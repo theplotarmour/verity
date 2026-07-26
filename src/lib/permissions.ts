@@ -1,5 +1,18 @@
-import { Role } from '@prisma/client';
+import { SystemRole } from '@prisma/client';
 
+/**
+ * @deprecated Superseded by the module-contributed permission registry in
+ * `@/platform/rbac/permissions`, which supports custom roles and lets modules
+ * add permissions without editing this file.
+ *
+ * Still live because seven call sites read it. Do not add permissions here —
+ * add them to the owning module in `@/platform/modules/registry`. `LEGACY_KEY_MAP`
+ * below is the single mapping between the two vocabularies; keep it exhaustive
+ * so the old and new systems can never disagree about what a check means.
+ *
+ * Removal plan: migrate the seven call sites to `requirePermission`, then
+ * delete this file.
+ */
 export type Permission = 
   | 'ACCESS_BILLING'
   | 'ACCESS_SETTINGS'
@@ -55,7 +68,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
 
 // A factory may override these from Settings; they are the fallback whenever a
 // role has no stored entry.
-export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
+export const DEFAULT_ROLE_PERMISSIONS: Record<SystemRole, Permission[]> = {
   OWNER: [
     'ACCESS_BILLING',
     'ACCESS_SETTINGS',
@@ -120,13 +133,13 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ]
 };
 
-export type PermissionMatrix = Partial<Record<Role, Permission[]>>;
+export type PermissionMatrix = Partial<Record<SystemRole, Permission[]>>;
 
 // `matrix` is the factory's saved override (Settings → Permissions). Roles the
 // factory has not customised fall back to the defaults above, so a partial
 // override never accidentally strips a role of everything.
 export function can(
-  user: { role: Role } | Role | null | undefined,
+  user: { role: SystemRole } | SystemRole | null | undefined,
   action: Permission,
   matrix?: PermissionMatrix | null
 ): boolean {
@@ -136,3 +149,33 @@ export function can(
   return allowed?.includes(action) ?? false;
 }
 
+
+/**
+ * Bridge between the legacy permission vocabulary and the module registry keys.
+ *
+ * Exhaustive by construction: `Record<Permission, string>` means adding a
+ * legacy permission without mapping it is a compile error. That is what stops
+ * the two systems drifting while both exist.
+ */
+export const LEGACY_KEY_MAP: Record<Permission, string> = {
+  ACCESS_BILLING: 'billing.access',
+  ACCESS_SETTINGS: 'settings.access',
+  ACCESS_BRANDING: 'branding.access',
+  ACCESS_MASTER_DATA: 'master_data.access',
+  CREATE_ORDER: 'sales_order.create',
+  DELETE_ORDER: 'sales_order.delete',
+  MANAGE_TEAM: 'team.manage',
+  ASSIGN_ROLES: 'team.assign_roles',
+  TRANSFER_OWNERSHIP: 'org.transfer_ownership',
+  EXPORT_REPORTS: 'reports.export',
+  VIEW_DASHBOARD: 'dashboard.view',
+  VIEW_REPORTS: 'reports.view',
+  QC_QUEUE: 'quality.queue',
+  INSPECT_CHECKPOINT: 'quality.inspect',
+  WORKER_JOBS: 'production.jobs',
+};
+
+/** Reverse lookup, for reading a registry key back into the legacy UI. */
+export const KEY_TO_LEGACY: Record<string, Permission> = Object.fromEntries(
+  Object.entries(LEGACY_KEY_MAP).map(([legacy, key]) => [key, legacy as Permission]),
+) as Record<string, Permission>;

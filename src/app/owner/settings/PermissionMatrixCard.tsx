@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Lock, RotateCcw } from "lucide-react";
-import { Role } from "@prisma/client";
+import { SystemRole } from "@prisma/client";
 import { Button } from "@/components/ui/primitives";
 import { toast } from "@/components/ui/toast";
 import {
@@ -15,7 +15,7 @@ import {
 } from "@/lib/permissions";
 import { savePermissionMatrix } from "@/server/actions/permissions";
 
-const ROLES = Object.keys(DEFAULT_ROLE_PERMISSIONS) as Role[];
+const ROLES = Object.keys(DEFAULT_ROLE_PERMISSIONS) as SystemRole[];
 const ROLE_LABELS: Record<string, string> = {
   OWNER: "Owner",
   CO_OWNER: "Co-owner",
@@ -34,7 +34,7 @@ export function PermissionMatrixCard({ saved }: { saved: PermissionMatrix }) {
   });
   const [saving, setSaving] = useState(false);
 
-  const toggle = (role: Role, permission: Permission) => {
+  const toggle = (role: SystemRole, permission: Permission) => {
     // The owner role is deliberately not editable — it's the lockout guard.
     if (role === "OWNER") return;
     setMatrix((prev) => {

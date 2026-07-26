@@ -2,7 +2,7 @@
 
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
-import { Role } from "@prisma/client";
+import { SystemRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 import { randomInt } from "crypto";
@@ -14,7 +14,7 @@ function generateRandomPin() {
 
 import { hashPin } from "@/lib/server/hash";
 
-export async function createEmployee(data: { name: string; role: Role; phone: string; pin?: string }) {
+export async function createEmployee(data: { name: string; role: SystemRole; phone: string; pin?: string }) {
   const owner = await getOwnerUser();
   if (!owner || owner.role !== "OWNER") {
     return { error: "Unauthorized" };

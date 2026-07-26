@@ -8,7 +8,7 @@ import {
   Crown, Shield, Wrench, ShieldAlert, KeyRound, Trash2,
   UserX, UserCheck, ArrowLeft, FileCheck, History, Check, Copy, Share2, ChevronDown
 } from "lucide-react";
-import { Role, User, AuditLog } from "@prisma/client";
+import { SystemRole, User, AuditLog } from "@prisma/client";
 import { Surface } from "@/components/design/Surface";
 import { Badge, Button, Input } from "@/components/ui/primitives";
 import { PageHeader } from "@/components/design/PageHeader";
@@ -36,7 +36,7 @@ export function MemberDetailClient({
   auditLogs: AuditLog[];
 }) {
   const router = useRouter();
-  const [role, setRole] = useState<Role>(member.role);
+  const [role, setRole] = useState<SystemRole>(member.role);
   const [isActive, setIsActive] = useState<boolean>(member.isActive);
   const [newPin, setNewPin] = useState<string | null>(null);
   const [customPin, setCustomPin] = useState("");
@@ -47,7 +47,7 @@ export function MemberDetailClient({
   const [isResetPinOpen, setIsResetPinOpen] = useState(false);
   const [isRemoveOpen, setIsRemoveOpen] = useState(false);
 
-  const getRoleIcon = (r: Role) => {
+  const getRoleIcon = (r: SystemRole) => {
     switch (r) {
       case "OWNER": return <Crown className="h-4 w-4 text-warning" />;
       case "CO_OWNER": return <Crown className="h-4 w-4 text-orange-400" />;
@@ -57,9 +57,9 @@ export function MemberDetailClient({
     }
   };
 
-  const roleLabel = (r: Role) => r.replace("_", " ").replace(/\b\w/g, c => c.toUpperCase());
+  const roleLabel = (r: SystemRole) => r.replace("_", " ").replace(/\b\w/g, c => c.toUpperCase());
 
-  const permissionsSummary = (r: Role): { desc: string; enabled: boolean }[] => {
+  const permissionsSummary = (r: SystemRole): { desc: string; enabled: boolean }[] => {
     const list = [
       { key: "ACCESS_SETTINGS", label: "Change branding and factory profile" },
       { key: "CREATE_ORDER", label: "Create production" },
@@ -71,7 +71,7 @@ export function MemberDetailClient({
     return list.map(item => ({ desc: item.label, enabled: can(r, item.key) }));
   };
 
-  const handleRoleChange = async (newRole: Role) => {
+  const handleRoleChange = async (newRole: SystemRole) => {
     if (!can(currentUser, "ASSIGN_ROLES")) { setError("You do not have permission to assign roles."); return; }
     setLoading(true); setError("");
     const res = await updateMemberRole(member.id, newRole);
@@ -374,7 +374,7 @@ export function MemberDetailClient({
               </div>
             </div>
 
-            {/* Role Config Section */}
+            {/* SystemRole Config Section */}
             <div className="space-y-3 shrink-0">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest">Workspace Permissions</p>

@@ -6,7 +6,7 @@ import {
   Users, UserPlus, Shield, Crown, Wrench, ShieldAlert,
   Search, Plus, X, Smartphone, Check, Copy, Share2, ChevronRight
 } from "lucide-react";
-import { Role, User } from "@prisma/client";
+import { SystemRole, User } from "@prisma/client";
 import { PageHeader } from "@/components/design/PageHeader";
 import { Surface } from "@/components/design/Surface";
 import { Badge, Button, Input, Select } from "@/components/ui/primitives";
@@ -37,7 +37,7 @@ export function TeamClient({
   const [roleFilter, setRoleFilter] = useState<"ALL" | "LEADERSHIP" | "SUPERVISOR" | "WORKER">("ALL");
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [inviteStep, setInviteStep] = useState<1 | 2 | 3>(1);
-  const [inviteRole, setInviteRole] = useState<Role>("WORKER");
+  const [inviteRole, setInviteRole] = useState<SystemRole>("WORKER");
   const [inviteName, setInviteName] = useState("");
   const [invitePhone, setInvitePhone] = useState("");
   const [inviteDepartmentId, setInviteDepartmentId] = useState("");
@@ -114,7 +114,7 @@ export function TeamClient({
     setError("");
   };
 
-  const getRoleIcon = (role: Role) => {
+  const getRoleIcon = (role: SystemRole) => {
     switch (role) {
       case "OWNER":
       case "CO_OWNER":
@@ -130,7 +130,7 @@ export function TeamClient({
     }
   };
 
-  const roleLabel = (role: Role) => {
+  const roleLabel = (role: SystemRole) => {
     return role.replace("_", " ");
   };
 
@@ -405,11 +405,11 @@ export function TeamClient({
               <div className="flex-1 overflow-y-auto space-y-3 pr-0.5">
                 <p className="text-xs text-text-secondary font-medium mb-1">Who are you adding?</p>
                 {([
-                  { role: "CO_OWNER" as Role, label: "Co Owner", sub: "Factory leadership and operations partner.", icon: <Crown className="h-5 w-5" />, color: "text-warning bg-warning/10" },
-                  { role: "MANAGER" as Role, label: "Manager", sub: "Runs daily production line operations.", icon: <Shield className="h-5 w-5" />, color: "text-brand bg-brand/10" },
-                  { role: "SUPERVISOR" as Role, label: "Supervisor", sub: "Department head; runs QC when supervising the QC department.", icon: <ShieldAlert className="h-5 w-5" />, color: "text-success bg-success/10" },
-                  { role: "STORE_MANAGER" as Role, label: "Store Manager", sub: "Books customer productions only; sent to Pending for a manager to release.", icon: <Shield className="h-5 w-5" />, color: "text-brand bg-brand/10" },
-                  { role: "WORKER" as Role, label: "Worker", sub: "Production floor manufacturer.", icon: <Wrench className="h-5 w-5" />, color: "text-text-tertiary bg-surface-2/10" },
+                  { role: "CO_OWNER" as SystemRole, label: "Co Owner", sub: "Factory leadership and operations partner.", icon: <Crown className="h-5 w-5" />, color: "text-warning bg-warning/10" },
+                  { role: "MANAGER" as SystemRole, label: "Manager", sub: "Runs daily production line operations.", icon: <Shield className="h-5 w-5" />, color: "text-brand bg-brand/10" },
+                  { role: "SUPERVISOR" as SystemRole, label: "Supervisor", sub: "Department head; runs QC when supervising the QC department.", icon: <ShieldAlert className="h-5 w-5" />, color: "text-success bg-success/10" },
+                  { role: "STORE_MANAGER" as SystemRole, label: "Store Manager", sub: "Books customer productions only; sent to Pending for a manager to release.", icon: <Shield className="h-5 w-5" />, color: "text-brand bg-brand/10" },
+                  { role: "WORKER" as SystemRole, label: "Worker", sub: "Production floor manufacturer.", icon: <Wrench className="h-5 w-5" />, color: "text-text-tertiary bg-surface-2/10" },
                 ]).map(({ role, label, sub, icon, color }) => (
                   <button
                     key={role}

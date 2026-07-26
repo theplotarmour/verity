@@ -1,7 +1,7 @@
 import "server-only";
 
 import prisma from "@/lib/prisma";
-import { Role } from "@prisma/client";
+import { SystemRole } from "@prisma/client";
 import {
   ALL_PERMISSIONS,
   DEFAULT_ROLE_PERMISSIONS,
@@ -26,7 +26,7 @@ export async function getPermissionMatrix(factoryId: string): Promise<Permission
 // hand-edited or stale blob can't widen access.
 export function sanitizeMatrix(raw: unknown): PermissionMatrix {
   if (!raw || typeof raw !== "object") return {};
-  const roles = Object.keys(DEFAULT_ROLE_PERMISSIONS) as Role[];
+  const roles = Object.keys(DEFAULT_ROLE_PERMISSIONS) as SystemRole[];
   const out: PermissionMatrix = {};
   for (const role of roles) {
     const value = (raw as Record<string, unknown>)[role];
@@ -38,7 +38,7 @@ export function sanitizeMatrix(raw: unknown): PermissionMatrix {
 
 // Server-side gate that honours the factory's saved matrix.
 export async function canUser(
-  user: { role: Role; factoryId: string } | null | undefined,
+  user: { role: SystemRole; factoryId: string } | null | undefined,
   action: Permission
 ): Promise<boolean> {
   if (!user) return false;

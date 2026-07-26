@@ -8,7 +8,7 @@ import { Surface } from "@/components/design/Surface";
 import { Button, Input, Badge } from "@/components/ui/primitives";
 import { Loader2, ArrowLeft, CheckCircle2, MessageSquare, MessageCircle } from "lucide-react";
 import Link from "next/link";
-import type { Role } from "@prisma/client";
+import type { SystemRole } from "@prisma/client";
 
 export default function NewUserPage() {
   const router = useRouter();
@@ -19,7 +19,7 @@ export default function NewUserPage() {
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
-    role: "WORKER" as Role,
+    role: "WORKER" as SystemRole,
   });
 
   async function handleSubmit(e: React.FormEvent) {

@@ -14,7 +14,21 @@ datasource db {
 // ENUMS
 // ==========================================
 
-enum Role {
+// The *behavioural archetype* — which app shell a user gets (worker scanner,
+// supervisor approval queue, owner console). This stays a closed enum on
+// purpose: each value has hand-written UX and routing behind it, so a tenant
+// inventing a seventh archetype would get a blank screen, not a new role.
+//
+// What a user is *allowed to do* is NOT this. That lives on the Role model,
+// which is org-scoped and freely customisable. Two axes:
+//
+//   SystemRole → which UI you see        (closed, code-backed)
+//   Role       → what you may do         (open, data-driven, per-tenant)
+//
+// A tenant wanting "Senior Inspector who may also approve dispatch" creates a
+// Role with those permissions pointing at the SUPERVISOR archetype. No
+// migration, no code change.
+enum SystemRole {
   OWNER
   CO_OWNER
   MANAGER
@@ -70,8 +84,63 @@ enum TimelineEventType {
 // IDENTITY ENGINE
 // ==========================================
 
+// ==========================================
+// TENANCY
+// ==========================================
+
+// The billing and configuration tenant. A Factory is a *site* within an Org —
+// splitting these lets one customer run several plants (or a plant plus a
+// service branch) under one contract, one chart of accounts and one currency.
+//
+// Every Org gets exactly one Factory on migration, so existing single-site
+// customers see no change.
+model Organization {
+  id       String  @id @default(cuid())
+  name     String
+  slug     String  @unique
+  logoUrl  String?
+  // ISO 4217. Set at the Org because financial consolidation happens here,
+  // not per site.
+  currency String  @default("INR")
+  // IANA zone, e.g. "Asia/Kolkata". Drives period close and shift boundaries.
+  timezone String  @default("Asia/Kolkata")
+  // Month (1-12) the fiscal year opens on. India defaults to April.
+  fiscalYearStartMonth Int @default(4)
+
+  settings  Json?    @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  factories    Factory[]
+  roles        Role[]
+  entitlements ModuleEntitlement[]
+  productTypes ProductType[]
+}
+
+// Which modules an Org has bought. Replaces Factory.modulesEnabled, which was
+// a JSON string written in two places and read in none. A row here is the
+// authoritative answer to "may this tenant use module X".
+model ModuleEntitlement {
+  id             String    @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Registry key, e.g. "inventory", "quality", "automotive".
+  moduleKey      String
+  enabled        Boolean   @default(true)
+  // Null means perpetual; set for trials.
+  expiresAt      DateTime?
+  settings       Json?     @default("{}")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([organizationId, moduleKey])
+  @@index([organizationId])
+}
+
 model Factory {
   id               String   @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name             String
   slug             String   @unique
   logoUrl          String?
@@ -81,7 +150,6 @@ model Factory {
   onboardingStatus String   @default("SETUP")
   setupFee         Int      @default(0)
   monthlyFee       Int      @default(0)
-  modulesEnabled   String?  @default("[]")
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -90,6 +158,8 @@ model Factory {
   agreements      Agreement[]
   supportSessions SupportSession[]
   workflowStages  WorkflowStage[]
+
+  @@index([organizationId])
 }
 
 model Agreement {
@@ -137,7 +207,7 @@ model WorkflowStage {
   requirePhoto   Boolean  @default(false)
   requireRemarks Boolean  @default(false)
   isQcStage      Boolean  @default(false) // QC stages run the inspection flow instead of stage capture
-  assignedRole   Role? // Role allowed to complete this stage
+  assignedRole   SystemRole? // Archetype allowed to complete this stage
   qcTemplateId   String? // Optional template to check during this stage
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -148,6 +218,45 @@ model WorkflowStage {
   @@index([factoryId])
 }
 
+// An org-scoped, named set of permissions. Seeded with one row per SystemRole
+// so existing users keep exactly today's access, then freely editable and
+// extendable per tenant.
+model Role {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  // Which app shell members of this role get. Several Roles may share one
+  // archetype (e.g. "Inspector" and "Senior Inspector" are both SUPERVISOR).
+  systemRole     SystemRole
+  // Seeded defaults cannot be deleted — they are the fallback if a custom role
+  // is removed while still assigned.
+  isSystem       Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  permissions RolePermission[]
+  users       User[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+// One granted permission key on a role. Keys are contributed by modules at
+// registration (see src/platform/modules), so this table is intentionally not
+// constrained to an enum — installing a module must not require a migration.
+model RolePermission {
+  id     String @id @default(cuid())
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  // Namespaced, e.g. "sales_order.create", "quality.inspect".
+  key    String
+
+  @@unique([roleId, key])
+  @@index([roleId])
+}
+
 model User {
   id                String    @id @default(cuid())
   factoryId         String
@@ -156,7 +265,13 @@ model User {
   name              String
   employeeId        Int       @unique @default(autoincrement())
   phone             String?   @unique
-  role              Role
+  // Behavioural archetype. Kept denormalised on the user because routing and
+  // the app shell read it on every request, before any role join.
+  role              SystemRole
+  // Permission grants. Nullable during migration; backfilled to the seeded
+  // system role matching `role`.
+  roleId            String?
+  customRole        Role?     @relation(fields: [roleId], references: [id], onDelete: SetNull)
   status            String    @default("active")
   pinHash           String?
   email             String?
@@ -305,7 +420,7 @@ model Approval {
   entityId      String
   requestedById String
   approverId    String? // If assigned to a specific user
-  approverRole  Role? // Or assigned to any user with this role
+  approverRole  SystemRole? // Or assigned to any user with this archetype
   status        String    @default("PENDING") // PENDING, APPROVED, REJECTED
   comments      String?   @db.Text
   resolvedAt    DateTime?
@@ -1107,33 +1222,81 @@ model ProductCombination {
   @@index([factoryId])
 }
 
+// The definition of a kind of thing the tenant sells or makes. This is the
+// generalisation point: everything vertical-specific about an order should be
+// expressed as ProductFields on a ProductType, never as columns on SalesOrder.
+//
+// Org-scoped rather than factory-scoped — a customer running two plants sells
+// the same catalogue from both.
 model ProductType {
-  id        String   @id @default(cuid())
-  factoryId String
-  name      String // e.g., "Seat Cover", "Table", "Shirt"
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String  @id @default(cuid())
+  factoryId      String
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String // e.g., "Seat Cover", "Table", "Shirt", "Consulting Engagement"
+  // Stable machine key used by templates and imports, e.g. "seat_cover".
+  key            String?
+  // Template for the one-line human label, over field keys:
+  //   "{brand} {model} {generation} {product} {seat_type} {headrests}"
+  // Replaces the hardcoded ordering in src/lib/variant-descriptor.ts.
+  labelTemplate  String?
+  // False for service/engagement types that never produce a physical good and
+  // so have no job card, label or dispatch.
+  isPhysical     Boolean @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   fields      ProductField[]
   salesOrders SalesOrder[]
 
   @@index([factoryId])
+  @@index([organizationId])
 }
 
 model ProductField {
   id            String    @id @default(cuid())
   productTypeId String
   name          String // e.g., "Wood Type", "Dimensions", "Thread Color"
+  // Stable machine key — what dynamicData is keyed by and what labelTemplate
+  // interpolates. Renaming `name` must never orphan stored values.
+  key           String?
   type          FieldType
   options       Json? // Array of options if SELECT type (e.g. ["Oak", "Teak"])
   isRequired    Boolean   @default(false)
   sortOrder     Int       @default(0)
+
+  // --- parity with the hardcoded automotive path ---
+
+  // Pull options from a master-data table instead of a static list, e.g.
+  // "vehicle_brand" or "material". Mutually exclusive with `options`.
+  optionSource  String?
+  // For hierarchical pickers: the field whose value filters this one's options
+  // (model depends on brand, generation depends on model). This is what makes
+  // the vehicle cascade expressible without dedicated tables.
+  parentFieldId String?
+  parentField   ProductField?  @relation("FieldHierarchy", fields: [parentFieldId], references: [id], onDelete: SetNull)
+  children      ProductField[] @relation("FieldHierarchy")
+  // Show this field only when the expression holds, e.g. {"field":"product",
+  // "matches":"seat"}. Generalises productHasSeatSpecs(), which hardcodes the
+  // rule that only seat products have bench/headrest geometry.
+  visibleWhen   Json?
+  // Type-appropriate constraints: {"min":2,"max":8,"step":1} or {"pattern":...}.
+  validation    Json?
+  // Carried onto the job card and the public passport. Off by default so
+  // internal-only fields do not leak to customers.
+  showOnJobCard Boolean @default(false)
+  showOnPassport Boolean @default(false)
+  unit          String?
+  helpText      String?
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   productType ProductType @relation(fields: [productTypeId], references: [id], onDelete: Cascade)
 
+  @@unique([productTypeId, key])
   @@index([productTypeId])
+  @@index([parentFieldId])
 }
 
 // Groups draft productions released to the floor together (e.g. several

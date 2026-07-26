@@ -24,11 +24,78 @@ async function main() {
   console.log("Seeding Carxen client-trial workspace...");
 
   const factoryId = "fac_demo";
+  const organizationId = "org_demo";
+
+  // The seed cannot import @/platform/tenancy/provision (it is server-only and
+  // runs outside Next), so the same provisioning shape is inlined here. Keep
+  // the two in step: an Org, a Factory inside it, seeded system Roles with
+  // grants, and module entitlements.
+  await prisma.organization.upsert({
+    where: { id: organizationId },
+    update: {},
+    create: { id: organizationId, name: "Carxen", slug: "carxen" },
+  });
+
   const factory = await prisma.factory.upsert({
     where: { slug: "carxen" },
     update: {},
-    create: { id: factoryId, name: "Carxen", slug: "carxen", logoUrl: null },
+    create: { id: factoryId, organizationId, name: "Carxen", slug: "carxen", logoUrl: null },
   });
+
+  // Carxen runs the automotive vertical on top of the horizontal defaults.
+  const seededModules = [
+    "core", "inventory", "manufacturing", "quality",
+    "procurement", "sales", "hr", "automotive",
+  ];
+  await prisma.moduleEntitlement.createMany({
+    data: seededModules.map((moduleKey) => ({ organizationId, moduleKey, enabled: true })),
+    skipDuplicates: true,
+  });
+
+  const SEED_GRANTS: Record<string, string[]> = {
+    OWNER: [
+      "dashboard.view", "settings.access", "branding.access", "billing.access",
+      "master_data.access", "team.manage", "team.assign_roles",
+      "org.transfer_ownership", "reports.view", "reports.export",
+      "product_type.manage", "sales_order.view", "sales_order.create",
+      "sales_order.delete", "sales_order.approve", "customer.manage",
+      "vehicle_catalog.manage", "fitment.manage",
+    ],
+    CO_OWNER: [
+      "dashboard.view", "settings.access", "master_data.access", "team.manage",
+      "reports.view", "reports.export", "sales_order.view", "sales_order.create",
+    ],
+    MANAGER: [
+      "dashboard.view", "master_data.access", "team.manage", "reports.view",
+      "sales_order.view", "sales_order.create",
+    ],
+    SUPERVISOR: ["dashboard.view", "reports.view", "quality.queue", "quality.inspect", "production.supervise"],
+    WORKER: ["production.jobs"],
+    STORE_MANAGER: ["dashboard.view", "sales_order.view", "sales_order.create"],
+  };
+  const ROLE_LABELS: Record<string, string> = {
+    OWNER: "Owner", CO_OWNER: "Co-Owner", MANAGER: "Manager",
+    SUPERVISOR: "Supervisor", WORKER: "Worker", STORE_MANAGER: "Store Manager",
+  };
+
+  const roleIdByArchetype: Record<string, string> = {};
+  for (const [archetype, grants] of Object.entries(SEED_GRANTS)) {
+    const id = `role_${organizationId}_${archetype}`;
+    await prisma.role.upsert({
+      where: { id },
+      update: {},
+      create: {
+        id,
+        organizationId,
+        name: ROLE_LABELS[archetype],
+        description: "Built-in role. Rename or copy it; it cannot be deleted.",
+        systemRole: archetype as never,
+        isSystem: true,
+        permissions: { create: grants.map((key) => ({ key })) },
+      },
+    });
+    roleIdByArchetype[archetype] = id;
+  }
 
   // ==========================================
   // QC TEMPLATE (attached to the QC department)
@@ -100,8 +167,8 @@ async function main() {
   // ==========================================
   await prisma.user.upsert({
     where: { phone: "9971907190" },
-    update: { pinHash: hashPin("5782", factory.id), name: "Yashu Malik", role: "OWNER", isActive: true },
-    create: { factoryId: factory.id, role: "OWNER", name: "Yashu Malik", language: "en", phone: "9971907190", pinHash: hashPin("5782", factory.id) },
+    update: { pinHash: hashPin("5782", factory.id), name: "Yashu Malik", role: "OWNER", roleId: roleIdByArchetype.OWNER, isActive: true },
+    create: { factoryId: factory.id, role: "OWNER", roleId: roleIdByArchetype.OWNER, name: "Yashu Malik", language: "en", phone: "9971907190", pinHash: hashPin("5782", factory.id) },
   });
 
   // [name, phone, role, departmentName] — PIN 1234 for everyone. The QC

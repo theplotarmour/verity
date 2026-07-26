@@ -2,7 +2,7 @@
 
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
-import { Role } from "@prisma/client";
+import { SystemRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { randomInt } from "crypto";
 import { hashPin } from "@/lib/server/hash";
@@ -28,7 +28,7 @@ async function logAudit(factoryId: string, actorId: string, actorName: string, a
   }
 }
 
-export async function inviteMember(data: { name: string; role: Role; phone: string; departmentId?: string }) {
+export async function inviteMember(data: { name: string; role: SystemRole; phone: string; departmentId?: string }) {
   const actor = await getOwnerUser();
   if (!actor) return { error: "Unauthorized" };
 
@@ -225,7 +225,7 @@ export async function removeMember(memberId: string) {
   }
 }
 
-export async function updateMemberRole(memberId: string, role: Role) {
+export async function updateMemberRole(memberId: string, role: SystemRole) {
   const actor = await getOwnerUser();
   if (!actor) return { error: "Unauthorized" };
 

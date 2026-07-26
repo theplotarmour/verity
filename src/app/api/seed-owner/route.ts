@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from "@/lib/prisma";
 import { hashPin } from "@/lib/server/hash";
 import { requireMaintenanceToken } from "@/lib/server/maintenanceGuard";
+import { DEFAULT_MODULES, provisionTenant, systemRoleId } from "@/platform/tenancy/provision";
 
 export async function GET(request: NextRequest) {
   const denied = requireMaintenanceToken(request);
@@ -12,13 +13,14 @@ export async function GET(request: NextRequest) {
     });
 
     if (!factory) {
-      factory = await prisma.factory.create({
-        data: {
-          name: "Carxen",
-          slug: "carxen",
-          onboardingStatus: "COMPLETED"
-        }
+      // Carxen runs the automotive vertical pack on top of the default modules.
+      const { factoryId } = await provisionTenant({
+        name: "Carxen",
+        slug: "carxen",
+        onboardingStatus: "COMPLETED",
+        modules: [...DEFAULT_MODULES, "automotive"],
       });
+      factory = await prisma.factory.findUniqueOrThrow({ where: { id: factoryId } });
     }
 
     const pinHash = hashPin("5782", factory.id);
@@ -34,6 +36,7 @@ export async function GET(request: NextRequest) {
           name: "Carxen Owner",
           phone: "9971907190",
           role: "OWNER",
+          roleId: await systemRoleId(factory.organizationId, "OWNER"),
           pinHash,
           isActive: true
         }

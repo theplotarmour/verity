@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { createHmac } from "node:crypto";
 import { requireMaintenanceToken } from "@/lib/server/maintenanceGuard";
+import { provisionTenant } from "@/platform/tenancy/provision";
 
 function hashPassword(password: string) {
   const secretKey = process.env.JWT_SECRET || "fallback-secret-key-for-dev";
@@ -17,15 +18,14 @@ export async function GET(request: NextRequest) {
     const factoryId = "fac_default";
 
     // Upsert Factory First
-    await prisma.factory.upsert({
-      where: { id: factoryId },
-      update: {},
-      create: {
-        id: factoryId,
+    const existing = await prisma.factory.findUnique({ where: { id: factoryId } });
+    if (!existing) {
+      await provisionTenant({
+        factoryId,
         name: "Verity Demo Factory",
-        slug: "demo-factory"
-      }
-    });
+        slug: "demo-factory",
+      });
+    }
 
     // Upsert Owner
     await prisma.user.upsert({

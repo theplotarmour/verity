@@ -16,7 +16,7 @@ import { NotificationPrefsCard } from "@/components/settings/NotificationPrefsCa
 import { Button, Input, Badge } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { Role, User } from "@prisma/client";
+import { SystemRole, User } from "@prisma/client";
 import { transferOwnership } from "@/server/actions/team";
 import { toast } from "@/components/ui/toast";
 import { MasterSheetView } from "./MasterSheetView";
@@ -31,12 +31,12 @@ import { BRAND_ACCENT } from "@/lib/brand";
 export function SettingsClient({ 
   initialData, 
   masterData,
-  currentUserRole = "OWNER" as Role,
+  currentUserRole = "OWNER" as SystemRole,
   coOwners = []
 }: { 
   initialData: any; 
   masterData?: any;
-  currentUserRole?: Role;
+  currentUserRole?: SystemRole;
   coOwners?: User[];
 }) {
   const router = useRouter();

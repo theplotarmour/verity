@@ -3,9 +3,24 @@
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { hashPin } from "@/lib/server/hash";
+import { DEFAULT_MODULES, provisionTenant, systemRoleId } from "@/platform/tenancy/provision";
+import { type ModuleKey, allModules } from "@/platform/modules/registry";
 
 // ==========================================
 // Verity HQ Agreements Actions
+
+/**
+ * Agreements store module names as free text chosen by sales ("Production
+ * Board", "Quality Gates"). Map them onto registry keys, ignoring anything
+ * unrecognised so a typo in an agreement cannot grant or deny a module.
+ */
+function modulesFromAgreement(raw: unknown): ModuleKey[] {
+  const labels = Array.isArray(raw) ? raw.map((v) => String(v).toLowerCase()) : [];
+  const matched = allModules()
+    .filter((m) => labels.some((l) => l.includes(m.key) || l.includes(m.name.toLowerCase())))
+    .map((m) => m.key);
+  return matched.length > 0 ? matched : DEFAULT_MODULES;
+}
 // ==========================================
 
 export async function createAgreement(data: {
@@ -63,17 +78,18 @@ export async function acceptAgreement(id: string, signature: string) {
       .replace(/^-+|-+$/g, "");
 
     // 1. Create Factory Workspace
-    const factory = await prisma.factory.create({
-      data: {
-        name: agreement.factoryName,
-        slug,
-        industry: "Custom Manufacturing",
-        onboardingStatus: "SETUP",
-        setupFee: agreement.setupFee,
-        monthlyFee: agreement.monthlyFee,
-        modulesEnabled: JSON.stringify(agreement.modules),
-      },
+    // The agreement's module list is the entitlement, resolved through the
+    // registry so unknown labels are dropped rather than silently trusted.
+    const { factoryId: newFactoryId, organizationId } = await provisionTenant({
+      name: agreement.factoryName,
+      slug,
+      industry: "Custom Manufacturing",
+      onboardingStatus: "SETUP",
+      setupFee: agreement.setupFee,
+      monthlyFee: agreement.monthlyFee,
+      modules: modulesFromAgreement(agreement.modules),
     });
+    const factory = await prisma.factory.findUniqueOrThrow({ where: { id: newFactoryId } });
 
     // 2. Create Owner account (default PIN: "1234")
     const pin = "1234";
@@ -85,6 +101,7 @@ export async function acceptAgreement(id: string, signature: string) {
         name: agreement.ownerName,
         phone: agreement.phone,
         role: "OWNER",
+        roleId: await systemRoleId(organizationId, "OWNER"),
         pinHash: hashed,
         isActive: true,
       },
@@ -230,17 +247,16 @@ export async function createAndSignAgreementDirect(data: {
     const finalSlug = existing ? `${slug}-${Math.floor(Math.random() * 1000)}` : slug;
 
     // 1. Create Factory Workspace
-    const factory = await prisma.factory.create({
-      data: {
-        name: data.factoryName,
-        slug: finalSlug,
-        industry: "Automotive Seat Covers",
-        onboardingStatus: "LIVE",
-        setupFee: 150000,
-        monthlyFee: 18000,
-        modulesEnabled: JSON.stringify(["Production Board", "Quality Gates", "Public Passports"]),
-      },
+    const { factoryId: newFactoryId, organizationId } = await provisionTenant({
+      name: data.factoryName,
+      slug: finalSlug,
+      industry: "Automotive Seat Covers",
+      onboardingStatus: "LIVE",
+      setupFee: 150000,
+      monthlyFee: 18000,
+      modules: [...DEFAULT_MODULES, "automotive"],
     });
+    const factory = await prisma.factory.findUniqueOrThrow({ where: { id: newFactoryId } });
 
     // 2. Create Owner account (default PIN: "1234")
     const pin = "1234";
@@ -252,6 +268,7 @@ export async function createAndSignAgreementDirect(data: {
         name: data.ownerName,
         phone: data.phone,
         role: "OWNER",
+        roleId: await systemRoleId(organizationId, "OWNER"),
         pinHash: hashed,
         isActive: true,
       },

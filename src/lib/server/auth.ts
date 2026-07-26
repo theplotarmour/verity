@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
-import type { Role } from "@prisma/client";
+import type { SystemRole } from "@prisma/client";
 import { NextRequest } from "next/server";
 import { redirect } from "next/navigation";
 import { getSessionHomePath } from "@/lib/server/roleHome";
@@ -11,7 +11,7 @@ const encodedKey = new TextEncoder().encode(secretKey);
 export type SessionPayload = {
   userId: string;
   factoryId: string;
-  role: Role;
+  role: SystemRole;
   language: string;
 };
 
@@ -66,7 +66,7 @@ export async function getUserSessionFromRequest(request: NextRequest) {
   return await decrypt(session);
 }
 
-export async function enforceRole(allowedRoles: Role[]) {
+export async function enforceRole(allowedRoles: SystemRole[]) {
   const session = await getUserSession();
   if (!session) {
     redirect("/");

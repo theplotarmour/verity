@@ -22,7 +22,7 @@ import { cn, formatDate } from "@/lib/utils";
 import { Badge, Button, Input } from "@/components/ui/primitives";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Settings, Shield, Plus , Package, ShoppingCart, Wrench, FlaskConical, Database } from "lucide-react";
-import { Role } from "@prisma/client";
+import { SystemRole } from "@prisma/client";
 import { can, Permission, type PermissionMatrix } from "@/lib/permissions";
 import { InstallPromptBanner } from "./InstallPromptBanner";
 import { BRAND_ACCENT } from "@/lib/brand";
@@ -90,7 +90,7 @@ export function OwnerShell({
   factoryLogo,
   userName,
   themeColor,
-  userRole = "OWNER" as Role,
+  userRole = "OWNER" as SystemRole,
   permissionMatrix,
   children,
 }: {
@@ -98,7 +98,7 @@ export function OwnerShell({
   factoryLogo?: string | null;
   userName: string;
   themeColor?: string;
-  userRole?: Role;
+  userRole?: SystemRole;
   permissionMatrix?: PermissionMatrix;
   children: React.ReactNode;
 }) {
