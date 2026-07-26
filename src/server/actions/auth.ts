@@ -1,7 +1,7 @@
 "use server";
 
 import { createUserSession } from "@/lib/server/auth";
-import { hashPin, legacyHashPin } from "@/lib/server/hash";
+import { hashPin, matchesLegacyPin } from "@/lib/server/hash";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { createHmac } from "crypto";
@@ -43,7 +43,7 @@ export async function authenticateUser(phone: string, pin: string) {
   }
 
   const inputPinHash = hashPin(pin, user.factoryId);
-  const legacyMatch = user.pinHash === legacyHashPin(pin, user.factoryId);
+  const legacyMatch = matchesLegacyPin(pin, user.factoryId, user.pinHash);
   if (user.pinHash !== inputPinHash && !legacyMatch) {
     try {
       await prisma.auditLog.create({
@@ -121,7 +121,7 @@ export async function changeOwnPin(currentPin: string, newPin: string) {
 
   const currentMatch =
     user.pinHash === hashPin(currentPin, user.factoryId) ||
-    user.pinHash === legacyHashPin(currentPin, user.factoryId);
+    matchesLegacyPin(currentPin, user.factoryId, user.pinHash);
   if (!currentMatch) return { error: "Current PIN is incorrect" };
 
   await prisma.user.update({ where: { id: user.id }, data: { pinHash: hashPin(newPin, user.factoryId) } });

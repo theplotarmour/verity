@@ -14,7 +14,7 @@ export const BRAND_DESCRIPTION =
  * hosts; they now resolve from one env-driven value.
  */
 export const BRAND_URL =
-  process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || "https://verity.theverityai.xyz";
+  process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || "https://app.theverityai.xyz";
 
 /**
  * Default accent. Factories may override this per-workspace via settings, so
