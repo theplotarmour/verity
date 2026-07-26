@@ -2,10 +2,10 @@
 CREATE SCHEMA IF NOT EXISTS "public";
 
 -- CreateEnum
-CREATE TYPE "Role" AS ENUM ('OWNER', 'CO_OWNER', 'MANAGER', 'INSPECTOR', 'WORKER', 'OFFICE_STAFF', 'SUPERVISOR');
+CREATE TYPE "SystemRole" AS ENUM ('OWNER', 'CO_OWNER', 'MANAGER', 'SUPERVISOR', 'WORKER', 'STORE_MANAGER');
 
 -- CreateEnum
-CREATE TYPE "ItemType" AS ENUM ('RAW_MATERIAL', 'SEMI_FINISHED', 'FINISHED_PRODUCT', 'CONSUMABLE', 'PACKAGING', 'ASSET', 'SERVICE');
+CREATE TYPE "ItemType" AS ENUM ('RAW_MATERIAL', 'SEMI_FINISHED', 'FINISHED_PRODUCT', 'CONSUMABLE', 'PACKAGING', 'SPARE_PART', 'MACHINERY', 'TOOL', 'ASSET', 'SERVICE');
 
 -- CreateEnum
 CREATE TYPE "QCStatus" AS ENUM ('PENDING', 'IN_PROGRESS', 'WAITING_QC', 'APPROVED', 'REJECTED', 'REWORK_REQUIRED');
@@ -17,11 +17,45 @@ CREATE TYPE "NotificationType" AS ENUM ('INFO', 'WARNING', 'SUCCESS', 'ERROR', '
 CREATE TYPE "TimelineEventType" AS ENUM ('CREATED', 'UPDATED', 'APPROVED', 'REJECTED', 'STATUS_CHANGED', 'COMMENT_ADDED', 'FILE_ATTACHED');
 
 -- CreateEnum
+CREATE TYPE "OrderType" AS ENUM ('RETAIL', 'DEALER', 'OEM', 'INTERNAL');
+
+-- CreateEnum
 CREATE TYPE "FieldType" AS ENUM ('TEXT', 'SELECT', 'NUMBER', 'MEASUREMENT', 'TOGGLE', 'BUTTONS', 'CHECKBOX');
+
+-- CreateTable
+CREATE TABLE "Organization" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "slug" TEXT NOT NULL,
+    "logoUrl" TEXT,
+    "currency" TEXT NOT NULL DEFAULT 'INR',
+    "timezone" TEXT NOT NULL DEFAULT 'Asia/Kolkata',
+    "fiscalYearStartMonth" INTEGER NOT NULL DEFAULT 4,
+    "settings" JSONB DEFAULT '{}',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Organization_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ModuleEntitlement" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "moduleKey" TEXT NOT NULL,
+    "enabled" BOOLEAN NOT NULL DEFAULT true,
+    "expiresAt" TIMESTAMP(3),
+    "settings" JSONB DEFAULT '{}',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ModuleEntitlement_pkey" PRIMARY KEY ("id")
+);
 
 -- CreateTable
 CREATE TABLE "Factory" (
     "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "slug" TEXT NOT NULL,
     "logoUrl" TEXT,
@@ -31,7 +65,6 @@ CREATE TABLE "Factory" (
     "onboardingStatus" TEXT NOT NULL DEFAULT 'SETUP',
     "setupFee" INTEGER NOT NULL DEFAULT 0,
     "monthlyFee" INTEGER NOT NULL DEFAULT 0,
-    "modulesEnabled" TEXT DEFAULT '[]',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -81,12 +114,35 @@ CREATE TABLE "WorkflowStage" (
     "requirePhoto" BOOLEAN NOT NULL DEFAULT false,
     "requireRemarks" BOOLEAN NOT NULL DEFAULT false,
     "isQcStage" BOOLEAN NOT NULL DEFAULT false,
-    "assignedRole" "Role",
+    "assignedRole" "SystemRole",
     "qcTemplateId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "WorkflowStage_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Role" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "systemRole" "SystemRole" NOT NULL,
+    "isSystem" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Role_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "RolePermission" (
+    "id" TEXT NOT NULL,
+    "roleId" TEXT NOT NULL,
+    "key" TEXT NOT NULL,
+
+    CONSTRAINT "RolePermission_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -97,7 +153,8 @@ CREATE TABLE "User" (
     "name" TEXT NOT NULL,
     "employeeId" SERIAL NOT NULL,
     "phone" TEXT,
-    "role" "Role" NOT NULL,
+    "role" "SystemRole" NOT NULL,
+    "roleId" TEXT,
     "status" TEXT NOT NULL DEFAULT 'active',
     "pinHash" TEXT,
     "email" TEXT,
@@ -111,23 +168,9 @@ CREATE TABLE "User" (
     "lastLoginAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "teamId" TEXT,
+    "departmentId" TEXT,
 
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "ProductionTeam" (
-    "id" TEXT NOT NULL,
-    "factoryId" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "departmentId" TEXT,
-    "leaderId" TEXT,
-    "active" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "ProductionTeam_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -136,6 +179,13 @@ CREATE TABLE "Department" (
     "factoryId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "description" TEXT,
+    "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "isQcStage" BOOLEAN NOT NULL DEFAULT false,
+    "requirePhoto" BOOLEAN NOT NULL DEFAULT false,
+    "requireRemarks" BOOLEAN NOT NULL DEFAULT false,
+    "requiresApproval" BOOLEAN NOT NULL DEFAULT true,
+    "templateId" TEXT,
+    "active" BOOLEAN NOT NULL DEFAULT true,
     "capacity" DOUBLE PRECISION,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -224,7 +274,7 @@ CREATE TABLE "Approval" (
     "entityId" TEXT NOT NULL,
     "requestedById" TEXT NOT NULL,
     "approverId" TEXT,
-    "approverRole" "Role",
+    "approverRole" "SystemRole",
     "status" TEXT NOT NULL DEFAULT 'PENDING',
     "comments" TEXT,
     "resolvedAt" TIMESTAMP(3),
@@ -239,8 +289,16 @@ CREATE TABLE "ItemMaster" (
     "factoryId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "sku" TEXT NOT NULL,
+    "itemCode" TEXT,
     "itemType" "ItemType" NOT NULL,
     "defaultUOM" TEXT NOT NULL,
+    "secondaryUOM" TEXT,
+    "brand" TEXT,
+    "description" TEXT,
+    "imageUrl" TEXT,
+    "aliasName" TEXT,
+    "searchKeywords" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "status" TEXT NOT NULL DEFAULT 'ACTIVE',
     "valuationMethod" TEXT NOT NULL DEFAULT 'FIFO',
     "isBatchTracked" BOOLEAN NOT NULL DEFAULT false,
     "minStockLevel" DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -248,10 +306,23 @@ CREATE TABLE "ItemMaster" (
     "hsnCode" TEXT,
     "taxRate" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "categoryId" TEXT,
+    "subcategoryId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "customFields" JSONB DEFAULT '{}',
 
     CONSTRAINT "ItemMaster_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ItemFieldDefinition" (
+    "id" TEXT NOT NULL,
+    "factoryId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ItemFieldDefinition_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -261,6 +332,16 @@ CREATE TABLE "MaterialCategory" (
     "name" TEXT NOT NULL,
 
     CONSTRAINT "MaterialCategory_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "MaterialSubcategory" (
+    "id" TEXT NOT NULL,
+    "factoryId" TEXT NOT NULL,
+    "categoryId" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+
+    CONSTRAINT "MaterialSubcategory_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -517,6 +598,9 @@ CREATE TABLE "VehicleGeneration" (
     "factoryId" TEXT,
     "modelId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
+    "allowedSeatTypes" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "allowedHeadrests" INTEGER[] DEFAULT ARRAY[]::INTEGER[],
+    "allowedArmrests" TEXT[] DEFAULT ARRAY[]::TEXT[],
 
     CONSTRAINT "VehicleGeneration_pkey" PRIMARY KEY ("id")
 );
@@ -597,6 +681,7 @@ CREATE TABLE "PurchaseOrder" (
     "supplierId" TEXT NOT NULL,
     "status" TEXT NOT NULL,
     "orderDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "expectedDate" TIMESTAMP(3),
 
     CONSTRAINT "PurchaseOrder_pkey" PRIMARY KEY ("id")
 );
@@ -713,13 +798,13 @@ CREATE TABLE "JobCard" (
     "stageId" TEXT,
     "reworkReason" TEXT,
     "assignedToId" TEXT,
-    "teamId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "targetQty" DOUBLE PRECISION NOT NULL,
     "completedQty" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "timeSpentMins" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "startedAt" TIMESTAMP(3),
     "completedAt" TIMESTAMP(3),
+    "templateId" TEXT,
 
     CONSTRAINT "JobCard_pkey" PRIMARY KEY ("id")
 );
@@ -735,6 +820,7 @@ CREATE TABLE "StageEntry" (
     "measurements" TEXT,
     "materialNotes" TEXT,
     "remarks" TEXT,
+    "checklist" JSONB,
     "outcome" TEXT NOT NULL DEFAULT 'SUBMITTED',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -745,13 +831,21 @@ CREATE TABLE "StageEntry" (
 CREATE TABLE "Customer" (
     "id" TEXT NOT NULL,
     "factoryId" TEXT NOT NULL,
+    "customerCode" TEXT,
     "name" TEXT NOT NULL,
     "companyName" TEXT,
     "phone" TEXT,
+    "altPhone" TEXT,
     "email" TEXT,
     "gstNumber" TEXT,
+    "billingAddress" TEXT,
+    "shippingAddress" TEXT,
+    "notes" TEXT,
+    "tags" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "assignedSalesperson" TEXT,
     "creditLimit" DOUBLE PRECISION NOT NULL DEFAULT 0,
     "paymentTerms" TEXT,
+    "customFields" JSONB DEFAULT '{}',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Customer_pkey" PRIMARY KEY ("id")
@@ -779,8 +873,11 @@ CREATE TABLE "SalesOrder" (
     "soNumber" TEXT NOT NULL,
     "customerId" TEXT NOT NULL,
     "status" TEXT NOT NULL,
+    "createdById" TEXT,
+    "orderType" "OrderType" NOT NULL DEFAULT 'RETAIL',
     "labelCode" TEXT,
     "totalAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "expectedDeliveryDate" TIMESTAMP(3),
     "orderDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "materialId" TEXT,
     "designId" TEXT,
@@ -788,6 +885,11 @@ CREATE TABLE "SalesOrder" (
     "productTypeId" TEXT,
     "inspectorId" TEXT,
     "fulfilledFromOrderId" TEXT,
+    "scheduledFor" TIMESTAMP(3),
+    "fulfilledFromStockQty" DOUBLE PRECISION DEFAULT 0,
+    "productionBatchId" TEXT,
+    "vehicleBrandId" TEXT,
+    "vehicleModelId" TEXT,
     "vehicleYear" TEXT,
     "seatType" TEXT,
     "hasArmrest" BOOLEAN NOT NULL DEFAULT false,
@@ -804,6 +906,7 @@ CREATE TABLE "Design" (
     "id" TEXT NOT NULL,
     "factoryId" TEXT NOT NULL,
     "category" TEXT,
+    "productId" TEXT,
     "name" TEXT NOT NULL,
     "imageUrls" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "fabricConsumption" DOUBLE PRECISION,
@@ -848,7 +951,11 @@ CREATE TABLE "ProductCombination" (
 CREATE TABLE "ProductType" (
     "id" TEXT NOT NULL,
     "factoryId" TEXT NOT NULL,
+    "organizationId" TEXT,
     "name" TEXT NOT NULL,
+    "key" TEXT,
+    "labelTemplate" TEXT,
+    "isPhysical" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -860,14 +967,33 @@ CREATE TABLE "ProductField" (
     "id" TEXT NOT NULL,
     "productTypeId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
+    "key" TEXT,
     "type" "FieldType" NOT NULL,
     "options" JSONB,
     "isRequired" BOOLEAN NOT NULL DEFAULT false,
     "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "optionSource" TEXT,
+    "parentFieldId" TEXT,
+    "visibleWhen" JSONB,
+    "validation" JSONB,
+    "showOnJobCard" BOOLEAN NOT NULL DEFAULT false,
+    "showOnPassport" BOOLEAN NOT NULL DEFAULT false,
+    "unit" TEXT,
+    "helpText" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "ProductField_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ProductionBatch" (
+    "id" TEXT NOT NULL,
+    "factoryId" TEXT NOT NULL,
+    "batchNumber" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ProductionBatch_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -880,34 +1006,6 @@ CREATE TABLE "SalesOrderItem" (
     "unitPrice" DOUBLE PRECISION NOT NULL,
 
     CONSTRAINT "SalesOrderItem_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "SalesInvoice" (
-    "id" TEXT NOT NULL,
-    "factoryId" TEXT NOT NULL,
-    "invoiceNumber" TEXT NOT NULL,
-    "customerId" TEXT NOT NULL,
-    "salesOrderId" TEXT NOT NULL,
-    "totalAmount" DOUBLE PRECISION NOT NULL,
-    "paidAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
-    "status" TEXT NOT NULL,
-    "dueDate" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "SalesInvoice_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "PaymentReceipt" (
-    "id" TEXT NOT NULL,
-    "factoryId" TEXT NOT NULL,
-    "customerId" TEXT NOT NULL,
-    "amount" DOUBLE PRECISION NOT NULL,
-    "mode" TEXT NOT NULL,
-    "reference" TEXT,
-    "date" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "PaymentReceipt_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -974,6 +1072,7 @@ CREATE TABLE "QCTemplate" (
     "isLatest" BOOLEAN NOT NULL DEFAULT true,
     "parentTemplateId" TEXT,
     "status" TEXT NOT NULL DEFAULT 'active',
+    "requiresVideo" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -1006,7 +1105,7 @@ CREATE TABLE "Checkpoint" (
     "instructions" TEXT NOT NULL,
     "instructionsHi" TEXT,
     "instructionsHinglish" TEXT,
-    "requireImage" BOOLEAN NOT NULL DEFAULT true,
+    "requireImage" BOOLEAN NOT NULL DEFAULT false,
     "requireRemarks" BOOLEAN NOT NULL DEFAULT false,
     "sortOrder" INTEGER NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1026,6 +1125,11 @@ CREATE TABLE "Inspection" (
     "approvedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "videoUrl" TEXT,
+    "videoPath" TEXT,
+    "videoDurationSec" DOUBLE PRECISION,
+    "videoUploadedAt" TIMESTAMP(3),
+    "videoUploadedById" TEXT,
 
     CONSTRAINT "Inspection_pkey" PRIMARY KEY ("id")
 );
@@ -1104,24 +1208,6 @@ CREATE TABLE "ReworkRecord" (
 );
 
 -- CreateTable
-CREATE TABLE "DispatchLog" (
-    "id" TEXT NOT NULL,
-    "factoryId" TEXT NOT NULL,
-    "salesOrderId" TEXT NOT NULL,
-    "status" TEXT NOT NULL,
-    "courierPartner" TEXT,
-    "trackingId" TEXT,
-    "expectedDelivery" TIMESTAMP(3),
-    "deliveryProofUrl" TEXT,
-    "recipientSignature" TEXT,
-    "remarks" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "DispatchLog_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "_ProductToQCTemplate" (
     "A" TEXT NOT NULL,
     "B" TEXT NOT NULL,
@@ -1130,7 +1216,19 @@ CREATE TABLE "_ProductToQCTemplate" (
 );
 
 -- CreateIndex
+CREATE UNIQUE INDEX "Organization_slug_key" ON "Organization"("slug");
+
+-- CreateIndex
+CREATE INDEX "ModuleEntitlement_organizationId_idx" ON "ModuleEntitlement"("organizationId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ModuleEntitlement_organizationId_moduleKey_key" ON "ModuleEntitlement"("organizationId", "moduleKey");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Factory_slug_key" ON "Factory"("slug");
+
+-- CreateIndex
+CREATE INDEX "Factory_organizationId_idx" ON "Factory"("organizationId");
 
 -- CreateIndex
 CREATE INDEX "Agreement_factoryId_idx" ON "Agreement"("factoryId");
@@ -1145,6 +1243,18 @@ CREATE INDEX "SupportSession_internalUserId_idx" ON "SupportSession"("internalUs
 CREATE INDEX "WorkflowStage_factoryId_idx" ON "WorkflowStage"("factoryId");
 
 -- CreateIndex
+CREATE INDEX "Role_organizationId_idx" ON "Role"("organizationId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Role_organizationId_name_key" ON "Role"("organizationId", "name");
+
+-- CreateIndex
+CREATE INDEX "RolePermission_roleId_idx" ON "RolePermission"("roleId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "RolePermission_roleId_key_key" ON "RolePermission"("roleId", "key");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "User_authId_key" ON "User"("authId");
 
 -- CreateIndex
@@ -1154,10 +1264,7 @@ CREATE UNIQUE INDEX "User_employeeId_key" ON "User"("employeeId");
 CREATE UNIQUE INDEX "User_phone_key" ON "User"("phone");
 
 -- CreateIndex
-CREATE INDEX "ProductionTeam_factoryId_idx" ON "ProductionTeam"("factoryId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "ProductionTeam_factoryId_name_key" ON "ProductionTeam"("factoryId", "name");
+CREATE INDEX "Department_factoryId_idx" ON "Department"("factoryId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Department_factoryId_name_key" ON "Department"("factoryId", "name");
@@ -1205,7 +1312,19 @@ CREATE UNIQUE INDEX "ItemMaster_sku_key" ON "ItemMaster"("sku");
 CREATE INDEX "ItemMaster_factoryId_idx" ON "ItemMaster"("factoryId");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "ItemMaster_factoryId_itemCode_key" ON "ItemMaster"("factoryId", "itemCode");
+
+-- CreateIndex
+CREATE INDEX "ItemFieldDefinition_factoryId_idx" ON "ItemFieldDefinition"("factoryId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "MaterialCategory_factoryId_name_key" ON "MaterialCategory"("factoryId", "name");
+
+-- CreateIndex
+CREATE INDEX "MaterialSubcategory_factoryId_idx" ON "MaterialSubcategory"("factoryId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "MaterialSubcategory_factoryId_categoryId_name_key" ON "MaterialSubcategory"("factoryId", "categoryId", "name");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Warehouse_factoryId_name_key" ON "Warehouse"("factoryId", "name");
@@ -1289,6 +1408,9 @@ CREATE INDEX "StageEntry_jobCardId_idx" ON "StageEntry"("jobCardId");
 CREATE INDEX "StageEntry_factoryId_idx" ON "StageEntry"("factoryId");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "Customer_factoryId_customerCode_key" ON "Customer"("factoryId", "customerCode");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "SalesOrder_soNumber_key" ON "SalesOrder"("soNumber");
 
 -- CreateIndex
@@ -1307,10 +1429,22 @@ CREATE INDEX "ProductCombination_factoryId_idx" ON "ProductCombination"("factory
 CREATE INDEX "ProductType_factoryId_idx" ON "ProductType"("factoryId");
 
 -- CreateIndex
+CREATE INDEX "ProductType_organizationId_idx" ON "ProductType"("organizationId");
+
+-- CreateIndex
 CREATE INDEX "ProductField_productTypeId_idx" ON "ProductField"("productTypeId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "SalesInvoice_invoiceNumber_key" ON "SalesInvoice"("invoiceNumber");
+CREATE INDEX "ProductField_parentFieldId_idx" ON "ProductField"("parentFieldId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ProductField_productTypeId_key_key" ON "ProductField"("productTypeId", "key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "ProductionBatch_batchNumber_key" ON "ProductionBatch"("batchNumber");
+
+-- CreateIndex
+CREATE INDEX "ProductionBatch_factoryId_idx" ON "ProductionBatch"("factoryId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "EmployeeProfile_userId_key" ON "EmployeeProfile"("userId");
@@ -1364,10 +1498,13 @@ CREATE INDEX "QualityReport_factoryId_idx" ON "QualityReport"("factoryId");
 CREATE INDEX "QualityReport_verificationCode_idx" ON "QualityReport"("verificationCode");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "DispatchLog_salesOrderId_key" ON "DispatchLog"("salesOrderId");
-
--- CreateIndex
 CREATE INDEX "_ProductToQCTemplate_B_index" ON "_ProductToQCTemplate"("B");
+
+-- AddForeignKey
+ALTER TABLE "ModuleEntitlement" ADD CONSTRAINT "ModuleEntitlement_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Factory" ADD CONSTRAINT "Factory_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Agreement" ADD CONSTRAINT "Agreement_factoryId_fkey" FOREIGN KEY ("factoryId") REFERENCES "Factory"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -1379,28 +1516,37 @@ ALTER TABLE "SupportSession" ADD CONSTRAINT "SupportSession_factoryId_fkey" FORE
 ALTER TABLE "WorkflowStage" ADD CONSTRAINT "WorkflowStage_factoryId_fkey" FOREIGN KEY ("factoryId") REFERENCES "Factory"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "Role" ADD CONSTRAINT "Role_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RolePermission" ADD CONSTRAINT "RolePermission_roleId_fkey" FOREIGN KEY ("roleId") REFERENCES "Role"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "User" ADD CONSTRAINT "User_factoryId_fkey" FOREIGN KEY ("factoryId") REFERENCES "Factory"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "User" ADD CONSTRAINT "User_teamId_fkey" FOREIGN KEY ("teamId") REFERENCES "ProductionTeam"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "User" ADD CONSTRAINT "User_roleId_fkey" FOREIGN KEY ("roleId") REFERENCES "Role"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "ProductionTeam" ADD CONSTRAINT "ProductionTeam_factoryId_fkey" FOREIGN KEY ("factoryId") REFERENCES "Factory"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ProductionTeam" ADD CONSTRAINT "ProductionTeam_departmentId_fkey" FOREIGN KEY ("departmentId") REFERENCES "Department"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "ProductionTeam" ADD CONSTRAINT "ProductionTeam_leaderId_fkey" FOREIGN KEY ("leaderId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "User" ADD CONSTRAINT "User_departmentId_fkey" FOREIGN KEY ("departmentId") REFERENCES "Department"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Department" ADD CONSTRAINT "Department_factoryId_fkey" FOREIGN KEY ("factoryId") REFERENCES "Factory"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Department" ADD CONSTRAINT "Department_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "QCTemplate"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Notification" ADD CONSTRAINT "Notification_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "ItemMaster" ADD CONSTRAINT "ItemMaster_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "MaterialCategory"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ItemMaster" ADD CONSTRAINT "ItemMaster_subcategoryId_fkey" FOREIGN KEY ("subcategoryId") REFERENCES "MaterialSubcategory"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "MaterialSubcategory" ADD CONSTRAINT "MaterialSubcategory_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "MaterialCategory"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "UOMConversion" ADD CONSTRAINT "UOMConversion_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "ItemMaster"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -1535,7 +1681,7 @@ ALTER TABLE "JobCard" ADD CONSTRAINT "JobCard_stageId_fkey" FOREIGN KEY ("stageI
 ALTER TABLE "JobCard" ADD CONSTRAINT "JobCard_assignedToId_fkey" FOREIGN KEY ("assignedToId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "JobCard" ADD CONSTRAINT "JobCard_teamId_fkey" FOREIGN KEY ("teamId") REFERENCES "ProductionTeam"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "JobCard" ADD CONSTRAINT "JobCard_templateId_fkey" FOREIGN KEY ("templateId") REFERENCES "QCTemplate"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "StageEntry" ADD CONSTRAINT "StageEntry_jobCardId_fkey" FOREIGN KEY ("jobCardId") REFERENCES "JobCard"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -1556,7 +1702,25 @@ ALTER TABLE "SalesOrder" ADD CONSTRAINT "SalesOrder_productTypeId_fkey" FOREIGN 
 ALTER TABLE "SalesOrder" ADD CONSTRAINT "SalesOrder_inspectorId_fkey" FOREIGN KEY ("inspectorId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "SalesOrder" ADD CONSTRAINT "SalesOrder_productionBatchId_fkey" FOREIGN KEY ("productionBatchId") REFERENCES "ProductionBatch"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SalesOrder" ADD CONSTRAINT "SalesOrder_vehicleBrandId_fkey" FOREIGN KEY ("vehicleBrandId") REFERENCES "VehicleBrand"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SalesOrder" ADD CONSTRAINT "SalesOrder_vehicleModelId_fkey" FOREIGN KEY ("vehicleModelId") REFERENCES "VehicleModel"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "SalesOrder" ADD CONSTRAINT "SalesOrder_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Design" ADD CONSTRAINT "Design_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProductType" ADD CONSTRAINT "ProductType_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ProductField" ADD CONSTRAINT "ProductField_parentFieldId_fkey" FOREIGN KEY ("parentFieldId") REFERENCES "ProductField"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "ProductField" ADD CONSTRAINT "ProductField_productTypeId_fkey" FOREIGN KEY ("productTypeId") REFERENCES "ProductType"("id") ON DELETE CASCADE ON UPDATE CASCADE;

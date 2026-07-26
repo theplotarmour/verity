@@ -244,13 +244,13 @@ CREATE POLICY "BlueprintVersion_tenant_isolation" ON "BlueprintVersion"
 ALTER TABLE "BlueprintRouteStep" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "BlueprintRouteStep_tenant_isolation" ON "BlueprintRouteStep";
 CREATE POLICY "BlueprintRouteStep_tenant_isolation" ON "BlueprintRouteStep"
-  USING (EXISTS (SELECT 1 FROM "BlueprintVersion" par WHERE par."id" = "BlueprintRouteStep"."versionId")) WITH CHECK (EXISTS (SELECT 1 FROM "BlueprintVersion" par WHERE par."id" = "BlueprintRouteStep"."versionId"));
+  USING (EXISTS (SELECT 1 FROM "Department" par WHERE par."id" = "BlueprintRouteStep"."departmentId")) WITH CHECK (EXISTS (SELECT 1 FROM "Department" par WHERE par."id" = "BlueprintRouteStep"."departmentId"));
 
 -- FactoryDocument
 ALTER TABLE "FactoryDocument" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "FactoryDocument_tenant_isolation" ON "FactoryDocument";
 CREATE POLICY "FactoryDocument_tenant_isolation" ON "FactoryDocument"
-  USING (EXISTS (SELECT 1 FROM "Factory" par WHERE par."id" = "FactoryDocument"."factoryId")) WITH CHECK (EXISTS (SELECT 1 FROM "Factory" par WHERE par."id" = "FactoryDocument"."factoryId"));
+  USING (EXISTS (SELECT 1 FROM "BlueprintVersion" par WHERE par."id" = "FactoryDocument"."blueprintVersionId")) WITH CHECK (EXISTS (SELECT 1 FROM "BlueprintVersion" par WHERE par."id" = "FactoryDocument"."blueprintVersionId"));
 
 -- VehicleBrand
 ALTER TABLE "VehicleBrand" ENABLE ROW LEVEL SECURITY;
@@ -424,7 +424,7 @@ CREATE POLICY "ProductionBatch_tenant_isolation" ON "ProductionBatch"
 ALTER TABLE "SalesOrderItem" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "SalesOrderItem_tenant_isolation" ON "SalesOrderItem";
 CREATE POLICY "SalesOrderItem_tenant_isolation" ON "SalesOrderItem"
-  USING (EXISTS (SELECT 1 FROM "SalesOrder" par WHERE par."id" = "SalesOrderItem"."orderId")) WITH CHECK (EXISTS (SELECT 1 FROM "SalesOrder" par WHERE par."id" = "SalesOrderItem"."orderId"));
+  USING (EXISTS (SELECT 1 FROM "SalesOrder" par WHERE par."id" = "SalesOrderItem"."salesOrderId")) WITH CHECK (EXISTS (SELECT 1 FROM "SalesOrder" par WHERE par."id" = "SalesOrderItem"."salesOrderId"));
 
 -- EmployeeProfile
 ALTER TABLE "EmployeeProfile" ENABLE ROW LEVEL SECURITY;

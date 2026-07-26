@@ -1,37 +1,70 @@
 // Generates the row-level-security migration from the Prisma schema.
 //
 // Kept as a script rather than hand-written SQL because the policy set must
-// cover every tenant-scoped table, and the schema has 80 of them. A hand
-// list would drift the first time somebody adds a model.
+// cover every tenant-scoped table, and the schema has 80 of them. A hand list
+// would drift the first time somebody adds a model.
+//
+// Parent foreign keys are DERIVED from the schema, not hardcoded. An earlier
+// version guessed them and got three wrong (SalesOrderItem.orderId,
+// BlueprintRouteStep.versionId, and FactoryDocument->Factory, which has no
+// factoryId at all), which only surfaced when the migration hit the database.
 //
 // Run: node scripts/gen_rls_migration.mjs > <migration>/migration.sql
 
 import fs from "node:fs";
 
 const schema = fs.readFileSync("prisma/schema.prisma", "utf8");
+
 const models = [...schema.matchAll(/model\s+(\w+)\s*\{([\s\S]*?)\n\}/g)].map((m) => ({
   name: m[1],
   body: m[2],
 }));
+const byName = new Map(models.map((m) => [m.name, m]));
 
-const has = (body, field) => new RegExp(`^\\s*${field}\\s`, "m").test(body);
+const hasField = (body, field) => new RegExp(`^\\s*${field}\\s`, "m").test(body);
 
-// Child tables carry no tenant column; they are reached only through a parent.
-// Each maps to [parentTable, localFkColumn]. Without these the child tables are
-// readable by primary key alone, which is exactly the leak RLS is meant to close.
-const CHILD_PARENT = {
-  RolePermission: ["Role", "roleId"],
-  ProductField: ["ProductType", "productTypeId"],
-  SalesOrderItem: ["SalesOrder", "orderId"],
-  PurchaseOrderItem: ["PurchaseOrder", "purchaseOrderId"],
-  PurchaseReceiptItem: ["PurchaseReceipt", "receiptId"],
-  BOMItem: ["BOM", "bomId"],
-  BlueprintVersion: ["Blueprint", "blueprintId"],
-  BlueprintRouteStep: ["BlueprintVersion", "versionId"],
-  ProductVariant: ["Product", "productId"],
-  FactoryDocument: ["Factory", "factoryId"],
-  UOMConversion: ["ItemMaster", "itemId"],
-};
+/** Relations declared on a model: [{ target, fk }]. */
+function relations(body) {
+  const out = [];
+  const re =
+    /^\s*(\w+)\s+(\w+)(\?|\[\])?\s*@relation\((?:"[^"]*",\s*)?fields:\s*\[([^\]]+)\],\s*references:\s*\[[^\]]+\]/gm;
+  for (const m of body.matchAll(re)) {
+    out.push({ target: m[2], fk: m[4].trim() });
+  }
+  return out;
+}
+
+const scopeOf = new Map(); // model -> "factory" | "org" | "child" | "none"
+
+for (const { name, body } of models) {
+  if (name === "Organization") scopeOf.set(name, "org-self");
+  else if (hasField(body, "factoryId")) scopeOf.set(name, "factory");
+  else if (hasField(body, "organizationId")) scopeOf.set(name, "org");
+}
+
+/**
+ * For an unscoped model, find the relation that leads to a scoped ancestor.
+ * Self-references (ProductField.parentFieldId) are skipped — they lead nowhere
+ * and would produce a policy that depends on itself.
+ */
+function parentLink(name) {
+  const model = byName.get(name);
+  if (!model) return null;
+
+  const rels = relations(model.body).filter((r) => r.target !== name);
+
+  // Prefer a directly scoped parent, then one that is itself resolvable.
+  const direct = rels.find((r) => scopeOf.has(r.target));
+  if (direct) return direct;
+
+  return rels.find((r) => byName.has(r.target) && parentLinkShallow(r.target)) ?? null;
+}
+
+function parentLinkShallow(name) {
+  const model = byName.get(name);
+  if (!model) return null;
+  return relations(model.body).some((r) => r.target !== name && scopeOf.has(r.target));
+}
 
 const out = [];
 const p = (s = "") => out.push(s);
@@ -72,36 +105,45 @@ const emit = (table, predicate) => {
   p("");
 };
 
-const factoryScoped = [];
-const orgScoped = [];
-const childScoped = [];
+const counts = { factory: 0, org: 0, child: 0, skipped: [] };
 
-for (const { name, body } of models) {
-  if (name === "Organization") {
-    orgScoped.push(name);
+for (const { name } of models) {
+  const scope = scopeOf.get(name);
+
+  if (scope === "org-self") {
+    counts.org++;
     emit(name, `"id" = verity.current_org_id()`);
-  } else if (has(body, "factoryId")) {
-    factoryScoped.push(name);
+  } else if (scope === "factory") {
+    counts.factory++;
     emit(name, `"factoryId" = verity.current_factory_id()`);
-  } else if (has(body, "organizationId")) {
-    orgScoped.push(name);
+  } else if (scope === "org") {
+    counts.org++;
     emit(name, `"organizationId" = verity.current_org_id()`);
-  } else if (CHILD_PARENT[name]) {
-    const [parent, fk] = CHILD_PARENT[name];
-    childScoped.push(name);
-    // Recursive containment: the parent's own policy applies to this EXISTS,
-    // so a child is visible exactly when its parent is.
-    emit(
-      name,
-      `EXISTS (SELECT 1 FROM "${parent}" par WHERE par."id" = "${name}"."${fk}")`,
-    );
   } else {
-    p(`-- SKIPPED ${name}: no tenant column and no parent mapping. Add one to`);
-    p(`-- CHILD_PARENT in scripts/gen_rls_migration.mjs before shipping.`);
-    p("");
+    const link = parentLink(name);
+    if (link) {
+      counts.child++;
+      // Containment: the parent's own policy applies inside this EXISTS, so a
+      // child row is visible exactly when its parent is.
+      emit(
+        name,
+        `EXISTS (SELECT 1 FROM "${link.target}" par WHERE par."id" = "${name}"."${link.fk}")`,
+      );
+    } else {
+      counts.skipped.push(name);
+      p(`-- SKIPPED ${name}: no tenant column and no resolvable parent relation.`);
+      p("");
+    }
   }
 }
 
-p(`-- Covered: ${factoryScoped.length} factory-scoped, ${orgScoped.length} org-scoped, ${childScoped.length} via parent.`);
+p(
+  `-- Covered: ${counts.factory} factory-scoped, ${counts.org} org-scoped, ${counts.child} via parent.` +
+    (counts.skipped.length ? ` SKIPPED: ${counts.skipped.join(", ")}` : ""),
+);
+
+if (counts.skipped.length) {
+  process.stderr.write(`WARNING unscoped tables: ${counts.skipped.join(", ")}\n`);
+}
 
 process.stdout.write(out.join("\n"));
