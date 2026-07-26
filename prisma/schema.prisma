@@ -1,0 +1,1392 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // App runtime uses the pooled connection (pgbouncer). Migrations need a
+  // direct, non-pooled connection — required by Supabase/Neon poolers.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum Role {
+  OWNER
+  CO_OWNER
+  MANAGER
+  SUPERVISOR
+  WORKER
+  // Creates on-ordered (customer) productions only — never stock productions.
+  // Their productions land in Pending/Draft; only a manager or owner releases
+  // them to production.
+  STORE_MANAGER
+}
+
+enum ItemType {
+  RAW_MATERIAL
+  SEMI_FINISHED
+  FINISHED_PRODUCT
+  CONSUMABLE
+  PACKAGING
+  SPARE_PART
+  MACHINERY
+  TOOL
+  ASSET
+  SERVICE
+}
+
+enum QCStatus {
+  PENDING
+  IN_PROGRESS
+  WAITING_QC
+  APPROVED
+  REJECTED
+  REWORK_REQUIRED
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  SUCCESS
+  ERROR
+  ACTION_REQUIRED
+}
+
+enum TimelineEventType {
+  CREATED
+  UPDATED
+  APPROVED
+  REJECTED
+  STATUS_CHANGED
+  COMMENT_ADDED
+  FILE_ATTACHED
+}
+
+// ==========================================
+// IDENTITY ENGINE
+// ==========================================
+
+model Factory {
+  id               String   @id @default(cuid())
+  name             String
+  slug             String   @unique
+  logoUrl          String?
+  address          String?
+  industry         String?
+  settings         Json?    @default("{}")
+  onboardingStatus String   @default("SETUP")
+  setupFee         Int      @default(0)
+  monthlyFee       Int      @default(0)
+  modulesEnabled   String?  @default("[]")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  users           User[]
+  departments     Department[]
+  agreements      Agreement[]
+  supportSessions SupportSession[]
+  workflowStages  WorkflowStage[]
+}
+
+model Agreement {
+  id          String    @id @default(cuid())
+  factoryId   String?
+  factoryName String
+  ownerName   String
+  phone       String
+  modules     Json      @default("[]") // Array of strings of enabled modules
+  setupFee    Int       @default(0)
+  monthlyFee  Int       @default(0)
+  status      String    @default("DRAFT") // DRAFT, SENT, ACCEPTED, EXPIRED
+  acceptedAt  DateTime?
+  signature   String?
+  createdBy   String // ID of the internal user who created it
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  factory Factory? @relation(fields: [factoryId], references: [id], onDelete: SetNull)
+
+  @@index([factoryId])
+}
+
+model SupportSession {
+  id             String    @id @default(cuid())
+  factoryId      String
+  internalUserId String
+  reason         String
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  factory Factory @relation(fields: [factoryId], references: [id], onDelete: Restrict)
+
+  @@index([factoryId])
+  @@index([internalUserId])
+}
+
+model WorkflowStage {
+  id             String   @id @default(cuid())
+  factoryId      String
+  name           String // e.g., "Design", "Cutting", "Stitching", "QC Check"
+  sortOrder      Int      @default(0)
+  requirePhoto   Boolean  @default(false)
+  requireRemarks Boolean  @default(false)
+  isQcStage      Boolean  @default(false) // QC stages run the inspection flow instead of stage capture
+  assignedRole   Role? // Role allowed to complete this stage
+  qcTemplateId   String? // Optional template to check during this stage
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  factory  Factory   @relation(fields: [factoryId], references: [id], onDelete: Restrict)
+  jobCards JobCard[]
+
+  @@index([factoryId])
+}
+
+model User {
+  id                String    @id @default(cuid())
+  factoryId         String
+  factory           Factory   @relation(fields: [factoryId], references: [id], onDelete: Restrict)
+  authId            String?   @unique
+  name              String
+  employeeId        Int       @unique @default(autoincrement())
+  phone             String?   @unique
+  role              Role
+  status            String    @default("active")
+  pinHash           String?
+  email             String?
+  notificationPrefs Json? // { email: bool, whatsapp: bool } — in-app always on
+  language          String    @default("en")
+  themePreference   String    @default("system")
+  isActive          Boolean   @default(true)
+  failedAttempts    Int       @default(0)
+  lockedUntil       DateTime?
+  createdById       String?
+  lastLoginAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  employeeProfile EmployeeProfile?
+  notifications   Notification[]
+  jobCards        JobCard[]
+  inspectedOrders SalesOrder[]     @relation("OrderInspector")
+
+  // A worker/inspector belongs to one department (the stage they staff). Role
+  // distinguishes worker vs inspector within that department.
+  departmentId String?
+  department   Department? @relation("DepartmentMembers", fields: [departmentId], references: [id], onDelete: SetNull)
+}
+
+// ==========================================
+// FACTORY SETUP (Master Data)
+// ==========================================
+
+// A department is a stage in the production chain (CAD → Cutting → Stitching →
+// QC → Packing) AND the roster of workers/inspectors who staff it. sortOrder is
+// the chain position; isQcStage routes the card through the inspection flow; a
+// template gives the stage a QC-style checklist the worker completes.
+model Department {
+  id             String      @id @default(cuid())
+  factoryId      String
+  factory        Factory     @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+  name           String // Cutting, Stitching, QC, Packing, etc.
+  description    String?
+  sortOrder      Int         @default(0)
+  isQcStage      Boolean     @default(false)
+  requirePhoto   Boolean     @default(false)
+  requireRemarks Boolean     @default(false)
+  // When true, a worker's stage completion waits for the department supervisor
+  // to approve before the chain advances (QC-style sign-off for any department).
+  // This is the standard flow — worker submits, supervisor approves, the job
+  // moves to the next department — so new departments opt in by default.
+  requiresApproval Boolean   @default(true)
+  templateId     String?
+  template       QCTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  active         Boolean     @default(true)
+  capacity       Float?
+  createdAt      DateTime    @default(now())
+
+  members    User[]               @relation("DepartmentMembers")
+  jobCards   JobCard[]
+  routeSteps BlueprintRouteStep[]
+
+  @@unique([factoryId, name])
+  @@index([factoryId])
+}
+
+// ==========================================
+// SHARED PLATFORM LAYER
+// ==========================================
+
+model TimelineEvent {
+  id          String            @id @default(cuid())
+  factoryId   String
+  entityType  String // e.g., "WorkOrder", "SalesOrder"
+  entityId    String
+  eventType   TimelineEventType
+  title       String
+  description String?           @db.Text
+  actorId     String?
+  metadata    Json?
+  createdAt   DateTime          @default(now())
+
+  @@index([factoryId])
+  @@index([entityType, entityId])
+}
+
+model Comment {
+  id         String   @id @default(cuid())
+  factoryId  String
+  entityType String
+  entityId   String
+  authorId   String
+  content    String   @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([factoryId])
+  @@index([entityType, entityId])
+}
+
+model Attachment {
+  id         String   @id @default(cuid())
+  factoryId  String
+  entityType String
+  entityId   String
+  fileName   String
+  fileUrl    String
+  mimeType   String
+  uploadedBy String
+  createdAt  DateTime @default(now())
+
+  @@index([factoryId])
+  @@index([entityType, entityId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  factoryId String
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String           @db.Text
+  type      NotificationType @default(INFO)
+  read      Boolean          @default(false)
+  linkUrl   String?
+  createdAt DateTime         @default(now())
+
+  @@index([factoryId])
+  @@index([userId, read])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  factoryId   String
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([factoryId])
+  @@index([entityType, entityId])
+}
+
+model Approval {
+  id            String    @id @default(cuid())
+  factoryId     String
+  entityType    String // e.g., "PurchaseOrder"
+  entityId      String
+  requestedById String
+  approverId    String? // If assigned to a specific user
+  approverRole  Role? // Or assigned to any user with this role
+  status        String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  comments      String?   @db.Text
+  resolvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([factoryId])
+  @@index([entityType, entityId])
+}
+
+// ==========================================
+// INVENTORY ENGINE (Material Movement)
+// ==========================================
+
+model ItemMaster {
+  id              String               @id @default(cuid())
+  factoryId       String
+  name            String
+  sku             String               @unique
+  // Human master code (RM-00042, FG-00007...). Auto-generated, editable, unique
+  // per factory. Nullable so existing rows migrate cleanly; CRUD always sets it.
+  itemCode        String?
+  itemType        ItemType
+  defaultUOM      String
+  secondaryUOM    String?
+  brand           String?
+  description     String?
+  imageUrl        String?
+  aliasName       String?
+  searchKeywords  String[]             @default([])
+  status          String               @default("ACTIVE") // ACTIVE | INACTIVE
+  valuationMethod String               @default("FIFO")
+  isBatchTracked  Boolean              @default(false)
+  minStockLevel   Float                @default(0)
+  safetyStock     Float                @default(0)
+  hsnCode         String?
+  taxRate         Float                @default(0)
+  categoryId      String?
+  category        MaterialCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  subcategoryId   String?
+  subcategory     MaterialSubcategory? @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  // Owner-defined custom fields (e.g. "xyz"): values keyed by ItemFieldDefinition.id.
+  customFields    Json?                @default("{}")
+
+  conversions        UOMConversion[]
+  stockLedgerEntries StockLedgerEntry[]
+  binBalances        BinBalance[]
+  bomItems           BOMItem[]             @relation("MaterialUsed")
+  purchaseOrderItems PurchaseOrderItem[]
+  salesOrders        SalesOrder[]          @relation("OrderMaterial")
+  reservations       MaterialReservation[] @relation("ReservedMaterial")
+
+  @@unique([factoryId, itemCode])
+  @@index([factoryId])
+}
+
+// Owner-defined custom field that applies to every item. Values are stored in
+// ItemMaster.customFields keyed by this id.
+model ItemFieldDefinition {
+  id        String   @id @default(cuid())
+  factoryId String
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([factoryId])
+}
+
+model MaterialCategory {
+  id            String                @id @default(cuid())
+  factoryId     String
+  name          String
+  materials     ItemMaster[]
+  subcategories MaterialSubcategory[]
+
+  @@unique([factoryId, name])
+}
+
+model MaterialSubcategory {
+  id         String           @id @default(cuid())
+  factoryId  String
+  categoryId String
+  category   MaterialCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name       String
+  items      ItemMaster[]
+
+  @@unique([factoryId, categoryId, name])
+  @@index([factoryId])
+}
+
+model UOMConversion {
+  id               String     @id @default(cuid())
+  itemId           String
+  item             ItemMaster @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  fromUOM          String
+  toUOM            String
+  conversionFactor Float
+}
+
+model Warehouse {
+  id        String   @id @default(cuid())
+  factoryId String
+  name      String
+  kind      String   @default("WAREHOUSE") // WAREHOUSE | STORE
+  createdAt DateTime @default(now())
+
+  zones      WarehouseZone[]
+  dispatches Dispatch[]
+
+  @@unique([factoryId, name])
+}
+
+model WarehouseZone {
+  id          String          @id @default(cuid())
+  factoryId   String?
+  warehouseId String
+  warehouse   Warehouse       @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  name        String
+  racks       WarehouseRack[]
+}
+
+model WarehouseRack {
+  id        String           @id @default(cuid())
+  factoryId String?
+  zoneId    String
+  zone      WarehouseZone    @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  name      String
+  shelves   WarehouseShelf[]
+}
+
+model WarehouseShelf {
+  id        String         @id @default(cuid())
+  factoryId String?
+  rackId    String
+  rack      WarehouseRack  @relation(fields: [rackId], references: [id], onDelete: Cascade)
+  name      String
+  bins      WarehouseBin[]
+}
+
+model WarehouseBin {
+  id        String         @id @default(cuid())
+  factoryId String?
+  shelfId   String
+  shelf     WarehouseShelf @relation(fields: [shelfId], references: [id], onDelete: Cascade)
+  name      String
+
+  balances           BinBalance[]
+  stockLedgerEntries StockLedgerEntry[]
+}
+
+model StockLedgerEntry {
+  id               String       @id @default(cuid())
+  factoryId        String
+  transactionType  String // RECEIPT, ISSUE, TRANSFER, ADJUSTMENT
+  itemId           String
+  item             ItemMaster   @relation(fields: [itemId], references: [id])
+  binId            String
+  bin              WarehouseBin @relation(fields: [binId], references: [id])
+  quantityChange   Float
+  valuationRate    Float // Cost per unit at time of transaction
+  totalValue       Float // quantityChange * valuationRate
+  batchNumber      String?
+  referenceDocType String? // e.g. "PurchaseReceipt", "ProductionReceipt"
+  referenceDocId   String?
+  adjustmentType   String? // manual adjustments: WASTAGE, DAMAGED, LOST, EXTRA_CONSUMED, CORRECTION, RECONCILIATION
+  notes            String? // mandatory remark on manual adjustments
+  createdById      String? // who performed a manual adjustment
+  stockStatus      String? // QC moves: AVAILABLE, QC_HOLD, REJECTED
+  supplierId       String? // batch provenance, captured on goods receipt
+  manufacturedAt   DateTime? // batch manufacture date, captured on goods receipt
+  createdAt        DateTime     @default(now())
+
+  @@index([factoryId])
+  @@index([itemId])
+  @@index([binId])
+}
+
+model BinBalance {
+  id             String       @id @default(cuid())
+  factoryId      String
+  itemId         String
+  item           ItemMaster   @relation(fields: [itemId], references: [id])
+  binId          String
+  bin            WarehouseBin @relation(fields: [binId], references: [id])
+  stockAvailable Float        @default(0)
+  // Quarantine buckets. Stock that failed or is awaiting incoming QC is still
+  // physically present but must not be issuable, so it is held apart from
+  // stockAvailable rather than just flagged.
+  stockQcHold    Float        @default(0)
+  stockRejected  Float        @default(0)
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([itemId, binId])
+}
+
+model MaterialReservation {
+  id               String     @id @default(cuid())
+  factoryId        String
+  itemId           String
+  item             ItemMaster @relation("ReservedMaterial", fields: [itemId], references: [id])
+  quantity         Float
+  productionPlanId String?
+  workOrderId      String?
+  workOrder        WorkOrder? @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+  status           String     @default("ACTIVE") // ACTIVE, CONSUMED, CANCELLED
+  createdAt        DateTime   @default(now())
+
+  @@index([factoryId])
+  @@index([workOrderId])
+}
+
+// BOM attached to a spec choice (design or fabric); merged with the
+// variant BOM when production issues materials.
+model SpecBOM {
+  id        String @id @default(cuid())
+  factoryId String
+  refType   String // DESIGN | FABRIC
+  refId     String
+  items     Json // [{ itemId, quantity, wastePercent }]
+
+  @@unique([refType, refId])
+  @@index([factoryId])
+}
+
+model Dispatch {
+  id                     String     @id @default(cuid())
+  factoryId              String
+  salesOrderId           String
+  salesOrder             SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  destinationType        String // WAREHOUSE | STORE | CUSTOMER
+  destinationWarehouseId String?
+  destinationWarehouse   Warehouse? @relation(fields: [destinationWarehouseId], references: [id], onDelete: SetNull)
+  customerName           String?
+  customerPhone          String?
+  address                String?
+  transporter            String?
+  vehicleNo              String?
+  trackingId             String?
+  notes                  String?
+  status                 String     @default("IN_TRANSIT") // IN_TRANSIT | DELIVERED
+  dispatchedAt           DateTime   @default(now())
+  deliveredAt            DateTime?
+
+  @@index([factoryId])
+  @@index([salesOrderId])
+}
+
+// ==========================================
+// CATALOG ENGINE
+// ==========================================
+
+model ProductCategory {
+  id        String    @id @default(cuid())
+  factoryId String
+  name      String
+  products  Product[]
+
+  @@unique([factoryId, name])
+}
+
+model Product {
+  id          String           @id @default(cuid())
+  factoryId   String
+  categoryId  String
+  category    ProductCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  name        String
+  skuPrefix   String?
+  description String?
+  variants    ProductVariant[]
+  templates   QCTemplate[]
+  designs     Design[]
+}
+
+model ProductVariant {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  itemId    String? @unique // Link to Inventory Engine (optional until an ItemMaster is attached)
+  name      String
+  sku       String  @unique
+  price     Float   @default(0)
+
+  fitments   ProductVehicleFitment[]
+  blueprint  Blueprint?
+  salesItems SalesOrderItem[]
+}
+
+// ==========================================
+// BLUEPRINT ENGINE (The DNA)
+// ==========================================
+
+model Blueprint {
+  id               String         @id @default(cuid())
+  factoryId        String
+  productVariantId String         @unique
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+  activeVersionId  String? // Points to BlueprintVersion.id
+
+  versions BlueprintVersion[]
+}
+
+model BlueprintVersion {
+  id                String      @id @default(cuid())
+  blueprintId       String
+  blueprint         Blueprint   @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  versionNumber     Int
+  name              String // e.g. "V1 - Standard Routing"
+  estimatedTimeMins Float       @default(0)
+  qcTemplateId      String?
+  qcTemplate        QCTemplate? @relation(fields: [qcTemplateId], references: [id])
+  isActive          Boolean     @default(false)
+  createdAt         DateTime    @default(now())
+
+  bom             BOM?
+  routeSteps      BlueprintRouteStep[]
+  documents       FactoryDocument[]
+  productionPlans ProductionPlan[]
+  salesOrderItems SalesOrderItem[]
+
+  @@unique([blueprintId, versionNumber])
+}
+
+model BlueprintRouteStep {
+  id                 String           @id @default(cuid())
+  blueprintVersionId String
+  blueprintVersion   BlueprintVersion @relation(fields: [blueprintVersionId], references: [id], onDelete: Cascade)
+  departmentId       String
+  department         Department       @relation(fields: [departmentId], references: [id])
+  sequence           Int
+  estimatedTimeMins  Float            @default(0)
+  requiredSkills     String[]
+  instructions       String?          @db.Text
+}
+
+model FactoryDocument {
+  id                 String           @id @default(cuid())
+  blueprintVersionId String
+  blueprintVersion   BlueprintVersion @relation(fields: [blueprintVersionId], references: [id], onDelete: Cascade)
+  title              String
+  fileUrl            String
+  documentType       String // DRAWING, VIDEO, GUIDE
+  createdAt          DateTime         @default(now())
+}
+
+// ==========================================
+// VEHICLE FITMENT ENGINE
+// ==========================================
+
+model VehicleBrand {
+  id          String         @id @default(cuid())
+  factoryId   String
+  name        String
+  models      VehicleModel[]
+  salesOrders SalesOrder[]      @relation("OrderVehicleBrand")
+}
+
+model VehicleModel {
+  id          String                  @id @default(cuid())
+  factoryId   String?
+  year        String?
+  brandId     String
+  brand       VehicleBrand            @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  name        String
+  generations VehicleGeneration[]
+  fitments    ProductVehicleFitment[]
+  salesOrders SalesOrder[]            @relation("OrderVehicleModel")
+}
+
+model VehicleGeneration {
+  id        String                  @id @default(cuid())
+  factoryId String?
+  modelId   String
+  model     VehicleModel            @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  name      String
+  years     VehicleYear[]
+  fitments  ProductVehicleFitment[]
+
+  // Spec constraints for variant generation (empty = all allowed, no gating).
+  // Owner curates real-world specs per Model+Generation so nonsense combos like
+  // "Alto 7HDR" never surface in variant search. Fabrics/designs stay open for all.
+  allowedSeatTypes String[] @default([]) // e.g. ["Single Back","Double Back"]
+  allowedHeadrests Int[]    @default([]) // e.g. [4,5]
+  allowedArmrests  String[] @default([]) // e.g. ["Arm","No Arm"]; empty = both
+}
+
+model VehicleYear {
+  id           String                  @id @default(cuid())
+  factoryId    String?
+  generationId String
+  generation   VehicleGeneration       @relation(fields: [generationId], references: [id], onDelete: Cascade)
+  year         Int
+  variants     VehicleVariant[]
+  fitments     ProductVehicleFitment[]
+}
+
+model VehicleVariant {
+  id        String                  @id @default(cuid())
+  factoryId String?
+  yearId    String
+  year      VehicleYear             @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  name      String
+  fitments  ProductVehicleFitment[]
+}
+
+model ProductVehicleFitment {
+  id               String         @id @default(cuid())
+  factoryId        String
+  productVariantId String
+  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+
+  vehicleVariantId    String?
+  vehicleVariant      VehicleVariant?    @relation(fields: [vehicleVariantId], references: [id], onDelete: Cascade)
+  vehicleYearId       String?
+  vehicleYear         VehicleYear?       @relation(fields: [vehicleYearId], references: [id], onDelete: Cascade)
+  vehicleGenerationId String?
+  vehicleGeneration   VehicleGeneration? @relation(fields: [vehicleGenerationId], references: [id], onDelete: Cascade)
+  vehicleModelId      String?
+  vehicleModel        VehicleModel?      @relation(fields: [vehicleModelId], references: [id], onDelete: Cascade)
+
+  fitmentNotes String?
+  createdAt    DateTime @default(now())
+
+  @@index([productVariantId])
+}
+
+// ==========================================
+// PROCUREMENT ENGINE
+// ==========================================
+
+model Supplier {
+  id            String   @id @default(cuid())
+  factoryId     String
+  name          String
+  contactPerson String?
+  phone         String?
+  email         String?
+  address       String?
+  gst           String?
+  pan           String?
+  bankName      String?
+  bankAccount   String?
+  paymentTerms  String?
+  leadTimeDays  Int?
+  createdAt     DateTime @default(now())
+
+  purchaseOrders PurchaseOrder[]
+}
+
+model PurchaseRequest {
+  id             String    @id @default(cuid())
+  factoryId      String
+  prNumber       String    @unique
+  status         String // DRAFT, PENDING_APPROVAL, APPROVED, ORDERED
+  requestedById  String
+  requiredByDate DateTime?
+  createdAt      DateTime  @default(now())
+}
+
+model PurchaseOrder {
+  id         String   @id @default(cuid())
+  factoryId  String
+  poNumber   String   @unique
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+  status     String // DRAFT, SUBMITTED, PARTIALLY_RECEIVED, COMPLETED, CANCELLED
+  orderDate  DateTime @default(now())
+  expectedDate DateTime?
+
+  items PurchaseOrderItem[]
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  materialId      String
+  material        ItemMaster    @relation(fields: [materialId], references: [id])
+  quantity        Float
+  rate            Float         @default(0)
+  receivedQty     Float         @default(0) // cumulative qty received across GRNs
+}
+
+model PurchaseReceipt {
+  id              String   @id @default(cuid())
+  factoryId       String
+  receiptNumber   String   @unique
+  purchaseOrderId String
+  supplierId      String
+  status          String // DRAFT, SUBMITTED
+  receiptDate     DateTime @default(now())
+  receivedById    String?
+
+  items PurchaseReceiptItem[]
+}
+
+model PurchaseReceiptItem {
+  id          String          @id @default(cuid())
+  receiptId   String
+  receipt     PurchaseReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  materialId  String
+  quantity    Float
+  rate        Float           @default(0)
+  batchNumber String?
+}
+
+model PurchaseInvoice {
+  id            String   @id @default(cuid())
+  factoryId     String
+  invoiceNumber String   @unique
+  supplierId    String
+  totalAmount   Float
+  status        String // UNPAID, PAID
+  dueDate       DateTime
+}
+
+// ==========================================
+// MANUFACTURING ENGINE
+// ==========================================
+
+model BOM {
+  id                 String           @id @default(cuid())
+  factoryId          String
+  blueprintVersionId String           @unique
+  blueprintVersion   BlueprintVersion @relation(fields: [blueprintVersionId], references: [id], onDelete: Cascade)
+  items              BOMItem[]
+}
+
+model BOMItem {
+  id           String     @id @default(cuid())
+  bomId        String
+  bom          BOM        @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  itemId       String
+  item         ItemMaster @relation("MaterialUsed", fields: [itemId], references: [id])
+  quantity     Float
+  wastePercent Float      @default(0)
+}
+
+model ProductionPlan {
+  id                 String           @id @default(cuid())
+  factoryId          String
+  salesOrderId       String?
+  salesOrder         SalesOrder?      @relation(fields: [salesOrderId], references: [id])
+  blueprintVersionId String
+  blueprintVersion   BlueprintVersion @relation(fields: [blueprintVersionId], references: [id])
+  quantity           Float
+  priority           String           @default("NORMAL") // URGENT, NORMAL, LOW
+  status             String           @default("PENDING") // PENDING, RELEASED, CANCELLED
+  targetStartDate    DateTime?
+  createdAt          DateTime         @default(now())
+
+  workOrders WorkOrder[]
+}
+
+model WorkOrder {
+  id               String         @id @default(cuid())
+  factoryId        String
+  woNumber         String         @unique
+  productionPlanId String
+  productionPlan   ProductionPlan @relation(fields: [productionPlanId], references: [id])
+  status           String         @default("PLANNED") // PLANNED, IN_PROGRESS, COMPLETED
+  targetQty        Float
+  producedQty      Float          @default(0)
+  startDate        DateTime?
+  endDate          DateTime?
+
+  jobCards     JobCard[]
+  reservations MaterialReservation[]
+}
+
+model JobCard {
+  id            String         @id @default(cuid())
+  factoryId     String
+  workOrderId   String
+  workOrder     WorkOrder      @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  departmentId  String
+  department    Department     @relation(fields: [departmentId], references: [id])
+  sequence      Int
+  status        String         @default("WAITING") // WAITING, IN_PROGRESS, ON_HOLD, BLOCKED, QC_PENDING, REWORK_REQUIRED, COMPLETED
+  stageId       String? // Workflow stage this card executes (null on legacy single-card orders)
+  stage         WorkflowStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  reworkReason  String? // Pinned QC rejection reason while status is REWORK_REQUIRED
+  assignedToId  String?
+  assignedTo    User?          @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  createdAt     DateTime       @default(now())
+  targetQty     Float
+  completedQty  Float          @default(0)
+  timeSpentMins Float          @default(0)
+  startedAt     DateTime?
+  completedAt   DateTime?
+
+  inspection   Inspection?
+  stageEntries StageEntry[]
+
+  // The QC/checklist template this card ran, pinned at creation so the order
+  // review shows exactly which template each department used (product-based:
+  // mats and seat covers resolve to different templates). Null on legacy cards.
+  templateId String?
+  template   QCTemplate? @relation("JobCardTemplate", fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([factoryId])
+  @@index([workOrderId])
+}
+
+// A stage submission: what the operator captured when working a stage card.
+// One row per submission attempt, so rework history is preserved.
+model StageEntry {
+  id            String   @id @default(cuid())
+  factoryId     String
+  jobCardId     String
+  jobCard       JobCard  @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  submittedById String?
+  beforeImages  Json? // array of public URLs
+  afterImages   Json? // array of public URLs
+  measurements  String?
+  materialNotes String?
+  remarks       String?
+  // Department stage-checklist results when the stage carries a template:
+  // [{ checkpointId, name, ok, remarks, images: [publicUrl] }]
+  checklist     Json?
+  outcome       String   @default("SUBMITTED") // SUBMITTED, APPROVED, REWORK
+  createdAt     DateTime @default(now())
+
+  @@index([jobCardId])
+  @@index([factoryId])
+}
+
+// ==========================================
+// CRM & SALES ENGINE
+// ==========================================
+
+model Customer {
+  id           String       @id @default(cuid())
+  factoryId    String
+  customerCode String?
+  name         String
+  companyName  String?
+  phone        String?
+  altPhone     String?
+  email        String?
+  gstNumber    String?
+  billingAddress  String?
+  shippingAddress String?
+  notes        String?
+  // Retail / Dealer / OEM / Internal (and any free tags). Dealers are simply a
+  // tagged customer, not a separate entity.
+  tags         String[]     @default([])
+  assignedSalesperson String?
+  creditLimit  Float        @default(0)
+  paymentTerms String?
+  customFields Json?        @default("{}")
+  createdAt    DateTime     @default(now())
+  salesOrders  SalesOrder[]
+
+  @@unique([factoryId, customerCode])
+}
+
+model Deal {
+  id            String    @id @default(cuid())
+  factoryId     String
+  title         String
+  customerId    String?
+  amount        Float
+  stage         String // PROSPECTING, QUALIFIED, PROPOSAL, WON, LOST
+  probability   Int       @default(50)
+  expectedClose DateTime?
+  ownerId       String
+}
+
+enum OrderType {
+  RETAIL
+  DEALER
+  OEM
+  INTERNAL
+}
+
+model SalesOrder {
+  id          String    @id @default(cuid())
+  factoryId   String
+  soNumber    String    @unique
+  customerId  String
+  status      String // DRAFT, APPROVED, IN_PRODUCTION, READY, DISPATCHED
+  // Who booked the order — used to scope a store manager to their own orders.
+  createdById String?
+  // Retail / Dealer / OEM / Internal. A "dealer order" is just an order whose
+  // type is DEALER — there is no separate dealer entity or portal.
+  orderType   OrderType @default(RETAIL)
+  // Identity of the physical production bag: printed once before manufacturing
+  // and carried CAD -> Cutting -> Stitching -> QC -> Packing -> Dispatch.
+  labelCode   String?   @unique
+  totalAmount Float     @default(0)
+  expectedDeliveryDate DateTime?
+  orderDate   DateTime @default(now())
+
+  // Order configuration captured by the V1 creation studio
+  materialId           String?
+  material             ItemMaster?      @relation("OrderMaterial", fields: [materialId], references: [id], onDelete: SetNull)
+  designId             String?
+  design               Design?          @relation(fields: [designId], references: [id], onDelete: SetNull)
+  colorId              String?
+  color                Color?           @relation(fields: [colorId], references: [id], onDelete: SetNull)
+  productTypeId        String?
+  productType          ProductType?     @relation(fields: [productTypeId], references: [id], onDelete: SetNull)
+  inspectorId          String?
+  inspector            User?            @relation("OrderInspector", fields: [inspectorId], references: [id], onDelete: SetNull)
+  fulfilledFromOrderId String? // stock-matched: the production whose goods and passport this order uses
+  // Scheduled release: workers don't see the job until this date arrives, then
+  // it's their task for the day. Null means "on the floor now".
+  scheduledFor         DateTime?
+  fulfilledFromStockQty Float?  @default(0) // partial stock: how many of the order were taken from stock
+  productionBatchId    String? // set when drafts are released together as one batch
+  productionBatch      ProductionBatch? @relation(fields: [productionBatchId], references: [id], onDelete: SetNull)
+  // Vehicle is stored per-order. Previously it lived only as a fitment on the
+  // (shared) product variant, so two orders of the same product type showed
+  // each other's vehicle. These columns give every order its own identity.
+  vehicleBrandId       String?
+  vehicleBrand         VehicleBrand?    @relation("OrderVehicleBrand", fields: [vehicleBrandId], references: [id], onDelete: SetNull)
+  vehicleModelId       String?
+  vehicleModel         VehicleModel?    @relation("OrderVehicleModel", fields: [vehicleModelId], references: [id], onDelete: SetNull)
+  vehicleYear          String?
+  seatType             String?
+  hasArmrest           Boolean          @default(false)
+  headrestCount        Int?
+  remarks              String?
+  photoReference       String?
+  dynamicData          Json?
+
+  customer   Customer         @relation(fields: [customerId], references: [id])
+  items      SalesOrderItem[]
+  plans      ProductionPlan[]
+  dispatches Dispatch[]
+}
+
+enum FieldType {
+  TEXT
+  SELECT
+  NUMBER
+  MEASUREMENT
+  TOGGLE
+  BUTTONS
+  CHECKBOX
+}
+
+model Design {
+  id                String   @id @default(cuid())
+  factoryId         String
+  // Design family (ULTRA, ERGO FIT, QUILTS...). Distinct from the product: a
+  // family groups designs by style, the product says what they are made for.
+  category          String?
+  productId         String?
+  product           Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  name              String
+  imageUrls         String[] @default([]) // reference photos shown to workers/QC
+  // CAD department master data: the standard fabric consumption for this design
+  // (metres per unit) drives automatic material calculation, and the CAD file is
+  // the cutting pattern handed to the Cutting department.
+  fabricConsumption Float?
+  cadFileUrl        String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  salesOrders SalesOrder[]
+
+  @@index([factoryId])
+}
+
+model Color {
+  id        String   @id @default(cuid())
+  factoryId String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  salesOrders SalesOrder[]
+
+  @@index([factoryId])
+}
+
+// A validated Carxen product configuration: the vehicle + product + spec
+// identity that a production is built on. Fabric/Design/Colour are selected
+// per-production (the variable part) and are intentionally NOT stored here —
+// this table is the reusable "up-to-specs" template that drives the studio's
+// progressive auto-selection and batch auto-population.
+model ProductCombination {
+  id         String   @id @default(cuid())
+  factoryId  String
+  brand      String
+  model      String
+  generation String?
+  category   String?
+  product    String?
+  seatType   String   @default("DB") // SB (Single Back) | DB (Double Back)
+  headrests  Int      @default(4) // 2,4,5,6,7,8
+  armrest    Boolean  @default(false)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([factoryId])
+}
+
+model ProductType {
+  id        String   @id @default(cuid())
+  factoryId String
+  name      String // e.g., "Seat Cover", "Table", "Shirt"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fields      ProductField[]
+  salesOrders SalesOrder[]
+
+  @@index([factoryId])
+}
+
+model ProductField {
+  id            String    @id @default(cuid())
+  productTypeId String
+  name          String // e.g., "Wood Type", "Dimensions", "Thread Color"
+  type          FieldType
+  options       Json? // Array of options if SELECT type (e.g. ["Oak", "Teak"])
+  isRequired    Boolean   @default(false)
+  sortOrder     Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  productType ProductType @relation(fields: [productTypeId], references: [id], onDelete: Cascade)
+
+  @@index([productTypeId])
+}
+
+// Groups draft productions released to the floor together (e.g. several
+// identical Brezza orders accumulated in Draft, clubbed into one run).
+model ProductionBatch {
+  id          String   @id @default(cuid())
+  factoryId   String
+  batchNumber String   @unique
+  createdAt   DateTime @default(now())
+
+  salesOrders SalesOrder[]
+
+  @@index([factoryId])
+}
+
+model SalesOrderItem {
+  id                 String            @id @default(cuid())
+  salesOrderId       String
+  salesOrder         SalesOrder        @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  productVariantId   String
+  productVariant     ProductVariant    @relation(fields: [productVariantId], references: [id])
+  quantity           Float
+  blueprintVersionId String?
+  blueprintVersion   BlueprintVersion? @relation(fields: [blueprintVersionId], references: [id])
+  unitPrice          Float
+}
+
+// ==========================================
+// WORKFORCE ENGINE
+// ==========================================
+
+model EmployeeProfile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  factoryId      String
+  dateOfJoining  DateTime
+  employmentType String // PERMANENT, CONTRACT, DAILY
+  hourlyRate     Float?
+  skills         String[]
+  defaultShiftId String?
+}
+
+model Shift {
+  id              String @id @default(cuid())
+  factoryId       String
+  name            String
+  startTime       String // e.g. "08:00"
+  endTime         String // e.g. "16:00"
+  gracePeriodMins Int    @default(15)
+}
+
+model AttendanceLog {
+  id            String    @id @default(cuid())
+  factoryId     String
+  userId        String
+  shiftId       String?
+  clockIn       DateTime
+  clockOut      DateTime?
+  isLate        Boolean   @default(false)
+  overtimeHours Float     @default(0)
+  status        String // PRESENT, HALF_DAY, ABSENT
+}
+
+model LeaveApplication {
+  id           String   @id @default(cuid())
+  factoryId    String
+  userId       String
+  leaveType    String // CASUAL, SICK, UNPAID
+  fromDate     DateTime
+  toDate       DateTime
+  status       String // PENDING, APPROVED, REJECTED
+  approvedById String?
+}
+
+// ==========================================
+// QUALITY ENGINE (FROZEN/PRESERVED)
+// ==========================================
+
+model QCTemplate {
+  id               String   @id @default(cuid())
+  factoryId        String
+  name             String
+  version          String   @default("1.0")
+  isLatest         Boolean  @default(true)
+  parentTemplateId String?
+  status           String   @default("active")
+  // When true the worker must attach a walkthrough video before submitting the
+  // inspection, and the supervisor must review it before sign-off.
+  requiresVideo    Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  parentTemplate QCTemplate?       @relation("TemplateVersions", fields: [parentTemplateId], references: [id], onDelete: SetNull)
+  childTemplates QCTemplate[]      @relation("TemplateVersions")
+  sections       TemplateSection[]
+  products       Product[]
+  departments    Department[]
+  jobCards       JobCard[]          @relation("JobCardTemplate")
+
+  blueprintVersions BlueprintVersion[]
+
+  @@index([factoryId])
+  @@index([parentTemplateId])
+}
+
+model TemplateSection {
+  id            String     @id @default(cuid())
+  factoryId     String
+  templateId    String
+  template      QCTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  title         String
+  titleHi       String?
+  titleHinglish String?
+  sortOrder     Int
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  checkpoints Checkpoint[]
+
+  @@index([factoryId])
+  @@index([templateId])
+}
+
+model Checkpoint {
+  id                   String          @id @default(cuid())
+  factoryId            String
+  sectionId            String
+  section              TemplateSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  name                 String
+  nameHi               String?
+  nameHinglish         String?
+  instructions         String
+  instructionsHi       String?
+  instructionsHinglish String?
+  // Photos are opt-in: a checkpoint only demands one when the template author
+  // explicitly asks for it. Defaulting to true silently blocked submissions on
+  // checkpoints nobody had configured.
+  requireImage         Boolean         @default(false)
+  requireRemarks       Boolean         @default(false)
+  sortOrder            Int
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  submissions CheckpointSubmission[]
+
+  @@index([factoryId])
+  @@index([sectionId])
+}
+
+model Inspection {
+  id          String    @id @default(cuid())
+  factoryId   String
+  jobCardId   String    @unique
+  jobCard     JobCard   @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  status      QCStatus  @default(IN_PROGRESS)
+  startedAt   DateTime?
+  submittedAt DateTime?
+  approvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // A short walkthrough video of the finished piece (30–60s), captured during
+  // QC. Photos prove individual checkpoints; the video proves the whole item
+  // and is the strongest evidence in a customer dispute.
+  videoUrl          String?
+  videoPath         String?
+  videoDurationSec  Float?
+  videoUploadedAt   DateTime?
+  videoUploadedById String?
+
+  submissions   CheckpointSubmission[]
+  approval      QualityApproval?
+  report        QualityReport?
+  reworkRecords ReworkRecord[]
+
+  @@index([factoryId])
+  @@index([factoryId, status])
+}
+
+model CheckpointSubmission {
+  id                 String     @id @default(cuid())
+  factoryId          String
+  inspectionId       String
+  inspection         Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  checkpointId       String
+  checkpoint         Checkpoint @relation(fields: [checkpointId], references: [id], onDelete: Cascade)
+  passFail           String?
+  remarks            String?
+  completedAt        DateTime?
+  verificationStatus String?
+  inspectorComment   String?
+  verifiedAt         DateTime?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  evidences ImageEvidence[]
+
+  @@index([factoryId])
+  @@index([inspectionId])
+}
+
+model ImageEvidence {
+  id           String               @id @default(cuid())
+  factoryId    String
+  submissionId String
+  submission   CheckpointSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  storageKey   String
+  publicUrl    String
+  mimeType     String
+  uploadedById String? // who captured this evidence photo
+  createdAt    DateTime             @default(now())
+}
+
+model QualityApproval {
+  id           String     @id @default(cuid())
+  factoryId    String
+  inspectionId String     @unique
+  inspection   Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  inspectorId  String
+  status       String
+  comments     String?
+  createdAt    DateTime   @default(now())
+}
+
+model QualityReport {
+  id               String     @id @default(cuid())
+  factoryId        String
+  inspectionId     String     @unique
+  inspection       Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  verificationCode String     @unique
+  pdfUrl           String?
+  generatedAt      DateTime   @default(now())
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@index([factoryId])
+  @@index([verificationCode])
+}
+
+model ReworkRecord {
+  id           String     @id @default(cuid())
+  factoryId    String
+  inspectionId String
+  inspection   Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  defectCode   String
+  workerId     String
+  comments     String?    @db.Text
+  resolvedAt   DateTime?
+  createdAt    DateTime   @default(now())
+}
+
+// ==========================================
+// DISPATCH ENGINE
+// ==========================================
+

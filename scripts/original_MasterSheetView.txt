@@ -1,0 +1,935 @@
+"use client";
+
+import { useState, useMemo, useEffect, useRef } from "react";
+import { 
+  X, Search, Download, Plus, Check, Loader2, Database, AlertCircle, FileSpreadsheet, Trash2,
+  ChevronDown, ChevronRight, CheckSquare, Edit3
+} from "lucide-react";
+import { toast } from "@/components/ui/toast";
+import { 
+  addBrand, addColor, addMaterial, addModel, addModelByName,
+  removeBrand, removeColor, removeMaterial, removeModel,
+  updateBrand, updateColor, updateMaterial, updateModel
+} from "@/server/actions/masterData";
+import { cn } from "@/lib/utils";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { updateCheckpointField, deleteCheckpointAction, addSectionAction, addCheckpointAction, deleteSectionAction, deleteQCTemplate } from "@/server/actions/qc-templates";
+
+type MasterSheetViewProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  masterData: {
+    brands: any[];
+    models: any[];
+    materials: any[];
+    colors: any[];
+    templates?: any[];
+  };
+};
+
+type ActiveSheet = "vehicles" | "materials" | "colors" | "templates";
+
+type SelectedCell = {
+  rowIndex: number;
+  colIndex: number;
+};
+
+type ColDefinition = {
+  label: string;
+  field: string;
+  letter: string;
+  type: string;
+};
+
+export function MasterSheetView({ isOpen, onClose, masterData }: MasterSheetViewProps) {
+  const [activeSheet, setActiveSheet] = useState<ActiveSheet>("vehicles");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [editingCell, setEditingCell] = useState<{ id: string; field: string; type: string } | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [newItemName, setNewItemName] = useState("");
+  const [newModelBrandId, setNewModelBrandId] = useState("");
+  const [newModelYear, setNewModelYear] = useState("");
+  const [brandInputText, setBrandInputText] = useState("");
+  const [itemToDelete, setItemToDelete] = useState<{ id: string, type: "brand" | "model" | "material" | "color" | "checkpoint", name: string } | null>(null);
+
+  // Outline/Hierarchy states for Templates
+  const [collapsedTemplates, setCollapsedTemplates] = useState<Record<string, boolean>>({});
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+
+  // Active grid cell state
+  const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
+
+  // Last saved timestamp
+  const [lastSaved, setLastSaved] = useState<string>("Just now");
+
+  const tableRef = useRef<HTMLTableElement>(null);
+
+  const { brands = [], models = [], materials = [], colors = [], templates = [] } = masterData;
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLastSaved(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    }, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Columns per active sheet
+  const columns: Record<ActiveSheet, ColDefinition[]> = useMemo(() => ({
+    vehicles: [
+      { label: "Brand", field: "brandName", letter: "A", type: "brand" },
+      { label: "Model Variant", field: "modelName", letter: "B", type: "model" },
+      { label: "Year", field: "year", letter: "C", type: "model" }
+    ],
+    materials: [
+      { label: "Material Name", field: "name", letter: "A", type: "material" }
+    ],
+    colors: [
+      { label: "Color Accent", field: "name", letter: "A", type: "color" }
+    ],
+    templates: [
+      { label: "Template Name", field: "templateName", letter: "A", type: "checkpoint" },
+      { label: "Section Title", field: "sectionTitle", letter: "B", type: "checkpoint" },
+      { label: "Checkpoint Name", field: "checkpointName", letter: "C", type: "checkpoint" },
+      { label: "Instructions", field: "instructions", letter: "D", type: "checkpoint" },
+      { label: "Req. Image", field: "requireImage", letter: "E", type: "checkpoint" },
+      { label: "Req. Remarks", field: "requireRemarks", letter: "F", type: "checkpoint" }
+    ]
+  }), []);
+
+  const activeCols = columns[activeSheet];
+
+  // Vehicles flattened data
+  const vehicleRows = useMemo(() => {
+    return models.map((m: any) => ({
+      id: m.id,
+      brandId: m.brandId,
+      brandName: m.brand?.name || "Other",
+      modelName: m.name,
+      year: m.year || "—",
+      type: "row"
+    }));
+  }, [models]);
+
+  // Collapsible hierarchical templates data builder
+  const templateRows = useMemo(() => {
+    const rows: any[] = [];
+    for (const tpl of templates) {
+      const isTplCollapsed = collapsedTemplates[tpl.id];
+      rows.push({
+        id: tpl.id,
+        type: "template_header",
+        templateName: tpl.name,
+        isCollapsed: isTplCollapsed
+      });
+
+      if (isTplCollapsed) continue;
+
+      for (const sec of tpl.sections) {
+        const isSecCollapsed = collapsedSections[sec.id];
+        rows.push({
+          id: sec.id,
+          type: "section_header",
+          templateName: tpl.name,
+          sectionTitle: sec.title,
+          isCollapsed: isSecCollapsed
+        });
+
+        if (isSecCollapsed) continue;
+
+        for (const cp of sec.checkpoints) {
+          rows.push({
+            id: cp.id,
+            type: "checkpoint_row",
+            templateId: tpl.id,
+            templateName: tpl.name,
+            sectionId: sec.id,
+            sectionTitle: sec.title,
+            checkpointId: cp.id,
+            checkpointName: cp.name,
+            instructions: cp.instructions,
+            requireImage: cp.requireImage ? "Yes" : "No",
+            requireRemarks: cp.requireRemarks ? "Yes" : "No"
+          });
+        }
+      }
+    }
+    return rows;
+  }, [templates, collapsedTemplates, collapsedSections]);
+
+  // Row filtering by search query
+  const filteredVehicles = useMemo(() => {
+    return vehicleRows.filter(r => 
+      r.brandName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.modelName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.year.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [vehicleRows, searchQuery]);
+
+  const filteredMaterials = useMemo(() => {
+    return materials.map(m => ({ ...m, type: "row" })).filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [materials, searchQuery]);
+
+  const filteredColors = useMemo(() => {
+    return colors.map(c => ({ ...c, type: "row" })).filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [colors, searchQuery]);
+
+  const filteredTemplates = useMemo(() => {
+    // Keep header rows if query is empty, otherwise filter by text matches
+    if (!searchQuery) return templateRows;
+    return templateRows.filter(r => 
+      r.type !== "checkpoint_row" ||
+      r.templateName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.sectionTitle?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.checkpointName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      r.instructions?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [templateRows, searchQuery]);
+
+  const currentRows = useMemo(() => {
+    if (activeSheet === "vehicles") return filteredVehicles;
+    if (activeSheet === "materials") return filteredMaterials;
+    if (activeSheet === "colors") return filteredColors;
+    return filteredTemplates;
+  }, [activeSheet, filteredVehicles, filteredMaterials, filteredColors, filteredTemplates]);
+
+  // Selected cell value for formula bar
+  const formulaValue = useMemo(() => {
+    if (!selectedCell) return "";
+    const row = currentRows[selectedCell.rowIndex];
+    const col = activeCols[selectedCell.colIndex];
+    if (!row || !col) return "";
+    if (row.type !== "row" && row.type !== "checkpoint_row") return "";
+    return row[col.field] || "";
+  }, [selectedCell, currentRows, activeCols]);
+
+  const handleCellCommit = async (id: string, field: string, type: string, originalValue: string) => {
+    if (editValue.trim() === originalValue) {
+      setEditingCell(null);
+      return;
+    }
+    
+    setSyncing(true);
+    try {
+      if (type === "brand") {
+        await updateBrand(id, editValue.trim());
+      } else if (type === "model") {
+        if (field === "modelName") {
+          const modelObj = models.find((m: any) => m.id === id);
+          await updateModel(id, editValue.trim(), modelObj?.year || "");
+        } else if (field === "year") {
+          const modelObj = models.find((m: any) => m.id === id);
+          await updateModel(id, modelObj?.name || "", editValue.trim());
+        }
+      } else if (type === "material") {
+        await updateMaterial(id, editValue.trim());
+      } else if (type === "color") {
+        await updateColor(id, editValue.trim());
+      } else if (type === "checkpoint") {
+        let dbField = field;
+        if (field === "checkpointName") dbField = "checkpointName";
+        await updateCheckpointField(id, dbField, editValue.trim());
+      }
+      setLastSaved(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      toast.success("Workbook autosaved");
+    } catch (err: any) {
+      toast.error("Save failed: " + (err.message || "Unknown error"));
+    } finally {
+      setSyncing(false);
+      setEditingCell(null);
+    }
+  };
+
+  const startCellEditing = (rowIndex: number, colIndex: number) => {
+    const row = currentRows[rowIndex];
+    const col = activeCols[colIndex];
+    if (!row || !col || row.type === "template_header" || row.type === "section_header") return;
+
+    let editType = col.type;
+    let itemId = row.id;
+
+    if (activeSheet === "vehicles" && col.field === "brandName") {
+      editType = "brand";
+      itemId = row.brandId;
+    }
+
+    setEditingCell({ id: itemId, field: col.field, type: editType });
+    setEditValue(row[col.field] || "");
+  };
+
+  // Keyboard navigation controller
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!selectedCell) return;
+    const maxRows = currentRows.length;
+    const maxCols = activeCols.length;
+
+    if (editingCell) {
+      if (e.key === "Escape") {
+        setEditingCell(null);
+        e.preventDefault();
+      }
+      return;
+    }
+
+    let { rowIndex, colIndex } = selectedCell;
+
+    switch (e.key) {
+      case "ArrowUp":
+        if (rowIndex > 0) rowIndex--;
+        e.preventDefault();
+        break;
+      case "ArrowDown":
+        if (rowIndex < maxRows - 1) rowIndex++;
+        e.preventDefault();
+        break;
+      case "ArrowLeft":
+        if (colIndex > 0) colIndex--;
+        e.preventDefault();
+        break;
+      case "ArrowRight":
+        if (colIndex < maxCols - 1) colIndex++;
+        e.preventDefault();
+        break;
+      case "Tab":
+        if (e.shiftKey) {
+          if (colIndex > 0) colIndex--;
+        } else {
+          if (colIndex < maxCols - 1) colIndex++;
+        }
+        e.preventDefault();
+        break;
+      case "Enter":
+        startCellEditing(rowIndex, colIndex);
+        e.preventDefault();
+        break;
+    }
+
+    setSelectedCell({ rowIndex, colIndex });
+  };
+
+  const handleAddItem = async () => {
+    if (!newItemName.trim()) return;
+    setSyncing(true);
+    try {
+      if (activeSheet === "vehicles") {
+        if (!brandInputText.trim()) {
+          toast.error("Please specify a brand");
+          setSyncing(false);
+          return;
+        }
+        await addModelByName(brandInputText.trim(), newItemName.trim(), newModelYear.trim());
+        setNewItemName("");
+        setNewModelYear("");
+        setBrandInputText("");
+      } else if (activeSheet === "materials") {
+        await addMaterial(newItemName.trim());
+        setNewItemName("");
+      } else if (activeSheet === "colors") {
+        await addColor(newItemName.trim());
+        setNewItemName("");
+      }
+      toast.success("Record added");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add record");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleDeleteItem = (id: string, type: "brand" | "model" | "material" | "color" | "checkpoint", name: string) => {
+    setItemToDelete({ id, type, name });
+  };
+
+  const executeDeleteItem = async () => {
+    if (!itemToDelete) return;
+    const { id, type } = itemToDelete;
+    setItemToDelete(null);
+    setSyncing(true);
+    try {
+      if (type === "brand") await removeBrand(id);
+      else if (type === "model") await removeModel(id);
+      else if (type === "material") await removeMaterial(id);
+      else if (type === "color") await removeColor(id);
+      else if (type === "checkpoint") await deleteCheckpointAction(id);
+      toast.success("Record deleted");
+    } catch (err: any) {
+      toast.error(err.message || "Deletion failed");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleExportCSV = () => {
+    let headers = "";
+    let rows: string[] = [];
+
+    if (activeSheet === "vehicles") {
+      headers = "Brand,Model,Year\n";
+      rows = filteredVehicles.map(r => `"${r.brandName}","${r.modelName}","${r.year}"`);
+    } else if (activeSheet === "materials") {
+      headers = "Material Name\n";
+      rows = filteredMaterials.map(m => `"${m.name}"`);
+    } else if (activeSheet === "colors") {
+      headers = "Color Name\n";
+      rows = filteredColors.map(c => `"${c.name}"`);
+    } else if (activeSheet === "templates") {
+      headers = "Template,Section,Checkpoint,Instructions,Require Image,Require Remarks\n";
+      rows = filteredTemplates
+        .filter(r => r.type === "checkpoint_row")
+        .map(r => `"${r.templateName}","${r.sectionTitle}","${r.checkpointName}","${r.instructions}","${r.requireImage}","${r.requireRemarks}"`);
+    }
+
+    const csvContent = "data:text/csv;charset=utf-8," + headers + rows.join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `VEDA_${activeSheet}_catalog.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const toggleTemplateCollapse = (tplId: string) => {
+    setCollapsedTemplates(prev => ({ ...prev, [tplId]: !prev[tplId] }));
+  };
+
+  const handleAddSectionToTemplate = async (templateId: string) => {
+    const title = window.prompt("Enter new Section Title:");
+    if (!title?.trim()) return;
+    setSyncing(true);
+    try {
+      const res = await addSectionAction(templateId, title.trim());
+      if (res.error) throw new Error(res.error);
+      toast.success("Section added to template outline");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add section");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleAddCheckpointToSection = async (sectionId: string) => {
+    const name = window.prompt("Enter new Checkpoint Name:");
+    if (!name?.trim()) return;
+    setSyncing(true);
+    try {
+      const res = await addCheckpointAction(sectionId, name.trim());
+      if (res.error) throw new Error(res.error);
+      toast.success("Step added to section outline");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add checkpoint");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to delete template "${name}"?`)) return;
+    setSyncing(true);
+    try {
+      const res = await deleteQCTemplate(templateId);
+      if (res.error) throw new Error(res.error);
+      toast.success("Template deleted");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete template");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleDeleteSection = async (sectionId: string, title: string) => {
+    if (!window.confirm(`Are you sure you want to delete section "${title}"?`)) return;
+    setSyncing(true);
+    try {
+      const res = await deleteSectionAction(sectionId);
+      if (res.error) throw new Error(res.error);
+      toast.success("Section deleted");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete section");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const toggleSectionCollapse = (secId: string) => {
+    setCollapsedSections(prev => ({ ...prev, [secId]: !prev[secId] }));
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-0">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={onClose} />
+
+      {/* Modal Shell */}
+      <div className="relative w-screen h-screen bg-white dark:bg-neutral-900 flex flex-col z-10 animate-in fade-in duration-200">
+        
+        {/* Top Header Bar */}
+        <div className="flex justify-between items-center px-6 py-4 border-b border-border shrink-0 bg-surface-secondary/40 dark:bg-neutral-800/20">
+          <div className="flex items-center gap-2">
+            <div className="h-9 w-9 rounded-xl bg-[var(--brand-soft)] text-[var(--brand)] flex items-center justify-center">
+              <FileSpreadsheet className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-text-primary">Master Data Studio</h3>
+              <p className="text-[10px] text-text-secondary">Spreadsheet-style catalog workbook</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-surface text-[10px] font-bold text-text-tertiary">
+              {syncing ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-[var(--brand)]" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Database className="h-3.5 w-3.5 text-success" />
+                  Autosaved
+                </>
+              )}
+            </div>
+
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-full hover:bg-surface-secondary text-text-secondary hover:text-text-primary transition cursor-pointer"
+            >
+              <X className="h-4.5 w-4.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Formula Bar & Search */}
+        <div className="flex flex-col border-b border-border shrink-0">
+          {/* Action Toolbar */}
+          <div className="flex justify-between items-center px-6 py-2 bg-surface-secondary/10 border-b border-border/40">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-text-tertiary uppercase">Formula Bar</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-text-tertiary">
+                  <Search className="h-3.5 w-3.5" />
+                </span>
+                <input
+                  type="text"
+                  placeholder="Search catalog..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full h-8 pl-9 pr-4 rounded-lg border border-border bg-surface text-text-primary text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[var(--brand)]"
+                />
+              </div>
+              <button
+                onClick={handleExportCSV}
+                className="h-8 px-3 rounded-lg border border-border bg-surface text-text-secondary hover:text-text-primary transition flex items-center gap-1.5 text-xs font-semibold cursor-pointer shrink-0"
+              >
+                <Download className="h-3.5 w-3.5" /> Export
+              </button>
+            </div>
+          </div>
+
+          {/* Actual Excel fx input */}
+          <div className="flex items-center bg-surface px-6 py-2 gap-2 text-xs">
+            <div className="flex items-center justify-center font-bold px-2 py-1 bg-surface-secondary/50 rounded text-text-tertiary border border-border/50 select-none">
+              {selectedCell 
+                ? `${activeCols[selectedCell.colIndex]?.letter}${selectedCell.rowIndex + 1}` 
+                : "A1"}
+            </div>
+            <div className="font-bold text-text-tertiary italic select-none">fx</div>
+            <div className="h-4 w-px bg-border/80" />
+            <input 
+              type="text"
+              readOnly={!selectedCell || currentRows[selectedCell.rowIndex]?.type === "template_header" || currentRows[selectedCell.rowIndex]?.type === "section_header"}
+              value={editingCell ? editValue : formulaValue}
+              onChange={(e) => {
+                if (selectedCell) {
+                  const row = currentRows[selectedCell.rowIndex];
+                  const col = activeCols[selectedCell.colIndex];
+                  if (row && col) {
+                    let editType = col.type;
+                    let itemId = row.id;
+                    if (activeSheet === "vehicles" && col.field === "brandName") {
+                      editType = "brand";
+                      itemId = row.brandId;
+                    }
+                    setEditingCell({ id: itemId, field: col.field, type: editType });
+                    setEditValue(e.target.value);
+                  }
+                }
+              }}
+              onBlur={() => {
+                if (selectedCell && editingCell) {
+                  const row = currentRows[selectedCell.rowIndex];
+                  const col = activeCols[selectedCell.colIndex];
+                  if (row && col) {
+                    void handleCellCommit(editingCell.id, editingCell.field, editingCell.type, row[col.field] || "");
+                  }
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && selectedCell && editingCell) {
+                  const row = currentRows[selectedCell.rowIndex];
+                  const col = activeCols[selectedCell.colIndex];
+                  if (row && col) {
+                    void handleCellCommit(editingCell.id, editingCell.field, editingCell.type, row[col.field] || "");
+                  }
+                }
+              }}
+              placeholder={selectedCell ? "Formula bar value" : "Select a cell to view/edit"}
+              className="flex-1 bg-transparent py-1 px-2 focus:outline-none text-text-primary font-medium"
+            />
+          </div>
+        </div>
+
+        {/* Spreadsheet Data Grid Viewport */}
+        <div 
+          className="flex-1 overflow-auto bg-surface-secondary/20 relative outline-none min-h-0 select-none"
+          tabIndex={0}
+          onKeyDown={handleKeyDown}
+        >
+          <table ref={tableRef} className="w-full text-left text-xs border-collapse border-spacing-0">
+            {/* Headers row */}
+            <thead className="sticky top-0 bg-surface-2 border-b border-border z-20 select-none">
+              {/* Excel letters header */}
+              <tr className="bg-surface-secondary/30 text-text-tertiary/70 text-[9px] font-bold border-b border-border/40 select-none">
+                <th className="px-2 py-0.5 text-center border-r border-border/40 w-10 shrink-0 font-mono"></th>
+                {activeCols.map((col, idx) => (
+                  <th key={idx} className="px-6 py-0.5 text-center border-r border-border/40 font-mono">
+                    {col.letter}
+                  </th>
+                ))}
+                <th className="px-6 py-0.5 text-center w-20"></th>
+              </tr>
+              {/* Header titles */}
+              <tr className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary border-b border-border select-none">
+                <th className="px-2 py-2.5 text-center border-r border-border w-10 shrink-0 font-mono bg-surface-secondary/30"></th>
+                {activeCols.map((col, idx) => (
+                  <th key={idx} className={cn(
+                    "px-6 py-2.5 border-r border-border bg-surface-2",
+                    idx === 0 && "sticky left-0 z-35 bg-surface-2"
+                  )}>
+                    {col.label}
+                  </th>
+                ))}
+                <th className="px-6 py-2.5 w-20 text-center bg-surface-2">Action</th>
+              </tr>
+            </thead>
+
+            {/* Grid Body */}
+            <tbody className="divide-y divide-border bg-background select-none">
+              {currentRows.map((row, rowIndex) => {
+                // Determine template nesting styles
+                const isTplHeader = row.type === "template_header";
+                const isSecHeader = row.type === "section_header";
+
+                return (
+                  <tr 
+                    key={row.id + "_" + rowIndex} 
+                    className={cn(
+                      "hover:bg-surface-secondary/25 transition select-none group",
+                      isTplHeader && "bg-slate-50/70 dark:bg-neutral-850/40 font-bold",
+                      isSecHeader && "bg-slate-50/30 dark:bg-neutral-850/20 font-semibold"
+                    )}
+                  >
+                    {/* Row Index Indicator */}
+                    <td className="px-2 py-2 text-center border-r border-border/50 w-10 font-mono text-[9px] text-text-tertiary bg-surface-secondary/20 select-none">
+                      {rowIndex + 1}
+                    </td>
+
+                    {isTplHeader ? (
+                      /* Outline grouped Template Title */
+                      <td colSpan={activeCols.length + 1} className="px-6 py-3 font-semibold text-text-primary text-sm bg-surface-secondary/40 dark:bg-neutral-800/40 border-b border-border select-none">
+                        <div className="flex items-center justify-between w-full">
+                          <button 
+                            onClick={() => toggleTemplateCollapse(row.id)}
+                            className="flex items-center gap-2 outline-none"
+                          >
+                            {row.isCollapsed ? <ChevronRight className="w-4 h-4 text-text-tertiary" /> : <ChevronDown className="w-4 h-4 text-[var(--brand)]" />}
+                            <span>Template: {row.templateName}</span>
+                          </button>
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => handleAddSectionToTemplate(row.id)}
+                              className="h-7 px-2.5 rounded-lg border border-border bg-surface text-text-primary text-[10px] font-bold hover:bg-surface-secondary transition cursor-pointer"
+                            >
+                              Add Section
+                            </button>
+                            <button
+                              onClick={() => handleDeleteTemplate(row.id, row.templateName)}
+                              className="h-7 px-2.5 rounded-lg border border-danger/35 bg-danger-soft/5 text-danger text-[10px] font-bold hover:bg-danger-soft/25 transition cursor-pointer"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                    ) : isSecHeader ? (
+                      /* Outline grouped Section Title */
+                      <td colSpan={activeCols.length + 1} className="px-10 py-2.5 font-medium text-text-secondary text-xs bg-surface-secondary/20 dark:bg-neutral-800/20 border-b border-border/80 select-none">
+                        <div className="flex items-center justify-between w-full">
+                          <button 
+                            onClick={() => toggleSectionCollapse(row.id)}
+                            className="flex items-center gap-2 outline-none"
+                          >
+                            {row.isCollapsed ? <ChevronRight className="w-3.5 h-3.5 text-text-tertiary" /> : <ChevronDown className="w-3.5 h-3.5 text-[var(--brand)]" />}
+                            <span>Section: {row.sectionTitle}</span>
+                          </button>
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => handleAddCheckpointToSection(row.id)}
+                              className="h-6 px-2.5 rounded-lg border border-border bg-surface text-text-primary text-[10px] font-bold hover:bg-surface-secondary transition cursor-pointer"
+                            >
+                              Add Step
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSection(row.id, row.sectionTitle)}
+                              className="h-6 px-2.5 rounded-lg border border-danger/35 bg-danger-soft/5 text-danger text-[10px] font-bold hover:bg-danger-soft/25 transition cursor-pointer"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                    ) : (
+                      <>
+                        {/* Spreadsheet cell fields */}
+                        {activeCols.map((col, colIndex) => {
+                          const active = selectedCell?.rowIndex === rowIndex && selectedCell?.colIndex === colIndex;
+                          let cellValue = row[col.field] || "";
+                          
+                          // Group view: Clear out duplicate template name and section name from rows to make grouping stand out
+                          if (activeSheet === "templates" && (col.field === "templateName" || col.field === "sectionTitle")) {
+                            cellValue = "";
+                          }
+
+                          // Inline logic to fetch edit details
+                          let cellEditType = col.type;
+                          let cellItemId = row.id;
+
+                          if (activeSheet === "vehicles" && col.field === "brandName") {
+                            cellEditType = "brand";
+                            cellItemId = row.brandId;
+                          }
+
+                          const editing = editingCell?.id === cellItemId && editingCell?.field === col.field;
+
+                          return (
+                            <td 
+                              key={colIndex} 
+                              className={cn(
+                                "px-6 py-2 border-r border-border relative select-none",
+                                colIndex === 0 && "sticky left-0 z-10 bg-background group-hover:bg-surface-secondary/25",
+                                active && "ring-1 ring-[var(--brand)] ring-inset z-10"
+                              )}
+                              onClick={() => setSelectedCell({ rowIndex, colIndex })}
+                              onDoubleClick={() => startCellEditing(rowIndex, colIndex)}
+                            >
+                              {editing ? (
+                                col.field === "requireImage" || col.field === "requireRemarks" ? (
+                                  <select
+                                    value={editValue}
+                                    onChange={(e) => setEditValue(e.target.value)}
+                                    onBlur={() => handleCellCommit(cellItemId, col.field, cellEditType, cellValue)}
+                                    autoFocus
+                                    className="bg-surface border border-[var(--brand)] rounded px-1.5 py-0.5 text-xs focus:outline-none outline-none cursor-pointer w-full"
+                                  >
+                                    <option value="Yes">Yes</option>
+                                    <option value="No">No</option>
+                                  </select>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    value={editValue}
+                                    onChange={(e) => setEditValue(e.target.value)}
+                                    onBlur={() => handleCellCommit(cellItemId, col.field, cellEditType, cellValue)}
+                                    onKeyDown={(e) => e.key === "Enter" && handleCellCommit(cellItemId, col.field, cellEditType, cellValue)}
+                                    autoFocus
+                                    className="w-full bg-surface border border-[var(--brand)] rounded px-2 py-1 text-xs focus:outline-none font-medium"
+                                  />
+                                )
+                              ) : (
+                                <div className="min-h-[24px] flex items-center select-none w-full">
+                                  {col.field === "requireImage" || col.field === "requireRemarks" ? (
+                                    <span className={cn(
+                                      "px-2 py-0.5 rounded text-[10px] font-bold",
+                                      cellValue === "Yes" 
+                                        ? "bg-brand-soft text-[var(--brand)]" 
+                                        : "bg-surface-secondary text-text-tertiary"
+                                    )}>
+                                      {col.field === "requireImage" 
+                                        ? (cellValue === "Yes" ? "Required" : "Optional")
+                                        : (cellValue === "Yes" ? "Mandatory" : "Optional")}
+                                    </span>
+                                  ) : (
+                                    cellValue
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })}
+
+                        {/* Row Action Trigger */}
+                        <td className="px-6 py-2 text-center select-none">
+                          <button 
+                            onClick={() => {
+                              const deleteType = activeSheet === "vehicles" ? "model" : (activeSheet === "materials" ? "material" : (activeSheet === "colors" ? "color" : "checkpoint"));
+                              const deleteName = activeSheet === "vehicles" ? row.modelName : (activeSheet === "materials" ? row.name : (activeSheet === "colors" ? row.name : row.checkpointName));
+                              handleDeleteItem(row.id, deleteType, deleteName);
+                            }}
+                            className="p-1 rounded hover:bg-danger-soft text-text-tertiary hover:text-danger transition cursor-pointer"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                );
+              })}
+
+              {currentRows.length === 0 && (
+                <tr>
+                  <td colSpan={activeCols.length + 2} className="px-6 py-10 text-center text-text-tertiary select-none">
+                    No matching workbook entries found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Workbook Sheets Selector (Bottom tabs look-alike) */}
+        <div className="px-6 py-2 border-t border-b border-border bg-surface-secondary/40 dark:bg-neutral-800/20 shrink-0 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+          {([
+            { id: "vehicles", label: "Vehicles" },
+            { id: "materials", label: "Materials" },
+            { id: "colors", label: "Colors" },
+            { id: "templates", label: "Templates" }
+          ] as const).map((sheet) => {
+            const active = activeSheet === sheet.id;
+            return (
+              <button
+                key={sheet.id}
+                onClick={() => {
+                  setActiveSheet(sheet.id);
+                  setSearchQuery("");
+                  setNewItemName("");
+                  setSelectedCell(null);
+                  setEditingCell(null);
+                }}
+                className={cn(
+                  "px-4 py-1.5 text-xs font-bold rounded-t-xl transition cursor-pointer border border-border border-b-transparent -mb-[9px] relative z-10",
+                  active
+                    ? "bg-background text-text-primary border-t-[var(--brand)] border-t-2"
+                    : "bg-surface text-text-secondary hover:text-text-primary"
+                )}
+              >
+                {sheet.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Add Record Bottom Panel */}
+        {activeSheet === "templates" ? (
+          <div className="p-4 bg-surface shrink-0 flex items-center justify-between gap-4 border-t border-border">
+            <span className="text-xs text-text-tertiary font-medium">
+              💡 Tip: To configure or restructure QC templates, please use the main Templates Configurator outline workspace.
+            </span>
+          </div>
+        ) : (
+          <div className="p-4 bg-surface shrink-0 flex flex-wrap items-center gap-4 border-t border-border">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary flex items-center gap-1">
+              <Plus className="h-4 w-4 text-[var(--brand)]" /> Add Row:
+            </span>
+
+            {activeSheet === "vehicles" ? (
+              <>
+                <input
+                  list="brands-datalist"
+                  value={brandInputText}
+                  onChange={(e) => setBrandInputText(e.target.value)}
+                  placeholder="Brand (e.g. Honda)"
+                  className="h-9 w-44 border border-border rounded-xl px-3 text-xs bg-surface text-text-primary focus:outline-none focus:ring-1 focus:ring-[var(--brand)] font-semibold"
+                />
+                <datalist id="brands-datalist">
+                  {brands.map((b: any) => (
+                    <option key={b.id} value={b.name} />
+                  ))}
+                </datalist>
+
+                <input
+                  type="text"
+                  placeholder="Model variant (e.g. Civic)"
+                  value={newItemName}
+                  onChange={(e) => setNewItemName(e.target.value)}
+                  className="flex-1 min-w-[150px] h-9 px-3.5 rounded-xl border border-border bg-surface text-text-primary text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[var(--brand)]"
+                />
+
+                <input
+                  type="text"
+                  placeholder="Year (e.g. 2024)"
+                  value={newModelYear}
+                  onChange={(e) => setNewModelYear(e.target.value)}
+                  className="w-24 h-9 px-3.5 rounded-xl border border-border bg-surface text-text-primary text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[var(--brand)]"
+                />
+              </>
+            ) : (
+              <input
+                type="text"
+                placeholder={activeSheet === "materials" ? "Material Name (e.g. Leather)" : "Color Name (e.g. Scarlet)"}
+                value={newItemName}
+                onChange={(e) => setNewItemName(e.target.value)}
+                className="flex-1 h-9 px-3.5 rounded-xl border border-border bg-surface text-text-primary text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[var(--brand)]"
+              />
+            )}
+
+            <button
+              onClick={handleAddItem}
+              disabled={syncing || !newItemName.trim()}
+              className="h-9 px-4 rounded-xl bg-text-primary text-background hover:opacity-90 transition text-xs font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+            >
+              Add Record
+            </button>
+          </div>
+        )}
+
+        {/* Workbook Status Bar */}
+        <div className="bg-surface-secondary/60 dark:bg-neutral-800/10 px-6 py-2 border-t border-border flex items-center justify-between text-[10px] font-bold text-text-tertiary tracking-wide shrink-0">
+          <div className="flex items-center gap-4">
+            <span>{currentRows.length} Row{currentRows.length === 1 ? "" : "s"}</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-border" />
+            {activeSheet === "templates" ? (
+              <>
+                <span>{templates.length} Templates</span>
+                <div className="w-1.5 h-1.5 rounded-full bg-border" />
+                <span>{templates.reduce((acc, t) => acc + t.sections.length, 0)} Sections</span>
+                <div className="w-1.5 h-1.5 rounded-full bg-border" />
+                <span>{templateRows.filter(r => r.type === "checkpoint_row").length} Checkpoints</span>
+              </>
+            ) : (
+              <span>Catalog Sheet</span>
+            )}
+          </div>
+          <div>
+            <span>Autosaved at {lastSaved}</span>
+          </div>
+        </div>
+
+      </div>
+
+      <ConfirmDialog
+        isOpen={!!itemToDelete}
+        title="Delete record?"
+        description={`Are you sure you want to delete "${itemToDelete?.name || ""}" permanently? This cannot be undone.`}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={executeDeleteItem}
+        onCancel={() => setItemToDelete(null)}
+      />
+    </div>
+  );
+}

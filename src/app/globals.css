@@ -1,0 +1,225 @@
+@import "tailwindcss";
+
+:root {
+  /* Make native controls (dropdown option lists, date pickers, scrollbars)
+     follow the app theme so every dropdown reads as in-app and theme-consistent. */
+  color-scheme: light;
+  --background: #F5F5F7;
+  --foreground: #050505;
+  --surface: #FFFFFF;
+  --surface-secondary: #E5E5EA;
+  --border: rgba(0, 0, 0, 0.08);
+  /* Verity indigo. Deliberately not green or red — those are load-bearing
+     pass/fail semantics everywhere in QC, so the brand stays out of them. */
+  --accent: #4C3FE4;
+  --accent-soft: rgba(76, 63, 228, 0.12);
+  --accent-foreground: #FFFFFF;
+
+  /* legacy compatibility aliases */
+  --brand: var(--accent);
+  --brand-strong: var(--accent);
+  --brand-soft: var(--accent-soft);
+  
+  --success: #30D158;
+  --success-soft: rgba(48, 209, 88, 0.12);
+  --danger: #FF453A;
+  --danger-soft: rgba(255, 69, 58, 0.12);
+  --danger-strong: #D70015;
+  --danger-dark: #B3000F;
+  --warning: #FFD60A;
+  --warning-soft: rgba(255, 214, 10, 0.12);
+  --text-primary: #050505;
+  --text-secondary: #636366;
+  --text-tertiary: #8E8E93;
+}
+@plugin "tailwindcss-animate";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-secondary: var(--surface-secondary);
+  /* `surface-2` is the raised/subtle surface used across the app (161 call
+     sites). Without this alias every `bg-surface-2` silently rendered as
+     nothing, which is what flattened the dark UI. */
+  --color-surface-2: var(--surface-secondary);
+  --color-border: var(--border);
+  
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-strong: var(--danger-strong);
+  --color-danger-dark: var(--danger-dark);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-hindi: var(--font-noto-sans-devanagari), ui-sans-serif, system-ui, sans-serif;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #151517;
+  --foreground: #F5F5F7;
+  --surface: #1C1C1E;
+  --surface-secondary: #2C2C2E;
+  --border: rgba(255, 255, 255, 0.08);
+  /* Lifted on dark so white label text still clears 4.5:1 on the accent fill. */
+  --accent: #6D5AF5;
+  --accent-soft: rgba(109, 90, 245, 0.16);
+  --accent-foreground: #FFFFFF;
+
+  --brand: var(--accent);
+  --brand-strong: var(--accent);
+  --brand-soft: var(--accent-soft);
+  
+  --success: #30D158;
+  --success-soft: rgba(48, 209, 88, 0.14);
+  --danger: #FF453A;
+  --danger-soft: rgba(255, 69, 58, 0.14);
+  /* On dark surfaces the "strong" danger reads brighter, not darker. */
+  --danger-strong: #FF6961;
+  --danger-dark: #FF8A82;
+  --warning: #FFD60A;
+  --warning-soft: rgba(255, 214, 10, 0.14);
+  --text-primary: #F5F5F7;
+  --text-secondary: #AEAEB2;
+  --text-tertiary: #636366;
+}
+
+/* Base styles */
+html,
+body {
+  font-family: var(--font-sans);
+  background-color: var(--background);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv11" 1;
+  background-image:
+    radial-gradient(circle at top left, rgba(76, 63, 228, 0.03), transparent 26%),
+    radial-gradient(circle at bottom right, rgba(0, 0, 0, 0.03), transparent 24%);
+  /* Nothing should scroll the page sideways on a phone. Wide content (tables,
+     label sheets) scrolls inside its own container instead. */
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+/* Media never forces the layout wider than the viewport. */
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+@utility scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Print styles — clean passports, timelines and reports on paper.     */
+/* Hide app chrome, force light ink on white, avoid row/card splits.   */
+/* ------------------------------------------------------------------ */
+@media print {
+  aside,
+  nav,
+  [data-print="hide"],
+  .no-print {
+    display: none !important;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* Neutralise elevated surfaces so they don't waste toner. */
+  [class*="shadow"] {
+    box-shadow: none !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  tr,
+  img,
+  .print-keep {
+    page-break-inside: avoid;
+  }
+
+  a[href]::after {
+    content: "";
+  }
+}
