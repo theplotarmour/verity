@@ -26,12 +26,19 @@ import { SystemRole } from "@prisma/client";
 import { can, Permission, type PermissionMatrix } from "@/lib/permissions";
 import { InstallPromptBanner } from "./InstallPromptBanner";
 import { BRAND_ACCENT } from "@/lib/brand";
+import type { ModuleKey } from "@/platform/modules/registry";
 
 type NavItem = {
   label: string;
   href: string;
   icon: React.ReactNode;
   permission: Permission;
+  /**
+   * The module that owns this destination. Hidden unless the org is entitled.
+   * Nav gating is an affordance only — the page and its server actions must
+   * check entitlement too, since hiding a link does not protect a route.
+   */
+  module: ModuleKey;
 };
 
 type NavGroup = {
@@ -43,24 +50,24 @@ const navGroups: NavGroup[] = [
   {
     title: "Overview",
     items: [
-      { label: "Dashboard", href: "/owner/dashboard", icon: <Home className="h-4.5 w-4.5" />, permission: "VIEW_DASHBOARD" },
+      { label: "Dashboard", href: "/owner/dashboard", icon: <Home className="h-4.5 w-4.5" />, permission: "VIEW_DASHBOARD", module: "core" },
     ]
   },
   {
     title: "Operations",
     items: [
-      { label: "Inventory", href: "/owner/inventory", icon: <Package className="h-4.5 w-4.5" />, permission: "CREATE_ORDER" },
-      { label: "Purchase", href: "/owner/purchase", icon: <ShoppingCart className="h-4.5 w-4.5" />, permission: "CREATE_ORDER" },
-      { label: "Order Taking", href: "/owner/order-taking", icon: <ClipboardList className="h-4.5 w-4.5" />, permission: "CREATE_ORDER" },
-      { label: "Production", href: "/owner/production", icon: <Wrench className="h-4.5 w-4.5" />, permission: "CREATE_ORDER" },
-      { label: "Logistics", href: "/owner/logistics", icon: <Truck className="h-4.5 w-4.5" />, permission: "CREATE_ORDER" },
+      { label: "Inventory", href: "/owner/inventory", icon: <Package className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", module: "inventory" },
+      { label: "Purchase", href: "/owner/purchase", icon: <ShoppingCart className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", module: "procurement" },
+      { label: "Order Taking", href: "/owner/order-taking", icon: <ClipboardList className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", module: "sales" },
+      { label: "Production", href: "/owner/production", icon: <Wrench className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", module: "manufacturing" },
+      { label: "Logistics", href: "/owner/logistics", icon: <Truck className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", module: "sales" },
     ]
   },
   {
     title: "Quality",
     items: [
-      { label: "Floor", href: "/owner/floor", icon: <FlaskConical className="h-4.5 w-4.5" />, permission: "QC_QUEUE" },
-      { label: "Reports", href: "/owner/reports", icon: <CircleCheckBig className="h-4.5 w-4.5" />, permission: "VIEW_REPORTS" },
+      { label: "Floor", href: "/owner/floor", icon: <FlaskConical className="h-4.5 w-4.5" />, permission: "QC_QUEUE", module: "quality" },
+      { label: "Reports", href: "/owner/reports", icon: <CircleCheckBig className="h-4.5 w-4.5" />, permission: "VIEW_REPORTS", module: "quality" },
     ]
   },
 ];
@@ -68,10 +75,10 @@ const navGroups: NavGroup[] = [
 // Config-style destinations pinned to the top bar (next to the theme switch)
 // instead of the sidebar.
 const topbarItems: NavItem[] = [
-  { label: "Master Data", href: "/owner/settings/master-data", icon: <Database className="h-4 w-4" />, permission: "ACCESS_MASTER_DATA" },
-  { label: "Team", href: "/owner/team", icon: <Users className="h-4 w-4" />, permission: "MANAGE_TEAM" },
-  { label: "Departments", href: "/owner/departments", icon: <Factory className="h-4 w-4" />, permission: "MANAGE_TEAM" },
-  { label: "Settings", href: "/owner/settings", icon: <Settings className="h-4 w-4" />, permission: "ACCESS_SETTINGS" },
+  { label: "Master Data", href: "/owner/settings/master-data", icon: <Database className="h-4 w-4" />, permission: "ACCESS_MASTER_DATA", module: "core" },
+  { label: "Team", href: "/owner/team", icon: <Users className="h-4 w-4" />, permission: "MANAGE_TEAM", module: "core" },
+  { label: "Departments", href: "/owner/departments", icon: <Factory className="h-4 w-4" />, permission: "MANAGE_TEAM", module: "core" },
+  { label: "Settings", href: "/owner/settings", icon: <Settings className="h-4 w-4" />, permission: "ACCESS_SETTINGS", module: "core" },
 ];
 
 // Flat list for active item detection (sidebar + topbar destinations)
@@ -92,6 +99,7 @@ export function OwnerShell({
   themeColor,
   userRole = "OWNER" as SystemRole,
   permissionMatrix,
+  entitledModules,
   children,
 }: {
   factoryName: string;
@@ -100,11 +108,16 @@ export function OwnerShell({
   themeColor?: string;
   userRole?: SystemRole;
   permissionMatrix?: PermissionMatrix;
+  /** Modules the org is entitled to, resolved server-side in the layout. */
+  entitledModules?: ModuleKey[];
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  // Undefined means "not yet wired" rather than "nothing entitled", so an
+  // unpassed prop must not blank the whole navigation.
+  const moduleAllowed = (m: ModuleKey) => entitledModules === undefined || entitledModules.includes(m);
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -210,6 +223,7 @@ export function OwnerShell({
               const storeManagerAllowed = ["/owner/order-taking", "/owner/dashboard", "/owner/inventory"];
               const visible = group.items.filter(item =>
                 can(userRole, item.permission, permissionMatrix) &&
+                moduleAllowed(item.module) &&
                 (userRole === "STORE_MANAGER" ? storeManagerAllowed.includes(item.href) : item.href !== "/owner/order-taking"));
               if (visible.length === 0) return null;
               return (
@@ -290,7 +304,7 @@ export function OwnerShell({
                   Departments, Settings — permission-gated icon buttons. */}
               <div className="flex items-center gap-1 pr-1">
                 {topbarItems
-                  .filter((item) => can(userRole, item.permission, permissionMatrix))
+                  .filter((item) => can(userRole, item.permission, permissionMatrix) && moduleAllowed(item.module))
                   .map((item) => {
                     const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                     return (
