@@ -1471,7 +1471,8 @@ model ChecklistTemplate {
 
   /// Service work orders that run this checklist on completion. A checklist is
   /// stage-shaped, so it serves a site visit as readily as a production stage.
-  serviceWorkOrders ServiceWorkOrder[] @relation("ServiceWOChecklist")
+  serviceWorkOrders  ServiceWorkOrder[]  @relation("ServiceWOChecklist")
+  serviceInspections ServiceInspection[] @relation("ServiceInspectionChecklist")
 
   blueprintVersions BlueprintVersion[]
 
@@ -1530,7 +1531,8 @@ model Checkpoint {
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
 
-  submissions CheckpointSubmission[]
+  submissions        CheckpointSubmission[]
+  serviceSubmissions ServiceCheckpointSubmission[]
 
   @@index([factoryId])
   @@index([sectionId])
@@ -1557,11 +1559,6 @@ model Inspection {
   videoUploadedAt   DateTime?
   videoUploadedById String?
 
-  // Where the inspection happened. Optional and nullable: production
-  // inspections have no site, and no existing row can be given one.
-  siteId String?
-  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
-
   submissions   CheckpointSubmission[]
   approval      QualityApproval?
   report        QualityReport?
@@ -1569,7 +1566,6 @@ model Inspection {
 
   @@index([factoryId])
   @@index([factoryId, status])
-  @@index([siteId])
 }
 
 model CheckpointSubmission {
@@ -1904,7 +1900,7 @@ model Site {
   assets      Asset[]
   schedules   ShiftSchedule[]
   invoices    ServiceInvoice[]
-  inspections Inspection[]
+  inspections ServiceInspection[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2045,6 +2041,9 @@ model ServiceWorkOrder {
 
   assetId String?
   asset   Asset?  @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  /// Raised when the visit is completed and a checklist was attached.
+  inspection ServiceInspection?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2387,4 +2386,79 @@ model PayrollInput {
   @@unique([userId, periodStart, periodEnd])
   @@index([factoryId])
   @@index([factoryId, periodStart])
+}
+
+// --- Service quality ------------------------------------------------------
+
+/// A checklist run against a completed site visit.
+///
+/// Deliberately not `Inspection`. That model is anchored to a JobCard by a
+/// required FK and cascades from it — a service visit has no job card, and
+/// loosening that FK would have put a nullable relation through every
+/// production QC query for the sake of a second, unrelated caller. Two small
+/// models that each say what they mean beat one that means either.
+///
+/// The checkpoint definitions are shared: both sides run the same
+/// `ChecklistTemplate` and the same `Checkpoint` rows. Only the answers live
+/// apart.
+model ServiceInspection {
+  id        String @id @default(cuid())
+  factoryId String
+
+  serviceWorkOrderId String           @unique
+  serviceWorkOrder   ServiceWorkOrder @relation(fields: [serviceWorkOrderId], references: [id], onDelete: Cascade)
+
+  /// Denormalised from the work order at creation so a site's inspection
+  /// history survives the work order being re-pointed.
+  siteId String?
+  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  checklistId String
+  checklist   ChecklistTemplate @relation("ServiceInspectionChecklist", fields: [checklistId], references: [id], onDelete: Restrict)
+
+  status QCStatus @default(IN_PROGRESS)
+
+  inspectedById String?
+  startedAt     DateTime  @default(now())
+  submittedAt   DateTime?
+  approvedAt    DateTime?
+  approvedById  String?
+
+  notes String?
+
+  submissions ServiceCheckpointSubmission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([factoryId])
+  @@index([factoryId, status])
+  @@index([siteId])
+}
+
+model ServiceCheckpointSubmission {
+  id        String @id @default(cuid())
+  factoryId String
+
+  inspectionId String
+  inspection   ServiceInspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  checkpointId String
+  checkpoint   Checkpoint @relation(fields: [checkpointId], references: [id], onDelete: Cascade)
+
+  passFail String?
+  /// The typed answer for non pass/fail checkpoints, matching CheckpointSubmission.
+  value    String?
+  remarks  String?
+  photoUrl String?
+
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  /// One answer per checkpoint per inspection — re-answering updates, never
+  /// appends a second opinion.
+  @@unique([inspectionId, checkpointId])
+  @@index([factoryId])
+  @@index([inspectionId])
 }

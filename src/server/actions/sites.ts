@@ -169,7 +169,15 @@ export async function getSiteDetail(siteId: string) {
       inspections: {
         orderBy: { createdAt: "desc" },
         take: 25,
-        select: { id: true, status: true, submittedAt: true, approvedAt: true, createdAt: true },
+        select: {
+          id: true,
+          status: true,
+          submittedAt: true,
+          approvedAt: true,
+          createdAt: true,
+          checklist: { select: { name: true } },
+          serviceWorkOrder: { select: { woNumber: true } },
+        },
       },
     },
   });
@@ -244,6 +252,8 @@ export async function getSiteDetail(siteId: string) {
     inspections: site.inspections.map((i) => ({
       id: i.id,
       status: i.status,
+      checklistName: i.checklist.name,
+      woNumber: i.serviceWorkOrder.woNumber,
       submittedAt: i.submittedAt?.toISOString() ?? null,
       approvedAt: i.approvedAt?.toISOString() ?? null,
       createdAt: i.createdAt.toISOString(),

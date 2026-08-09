@@ -98,6 +98,8 @@ export function SiteDetailClient({
   inspections: {
     id: string;
     status: string;
+    checklistName: string;
+    woNumber: string;
     submittedAt: string | null;
     approvedAt: string | null;
     createdAt: string;
@@ -375,13 +377,17 @@ export function SiteDetailClient({
             ) : (
               <div className="space-y-2">
                 {inspections.map((i) => (
-                  <div
+                  <Link
                     key={i.id}
-                    className="flex items-center justify-between gap-3 rounded-[12px] border border-border bg-surface-2 p-3"
+                    href={`/owner/service-work-orders/inspection/${i.id}`}
+                    className="flex items-center justify-between gap-3 rounded-[12px] border border-border bg-surface-2 p-3 transition-colors hover:border-[var(--brand)]/40"
                   >
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-text-primary">
-                        Inspection {formatDay(i.createdAt)}
+                      <p className="truncate text-sm font-medium text-text-primary">
+                        {i.checklistName}
+                        <span className="ml-1.5 font-mono text-[11px] text-text-tertiary">
+                          {i.woNumber}
+                        </span>
                       </p>
                       <p className="text-[11px] text-text-tertiary">
                         {i.approvedAt
@@ -392,7 +398,7 @@ export function SiteDetailClient({
                       </p>
                     </div>
                     <StatusPill status={i.status} />
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}

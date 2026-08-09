@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Search } from "lucide-react";
+import { ClipboardCheck, Plus, Search } from "lucide-react";
 import type { ServiceWOStatus, TicketPriority } from "@prisma/client";
 
 import { PageHeader } from "@/components/design/PageHeader";
@@ -57,6 +58,8 @@ export type WorkOrderRow = {
   slaDueAt: string | null;
   slaBreached: boolean;
   createdAt: string;
+  inspectionId: string | null;
+  inspectionStatus: string | null;
 };
 
 const STATUSES: ServiceWOStatus[] = [
@@ -330,15 +333,26 @@ export function ServiceWorkOrdersClient({
                       </Select>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-danger"
-                        onClick={() => remove(w)}
-                        disabled={pending}
-                      >
-                        Delete
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        {w.inspectionId ? (
+                          <Link
+                            href={`/owner/service-work-orders/inspection/${w.inspectionId}`}
+                            className="inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-[var(--brand)]/40 px-2.5 text-xs font-semibold text-[var(--brand)] transition-colors hover:bg-[var(--brand)]/10"
+                          >
+                            <ClipboardCheck className="h-3.5 w-3.5" />
+                            {w.inspectionStatus ? humanise(w.inspectionStatus) : "Checklist"}
+                          </Link>
+                        ) : null}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-danger"
+                          onClick={() => remove(w)}
+                          disabled={pending}
+                        >
+                          Delete
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 );

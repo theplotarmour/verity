@@ -424,6 +424,7 @@ export async function getServiceWorkOrdersData() {
         site: { select: { id: true, name: true } },
         assignedTo: { select: { id: true, name: true } },
         ticket: { select: { id: true, ticketNumber: true } },
+        inspection: { select: { id: true, status: true } },
       },
     }),
     prisma.customer.findMany({
@@ -475,6 +476,8 @@ export async function getServiceWorkOrdersData() {
     checklistId: w.checklistId,
     ticketId: w.ticketId,
     ticketNumber: w.ticket?.ticketNumber ?? null,
+    inspectionId: w.inspection?.id ?? null,
+    inspectionStatus: w.inspection?.status ?? null,
     scheduledAt: w.scheduledAt?.toISOString() ?? null,
     startedAt: w.startedAt?.toISOString() ?? null,
     completedAt: w.completedAt?.toISOString() ?? null,
@@ -576,7 +579,14 @@ export async function setServiceWorkOrderStatus(woId: string, status: ServiceWOS
 
   const wo = await prisma.serviceWorkOrder.findFirst({
     where: { id: woId, factoryId: user.factoryId },
-    select: { id: true, startedAt: true, ticketId: true },
+    select: {
+      id: true,
+      startedAt: true,
+      ticketId: true,
+      siteId: true,
+      checklistId: true,
+      inspection: { select: { id: true } },
+    },
   });
   if (!wo) return { error: "Work order not found." };
 
@@ -592,7 +602,25 @@ export async function setServiceWorkOrderStatus(woId: string, status: ServiceWOS
     },
   });
 
+  // Completing a visit with a checklist attached opens the inspection. This is
+  // the whole point of the checklist field — before this it stored a choice
+  // that had no effect. Created once; re-completing does not wipe answers.
+  if (status === "COMPLETED" && wo.checklistId && !wo.inspection) {
+    await prisma.serviceInspection.create({
+      data: {
+        factoryId: user.factoryId,
+        serviceWorkOrderId: wo.id,
+        // Copied, not joined: the site's inspection history should survive the
+        // work order later being re-pointed elsewhere.
+        siteId: wo.siteId,
+        checklistId: wo.checklistId,
+        inspectedById: user.id,
+      },
+    });
+  }
+
   revalidateHelpdeskPaths(wo.ticketId ?? undefined);
+  if (wo.siteId) revalidatePath(`/owner/sites/${wo.siteId}`);
   return { success: true };
 }
 
