@@ -30,9 +30,11 @@ import {
   createInvoice,
   deleteInvoice,
   exportPayrollCsv,
+  getInvoiceDetail,
   generatePayrollInputs,
   setInvoiceStatus,
   setPayrollStatus,
+  updateInvoice,
 } from "@/server/actions/billing";
 
 type InvoiceRow = {
@@ -109,8 +111,10 @@ export function BillingClient({
   const [tab, setTab] = useState<"Invoices" | "Payroll">("Invoices");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<InvoiceStatus | null>(null);
-  const [creating, setCreating] = useState(false);
+  // null closed, "" creating, an invoice id editing that draft.
+  const [editing, setEditing] = useState<string | null>(null);
   const [building, setBuilding] = useState(false);
+  const [loadingLines, setLoadingLines] = useState(false);
 
   const bounds = monthBounds();
   const [form, setForm] = useState({
@@ -170,6 +174,46 @@ export function BillingClient({
     }));
   }
 
+  function openInvoice(row?: InvoiceRow) {
+    setEditing(row?.id ?? "");
+    setForm(
+      row
+        ? {
+            customerId: row.customerId,
+            siteId: row.siteId ?? "",
+            dueDate: row.dueDate ? row.dueDate.slice(0, 10) : "",
+            notes: row.notes ?? "",
+            // Line items are not on the list payload, so an edit starts from a
+            // blank line rather than silently showing the wrong ones. Loaded
+            // below once the sheet is open.
+            lines: [{ ...BLANK_LINE }],
+          }
+        : { customerId: "", siteId: "", dueDate: "", notes: "", lines: [{ ...BLANK_LINE }] },
+    );
+    if (row) void loadLines(row.id);
+  }
+
+  async function loadLines(invoiceId: string) {
+    setLoadingLines(true);
+    try {
+      const detail = await getInvoiceDetail(invoiceId);
+      if (!detail) return;
+      setForm((f) => ({
+        ...f,
+        lines: detail.lineItems.length
+          ? detail.lineItems.map((l) => ({
+              description: l.description,
+              quantity: String(l.quantity),
+              unitPrice: String(l.unitPrice),
+              taxRate: String(l.taxRate),
+            }))
+          : [{ ...BLANK_LINE }],
+      }));
+    } finally {
+      setLoadingLines(false);
+    }
+  }
+
   function submitInvoice() {
     if (!form.customerId) {
       toast.error("Pick a customer.");
@@ -188,20 +232,24 @@ export function BillingClient({
       return;
     }
 
+    const payload = {
+      customerId: form.customerId,
+      siteId: form.siteId || null,
+      dueDate: form.dueDate || null,
+      notes: form.notes || null,
+      lineItems,
+    };
+
     start(async () => {
-      const result = await createInvoice({
-        customerId: form.customerId,
-        siteId: form.siteId || null,
-        dueDate: form.dueDate || null,
-        notes: form.notes || null,
-        lineItems,
-      });
+      const result = editing
+        ? await updateInvoice(editing, payload)
+        : await createInvoice(payload);
       if ("error" in result && result.error) {
         toast.error(result.error);
         return;
       }
-      toast.success("Invoice drafted.");
-      setCreating(false);
+      toast.success(editing ? "Invoice updated." : "Invoice drafted.");
+      setEditing(null);
       setForm({ customerId: "", siteId: "", dueDate: "", notes: "", lines: [{ ...BLANK_LINE }] });
       router.refresh();
     });
@@ -301,7 +349,7 @@ export function BillingClient({
                 <Sparkles className="h-3.5 w-3.5" />
                 From work
               </Button>
-              <Button onClick={() => setCreating(true)}>
+              <Button onClick={() => openInvoice()}>
                 <Plus className="h-4 w-4" />
                 New invoice
               </Button>
@@ -462,15 +510,21 @@ export function BillingClient({
                     </td>
                     <td className="px-4 py-3 text-right">
                       {i.status === "DRAFT" ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-danger"
-                          onClick={() => removeInvoice(i)}
-                          disabled={pending}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => openInvoice(i)}>
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-danger"
+                            onClick={() => removeInvoice(i)}
+                            disabled={pending}
+                            aria-label={`Delete ${i.invoiceNumber}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       ) : null}
                     </td>
                   </tr>
@@ -548,10 +602,13 @@ export function BillingClient({
       </div>
 
       {/* Manual invoice */}
-      <Dialog isOpen={creating} onClose={() => setCreating(false)} className="max-w-3xl">
+      <Dialog isOpen={editing !== null} onClose={() => setEditing(null)} className="max-w-3xl">
         <h2 className="text-[17px] font-semibold tracking-[-0.03em] text-text-primary">
-          New invoice
+          {editing ? "Edit draft invoice" : "New invoice"}
         </h2>
+        {loadingLines ? (
+          <p className="mt-1 text-sm text-text-secondary">Loading line items...</p>
+        ) : null}
         <div className="mt-5 max-h-[60vh] space-y-4 overflow-y-auto pr-1">
           <FormGrid>
             <Field label="Client">
@@ -667,11 +724,11 @@ export function BillingClient({
         </div>
 
         <div className="mt-6 flex justify-end gap-2">
-          <Button variant="secondary" onClick={() => setCreating(false)} disabled={pending}>
+          <Button variant="secondary" onClick={() => setEditing(null)} disabled={pending}>
             Cancel
           </Button>
-          <Button onClick={submitInvoice} disabled={pending}>
-            {pending ? "Saving..." : "Create draft"}
+          <Button onClick={submitInvoice} disabled={pending || loadingLines}>
+            {pending ? "Saving..." : editing ? "Save changes" : "Create draft"}
           </Button>
         </div>
       </Dialog>
