@@ -99,11 +99,11 @@ export async function getInspectionData(jobCardId: string) {
   }
 
   const template = pinnedTemplateId
-    ? await prisma.qCTemplate.findFirst({
+    ? await prisma.checklistTemplate.findFirst({
         where: { id: pinnedTemplateId, factoryId: session.factoryId },
         include: templateInclude,
       })
-    : await prisma.qCTemplate.findFirst({
+    : await prisma.checklistTemplate.findFirst({
         where: { factoryId: session.factoryId, isLatest: true, status: 'active' },
         include: templateInclude,
       })

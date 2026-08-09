@@ -26,7 +26,7 @@ export default async function OwnerOrdersPage() {
       orderBy: { createdAt: 'desc' },
       take: 20
     }).then((rows) => rows.map((row) => ({ ...row, batch: toWorkerJob(row.jobCard) }))),
-    prisma.qCTemplate.findFirst({
+    prisma.checklistTemplate.findFirst({
       where: { factoryId, isLatest: true, status: 'active' },
       include: {
         sections: {

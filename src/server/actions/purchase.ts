@@ -3,6 +3,7 @@
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getOwnerUser } from "@/lib/server/owner";
+import { SPEC_SUMMARY_INCLUDE, specSummary, loadRefLabels } from "@/server/queries/spec";
 
 export async function createPurchaseOrder(data: {
   supplierId: string;
@@ -117,16 +118,43 @@ export async function getPurchaseOrders() {
   const user = await getOwnerUser();
   if (!user) return [];
   
-  return prisma.purchaseOrder.findMany({
+  const orders = await prisma.purchaseOrder.findMany({
     where: { factoryId: user.factoryId },
     include: {
       supplier: true,
       items: {
-        include: { material: true }
-      }
+        include: {
+          material: {
+            include: {
+              group: { select: { name: true } },
+              specValues: { include: SPEC_SUMMARY_INCLUDE },
+              conversions: true,
+            },
+          },
+        },
+      },
     },
     orderBy: { orderDate: 'desc' }
   });
+
+  // A vendor slip has to say what was ordered, not just its name — the supplier
+  // cannot ship "Leatherite" without the GSM and width.
+  const refIds = orders.flatMap((o) =>
+    o.items.flatMap((i) => i.material.specValues.map((v) => v.valueRefId))
+  ).filter((x): x is string => Boolean(x));
+  const refLabels = await loadRefLabels(refIds);
+
+  return orders.map((o) => ({
+    ...o,
+    items: o.items.map((i) => ({
+      ...i,
+      material: {
+        ...i.material,
+        groupName: i.material.group?.name ?? null,
+        spec: specSummary(i.material.specValues, refLabels),
+      },
+    })),
+  }));
 }
 
 export async function getSuppliers() {
@@ -348,7 +376,17 @@ async function ensureRawBin(factoryId: string) {
 // moves to PARTIALLY_RECEIVED until every line is fully received (COMPLETED).
 export async function receivePurchaseOrder(
   id: string,
-  lines: { materialId: string; quantity: number; rate: number; batchNumber?: string }[],
+  lines: {
+    materialId: string;
+    quantity: number;
+    rate: number;
+    batchNumber?: string;
+    /**
+     * The unit the quantity and rate are expressed in. Omit for the item's
+     * stocking unit; pass its purchase unit to receive in rolls, boxes or bags.
+     */
+    unit?: string;
+  }[],
 ) {
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
@@ -362,8 +400,46 @@ export async function receivePurchaseOrder(
   if (po.status === "COMPLETED") return { error: "Already fully received" };
   if (po.status === "CANCELLED") return { error: "Order was cancelled" };
 
-  const received = lines.filter((l) => l.quantity > 0);
-  if (received.length === 0) return { error: "Enter at least one received quantity" };
+  const entered = lines.filter((l) => l.quantity > 0);
+  if (entered.length === 0) return { error: "Enter at least one received quantity" };
+
+  // Stock is always held in the item's own unit. A receipt entered in the
+  // purchase unit is converted here — including the rate, because 3 rolls at
+  // ₹5000 a roll is 150 metres at ₹100 a metre, and valuing it at ₹5000 a metre
+  // would overstate inventory fifty-fold.
+  const items = await prisma.itemMaster.findMany({
+    where: { factoryId, id: { in: entered.map((l) => l.materialId) } },
+    select: {
+      id: true,
+      defaultUOM: true,
+      secondaryUOM: true,
+      conversions: { select: { fromUOM: true, toUOM: true, conversionFactor: true } },
+    },
+  });
+  const byItem = new Map(items.map((i) => [i.id, i]));
+
+  const received: typeof entered = [];
+  for (const line of entered) {
+    const item = byItem.get(line.materialId);
+    const unit = line.unit?.trim().toUpperCase();
+    if (!item || !unit || unit === item.defaultUOM) {
+      received.push(line);
+      continue;
+    }
+    const conversion = item.conversions.find(
+      (c) => c.fromUOM === unit && c.toUOM === item.defaultUOM
+    );
+    if (!conversion || conversion.conversionFactor <= 0) {
+      return {
+        error: `No conversion from ${unit} to ${item.defaultUOM}. Set it on the item before receiving in ${unit}.`,
+      };
+    }
+    received.push({
+      ...line,
+      quantity: line.quantity * conversion.conversionFactor,
+      rate: line.rate / conversion.conversionFactor,
+    });
+  }
 
   const bin = await ensureRawBin(factoryId);
   const rcCount = await prisma.purchaseReceipt.count({ where: { factoryId } });
@@ -497,7 +573,10 @@ export async function getReorderSuggestions() {
   const factoryId = user.factoryId;
 
   const [materials, ledgerSums, lastLines] = await Promise.all([
-    prisma.itemMaster.findMany({ where: { factoryId, itemType: "RAW_MATERIAL" } }),
+    prisma.itemMaster.findMany({
+      where: { factoryId, itemType: "RAW_MATERIAL" },
+      include: { conversions: true },
+    }),
     prisma.stockLedgerEntry.groupBy({ by: ["itemId"], where: { factoryId }, _sum: { quantityChange: true } }),
     prisma.purchaseOrderItem.findMany({
       where: { purchaseOrder: { factoryId } },
@@ -516,15 +595,28 @@ export async function getReorderSuggestions() {
   return materials
     .map((m) => {
       const net = netByItem.get(m.id) ?? 0;
+      const toSecondary = m.secondaryUOM
+        ? m.conversions.find((c) => c.fromUOM === m.secondaryUOM && c.toUOM === m.defaultUOM)
+        : null;
       const target = m.safetyStock > 0 ? m.safetyStock : m.minStockLevel;
+      const suggestedQty = Math.max(0, Math.ceil(target - net));
       return {
         id: m.id,
         name: m.name,
         sku: m.sku,
         uom: m.defaultUOM,
         netStock: net,
+        secondaryNetStock:
+          toSecondary && toSecondary.conversionFactor > 0
+            ? net / toSecondary.conversionFactor
+            : null,
+        secondaryUom: m.secondaryUOM,
         minStockLevel: m.minStockLevel,
-        suggestedQty: Math.max(0, Math.ceil(target - net)),
+        suggestedQty,
+        secondarySuggestedQty:
+          toSecondary && toSecondary.conversionFactor > 0
+            ? suggestedQty / toSecondary.conversionFactor
+            : null,
         supplier: supplierByItem.get(m.id) ?? null,
       };
     })

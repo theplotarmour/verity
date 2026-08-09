@@ -27,19 +27,23 @@ export function Metric({
         : "M 5,24 L 20,20 L 35,10 L 50,18 L 65,8 L 80,12 L 95,5";
 
   const content = (
-    <div className="p-5 flex items-end justify-between gap-4">
+    <div className="p-4 sm:p-5 flex items-end justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-text-tertiary truncate">
+          {/* Wraps rather than truncates, and the tracking tightens: two cards
+              to a phone row leaves ~170px, and "Today Production" clipped to
+              "TODA…" names nothing. */}
+          <p className="text-[10px] font-bold uppercase tracking-[0.1em] sm:tracking-[0.22em] text-text-tertiary">
             {label}
           </p>
           <p className="mt-3 font-mono text-[clamp(28px,3vw,36px)] font-bold tracking-[-0.05em] text-text-primary">
             {value}
           </p>
-          {detail ? <p className="mt-1.5 text-[11px] text-text-secondary font-medium truncate">{detail}</p> : null}
+          {detail ? <p className="mt-1.5 text-[11px] text-text-secondary font-medium">{detail}</p> : null}
         </div>
-        
-        {/* Sparkline Graph */}
-        <div className="shrink-0 mb-1">
+
+        {/* Sparkline Graph — decoration, and on a phone it costs more width
+            than the reading it gives. */}
+        <div className="hidden shrink-0 mb-1 sm:block">
           <svg className="w-16 h-8 text-[var(--brand)]/70 dark:text-[var(--brand)]" viewBox="0 0 100 30" fill="none">
             <path
               d={sparklinePath || defaultPath}

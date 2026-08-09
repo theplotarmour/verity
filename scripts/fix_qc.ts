@@ -7,17 +7,17 @@ async function main() {
   console.log(`Found ${factories.length} factories`);
 
   for (const factory of factories) {
-    const existingTemplates = await prisma.qCTemplate.findMany({
+    const existingTemplates = await prisma.checklistTemplate.findMany({
       where: { factoryId: factory.id }
     });
 
     for (const temp of existingTemplates) {
-      await prisma.qCTemplate.delete({ where: { id: temp.id } });
+      await prisma.checklistTemplate.delete({ where: { id: temp.id } });
       console.log(`Deleted existing template ${temp.name} for ${factory.name}`);
     }
 
     console.log(`Creating comprehensive template for ${factory.name}...`);
-    await prisma.qCTemplate.create({
+    await prisma.checklistTemplate.create({
       data: {
         factoryId: factory.id,
         name: "Standard Seat Cover Inspection",

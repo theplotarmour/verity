@@ -3,8 +3,6 @@ import { notFound } from 'next/navigation'
 import { PassportCard } from './PassportCard'
 import { VerifiedMoment } from './VerifiedMoment'
 import { VerificationPanel } from './VerificationPanel'
-import { BRAND_ACCENT } from "@/lib/brand";
-import { BRAND_URL } from "@/lib/brand";
 
 export default async function QualityPassportPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -12,19 +10,22 @@ export default async function QualityPassportPage({ params }: { params: Promise<
   
   if (!data) notFound()
 
-  const siteUrl = BRAND_URL
+  const siteUrl = 'https://verity.theverityai.xyz'
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`${siteUrl}/verify/${id}`)}`
 
   const submissions = data.inspection.submissions || []
-  const themeColor = data.factory.settings?.themeColor || BRAND_ACCENT;
+  const themeColor = data.factory.settings?.themeColor || "#007AFF";
 
-  // Gather all photos for the evidence gallery
-  const allEvidences = submissions.flatMap((sub: any) => 
+  // Gather all photos for the evidence gallery: the QC inspection's evidence
+  // plus everything captured on the floor during production (before/after shots
+  // and per-checkpoint photos from each stage).
+  const qcEvidences = submissions.flatMap((sub: any) =>
     (sub.evidences || []).map((ev: any) => ({
       ...ev,
       checkpointName: sub.checkpoint.name
     }))
   )
+  const allEvidences = [...(data.stagePhotos ?? []), ...qcEvidences]
 
   return (
     <div className="min-h-screen bg-[#F5F5F7] dark:bg-black py-8 px-4 md:py-16 font-sans relative w-full max-w-full min-w-0">

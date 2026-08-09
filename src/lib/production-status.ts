@@ -89,7 +89,12 @@ export type StatusInput = {
 
 // Walk the card chain and report where the physical bag currently sits.
 export function deriveProductionStatus(input: StatusInput): ProductionStatus {
-  if (input.dispatched || input.orderStatus === "DISPATCHED") return "DISPATCHED";
+  // DELIVERED is dispatched-and-then-some: confirmDelivery moves the sales order
+  // past DISPATCHED, and without this the pipeline fell through to the
+  // all-cards-complete branch and showed a delivered bag as "Ready for Dispatch".
+  if (input.dispatched || input.orderStatus === "DISPATCHED" || input.orderStatus === "DELIVERED") {
+    return "DISPATCHED";
+  }
   if (input.orderStatus === "DRAFT") return "DRAFT";
 
   const cards = [...(input.jobCards || [])].sort((a, b) => a.sequence - b.sequence);

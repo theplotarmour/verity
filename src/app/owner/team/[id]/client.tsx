@@ -22,7 +22,6 @@ import {
 import { can, Permission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { BRAND_URL } from "@/lib/brand";
 
 export function MemberDetailClient({
   member,
@@ -137,12 +136,12 @@ export function MemberDetailClient({
 
   const [copiedCreds, setCopiedCreds] = useState(false);
   const handleShareCredentials = () => {
-    const text = `Verity Factory Access Details\nName: ${member.name}\nRole: ${roleLabel(role)}\nPhone: ${member.phone || "—"}\nWorkspace URL: ${BRAND_URL}`;
+    const text = `Verity Factory Access Details\nName: ${member.name}\nRole: ${roleLabel(role)}\nPhone: ${member.phone || "—"}\nWorkspace URL: https://verity.theverityai.xyz`;
     if (navigator.share) {
       navigator.share({
         title: `Access details for ${member.name}`,
         text: text,
-        url: BRAND_URL
+        url: "https://verity.theverityai.xyz"
       }).catch(err => console.log("Error sharing", err));
     } else {
       navigator.clipboard.writeText(text);
@@ -200,7 +199,7 @@ export function MemberDetailClient({
             {member.phone && (
               <>
                 <a
-                  href={`https://api.whatsapp.com/send?phone=${member.phone.replace(/\D/g, "").length === 10 ? `91${member.phone.replace(/\D/g, "")}` : member.phone.replace(/\D/g, "")}&text=${encodeURIComponent(`Hi ${member.name}, your Verity Factory Access PIN has been reset.\n\nURL: ${BRAND_URL}\nPIN: ${newPin}`)}`}
+                  href={`https://api.whatsapp.com/send?phone=${member.phone.replace(/\D/g, "").length === 10 ? `91${member.phone.replace(/\D/g, "")}` : member.phone.replace(/\D/g, "")}&text=${encodeURIComponent(`Hi ${member.name}, your Verity Factory Access PIN has been reset.\n\nURL: https://theverity.vercel.app\nPIN: ${newPin}`)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-success/25 bg-success/10 hover:bg-success/20 text-success dark:text-success px-4 text-xs font-bold transition shadow-sm cursor-pointer"
@@ -208,7 +207,7 @@ export function MemberDetailClient({
                   Share via WhatsApp
                 </a>
                 <a
-                  href={`sms:${member.phone.replace(/\D/g, "")}?body=${encodeURIComponent(`Hi ${member.name}, your Verity Factory Access PIN has been reset.\n\nURL: ${BRAND_URL}\nPIN: ${newPin}`)}`}
+                  href={`sms:${member.phone.replace(/\D/g, "")}?body=${encodeURIComponent(`Hi ${member.name}, your Verity Factory Access PIN has been reset.\n\nURL: https://theverity.vercel.app\nPIN: ${newPin}`)}`}
                   className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-brand/25 bg-brand/10 hover:bg-brand/20 text-blue-600 dark:text-brand px-4 text-xs font-bold transition shadow-sm cursor-pointer"
                 >
                   Share via SMS
@@ -374,7 +373,7 @@ export function MemberDetailClient({
               </div>
             </div>
 
-            {/* SystemRole Config Section */}
+            {/* Role Config Section */}
             <div className="space-y-3 shrink-0">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest">Workspace Permissions</p>

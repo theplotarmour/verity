@@ -30,7 +30,7 @@ async function main() {
   const depts = await prisma.department.findMany({
     where: { factoryId },
     orderBy: { sortOrder: "asc" },
-    select: { id: true, name: true, isQcStage: true, requiresApproval: true, templateId: true },
+    select: { id: true, name: true, isQcStage: true, requiresApproval: true },
   });
 
   let approvalOn = 0;
@@ -55,7 +55,15 @@ async function main() {
   // ---- 2. Photos opt-in on department operating checklists -----------------
   // Only the templates attached to a non-QC department; QC templates keep their
   // photo requirements because that evidence is the point of the inspection.
-  const deptTemplateIds = depts.filter((d) => !d.isQcStage && d.templateId).map((d) => d.templateId!) as string[];
+  // A checklist now names the department it belongs to, rather than the
+  // department pinning one template.
+  const nonQcDeptIds = depts.filter((d) => !d.isQcStage).map((d) => d.id);
+  const deptTemplateIds = (
+    await prisma.checklistTemplate.findMany({
+      where: { factoryId, ownerDepartmentId: { in: nonQcDeptIds } },
+      select: { id: true },
+    })
+  ).map((t) => t.id);
 
   let photosRelaxed = 0;
   if (deptTemplateIds.length > 0) {

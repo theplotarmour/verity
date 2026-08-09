@@ -5,9 +5,8 @@ import { usePwa } from "@/components/providers/pwa-provider";
 import { Download, X, Smartphone, Info } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/primitives";
-import { BRAND_ACCENT } from "@/lib/brand";
 
-export function InstallPromptBanner({ accentColor = BRAND_ACCENT }: { accentColor?: string }) {
+export function InstallPromptBanner({ accentColor = "#007AFF" }: { accentColor?: string }) {
   const { canInstall, install } = usePwa();
   const [mounted, setMounted] = useState(false);
   const [isVisible, setIsVisible] = useState(false);

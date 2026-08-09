@@ -56,7 +56,9 @@ export async function getMaterialRequirement(orderId: string): Promise<MaterialR
 
   // 1. Fabric, from the design's standard consumption held in Master Data.
   if (order.design) {
-    const perUnit = order.design.fabricConsumption ?? 0;
+    // Deferred with the BOM work: this figure has to become a spec field on
+    // the design category before cutting plans can use it again.
+    const perUnit = 0;
     if (perUnit > 0) {
       lines.push({
         itemId: order.materialId,
@@ -68,7 +70,10 @@ export async function getMaterialRequirement(orderId: string): Promise<MaterialR
       });
     } else {
       warnings.push(
-        `No standard fabric consumption set for design "${order.design.name}". Set it in Master Data → Designs so CAD can calculate automatically.`
+        // Do not send him to "Master Data → Designs": that screen is gone, and
+        // there is nowhere to set this figure yet. Say so rather than sending
+        // him looking for a setting that does not exist.
+        `Fabric for design "${order.design.name}" has to be added by hand — standard consumption per design is not back yet. Everything else below still comes from the blueprint BOM.`
       );
     }
   } else {

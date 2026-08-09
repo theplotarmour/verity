@@ -163,3 +163,78 @@ export async function deleteCustomer(id: string) {
   revalidatePath("/owner/customers");
   return { success: true };
 }
+
+/**
+ * Bulk import a customer directory from CSV.
+ *
+ * Matched on customerCode when given, else on name, so re-importing a corrected
+ * sheet updates the existing rows instead of doubling the book. Blank cells are
+ * left alone rather than wiping what is already there — a partial sheet is the
+ * normal case when someone exports, edits one column and sends it back.
+ */
+export async function importCustomersCsv(rows: Array<Record<string, string>>) {
+  const owner = await getOwnerUser();
+  if (!owner) return { error: "Unauthorized" };
+  const factoryId = owner.factoryId;
+
+  const get = (row: Record<string, string>, ...keys: string[]) => {
+    for (const k of keys) {
+      const v = row[k] ?? row[k.toLowerCase()] ?? row[k.toUpperCase()];
+      if (v && String(v).trim()) return String(v).trim();
+    }
+    return "";
+  };
+
+  let created = 0;
+  let updated = 0;
+  const failures: string[] = [];
+
+  for (const row of rows) {
+    const name = get(row, "Name", "Customer", "customerName");
+    const code = get(row, "Code", "Customer Code", "customerCode");
+    if (!name && !code) continue;
+
+    const data: Record<string, unknown> = {};
+    const set = (key: string, value: string) => {
+      if (value) data[key] = value;
+    };
+    set("companyName", get(row, "Company", "companyName"));
+    set("phone", get(row, "Phone", "phone"));
+    set("altPhone", get(row, "Alternate Phone", "Alt Phone", "altPhone"));
+    set("email", get(row, "Email", "email"));
+    set("gstNumber", get(row, "GST", "GST Number", "gstNumber"));
+    set("billingAddress", get(row, "Billing Address", "billingAddress"));
+    set("shippingAddress", get(row, "Shipping Address", "shippingAddress"));
+    set("notes", get(row, "Notes", "notes"));
+    set("paymentTerms", get(row, "Payment Terms", "paymentTerms"));
+    const tags = get(row, "Tags", "tags");
+    if (tags) {
+      data.tags = tags.split(/[,|]/).map((t) => t.trim().toUpperCase()).filter(Boolean);
+    }
+
+    try {
+      const existing = await prisma.customer.findFirst({
+        where: {
+          factoryId,
+          ...(code ? { customerCode: code } : { name: { equals: name, mode: "insensitive" } }),
+        },
+        select: { id: true },
+      });
+
+      if (existing) {
+        await prisma.customer.update({ where: { id: existing.id }, data });
+        updated++;
+      } else {
+        await prisma.customer.create({
+          data: { factoryId, name: name || code, ...(code ? { customerCode: code } : {}), ...data },
+        });
+        created++;
+      }
+    } catch (err: unknown) {
+      failures.push(`${name || code}: ${err instanceof Error ? err.message : "failed"}`);
+    }
+  }
+
+  revalidatePath("/owner/customers");
+  return { created, updated, failures };
+}

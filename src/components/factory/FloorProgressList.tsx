@@ -83,7 +83,7 @@ export function FloorProgressList({ recentOrders }: { recentOrders: any[] }) {
             orderId={order.id}
             batchNumber={order.batches?.[0]?.batchNumber || "Pending"}
             orderNumber={order.orderNumber}
-            vehicleName={order.vehicleBrand?.name ? `${order.vehicleBrand.name} ${order.vehicleModel?.name ?? ""}` : "N/A"}
+            vehicleName={order.itemName || order.productName || "N/A"}
             quantity={order.quantity}
             workerName={order.worker?.name}
             workerAvatar={null}

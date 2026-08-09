@@ -61,7 +61,7 @@ export function DepartmentsClient({ departments, users, templates }: { departmen
       <PageHeader
         eyebrow="Production"
         title="Departments"
-        description="Your production chain. Each department is a stage — reorder the flow, give it a checklist template, and staff it with workers and inspectors."
+        description="Your production chain. Each department is a stage — reorder the flow, staff it with workers and inspectors."
         actions={
           <Button onClick={() => setEditing("new")} className="gap-1.5">
             <Plus className="h-4 w-4" /> Add Department
@@ -91,13 +91,36 @@ export function DepartmentsClient({ departments, users, templates }: { departmen
                     {d.requiresApproval && <Badge className="bg-brand-soft text-brand gap-1"><ShieldCheck className="h-3 w-3" /> Approval</Badge>}
                     {d.requirePhoto && <Badge className="bg-brand-soft text-brand gap-1"><Camera className="h-3 w-3" /> Photo</Badge>}
                     {d.requireRemarks && <Badge className="bg-warning-soft text-warning gap-1"><MessageSquare className="h-3 w-3" /> Remarks</Badge>}
-                    {d.template ? (
-                      <Badge className="bg-success-soft text-success gap-1"><ClipboardList className="h-3 w-3" /> {d.template.name}</Badge>
-                    ) : (
-                      <Badge className="bg-surface-2 text-text-secondary">No template</Badge>
+                    {(d.ownedTemplates ?? []).length === 0 && (
+                      <Badge className="bg-surface-2 text-text-secondary">No checklist</Badge>
                     )}
                   </div>
                   {d.description && <p className="mt-0.5 text-xs text-text-secondary">{d.description}</p>}
+
+                  {/* What actually runs in this department, and for which
+                      products — readable here instead of only inside the
+                      builder. Each name opens that template. */}
+                  {(d.ownedTemplates ?? []).length > 0 && (
+                    <ul className="mt-1.5 space-y-0.5">
+                      {(d.ownedTemplates ?? []).map((t: any) => (
+                        <li key={t.id} className="text-xs">
+                          <Link
+                            href={`/owner/master-data?tab=templates&template=${t.id}`}
+                            className="font-medium text-[var(--brand)] hover:underline"
+                          >
+                            {t.name}
+                          </Link>
+                          <span className="text-text-tertiary">
+                            {" — "}
+                            {t.defaultForItemGroups?.length
+                              ? t.defaultForItemGroups.map((g: any) => g.name).join(", ")
+                              : "all categories"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
                   <p className="mt-1 text-xs text-text-tertiary">
                     {d.members.length} member{d.members.length === 1 ? "" : "s"}
                     {d._count?.jobCards ? ` · ${d._count.jobCards} job cards` : ""}
@@ -172,7 +195,6 @@ function DepartmentModal({ dept, templates, onClose, onSaved }: { dept: Dept | n
     requirePhoto: dept?.requirePhoto ?? false,
     requireRemarks: dept?.requireRemarks ?? false,
     requiresApproval: dept?.requiresApproval ?? false,
-    templateId: dept?.templateId ?? "",
   });
   const [saving, setSaving] = useState(false);
 
@@ -188,7 +210,6 @@ function DepartmentModal({ dept, templates, onClose, onSaved }: { dept: Dept | n
         requirePhoto: form.requirePhoto,
         requireRemarks: form.requireRemarks,
         requiresApproval: form.requiresApproval,
-        templateId: form.templateId || null,
       };
       const res: any = dept ? await updateDepartment(dept.id, payload) : await createDepartment(payload);
       if (res?.error) { toast.error(res.error); return; }
@@ -212,17 +233,16 @@ function DepartmentModal({ dept, templates, onClose, onSaved }: { dept: Dept | n
           <Toggle label="Require remarks" hint="Worker must write remarks to complete the stage" checked={form.requireRemarks} onChange={(v) => setForm({ ...form, requireRemarks: v })} />
         </div>
 
-        <Field label={form.isQcStage ? "QC Template" : "Checklist Template"}>
-          <Select value={form.templateId} onChange={(e) => setForm({ ...form, templateId: e.target.value })}>
-            <option value="">{form.isQcStage ? "Auto — resolve by product" : "No template"}</option>
-            {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </Select>
-          <p className="mt-1 text-[11px] text-text-tertiary">
-            {form.isQcStage
-              ? "Pick any of your templates to run this QC. Leave on “Auto” to use the product's QC template."
-              : "The checklist a worker clears to complete this stage. Choose any template."}
+        {/* No template is pinned here any more. A checklist names the one
+            department it belongs to and the categories it covers, so the job
+            card resolves its own — pinning a single template on the department
+            was what let a Seat Cover checklist reach a Mats order. */}
+        <Field label="Checklists">
+          <p className="text-[11px] text-text-tertiary">
+            Checklists are assigned in the builder: each names its department and the
+            product categories it applies to. A job card picks the one matching both.
           </p>
-          <Link href="/owner/settings/qc-templates" className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">
+          <Link href="/owner/master-data?tab=templates" className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-brand hover:underline">
             Build or edit templates <ExternalLink className="h-3 w-3" />
           </Link>
         </Field>

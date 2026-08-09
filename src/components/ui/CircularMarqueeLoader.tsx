@@ -9,7 +9,7 @@ interface CircularMarqueeLoaderProps {
 }
 
 export function CircularMarqueeLoader({ className, size = 200 }: CircularMarqueeLoaderProps) {
-  const text = "VERITY • VERIFIED MANUFACTURING INTELLIGENCE • VERITY LOOP ";
+  const text = "Verity • VISION FOR ENTERPRISE DIGITAL ADVANCEMENT • Verity LOOP ";
   
   return (
     <div 

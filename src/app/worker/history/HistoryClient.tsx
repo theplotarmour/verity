@@ -80,7 +80,8 @@ export function HistoryClient({ jobs, scope, basePath }: { jobs: any[]; scope: s
         <div className="grid gap-3">
           {shown.map((job) => {
             const when = job.completedAt ?? job.startedAt ?? job.createdAt;
-            const vehicle = [job.order?.vehicleBrand?.name, job.order?.vehicleModel?.name].filter(Boolean).join(" ");
+            const vehicle = job.order?.itemName || "";
+            const specSummary = (job.order?.specDetails ?? []).slice(0, 3).map((d: any) => d.value).filter(Boolean).join(" · ");
             return (
               <Link key={job.id} href={`${basePath}/history/${job.id}`}>
                 <Surface className="p-4 transition hover:border-[var(--brand)]/40">
@@ -101,8 +102,7 @@ export function HistoryClient({ jobs, scope, basePath }: { jobs: any[]; scope: s
                         {vehicle || job.order?.productName || job.order?.orderNumber}
                       </h3>
                       <p className="mt-0.5 truncate text-xs text-text-secondary">
-                        {[job.order?.orderNumber, job.order?.designName, job.order?.fabricName, job.order?.colorName]
-                          .filter(Boolean).join(" · ")}
+                        {[job.order?.orderNumber, specSummary].filter(Boolean).join(" · ")}
                       </p>
                       <p className="mt-1 flex items-center gap-2 text-[11px] text-text-tertiary">
                         {when ? new Date(when).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—"}

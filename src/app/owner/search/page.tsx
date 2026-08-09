@@ -16,12 +16,13 @@ export default async function SearchPage({
   const query = (await searchParams).q || "";
 
   if (!query) {
-    return <SearchClient query="" results={{ orders: [], batches: [], customers: [], workers: [], designs: [], materials: [], dispatches: [] }} />;
+    return <SearchClient query="" results={{ orders: [], batches: [], customers: [], workers: [], designs: [], materials: [], items: [], dispatches: [] }} />;
   }
 
   const factoryId = dbUser.factoryId;
 
-  const [orders, batches, customers, workers, designs, materials, dispatches] = await Promise.all([
+  // Designs are ordinary items now, so the item search below already finds them.
+  const [orders, batches, customers, workers, materials, items, dispatches] = await Promise.all([
     prisma.salesOrder.findMany({
       where: {
         factoryId,
@@ -58,18 +59,35 @@ export default async function SearchPage({
       },
       take: 20,
     }),
-    prisma.design.findMany({
-      where: { factoryId, OR: [
-        { name: { contains: query, mode: "insensitive" } },
-        { category: { contains: query, mode: "insensitive" } },
-      ] },
-      take: 20,
-    }),
     prisma.itemMaster.findMany({
       where: { factoryId, itemType: "RAW_MATERIAL", OR: [
         { name: { contains: query, mode: "insensitive" } },
         { sku: { contains: query, mode: "insensitive" } },
       ] },
+      take: 20,
+    }),
+    // Finished goods were missing from global search entirely, so the largest
+    // thing in the factory — the sellable catalogue — was the one thing the
+    // search bar could not find. Every word must match, in any order, so
+    // "swift beige" narrows the way it does in the production studio.
+    prisma.itemMaster.findMany({
+      where: {
+        factoryId,
+        itemType: "FINISHED_PRODUCT",
+        AND: query
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean)
+          .map((word) => ({
+            OR: [
+              { name: { contains: word, mode: "insensitive" as const } },
+              { itemCode: { contains: word, mode: "insensitive" as const } },
+              { aliasName: { contains: word, mode: "insensitive" as const } },
+            ],
+          })),
+      },
+      select: { id: true, name: true, itemCode: true, status: true },
+      orderBy: { name: "asc" },
       take: 20,
     }),
     prisma.dispatch.findMany({
@@ -86,7 +104,7 @@ export default async function SearchPage({
   return (
     <SearchClient
       query={query}
-      results={{ orders, batches: batches.map((jobCard: any) => ({ ...toWorkerJob(jobCard), inspection: jobCard.inspection })), customers, workers, designs, materials, dispatches }}
+      results={{ orders, batches: batches.map((jobCard: any) => ({ ...toWorkerJob(jobCard), inspection: jobCard.inspection })), customers, workers, designs: [], materials, items, dispatches }}
     />
   );
 }

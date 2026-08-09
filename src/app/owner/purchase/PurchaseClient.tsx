@@ -11,8 +11,9 @@ import { Surface } from "@/components/design/Surface";
 import { Badge, Button, Input, Select, EmptyState } from "@/components/ui/primitives";
 import { useRouter } from "next/navigation";
 import dayjs from "dayjs";
+import { SpecCombobox } from "@/components/spec/SpecCombobox";
 
-export default function PurchaseClient({ orders, suppliers, materials, reorderSuggestions = [] }: any) {
+export default function PurchaseClient({ orders, suppliers, materials, reorderSuggestions = [], purchasableItems = [] }: any) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -20,18 +21,67 @@ export default function PurchaseClient({ orders, suppliers, materials, reorderSu
 
   const [supplierId, setSupplierId] = useState(suppliers[0]?.id || "");
   const [poExpectedDate, setPoExpectedDate] = useState("");
+  // Purchasable items carry their spec in the label, so a PO line reads
+  // "Leatherite Black 220GSM" rather than just a name.
+  const purchaseOptions = useMemo(
+    () =>
+      (purchasableItems as any[]).map((i) => ({
+        id: i.id,
+        label: i.name,
+        sublabel: [i.itemCode, i.spec].filter(Boolean).join(" · ") || i.groupName || null,
+        searchText: i.searchText as string,
+      })),
+    [purchasableItems]
+  );
+
   const [orderItems, setOrderItems] = useState<Array<{ materialId: string; quantity: number | ""; rate: number | "" }>>([{ materialId: materials[0]?.id || "", quantity: "", rate: "" }]);
 
   // GRN (goods receipt) state — receive a PO into raw-material stock
   const [receivePo, setReceivePo] = useState<any>(null);
-  const [receiveLines, setReceiveLines] = useState<Array<{ materialId: string; name: string; ordered: number; already: number; quantity: number | ""; rate: number | ""; batchNumber: string }>>([]);
+  const [receiveLines, setReceiveLines] = useState<
+    Array<{
+      materialId: string;
+      name: string;
+      // Code and spec so the storekeeper can check the delivery against what
+      // was actually ordered, not just a name.
+      itemCode: string | null;
+      spec: string;
+      ordered: number;
+      already: number;
+      quantity: number | "";
+      rate: number | "";
+      batchNumber: string;
+      /** Unit this line is being received in — the stock unit, or a purchase unit. */
+      unit: string;
+      /** Stock unit and any purchase unit that converts to it. */
+      unitOptions: string[];
+      stockUnit: string;
+      conversions: any[];
+    }>
+  >([]);
 
   const openReceive = (order: any) => {
     setReceivePo(order);
     setReceiveLines(
       order.items.map((i: any) => {
         const remaining = Math.max(0, i.quantity - (i.receivedQty ?? 0));
-        return { materialId: i.materialId, name: i.material?.name ?? "Material", ordered: i.quantity, already: i.receivedQty ?? 0, quantity: remaining || "", rate: i.rate ?? 0, batchNumber: "" };
+        return {
+          materialId: i.materialId,
+          name: i.material?.name ?? "Material",
+          itemCode: i.material?.itemCode ?? null,
+          spec: i.material?.spec ?? "",
+          ordered: i.quantity,
+          already: i.receivedQty ?? 0,
+          quantity: remaining || "",
+          rate: i.rate ?? 0,
+          batchNumber: "",
+          // Received in the stock unit by default; a secondary unit is offered
+          // only when the item actually carries a conversion for it.
+          stockUnit: i.material?.defaultUOM ?? "",
+          unit: i.material?.defaultUOM ?? "",
+          unitOptions: [i.material?.defaultUOM, i.material?.secondaryUOM].filter(Boolean) as string[],
+          conversions: i.material?.conversions ?? [],
+        };
       })
     );
   };
@@ -41,7 +91,7 @@ export default function PurchaseClient({ orders, suppliers, materials, reorderSu
     setSyncing(true);
     try {
       const lines = receiveLines
-        .map((l) => ({ materialId: l.materialId, quantity: Number(l.quantity) || 0, rate: Number(l.rate) || 0, batchNumber: l.batchNumber || undefined }))
+        .map((l) => ({ materialId: l.materialId, quantity: Number(l.quantity) || 0, rate: Number(l.rate) || 0, batchNumber: l.batchNumber || undefined, unit: l.unit || undefined }))
         .filter((l) => l.quantity > 0);
       if (lines.length === 0) { toast.error("Enter a received quantity for at least one line"); setSyncing(false); return; }
       const res = await receivePurchaseOrder(receivePo.id, lines);
@@ -189,7 +239,19 @@ export default function PurchaseClient({ orders, suppliers, materials, reorderSu
                 <div className="text-sm">
                   <p className="font-semibold text-text-primary">{s.name} <span className="font-mono text-xs text-text-tertiary">{s.sku}</span></p>
                   <p className="mt-0.5 text-xs text-text-secondary">
-                    On hand {s.netStock} {s.uom} · min {s.minStockLevel} · suggest <span className="font-semibold text-text-primary">{s.suggestedQty} {s.uom}</span>
+                    On hand {s.netStock} {s.uom}
+                    {typeof s.secondaryNetStock === "number" && (
+                      <span className="text-text-tertiary"> ({Number(s.secondaryNetStock.toFixed(2))} {s.secondaryUom})</span>
+                    )}
+                    {" · min "}
+                    {s.minStockLevel}
+                    {" · suggest "}
+                    <span className="font-semibold text-text-primary">
+                      {s.suggestedQty} {s.uom}
+                      {typeof s.secondarySuggestedQty === "number" && (
+                        <span className="font-normal text-text-tertiary"> ({Number(s.secondarySuggestedQty.toFixed(2))} {s.secondaryUom})</span>
+                      )}
+                    </span>
                     {s.supplier ? ` · ${s.supplier.name}` : " · no supplier on file"}
                   </p>
                 </div>
@@ -501,15 +563,81 @@ export default function PurchaseClient({ orders, suppliers, materials, reorderSu
                 <div className="space-y-2">
                   {receiveLines.map((line, idx) => (
                     <div key={idx} className="rounded-[16px] border border-border bg-surface-2/40 p-3">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-semibold text-text-primary">{line.name}</p>
-                        <p className="text-[11px] text-text-tertiary">Ordered {line.ordered} · received {line.already}</p>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-text-primary">
+                            {line.name}
+                            {line.itemCode && (
+                              <span className="ml-2 font-mono text-[11px] text-text-tertiary">{line.itemCode}</span>
+                            )}
+                          </p>
+                          {/* The spec is what the storekeeper checks the delivery against. */}
+                          {line.spec && <p className="mt-0.5 text-[11px] text-text-tertiary">{line.spec}</p>}
+                        </div>
+                        <p className="shrink-0 text-[11px] text-text-tertiary">Ordered {line.ordered} · received {line.already}</p>
                       </div>
                       <div className="mt-2 grid grid-cols-3 gap-2">
                         <div className="space-y-1">
-                          <label className="text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">Receive qty</label>
-                          <Input type="number" min="0" step="0.01" value={line.quantity === "" ? "" : String(line.quantity)}
-                            onChange={(e) => { const n = [...receiveLines]; n[idx].quantity = e.target.value === "" ? "" : parseFloat(e.target.value); setReceiveLines(n); }} />
+                          <label className="text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
+                            Receive qty
+                          </label>
+                          <div className="flex gap-1">
+                            <Input type="number" min="0" step="0.01" value={line.quantity === "" ? "" : String(line.quantity)}
+                              onChange={(e) => { const n = [...receiveLines]; n[idx].quantity = e.target.value === "" ? "" : parseFloat(e.target.value); setReceiveLines(n); }} />
+                            {/* Only where the item carries a second unit. A lone
+                                stock unit needs no choice. */}
+                            {line.unitOptions.length > 1 ? (
+                              <select
+                                value={line.unit}
+                                onChange={(e) => {
+                                  const nextUnit = e.target.value;
+                                  const prevUnit = line.unit;
+                                  if (nextUnit === prevUnit) return;
+
+                                  const n = [...receiveLines];
+                                  const currentLine = n[idx];
+
+                                  let factor = 1;
+                                  if (nextUnit !== currentLine.stockUnit) {
+                                    const conv = currentLine.conversions.find(
+                                      (c: any) => c.fromUOM === nextUnit && c.toUOM === currentLine.stockUnit
+                                    );
+                                    if (conv && conv.conversionFactor > 0) {
+                                      factor = 1 / conv.conversionFactor;
+                                    }
+                                  } else {
+                                    const conv = currentLine.conversions.find(
+                                      (c: any) => c.fromUOM === prevUnit && c.toUOM === currentLine.stockUnit
+                                    );
+                                    if (conv && conv.conversionFactor > 0) {
+                                      factor = conv.conversionFactor;
+                                    }
+                                  }
+
+                                  if (currentLine.quantity !== "") {
+                                    currentLine.quantity = Math.round(Number(currentLine.quantity) * factor * 1000) / 1000;
+                                  }
+                                  if (currentLine.rate !== "") {
+                                    currentLine.rate = Math.round((Number(currentLine.rate) / factor) * 100) / 100;
+                                  }
+
+                                  currentLine.unit = nextUnit;
+                                  setReceiveLines(n);
+                                }}
+                                className="h-10 shrink-0 rounded-[12px] border border-border bg-background px-2 text-sm text-text-primary"
+                                aria-label={"Unit for " + line.name}
+                              >
+                                {line.unitOptions.map((u) => <option key={u} value={u}>{u}</option>)}
+                              </select>
+                            ) : (
+                              <span className="flex h-10 shrink-0 items-center px-2 text-xs text-text-tertiary">{line.stockUnit}</span>
+                            )}
+                          </div>
+                          {line.unit !== line.stockUnit && (
+                            <p className="text-[10px] text-text-tertiary">
+                              Converted to {line.stockUnit} on receipt, rate included.
+                            </p>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">Rate</label>
@@ -586,18 +714,18 @@ export default function PurchaseClient({ orders, suppliers, materials, reorderSu
                   <div className="space-y-2">
                     {orderItems.map((item, idx) => (
                       <div key={idx} className="flex items-center gap-2">
-                        <Select
-                          className="flex-1"
-                          value={item.materialId}
-                          onChange={(e) => {
-                            const next = [...orderItems];
-                            next[idx].materialId = e.target.value;
-                            setOrderItems(next);
-                          }}
-                          required
-                        >
-                          {materials.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </Select>
+                        <div className="flex-1">
+                          <SpecCombobox
+                            options={purchaseOptions}
+                            value={item.materialId || null}
+                            onChange={(id) => {
+                              const next = [...orderItems];
+                              next[idx].materialId = id ?? "";
+                              setOrderItems(next);
+                            }}
+                            placeholder="Search item, code or spec…"
+                          />
+                        </div>
                         <Input
                           className="w-24"
                           type="number"
@@ -703,18 +831,18 @@ export default function PurchaseClient({ orders, suppliers, materials, reorderSu
                   <div className="space-y-2">
                     {returnItems.map((item, idx) => (
                       <div key={idx} className="flex items-center gap-2">
-                        <Select
-                          className="flex-1"
-                          value={item.materialId}
-                          onChange={(e) => {
-                            const next = [...returnItems];
-                            next[idx].materialId = e.target.value;
-                            setReturnItems(next);
-                          }}
-                          required
-                        >
-                          {materials.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </Select>
+                        <div className="flex-1">
+                          <SpecCombobox
+                            options={purchaseOptions}
+                            value={item.materialId || null}
+                            onChange={(id) => {
+                              const next = [...returnItems];
+                              next[idx].materialId = id ?? "";
+                              setReturnItems(next);
+                            }}
+                            placeholder="Search item, code or spec…"
+                          />
+                        </div>
                         <Input
                           className="w-24"
                           type="number"

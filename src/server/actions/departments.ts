@@ -27,7 +27,18 @@ export async function getDepartmentsData() {
       where: { factoryId: user.factoryId },
       orderBy: [{ active: "desc" }, { sortOrder: "asc" }],
       include: {
-        template: { select: { id: true, name: true } },
+        // Every checklist dedicated to this department, with the categories it
+        // covers — so the settings page answers "what actually runs here?"
+        // without opening the builder to find out.
+        ownedTemplates: {
+          where: { status: "active" },
+          select: {
+            id: true,
+            name: true,
+            defaultForItemGroups: { select: { id: true, name: true } },
+          },
+          orderBy: { name: "asc" },
+        },
         members: { select: { id: true, name: true, role: true }, orderBy: { name: "asc" } },
         _count: { select: { jobCards: true } },
       },
@@ -37,7 +48,7 @@ export async function getDepartmentsData() {
       select: { id: true, name: true, role: true, departmentId: true },
       orderBy: { name: "asc" },
     }),
-    prisma.qCTemplate.findMany({
+    prisma.checklistTemplate.findMany({
       where: { factoryId: user.factoryId, status: "active" },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
@@ -77,7 +88,6 @@ export async function createDepartment(input: {
         requirePhoto: input.requirePhoto ?? false,
         requireRemarks: input.requireRemarks ?? false,
         requiresApproval: input.requiresApproval ?? false,
-        templateId: input.templateId || null,
         sortOrder: (last?.sortOrder ?? -1) + 1,
         active: true,
       },
@@ -117,7 +127,6 @@ export async function updateDepartment(
         requirePhoto: patch.requirePhoto ?? existing.requirePhoto,
         requireRemarks: patch.requireRemarks ?? existing.requireRemarks,
         requiresApproval: patch.requiresApproval ?? existing.requiresApproval,
-        templateId: patch.templateId !== undefined ? patch.templateId || null : existing.templateId,
         active: patch.active ?? existing.active,
       },
     });
@@ -128,9 +137,6 @@ export async function updateDepartment(
   }
 }
 
-export async function assignDepartmentTemplate(departmentId: string, templateId: string | null) {
-  return updateDepartment(departmentId, { templateId });
-}
 
 // Persist a new chain order. The array is department ids in the desired sequence.
 export async function reorderDepartments(orderedIds: string[]) {

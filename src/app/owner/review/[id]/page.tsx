@@ -31,7 +31,7 @@ export default async function OwnerReviewInspectionPage({ params }: { params: Pr
     : [];
 
   const customerName = review.order.customer?.name || "N/A";
-  const title = `${review.spec.brand || ""} ${review.spec.model || ""}`.trim() || review.order.soNumber;
+  const title = review.spec.itemName || review.spec.product || review.order.soNumber;
 
   return (
     <div className="flex flex-col h-[calc(100vh-112px)] overflow-y-auto p-6 md:p-8 gap-6 min-w-0 pb-20 animate-in fade-in duration-300">

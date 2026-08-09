@@ -137,15 +137,15 @@ for (const d of departments) {
 const vModels = await p.vehicleModel.findMany({ where: { factoryId }, include: { brand: true }, take: 20 })
 
 // ---- Productions: order -> plan -> workOrder -> jobCards across departments ----
-const template = await p.qCTemplate.findFirst({ where: { factoryId, status: 'active' } })
+const template = await p.checklistTemplate.findFirst({ where: { factoryId, status: 'active' } })
 const statuses = ['WAITING', 'IN_PROGRESS', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED']
 const seatOpts = ['Single Back', 'Double Back']
 
 async function ensureVariant(product, label) {
   let v = await p.productVariant.findFirst({ where: { productId: product.id, name: label } })
   if (!v) v = await p.productVariant.create({ data: { productId: product.id, name: label, sku: `${product.skuPrefix ?? 'PV'}-${uniq()}` } })
-  let bp = await p.blueprint.findUnique({ where: { productVariantId: v.id }, include: { versions: true } })
-  if (!bp) bp = await p.blueprint.create({ data: { factoryId, productVariantId: v.id }, include: { versions: true } })
+  let bp = await p.blueprint.findUnique({ where: { itemId: v.itemId }, include: { versions: true } })
+  if (!bp) bp = await p.blueprint.create({ data: { factoryId, itemId: v.itemId }, include: { versions: true } })
   let bv = bp.versions?.find((x) => x.isActive) ?? bp.versions?.[0]
   if (!bv) bv = await p.blueprintVersion.create({ data: { blueprintId: bp.id, versionNumber: 1, name: 'V1 - Standard', qcTemplateId: template?.id ?? null, isActive: true } })
   return { v, bv }

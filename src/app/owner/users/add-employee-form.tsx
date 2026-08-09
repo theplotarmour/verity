@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plus, Loader2, X, ShieldAlert, CheckCircle2, MessageCircle, MessageSquare } from "lucide-react";
-import { Button, Card } from "@/components/ui/primitives";
+import { Button, Card, Select } from "@/components/ui/primitives";
 import { createEmployee } from "@/server/actions/employee";
 import { SystemRole } from "@prisma/client";
 
@@ -155,14 +155,14 @@ export function AddEmployeeForm() {
                   
                   <div className="space-y-2">
                     <label className="block text-xs font-bold text-text-secondary uppercase tracking-wider">Role</label>
-                    <select
+                    <Select
                       value={role}
                       onChange={(e) => setRole(e.target.value as SystemRole)}
                       className="w-full px-4 py-3 bg-white/60 border border-white/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/50 font-medium text-text-primary shadow-sm transition-all"
                     >
                       <option value="WORKER">Worker (Doer)</option>
                       <option value="SUPERVISOR">Supervisor (Department head / QC reviewer)</option>
-                    </select>
+                    </Select>
                   </div>
 
                   <div className="pt-2 flex gap-3">

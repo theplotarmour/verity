@@ -5,6 +5,13 @@ import { getOwnerUser } from "@/lib/server/owner";
 import { revalidatePath } from "next/cache";
 import { ADJUSTMENT_TYPES } from "@/lib/inventory-constants";
 import { STOCK_STATUS_FIELD, type StockStatus } from "@/lib/stock-status";
+import { SPEC_SUMMARY_INCLUDE, specSummary, loadRefLabels } from "@/server/queries/spec";
+import { ensureDefaultBin } from "@/server/internal/stockMovements";
+
+// issueMaterialsForWorkOrder and receiveFinishedGoods deliberately are NOT
+// re-exported from here: re-exporting them from a "use server" module would
+// publish them as endpoints again, which is the whole thing the move avoided.
+// Their callers import them from @/server/internal/stockMovements.
 
 export async function dispatchOrder(orderId: string) {
   const owner = await getOwnerUser();
@@ -42,10 +49,44 @@ export async function dispatchOrder(orderId: string) {
 export async function getMaterials() {
   const user = await getOwnerUser();
   if (!user) return [];
+  const groupIds = await stockableGroupIds(user.factoryId);
   return prisma.itemMaster.findMany({
-    where: { factoryId: user.factoryId, itemType: "RAW_MATERIAL" },
+    where: { factoryId: user.factoryId, groupId: { in: [...groupIds] } },
     orderBy: { name: "asc" },
   });
+}
+
+// The group ids whose items are physical stock: everything under the seeded Raw
+// Material and Semi-Finished roots (fabric, foam, thread, sub-assemblies). Their
+// descendants are included; reference categories that happen to be RAW_MATERIAL
+// typed — Vehicles/Brands/Models, Designs, Colours — live under other roots and
+// are excluded, so brands and car models stop appearing as "stock".
+async function stockableGroupIds(factoryId: string): Promise<Set<string>> {
+  const groups = await prisma.itemGroup.findMany({
+    where: { factoryId },
+    select: { id: true, parentId: true, name: true, shortCode: true, itemType: true },
+  });
+  const isStockRoot = (g: (typeof groups)[number]) =>
+    !g.parentId &&
+    (["RM", "SF"].includes(g.shortCode ?? "") ||
+      ["Raw Material", "Semi-Finished"].includes(g.name)) &&
+    (g.itemType === "RAW_MATERIAL" || g.itemType === "SEMI_FINISHED");
+  const childrenByParent = new Map<string, string[]>();
+  for (const g of groups) {
+    if (!g.parentId) continue;
+    const list = childrenByParent.get(g.parentId) ?? [];
+    list.push(g.id);
+    childrenByParent.set(g.parentId, list);
+  }
+  const set = new Set<string>();
+  const stack = groups.filter(isStockRoot).map((g) => g.id);
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (set.has(id)) continue;
+    set.add(id);
+    for (const c of childrenByParent.get(id) ?? []) stack.push(c);
+  }
+  return set;
 }
 
 export async function getWarehouses() {
@@ -54,42 +95,10 @@ export async function getWarehouses() {
   return prisma.warehouse.findMany({ where: { factoryId: user.factoryId } });
 }
 
-// Ensures a Default zone/rack/shelf/bin chain for a warehouse; the old UI
-// works at warehouse level while the new ledger is bin-level.
-async function ensureDefaultBin(factoryId: string, warehouseId: string) {
-  // Fast path: the Default chain already exists for every warehouse after its
-  // first stock transaction, so resolve the leaf bin in ONE query instead of
-  // four sequential find-or-creates on every entry (perf audit P2).
-  const existing = await prisma.warehouseBin.findFirst({
-    where: {
-      name: "Default",
-      shelf: { name: "Default", rack: { name: "Default", zone: { name: "Default", warehouseId } } },
-    },
-    select: { id: true, shelfId: true, factoryId: true, name: true },
-  });
-  if (existing) return existing;
-
-  // Cold path: build the chain (first-ever transaction for this warehouse).
-  let zone = await prisma.warehouseZone.findFirst({ where: { warehouseId, name: "Default" } });
-  if (!zone) zone = await prisma.warehouseZone.create({ data: { factoryId, warehouseId, name: "Default" } });
-
-  let rack = await prisma.warehouseRack.findFirst({ where: { zoneId: zone.id, name: "Default" } });
-  if (!rack) rack = await prisma.warehouseRack.create({ data: { factoryId, zoneId: zone.id, name: "Default" } });
-
-  let shelf = await prisma.warehouseShelf.findFirst({ where: { rackId: rack.id, name: "Default" } });
-  if (!shelf) shelf = await prisma.warehouseShelf.create({ data: { factoryId, rackId: rack.id, name: "Default" } });
-
-  let bin = await prisma.warehouseBin.findFirst({ where: { shelfId: shelf.id, name: "Default" } });
-  if (!bin) bin = await prisma.warehouseBin.create({ data: { factoryId, shelfId: shelf.id, name: "Default" } });
-
-  return bin;
-}
-
 export async function createStockEntry(data: {
   transactionType: "RECEIPT" | "ISSUE" | "TRANSFER" | "ADJUSTMENT";
   warehouseId: string;
   materialId?: string;
-  productVariantId?: string;
   batchNumber?: string;
   quantityChange: number;
   referenceDocType?: string;
@@ -98,32 +107,9 @@ export async function createStockEntry(data: {
   const user = await getOwnerUser();
   if (!user) throw new Error("Unauthorized");
 
-  // Resolve the ItemMaster row: direct material, or the variant's linked item
-  // (created on the fly for variants that predate the inventory engine).
-  let itemId = data.materialId ?? null;
-  if (!itemId && data.productVariantId) {
-    const variant = await prisma.productVariant.findUnique({
-      where: { id: data.productVariantId },
-      include: { product: true },
-    });
-    if (!variant) throw new Error("Product variant not found");
-    if (variant.itemId) {
-      itemId = variant.itemId;
-    } else {
-      const item = await prisma.itemMaster.create({
-        data: {
-          factoryId: user.factoryId,
-          name: `${variant.product.name} - ${variant.name}`,
-          sku: variant.sku,
-          itemType: "FINISHED_PRODUCT",
-          defaultUOM: "pcs",
-        },
-      });
-      await prisma.productVariant.update({ where: { id: variant.id }, data: { itemId: item.id } });
-      itemId = item.id;
-    }
-  }
-  if (!itemId) throw new Error("A material or product variant is required");
+  // Stock moves against an ItemMaster row directly now.
+  const itemId = data.materialId ?? null;
+  if (!itemId) throw new Error("A material item is required");
 
   // Cutting issues the calculated quantity and no more. The requirement comes
   // from CAD (design consumption + BOM), materialised as this work order's
@@ -307,184 +293,16 @@ export async function getStockAdjustments() {
   }));
 }
 
-export async function getProductVariants() {
-  const user = await getOwnerUser();
-  if (!user) return [];
-  return prisma.productVariant.findMany({ where: { product: { factoryId: user.factoryId } }, include: { product: true } });
+// Retained as an empty stub: the inventory page still requests it, but the
+// legacy ProductVariant catalogue is retired and the UI no longer reads it.
+export async function getProductVariants(): Promise<never[]> {
+  return [];
 }
 
 // ==========================================
 // Production material issuance (auto-filled from the BOM configured in
 // Master Data) + finished-goods receipt on QC approval.
 // ==========================================
-
-async function ensureDefaultWarehouse(factoryId: string) {
-  let warehouse = await prisma.warehouse.findFirst({
-    where: { factoryId, kind: "WAREHOUSE" },
-    orderBy: { createdAt: "asc" },
-  });
-  if (!warehouse) {
-    warehouse = await prisma.warehouse.create({
-      data: { factoryId, name: "Main Warehouse", kind: "WAREHOUSE" },
-    });
-  }
-  return warehouse;
-}
-
-export async function issueMaterialsForWorkOrder(params: {
-  factoryId: string;
-  workOrderId: string;
-  blueprintVersionId: string;
-  quantity: number;
-  designId?: string | null;
-  fabricItemId?: string | null;
-}) {
-  const { factoryId, workOrderId, blueprintVersionId, quantity } = params;
-
-  const bom = await prisma.bOM.findUnique({
-    where: { blueprintVersionId },
-    include: { items: true },
-  });
-
-  // Merge in spec-level BOMs (per design, per fabric) from Master Data
-  const specRefs: Array<{ refType: string; refId: string }> = [];
-  if (params.designId) specRefs.push({ refType: "DESIGN", refId: params.designId });
-  if (params.fabricItemId) specRefs.push({ refType: "FABRIC", refId: params.fabricItemId });
-  const specBoms = specRefs.length
-    ? await prisma.specBOM.findMany({ where: { factoryId, OR: specRefs.map((r) => ({ refType: r.refType, refId: r.refId })) } })
-    : [];
-
-  // CAD holds the standard fabric consumption per design in Master Data, and
-  // that figure is what gets printed on the production label as the quantity
-  // Cutting must issue. Include it here so what the system actually issues is
-  // the same number the floor was told to cut — otherwise the label and the
-  // ledger disagree.
-  const designConsumption: Array<{ itemId: string; quantity: number; wastePercent: number }> = [];
-  if (params.designId && params.fabricItemId) {
-    const design = await prisma.design.findUnique({
-      where: { id: params.designId },
-      select: { fabricConsumption: true },
-    });
-    if (design?.fabricConsumption && design.fabricConsumption > 0) {
-      designConsumption.push({
-        itemId: params.fabricItemId,
-        quantity: design.fabricConsumption,
-        wastePercent: 0,
-      });
-    }
-  }
-
-  const mergedItems: Array<{ itemId: string; quantity: number; wastePercent: number }> = [
-    ...designConsumption,
-    ...(bom?.items ?? []).map((i) => ({ itemId: i.itemId, quantity: i.quantity, wastePercent: i.wastePercent })),
-    ...specBoms.flatMap((sb) => ((sb.items as any[]) ?? []).map((i: any) => ({
-      itemId: i.itemId,
-      quantity: Number(i.quantity) || 0,
-      wastePercent: Number(i.wastePercent) || 0,
-    }))),
-  ].filter((i) => i.itemId && i.quantity > 0);
-
-  if (mergedItems.length === 0) return { issued: 0 };
-
-  const warehouse = await ensureDefaultWarehouse(factoryId);
-  const bin = await ensureDefaultBin(factoryId, warehouse.id);
-
-  for (const bomItem of mergedItems) {
-    const totalQty = bomItem.quantity * quantity * (1 + bomItem.wastePercent / 100);
-
-    await prisma.materialReservation.create({
-      data: {
-        factoryId,
-        itemId: bomItem.itemId,
-        quantity: totalQty,
-        workOrderId,
-        status: "ACTIVE",
-      },
-    });
-
-    await prisma.stockLedgerEntry.create({
-      data: {
-        factoryId,
-        transactionType: "ISSUE",
-        itemId: bomItem.itemId,
-        binId: bin.id,
-        quantityChange: -totalQty,
-        valuationRate: 0,
-        totalValue: 0,
-        referenceDocType: "WORK_ORDER",
-        referenceDocId: workOrderId,
-      },
-    });
-
-    await prisma.binBalance.upsert({
-      where: { itemId_binId: { itemId: bomItem.itemId, binId: bin.id } },
-      update: { stockAvailable: { decrement: totalQty } },
-      create: { factoryId, itemId: bomItem.itemId, binId: bin.id, stockAvailable: -totalQty },
-    });
-  }
-
-  return { issued: mergedItems.length };
-}
-
-export async function receiveFinishedGoods(params: {
-  factoryId: string;
-  workOrderId: string;
-  productVariantId: string;
-  quantity: number;
-}) {
-  const { factoryId, workOrderId, productVariantId, quantity } = params;
-
-  // Resolve (or create) the ItemMaster row behind the variant.
-  const variant = await prisma.productVariant.findUnique({
-    where: { id: productVariantId },
-    include: { product: true },
-  });
-  if (!variant) return { error: "Variant not found" };
-
-  let itemId = variant.itemId;
-  if (!itemId) {
-    const item = await prisma.itemMaster.create({
-      data: {
-        factoryId,
-        name: `${variant.product.name} - ${variant.name}`,
-        sku: variant.sku,
-        itemType: "FINISHED_PRODUCT",
-        defaultUOM: "pcs",
-      },
-    });
-    await prisma.productVariant.update({ where: { id: variant.id }, data: { itemId: item.id } });
-    itemId = item.id;
-  }
-
-  const warehouse = await ensureDefaultWarehouse(factoryId);
-  const bin = await ensureDefaultBin(factoryId, warehouse.id);
-
-  await prisma.stockLedgerEntry.create({
-    data: {
-      factoryId,
-      transactionType: "RECEIPT",
-      itemId,
-      binId: bin.id,
-      quantityChange: quantity,
-      valuationRate: 0,
-      totalValue: 0,
-      referenceDocType: "WORK_ORDER",
-      referenceDocId: workOrderId,
-    },
-  });
-  await prisma.binBalance.upsert({
-    where: { itemId_binId: { itemId, binId: bin.id } },
-    update: { stockAvailable: { increment: quantity } },
-    create: { factoryId, itemId, binId: bin.id, stockAvailable: quantity },
-  });
-
-  await prisma.materialReservation.updateMany({
-    where: { workOrderId, status: "ACTIVE" },
-    data: { status: "CONSUMED" },
-  });
-
-  return { success: true };
-}
 
 // Aggregated view for the five-tab inventory screen.
 export async function getInventoryOverview() {
@@ -494,8 +312,22 @@ export async function getInventoryOverview() {
 
   const [rawMaterials, reservations, balances, warehouses, activeWorkOrders] = await Promise.all([
     prisma.itemMaster.findMany({
-      where: { factoryId, itemType: "RAW_MATERIAL" },
-      orderBy: { name: "asc" },
+      // Physical stock only — items under the Raw Material and Semi-Finished
+      // roots. Reference categories (Vehicles/Brands/Models, Designs, Colours)
+      // are RAW_MATERIAL-typed too but are not stock, so they are excluded by
+      // group rather than by type.
+      where: {
+        factoryId,
+        groupId: { in: [...(await stockableGroupIds(factoryId))] },
+      },
+      include: {
+        group: { select: { name: true } },
+        specValues: { include: SPEC_SUMMARY_INCLUDE },
+        // Stock is held in the item's own unit, but the floor counts rolls and
+        // bags. Carrying the conversion lets a row say both.
+        conversions: { select: { fromUOM: true, toUOM: true, conversionFactor: true } },
+      },
+      orderBy: [{ itemType: "asc" }, { name: "asc" }],
     }),
     prisma.materialReservation.findMany({
       where: { factoryId, status: "ACTIVE" },
@@ -506,7 +338,15 @@ export async function getInventoryOverview() {
             productionPlan: {
               include: {
                 salesOrder: true,
-                blueprintVersion: { include: { blueprint: { include: { productVariant: { include: { product: true } } } } } },
+                // Three joins out to Product for a name the item already carries —
+            // and Product is empty, so the WIP column read "—" on every row.
+            blueprintVersion: {
+              include: {
+                blueprint: {
+                  include: { item: { select: { id: true, name: true, group: { select: { name: true } } } } },
+                },
+              },
+            },
               },
             },
           },
@@ -517,7 +357,7 @@ export async function getInventoryOverview() {
     prisma.binBalance.findMany({
       where: { factoryId },
       include: {
-        item: true,
+        item: { include: { specValues: { include: SPEC_SUMMARY_INCLUDE }, conversions: { select: { fromUOM: true, toUOM: true, conversionFactor: true } } } },
         bin: { include: { shelf: { include: { rack: { include: { zone: { include: { warehouse: true } } } } } } } },
       },
     }),
@@ -531,7 +371,15 @@ export async function getInventoryOverview() {
         productionPlan: {
           include: {
             salesOrder: { include: { customer: true } },
-            blueprintVersion: { include: { blueprint: { include: { productVariant: { include: { product: true } } } } } },
+            // Three joins out to Product for a name the item already carries —
+            // and Product is empty, so the WIP column read "—" on every row.
+            blueprintVersion: {
+              include: {
+                blueprint: {
+                  include: { item: { select: { id: true, name: true, group: { select: { name: true } } } } },
+                },
+              },
+            },
           },
         },
       },
@@ -547,23 +395,57 @@ export async function getInventoryOverview() {
   });
   const netByItem = new Map(ledgerSums.map((l) => [l.itemId, l._sum.quantityChange ?? 0]));
 
-  const rawWithStock = rawMaterials.map((m) => ({
-    ...m,
-    netStock: netByItem.get(m.id) ?? 0,
-  }));
+  // Spec summaries so a stock row says what the item actually is, rather than
+  // leaving the reader to infer it from a name.
+  const stockRefIds = [
+    ...rawMaterials.flatMap((m) => m.specValues.map((v) => v.valueRefId)),
+    ...balances.flatMap((b) => b.item.specValues.map((v) => v.valueRefId)),
+  ].filter((x): x is string => Boolean(x));
+  const stockRefLabels = await loadRefLabels(stockRefIds);
+
+  const rawWithStock = rawMaterials.map((m) => {
+    const netStock = netByItem.get(m.id) ?? 0;
+    // How many of the purchase unit that quantity is — 150 m shown as 3 rolls.
+    const toSecondary = m.secondaryUOM
+      ? m.conversions.find((c) => c.fromUOM === m.secondaryUOM && c.toUOM === m.defaultUOM)
+      : null;
+    return {
+      ...m,
+      netStock,
+      groupName: m.group?.name ?? null,
+      spec: specSummary(m.specValues, stockRefLabels),
+      secondaryQty:
+        toSecondary && toSecondary.conversionFactor > 0
+          ? netStock / toSecondary.conversionFactor
+          : null,
+    };
+  });
 
   const locationBalances = balances
     .filter((b) => b.stockAvailable !== 0)
-    .map((b) => ({
-      id: b.id,
-      itemName: b.item.name,
-      sku: b.item.sku,
-      itemType: b.item.itemType,
-      quantity: b.stockAvailable,
-      warehouseId: b.bin.shelf.rack.zone.warehouse.id,
-      warehouseName: b.bin.shelf.rack.zone.warehouse.name,
-      warehouseKind: (b.bin.shelf.rack.zone.warehouse as any).kind ?? "WAREHOUSE",
-    }));
+    .map((b) => {
+      const toSecondary = b.item.secondaryUOM
+        ? b.item.conversions.find((c) => c.fromUOM === b.item.secondaryUOM && c.toUOM === b.item.defaultUOM)
+        : null;
+      return {
+        id: b.id,
+        itemCode: b.item.itemCode,
+        itemSpec: specSummary(b.item.specValues, stockRefLabels),
+        itemName: b.item.name,
+        sku: b.item.sku,
+        itemType: b.item.itemType,
+        quantity: b.stockAvailable,
+        uom: b.item.defaultUOM,
+        secondaryQty:
+          toSecondary && toSecondary.conversionFactor > 0
+            ? b.stockAvailable / toSecondary.conversionFactor
+            : null,
+        secondaryUOM: b.item.secondaryUOM,
+        warehouseId: b.bin.shelf.rack.zone.warehouse.id,
+        warehouseName: b.bin.shelf.rack.zone.warehouse.name,
+        warehouseKind: (b.bin.shelf.rack.zone.warehouse as any).kind ?? "WAREHOUSE",
+      };
+    });
 
   const ongoingProductions = activeWorkOrders.map((wo) => ({
     id: wo.id,
@@ -573,8 +455,8 @@ export async function getInventoryOverview() {
     startDate: wo.startDate,
     customerName: wo.productionPlan?.salesOrder?.customer?.name ?? "—",
     soNumber: wo.productionPlan?.salesOrder?.soNumber ?? "—",
-    productName: wo.productionPlan?.blueprintVersion?.blueprint?.productVariant?.product?.name ?? "—",
-    variantName: wo.productionPlan?.blueprintVersion?.blueprint?.productVariant?.name ?? "",
+    productName: wo.productionPlan?.blueprintVersion?.blueprint?.item?.group?.name ?? "—",
+    variantName: wo.productionPlan?.blueprintVersion?.blueprint?.item?.name ?? "",
     materialsIssued: wo.reservations.length,
   }));
 
@@ -619,7 +501,7 @@ export async function getInventoryOverview() {
 
   const lowStock = rawWithStock
     .filter((m) => m.minStockLevel > 0 && m.netStock <= m.minStockLevel)
-    .map((m) => ({ id: m.id, name: m.name, netStock: m.netStock, minStockLevel: m.minStockLevel, uom: m.defaultUOM }));
+    .map((m) => ({ id: m.id, name: m.name, netStock: m.netStock, minStockLevel: m.minStockLevel, uom: m.defaultUOM, secondaryQty: m.secondaryQty, secondaryUOM: m.secondaryUOM }));
 
   const valuation = rawWithStock
     .filter((m) => m.netStock !== 0)
@@ -631,6 +513,8 @@ export async function getInventoryOverview() {
       netStock: m.netStock,
       rate: rateByItem.get(m.id) ?? 0,
       value: m.netStock * (rateByItem.get(m.id) ?? 0),
+      secondaryQty: m.secondaryQty,
+      secondaryUOM: m.secondaryUOM,
     }))
     .sort((a, b) => b.value - a.value);
 
@@ -664,7 +548,7 @@ export async function getMaterialVariance() {
           salesOrder: true,
           blueprintVersion: {
             include: {
-              blueprint: { include: { productVariant: { include: { product: true } } } },
+              blueprint: { include: { item: { select: { id: true, name: true, group: { select: { name: true } } } } } },
               bom: { include: { items: { include: { item: true } } } },
             },
           },
@@ -699,7 +583,7 @@ export async function getMaterialVariance() {
       workOrderId: wo.id,
       woNumber: wo.woNumber,
       soNumber: wo.productionPlan?.salesOrder?.soNumber ?? "—",
-      productName: wo.productionPlan?.blueprintVersion?.blueprint?.productVariant?.product?.name ?? "—",
+      productName: wo.productionPlan?.blueprintVersion?.blueprint?.item?.name ?? "—",
       targetQty: target,
       lines,
       totalVariance: lines.reduce((s, l) => s + l.variance, 0),

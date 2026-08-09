@@ -1,11 +1,38 @@
 import prisma from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
 import { deriveProductionStatus } from '@/lib/production-status'
-import { designLabel } from '@/lib/variant-descriptor'
+import { describeSpecDetails, collectSpecImages, type SpecDetail } from '@/lib/server/specUtils'
 
 // The worker/inspector/QC flows predate the JobCard architecture and their
 // UIs consume the old Batch/Order shape. This adapter maps a JobCard chain
 // (WorkOrder -> ProductionPlan -> SalesOrder / BlueprintVersion) into that
 // shape so the approved UI renders unchanged.
+
+// The order's finished good and its answered spec columns. This is the generic
+// source of the vehicle/fabric/design/colour/spec labels now that the studio
+// stores them as spec values on the item instead of on the old SalesOrder
+// relations. Options and linked items resolve straight from here, so the
+// descriptor needs no extra query.
+export const orderItemInclude = {
+  group: { select: { name: true } },
+  specValues: {
+    include: {
+      field: { select: { key: true, name: true, sortOrder: true, unitSuffix: true } },
+      option: { select: { label: true, shortCode: true } },
+      valueItem: {
+        include: {
+          specValues: {
+            include: {
+              field: { select: { key: true, name: true, sortOrder: true, unitSuffix: true } },
+              option: { select: { label: true, shortCode: true } },
+              valueItem: { select: { name: true, aliasName: true } },
+            },
+          },
+        },
+      },
+    },
+  },
+} as const
 
 export const jobCardInclude = {
   department: true,
@@ -18,28 +45,20 @@ export const jobCardInclude = {
             include: {
               customer: true,
               inspector: { select: { id: true, name: true } },
-              design: { select: { id: true, name: true, category: true, imageUrls: true, fabricConsumption: true, cadFileUrl: true } },
-              // Floor staff build the item, so they get the whole spec: fabric,
-              // colour, product type and the order's own free-form fields.
-              material: { select: { id: true, name: true, defaultUOM: true } },
-              color: { select: { id: true, name: true } },
-              productType: { select: { id: true, name: true, fields: { orderBy: { sortOrder: 'asc' as const } } } },
-              vehicleBrand: true,
-              vehicleModel: { include: { brand: true } },
+              // Design (an ItemMaster) still supplies a reference image on the
+              // floor; the seat-cover vehicle/fabric/colour relations are gone.
+              design: { select: { id: true, name: true, imageUrl: true } },
+              item: { include: orderItemInclude },
             },
           },
           blueprintVersion: {
             include: {
               blueprint: {
                 include: {
-                  productVariant: {
-                    include: {
-                      product: { include: { category: true } },
-                      fitments: {
-                        include: { vehicleModel: { include: { brand: true } } },
-                        take: 1,
-                      },
-                    },
+                  item: {
+                    // The item is what production is planned against, so its
+                    // name is the one to show.
+                    include: { group: { select: { name: true } } },
                   },
                 },
               },
@@ -49,17 +68,33 @@ export const jobCardInclude = {
       },
     },
   },
-} as const
+} as const satisfies Prisma.JobCardInclude
 
 export function jobCardBatchLabel(jobCard: { workOrder?: { woNumber?: string } | null; sequence: number }) {
   return `${jobCard.workOrder?.woNumber ?? 'WO'}-${jobCard.sequence}`
 }
 
+// Resolve an order's finished good into its full, ordered spec list — every
+// answered column, product-agnostic, in the group's own SpecField order. No
+// field key is special-cased: a seat cover, a box and a shirt each render their
+// own fields under their own labels. A referenced item's specs (a linked Car's
+// Brand/Model...) are flattened in by describeSpecDetails.
+export function describeOrderItem(item: any): { specDetails: SpecDetail[] } {
+  return { specDetails: describeSpecDetails(item) }
+}
+
 export function toWorkerJob(jobCard: any, assignedWorker?: { id: string; name: string } | null) {
   const plan = jobCard.workOrder?.productionPlan
   const salesOrder = plan?.salesOrder
-  const variant = plan?.blueprintVersion?.blueprint?.productVariant
-  const fitment = variant?.fitments?.[0]
+  const item = plan?.blueprintVersion?.blueprint?.item
+  // Vehicle fitment linked a variant to a vehicle row. Both tables are gone;
+  // an order carries its own vehicle.
+  const fitment: { vehicleModel?: any; fitmentNotes?: string } | undefined = undefined
+
+  // The generic source: the ordered finished good's own spec values. Used to
+  // fill the vehicle/fabric/design/colour/specs the legacy relations no longer
+  // hold, with those relations kept as a fallback for pre-migration orders.
+  const specs = describeOrderItem(salesOrder?.item)
 
   return {
     ...jobCard,
@@ -76,39 +111,27 @@ export function toWorkerJob(jobCard: any, assignedWorker?: { id: string; name: s
       assignedWorkerId: jobCard.assignedToId ?? null,
       inspector: salesOrder?.inspector ?? null,
       inspectorId: salesOrder?.inspectorId ?? null,
-      vehicleBrand: salesOrder?.vehicleBrand ?? fitment?.vehicleModel?.brand ?? null,
-      vehicleModel: salesOrder?.vehicleModel ?? fitment?.vehicleModel ?? null,
-      productVariant: variant ?? null,
-      seatType: salesOrder?.seatType ?? null,
-      hasArmrest: salesOrder?.hasArmrest ?? false,
-      headrestCount: salesOrder?.headrestCount ?? null,
-      remarks: salesOrder?.remarks ?? fitment?.fitmentNotes ?? null,
-      designName: salesOrder?.design ? designLabel(salesOrder.design.name, salesOrder.design.category) : null,
-      designImages: (salesOrder?.design?.imageUrls ?? []) as string[],
-      // Full build spec for the floor. Customer identity is deliberately not
-      // part of this — workers and supervisors get the what, not the who.
-      vehicleYear: salesOrder?.vehicleYear ?? null,
-      productName: variant?.product?.name ?? salesOrder?.productType?.name ?? null,
-      variantName: variant?.name ?? null,
-      designFamily: salesOrder?.design?.category ?? null,
-      fabricName: salesOrder?.material?.name ?? null,
-      colorName: salesOrder?.color?.name ?? null,
-      fabricConsumption: salesOrder?.design?.fabricConsumption ?? null,
-      cadFileUrl: salesOrder?.design?.cadFileUrl ?? null,
+      productVariant: null,
+      remarks: salesOrder?.remarks ?? null,
+      // Every picture the SKU carries — the product render, the chosen fabric's
+      // swatch, the design artwork — not just the legacy design relation.
+      designImages: [
+        ...collectSpecImages(salesOrder?.item),
+        ...(salesOrder?.design?.imageUrl ? [salesOrder.design.imageUrl] : []),
+      ].filter((u, i, a) => a.indexOf(u) === i) as string[],
+      // The item's name and category — the primary identity on floor/worker
+      // cards, product-agnostic.
+      productName: item?.group?.name ?? item?.name ?? salesOrder?.item?.group?.name ?? null,
+      itemName: item?.name ?? salesOrder?.item?.name ?? null,
+      variantName: item?.name ?? null,
+      cadFileUrl: null,
       orderQuantity: (plan?.quantity ?? jobCard.targetQty) as number,
-      // Product-type spec fields the studio captured, resolved to label/value.
-      specFields: resolveDynamicSpecs(salesOrder?.productType?.fields, salesOrder?.dynamicData),
+      // The full, ordered spec list — every answered field, no hardcoded keys.
+      specDetails: specs.specDetails,
+      // Back-compat alias; consumers should read specDetails.
+      specFields: specs.specDetails,
     },
   }
-}
-
-// SalesOrder.dynamicData is keyed by ProductField.id. Pair it with the field
-// definitions so the floor sees "Seat Type: Double Back" rather than raw ids.
-function resolveDynamicSpecs(fields: any[] | undefined, dynamicData: any): Array<{ label: string; value: string }> {
-  if (!fields?.length || !dynamicData || typeof dynamicData !== 'object') return []
-  return fields
-    .map((f) => ({ label: f.name as string, value: String((dynamicData as any)[f.id] ?? '').trim() }))
-    .filter((s) => s.value.length > 0)
 }
 
 // SalesOrder include chain + adapter to the old Order shape (orderNumber,
@@ -116,28 +139,18 @@ function resolveDynamicSpecs(fields: any[] | undefined, dynamicData: any): Array
 // orders list, and floor progress components.
 export const salesOrderInclude = {
   customer: true,
-  material: true,
-  design: true,
-  color: true,
-  productType: true,
-  vehicleBrand: true,
-  vehicleModel: { include: { brand: true } },
+  item: { include: orderItemInclude },
   inspector: { select: { id: true, name: true } },
+  // toLegacyOrder derives `dispatched` from this; without it the flag was always
+  // false and a shipped order kept showing as still on the floor.
+  dispatches: { select: { id: true, status: true } },
   plans: {
     include: {
       blueprintVersion: {
         include: {
           blueprint: {
             include: {
-              productVariant: {
-                include: {
-                  product: { include: { category: true } },
-                  fitments: {
-                    include: { vehicleModel: { include: { brand: true } } },
-                    take: 1,
-                  },
-                },
-              },
+              item: { select: { name: true } },
             },
           },
         },
@@ -157,18 +170,20 @@ export const salesOrderInclude = {
       },
     },
   },
-} as const
+} as const satisfies Prisma.SalesOrderInclude
 
 export function toLegacyOrder(salesOrder: any) {
   const plan = salesOrder.plans?.[0]
-  const variant = plan?.blueprintVersion?.blueprint?.productVariant
-  const fitment = variant?.fitments?.[0]
+  const item = plan?.blueprintVersion?.blueprint?.item
   const jobCards = (salesOrder.plans ?? []).flatMap((p: any) =>
     (p.workOrders ?? []).flatMap((wo: any) =>
       (wo.jobCards ?? []).map((jc: any) => ({ ...jc, workOrder: wo }))
     )
   )
   const firstAssigned = jobCards.find((jc: any) => jc.assignedTo)
+  // Vehicle/fabric/design/colour from the ordered item's spec values, so the
+  // dashboard and lists stop showing blanks where the legacy relations are null.
+  const specs = describeOrderItem(salesOrder.item)
 
   return {
     ...salesOrder,
@@ -179,11 +194,14 @@ export function toLegacyOrder(salesOrder: any) {
     workerId: firstAssigned?.assignedTo?.id ?? firstAssigned?.assignedToId ?? null,
     inspector: salesOrder.inspector ?? null,
     inspectorId: salesOrder.inspectorId ?? null,
-    // The order's own vehicle is authoritative; the shared-variant fitment is
-    // only a fallback for legacy orders created before per-order columns existed.
-    vehicleBrand: salesOrder.vehicleBrand ?? fitment?.vehicleModel?.brand ?? null,
-    vehicleModel: salesOrder.vehicleModel ?? fitment?.vehicleModel ?? null,
-    productVariant: variant ?? null,
+    // The full, ordered spec list drives product-agnostic surfaces. The legacy
+    // vehicle/design/material/color relations are still spread from salesOrder
+    // above for the dashboard/production-list columns (Phase 3 cleanup).
+    specDetails: specs.specDetails,
+    specFields: specs.specDetails,
+    images: collectSpecImages(salesOrder.item),
+    itemName: item?.name ?? salesOrder.item?.name ?? null,
+    productVariant: null,
     // Where the physical production bag actually is right now, on the same
     // ladder the floor uses (Draft ... Ready for Dispatch, Dispatched).
     productionStatus: deriveProductionStatus({

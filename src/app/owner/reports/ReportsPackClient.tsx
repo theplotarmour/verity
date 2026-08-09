@@ -198,7 +198,7 @@ export function ReportsPackClient({ initialData, passports }: { initialData: any
                       <span className="text-sm font-semibold text-text-primary">{row.inspection?.batch?.order?.orderNumber}</span>
                       <Badge className="bg-surface-2 text-text-secondary">{row.verificationCode}</Badge>
                     </div>
-                    <p className="mt-1 text-sm text-text-secondary">{row.inspection?.batch?.order?.vehicleBrand?.name} {row.inspection?.batch?.order?.vehicleModel?.name} · {formatDate(row.createdAt)}</p>
+                    <p className="mt-1 text-sm text-text-secondary">{row.inspection?.batch?.order?.itemName || row.inspection?.batch?.order?.productName || row.inspection?.batch?.order?.orderNumber} · {formatDate(row.createdAt)}</p>
                   </div>
                 </div>
                 <Link href={`/verify/${row.verificationCode}`} target="_blank">

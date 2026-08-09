@@ -4,11 +4,12 @@ import prisma from '@/lib/prisma'
 import { getUserSession } from '@/lib/server/auth'
 import { QCStatus } from '@prisma/client'
 import { redirect } from 'next/navigation'
-import { jobCardInclude, toWorkerJob, jobCardBatchLabel, loadAssignedWorkers } from '@/lib/server/jobCardAdapter'
-import { receiveFinishedGoods } from '@/server/actions/inventory'
+import { jobCardInclude, toWorkerJob, jobCardBatchLabel, loadAssignedWorkers, describeOrderItem, orderItemInclude } from '@/lib/server/jobCardAdapter'
+import { receiveFinishedGoods } from '@/server/internal/stockMovements'
 import { recordTimeline } from '@/lib/server/stages'
 import { departmentKind } from '@/lib/production-status'
 import { canAccessJobCard, getSessionDepartmentId } from '@/lib/server/jobCardAccess'
+import { collectSpecImages } from '@/lib/server/specUtils'
 
 // QC is performed by the supervisor of the QC department (no separate inspector
 // role) and by management. Kept as one predicate the whole QC flow gates on.
@@ -81,12 +82,10 @@ export async function getOrderReview(inspectionId: string) {
     where: { id: salesOrderId, factoryId: session.factoryId },
     include: {
       customer: true,
-      material: true,
       design: true,
-      color: true,
-      productType: { include: { fields: { orderBy: { sortOrder: 'asc' } } } },
-      vehicleBrand: true,
-      vehicleModel: { include: { brand: true } },
+      // The ordered item + its spec values (recursively flattening a referenced
+      // item's specs) drive the product-agnostic dossier.
+      item: { include: orderItemInclude },
       inspector: { select: { id: true, name: true } },
       dispatches: true,
       plans: {
@@ -97,10 +96,16 @@ export async function getOrderReview(inspectionId: string) {
               bom: { include: { items: { include: { item: true } } } },
               blueprint: {
                 include: {
-                  productVariant: {
+                  item: {
                     include: {
-                      product: { include: { category: true } },
-                      fitments: { include: { vehicleModel: { include: { brand: true } } }, take: 1 },
+                      group: { select: { name: true } },
+                      specValues: {
+                        include: {
+                          field: { select: { name: true, sortOrder: true, unitSuffix: true } },
+                          option: { select: { label: true } },
+                          valueItem: { select: { name: true, aliasName: true } },
+                        },
+                      },
                     },
                   },
                 },
@@ -147,29 +152,28 @@ export async function getOrderReview(inspectionId: string) {
   // relation wasn't hydrated) — already included above via assignedTo.
   const plan = order.plans?.[0]
   const bv = plan?.blueprintVersion
-  const variant = bv?.blueprint?.productVariant
-  const fitment = variant?.fitments?.[0]
+  const oitem = bv?.blueprint?.item
+  // Vehicle fitment linked variants to vehicle rows; both tables are gone.
   const jobCards = (order.plans ?? []).flatMap((p: any) =>
     (p.workOrders ?? []).flatMap((wo: any) => (wo.jobCards ?? []).map((jc: any) => ({ ...jc, woNumber: wo.woNumber })))
   ).sort((a: any, b: any) => a.sequence - b.sequence)
+
+  const specs = describeOrderItem(order.item)
 
   return {
     activeInspectionId: inspectionId,
     order,
     spec: {
-      // Order's own vehicle is authoritative; fitment is the legacy fallback.
-      brand: order.vehicleBrand?.name ?? fitment?.vehicleModel?.brand?.name ?? null,
-      model: order.vehicleModel?.name ?? fitment?.vehicleModel?.name ?? null,
-      generation: order.vehicleYear ?? null,
-      product: variant?.product?.name ?? order.productType?.name ?? null,
-      category: variant?.product?.category?.name ?? null,
-      variantName: variant?.name ?? null,
-      seatType: order.seatType ?? null,
-      headrestCount: order.headrestCount ?? null,
-      hasArmrest: order.hasArmrest ?? false,
-      fabric: order.material?.name ?? null,
-      design: order.design ? `${order.design.category ? order.design.category + ' ' : ''}${order.design.name}` : null,
-      color: order.color?.name ?? null,
+      product: oitem?.group?.name ?? oitem?.name ?? order.item?.group?.name ?? null,
+      category: oitem?.group?.name ?? order.item?.group?.name ?? null,
+      variantName: oitem?.name ?? order.item?.name ?? null,
+      itemName: oitem?.name ?? order.item?.name ?? null,
+      // Every answered spec, product-agnostic (recursively includes a linked
+      // item's specs), in the group's column order.
+      specDetails: specs.specDetails,
+      // The product render plus any picture its referenced specs carry (fabric
+      // swatch, design artwork), so the review shows the whole SKU, not one image.
+      images: collectSpecImages(order.item ?? oitem),
     },
     materials: (bv?.bom?.items ?? []).map((it: any) => ({
       name: it.item?.name ?? '—',
@@ -216,11 +220,11 @@ export async function getReviewData(inspectionId: string) {
     }
   }
   const template = pinnedTemplateId
-    ? await prisma.qCTemplate.findFirst({
+    ? await prisma.checklistTemplate.findFirst({
         where: { id: pinnedTemplateId, factoryId: session.factoryId },
         include: templateInclude,
       })
-    : await prisma.qCTemplate.findFirst({
+    : await prisma.checklistTemplate.findFirst({
         where: { factoryId: session.factoryId, isLatest: true, status: 'active' },
         include: templateInclude,
       })
@@ -421,13 +425,19 @@ export async function approveInspection(inspectionId: string, comments: string, 
     try {
       const plan = await prisma.productionPlan.findUnique({
         where: { id: (completedWorkOrder as any).productionPlanId },
-        include: { blueprintVersion: { include: { blueprint: true } } },
+        include: {
+          blueprintVersion: { include: { blueprint: true } },
+          salesOrder: { include: { customer: { select: { name: true } } } },
+        },
       })
-      if (plan) {
+      // Stock production is not auto-warehoused — it goes to the Dispatch page and
+      // the owner moves it manually. Customer orders still auto-receive.
+      const isStockProduction = plan?.salesOrder?.customer?.name === "Stock Production"
+      if (plan && !isStockProduction) {
         await receiveFinishedGoods({
           factoryId: session.factoryId,
           workOrderId: (completedWorkOrder as any).id,
-          productVariantId: plan.blueprintVersion.blueprint.productVariantId,
+          itemId: plan.blueprintVersion.blueprint.itemId,
           quantity: (completedWorkOrder as any).targetQty,
         })
       }

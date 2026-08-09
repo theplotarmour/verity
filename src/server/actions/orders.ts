@@ -2,6 +2,8 @@
 
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
+import { resolveOrderItem } from "./orderItemResolver";
+import { itemsInRootCategory } from "@/lib/server/categoryItems";
 import { revalidatePath } from "next/cache";
 
 export async function createSalesOrder(customerId: string, items: { productVariantId: string; quantity: number; unitPrice: number }[]) {
@@ -81,7 +83,7 @@ export async function approveSalesOrder(orderId: string) {
 // ==========================================
 
 import { salesOrderInclude, toLegacyOrder } from "@/lib/server/jobCardAdapter";
-import { issueMaterialsForWorkOrder } from "@/server/actions/inventory";
+import { issueMaterialsForWorkOrder } from "@/server/internal/stockMovements";
 import { recordTimeline } from "@/lib/server/stages";
 import { ensureFactoryDepartments } from "@/lib/server/departments";
 import { resolveOrderTemplate } from "@/lib/server/templates";
@@ -96,34 +98,38 @@ export async function getMasterData() {
   // One parallel batch instead of 14 sequential round-trips (was 150–400 ms of
   // pure serial latency on a remote Postgres before the page could render).
   const [
-    brands, models, productCategories, products, productVariants, materials,
+    brands, models, products, materials,
     designs, colors, workers, inspectors, customers, combinations,
     productTypes, workflowStages, departments,
   ] = await Promise.all([
-    prisma.vehicleBrand.findMany({ where: { factoryId } }),
-    prisma.vehicleModel.findMany({ where: { brand: { factoryId } }, include: { brand: true, generations: true } }),
-    prisma.productCategory.findMany({ where: { factoryId } }),
-    prisma.product.findMany({ where: { factoryId } }),
-    prisma.productVariant.findMany({ where: { product: { factoryId } } }),
+    Promise.resolve([]),
+    Promise.resolve([]),
+    // Legacy Product table is retired; the studio searches finished goods
+    // directly through searchFinishedGoods.
+    Promise.resolve([] as any[]),
     // Only fabrics are directly selectable in the studio. Other raw materials
     // (foam, thread, zips...) are consumed via the BOM, never picked here.
+    //
+    // Scoped by item *group*, not the legacy MaterialCategory table: that table
+    // is empty since the spec engine took over, so this filter was silently
+    // returning nothing and the fabric picker rendered blank.
     prisma.itemMaster.findMany({
-      where: { factoryId, itemType: "RAW_MATERIAL", status: "ACTIVE", category: { name: "Fabric" } },
+      where: { factoryId, itemType: "RAW_MATERIAL", status: "ACTIVE", group: { name: "Fabric" } },
       orderBy: { name: 'asc' },
     }),
-    prisma.design.findMany({ where: { factoryId }, orderBy: { name: 'asc' } }),
-    prisma.color.findMany({ where: { factoryId }, orderBy: { name: 'asc' } }),
+    Promise.resolve([]),
+    // Colours are items in the Colour category now, not rows in their own
+    // table. Reading the old table here left the picker blank, exactly as the
+    // fabric one was before the comment above.
+    itemsInRootCategory(factoryId, "Colour"),
     prisma.user.findMany({ where: { factoryId, role: 'WORKER' } }),
     prisma.user.findMany({ where: { factoryId, role: 'SUPERVISOR' } }),
     prisma.customer.findMany({ where: { factoryId } }),
-    prisma.productCombination.findMany({
-      where: { factoryId, active: true },
-      orderBy: [{ brand: "asc" }, { model: "asc" }, { generation: "asc" }],
-    }),
-    prisma.productType.findMany({
-      where: { factoryId },
-      include: { fields: { orderBy: { sortOrder: 'asc' } } }
-    }),
+    // Legacy ProductCombination / ProductType tables are retired: the studio's
+    // variant search and the generic spec engine replaced them. Both are empty,
+    // and the UI already guards on length, so an empty list changes nothing.
+    Promise.resolve([] as any[]),
+    Promise.resolve([] as any[]),
     prisma.workflowStage.findMany({
       where: { factoryId },
       orderBy: { sortOrder: 'asc' }
@@ -137,12 +143,24 @@ export async function getMasterData() {
     }),
   ]);
 
+  // Finished goods are no longer shipped with this payload: the production
+  // studio searches them directly through searchFinishedGoods, so sending the
+  // whole catalogue on every page load was several hundred rows nothing read.
+  //
+  // Producible categories, for the fallback builder's product stage. The old
+  // Product and ProductType tables are empty since the spec engine took over,
+  // so sourcing the list from them left the builder with no product to pick.
+  const finishedGoodGroups = await prisma.itemGroup.findMany({
+    where: { factoryId, isProducible: true, parentId: { not: null } },
+    select: { name: true },
+    orderBy: { name: 'asc' },
+  });
+
   return {
+    finishedGoodGroups,
     brands,
     models,
-    productCategories,
     products,
-    productVariants,
     materials,
     designs,
     colors,
@@ -162,6 +180,12 @@ export async function createOrder(data: {
   vehicleBrandId?: string;
   vehicleModelId?: string;
   vehicleYear?: string;
+  /**
+   * The finished-good ItemMaster being ordered — the master-data path. When
+   * given it wins over productVariantId: the item is what production is
+   * planned against.
+   */
+  itemId?: string;
   productVariantId: string;
   quantity: number;
   assignedWorkerId: string;
@@ -224,93 +248,33 @@ export async function createOrder(data: {
     }
   }
 
-  // Ensure the factory has at least one active template; the actual template is
-  // resolved by product inside the transaction (mats vs seat covers differ).
-  const anyTemplate = await prisma.qCTemplate.findFirst({
-    where: { factoryId, status: "active" },
-    select: { id: true },
-  });
-  if (!anyTemplate) {
-    return { error: "No active QC template found for factory. Please contact support to setup a template." };
-  }
+  // QC checklists are optional: a factory with no template still books orders
+  // and generates job cards. The template, if any, is resolved by the ordered
+  // item's group inside the transaction. No pre-check blocks creation.
 
   const orderNumber = `ORD-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
   const result = await prisma.$transaction(async (tx) => {
-    // The V1 studio submits a productType + dynamic fields, not a product
-    // variant. The new architecture keys production on ProductVariant, so
-    // resolve one: the given variant if valid, else self-heal a Product +
-    // "Standard" variant named after the product type.
-    let productVariantId: string | null = data.productVariantId || null;
-    if (productVariantId) {
-      const exists = await tx.productVariant.findFirst({
-        where: { id: productVariantId, product: { factoryId } },
+    // Every production is keyed on the finished-good item. Resolve which item
+    // this order produces; Product / ProductVariant are no longer minted. A
+    // pre-existing sales variant is honoured on legacy orders but never created.
+    let orderedItemId: string | null = null;
+    const productVariantId: string | null = data.productVariantId || null;
+
+    if (data.itemId) {
+      const chosen = await tx.itemMaster.findFirst({
+        where: { id: data.itemId, factoryId },
         select: { id: true },
       });
-      if (!exists) productVariantId = null;
-    }
-    if (!productVariantId) {
-      const productType = data.productTypeId
-        ? await tx.productType.findFirst({ where: { id: data.productTypeId, factoryId } })
-        : null;
-      const productName = productType?.name ?? "General Production";
-
-      let category = await tx.productCategory.findFirst({ where: { factoryId } });
-      if (!category) {
-        category = await tx.productCategory.create({ data: { factoryId, name: "General" } });
-      }
-      let product = await tx.product.findFirst({ where: { factoryId, name: productName } });
-      if (!product) {
-        product = await tx.product.create({
-          data: { factoryId, categoryId: category.id, name: productName },
-        });
-      }
-      let variant = await tx.productVariant.findFirst({ where: { productId: product.id } });
-      if (!variant) {
-        variant = await tx.productVariant.create({
-          data: {
-            productId: product.id,
-            name: "Standard",
-            sku: `${productName.replace(/[^A-Za-z0-9]+/g, "-").toUpperCase()}-STD-${Date.now().toString(36).toUpperCase()}`,
-          },
-        });
-      }
-      productVariantId = variant.id;
+      if (chosen) orderedItemId = chosen.id;
     }
 
-    // Product-based QC template: mats and seat covers run different checklists.
-    const variantProduct = await tx.productVariant.findUnique({
-      where: { id: productVariantId },
-      select: { productId: true },
-    });
-    const template = await resolveOrderTemplate(tx, factoryId, variantProduct?.productId);
-    if (!template) throw new Error("No active QC template found for factory.");
-
-    // Resolve or create brand dynamically if provided
-    let brandId = data.vehicleBrandId || null;
-    if (brandId && !brandId.startsWith("c")) {
-      let dbBrand = await tx.vehicleBrand.findFirst({
-        where: { factoryId, name: { equals: brandId, mode: 'insensitive' } }
-      });
-      if (!dbBrand) {
-        dbBrand = await tx.vehicleBrand.create({ data: { factoryId, name: brandId } });
-      }
-      brandId = dbBrand.id;
-    }
-
-    // Resolve or create model dynamically if provided
-    let modelId = data.vehicleModelId || null;
-    if (modelId && brandId && !modelId.startsWith("c")) {
-      let dbModel = await tx.vehicleModel.findFirst({
-        where: { brandId, name: { equals: modelId, mode: 'insensitive' } }
-      });
-      if (!dbModel) {
-        dbModel = await tx.vehicleModel.create({
-          data: { factoryId, brandId, name: modelId, year: data.vehicleYear }
-        });
-      }
-      modelId = dbModel.id;
-    }
+    // Brands and models were resolved-or-created against bespoke tables here.
+    // They are ordinary items in categories the owner builds, so an id given by
+    // the caller is used as-is and a name that matches nothing is simply not a
+    // vehicle the factory has.
+    const brandId = data.vehicleBrandId || null;
+    const modelId = data.vehicleModelId || null;
 
     let customer = await tx.customer.findFirst({
       where: { factoryId, name: { equals: data.customerName, mode: 'insensitive' } }
@@ -327,25 +291,68 @@ export async function createOrder(data: {
       });
     }
 
-    // Record the vehicle on the variant as a fitment so the UI can show it
-    if (modelId) {
-      const existingFitment = await tx.productVehicleFitment.findFirst({
-        where: { productVariantId, vehicleModelId: modelId }
-      });
-      if (!existingFitment) {
-        await tx.productVehicleFitment.create({
-          data: {
-            factoryId,
-            productVariantId,
-            vehicleModelId: modelId,
-            fitmentNotes: data.remarks || null,
-          }
-        });
-      }
-    }
-
     // Sales order — starts in DRAFT; the owner releases drafts to the floor
     // (individually or clubbed into a production batch) from the Drafts tab.
+    // Every order resolves to a finished-good item. The studio already collects
+    // the full spec, so the item is derived from it rather than asked for again;
+    // the same combination sold twice converges on one item.
+    if (!orderedItemId) {
+      orderedItemId = await resolveOrderItem(factoryId, {
+        productTypeId: data.productTypeId ?? null,
+        vehicleBrandId: brandId,
+        vehicleModelId: modelId,
+        materialId: data.materialId ?? null,
+        designId: data.designId ?? null,
+        colorId: data.colorId ?? null,
+        seatType: data.seatType ?? null,
+        hasArmrest: data.hasArmrest ?? null,
+        headrestCount: data.headrestCount ?? null,
+      });
+    }
+
+    // Last resort: a bare production with nothing resolvable still needs an item
+    // for the blueprint to key on, so mint a backing finished good. No Product
+    // or ProductVariant is created.
+    if (!orderedItemId) {
+      // Prefer a category the owner actually marked producible; fall back to the
+      // finished-goods root for factories that have not flagged one.
+      const fgGroup =
+        (await tx.itemGroup.findFirst({
+          where: { factoryId, isProducible: true, parentId: { not: null } },
+          select: { id: true },
+          orderBy: { sortOrder: "asc" },
+        })) ??
+        (await tx.itemGroup.findFirst({
+          where: { factoryId, itemType: "FINISHED_PRODUCT", parentId: null },
+          select: { id: true },
+        }));
+      const sku = `PROD-STD-${Date.now().toString(36).toUpperCase()}`;
+      const backing = await tx.itemMaster.create({
+        data: {
+          factoryId,
+          groupId: fgGroup?.id ?? null,
+          itemType: "FINISHED_PRODUCT",
+          manufacturingType: "MAKE",
+          name: "General Production Standard",
+          sku,
+          itemCode: sku,
+          defaultUOM: "PCS",
+        },
+      });
+      orderedItemId = backing.id;
+    }
+
+    // QC checklist resolution, now that the ordered item is known. Optional:
+    // prefer the item's category default checklist, then a product-tagged or
+    // factory-wide active template. A null template means no QC checkpoints —
+    // the QC-stage card is completed manually.
+    const orderedGroupId = orderedItemId
+      ? (await tx.itemMaster.findUnique({ where: { id: orderedItemId }, select: { groupId: true } }))?.groupId ?? null
+      : null;
+    // Template resolves off the item's category default now; the legacy
+    // product-tagged tier is no longer consulted.
+    const template = await resolveOrderTemplate(tx, factoryId, null, orderedGroupId);
+
     const salesOrder = await tx.salesOrder.create({
       data: {
         factoryId,
@@ -359,6 +366,7 @@ export async function createOrder(data: {
         // identity of the physical bag from CAD through to dispatch.
         labelCode: `LBL-${orderNumber.replace(/^SO-?/i, '')}`,
         fulfilledFromStockQty: (data as any)._fulfilledFromStockQty ?? 0,
+        itemId: orderedItemId,
         materialId: data.materialId || null,
         designId: data.designId || null,
         colorId: data.colorId || null,
@@ -376,23 +384,30 @@ export async function createOrder(data: {
         photoReference: data.photoReference || null,
         dynamicData: data.dynamicFields ?? undefined,
         items: {
-          create: (data.batchLines && data.batchLines.length > 0 ? data.batchLines : [{ quantity: data.quantity, productVariantId }]).map((line) => ({
-            productVariantId: line.productVariantId || productVariantId,
-            quantity: line.quantity,
-            unitPrice: 0,
-          }))
+          create: (data.batchLines && data.batchLines.length > 0 ? data.batchLines : [{ quantity: data.quantity }]).map((line) => {
+            const variantId = (line as any).productVariantId || productVariantId;
+            return {
+              itemId: orderedItemId,
+              // Only carried when a legacy variant already exists; never minted.
+              ...(variantId ? { productVariantId: variantId } : {}),
+              quantity: line.quantity,
+              unitPrice: 0,
+            };
+          })
         }
       }
     });
 
-    // Self-heal a blueprint + active version for the variant if none exists
+    // Self-heal a blueprint + active version for the ordered item if none
+    // exists. Blueprints are keyed directly on the finished-good item now.
+    const producedItemId = orderedItemId!;
     let blueprint = await tx.blueprint.findUnique({
-      where: { productVariantId },
+      where: { itemId: producedItemId },
       include: { versions: true }
     });
     if (!blueprint) {
       blueprint = await tx.blueprint.create({
-        data: { factoryId, productVariantId },
+        data: { factoryId, itemId: producedItemId },
         include: { versions: true }
       });
     }
@@ -403,7 +418,7 @@ export async function createOrder(data: {
           blueprintId: blueprint.id,
           versionNumber: 1,
           name: "V1 - Standard",
-          qcTemplateId: template.id,
+          qcTemplateId: template?.id ?? null,
           isActive: true,
         }
       });
@@ -451,11 +466,39 @@ export async function createOrder(data: {
     for (let i = 0; i < stages.length; i++) {
       const dept = stages[i] as any;
       const assignedToId = canStaff ? (assignmentByDept.get(dept.id) ?? data.assignedWorkerId ?? null) : null;
-      // Pin the template each department runs. A department can be given a
-      // specific template (any of the factory's templates); when it hasn't, the
-      // QC stage falls back to the product-resolved QC template and other stages
-      // to no checklist.
-      const cardTemplateId = dept.templateId ?? (dept.isQcStage ? template.id : null);
+      // The checklist this card runs, resolved the same way the worker screen
+      // resolves it: the template owned by this department that covers the
+      // ordered item's category, else that department's universal one. The old
+      // department-level pin is gone, so there is nothing to fall back to.
+      const cardTemplateId = dept.isQcStage
+        ? template?.id ?? null
+        : (
+            await tx.checklistTemplate.findFirst({
+              where: {
+                factoryId,
+                status: "active",
+                ownerDepartmentId: dept.id,
+                ...(orderedGroupId
+                  ? { defaultForItemGroups: { some: { id: orderedGroupId } } }
+                  : { defaultForItemGroups: { none: {} } }),
+              },
+              orderBy: { updatedAt: "desc" },
+              select: { id: true },
+            })
+          )?.id ??
+          (
+            await tx.checklistTemplate.findFirst({
+              where: {
+                factoryId,
+                status: "active",
+                ownerDepartmentId: dept.id,
+                defaultForItemGroups: { none: {} },
+              },
+              orderBy: { updatedAt: "desc" },
+              select: { id: true },
+            })
+          )?.id ??
+          null;
       stageCards.push(await tx.jobCard.create({
         data: {
           factoryId,
@@ -612,14 +655,6 @@ export async function updateOrder(orderId: string, data: {
 
       // Vehicle shown on the passport is also mirrored as a fitment on the
       // variant (legacy compatibility); repoint it.
-      if (modelId) {
-        const variantId = order.items[0]?.productVariantId;
-        if (variantId) {
-          await tx.productVehicleFitment.deleteMany({ where: { productVariantId: variantId, factoryId } });
-          await tx.productVehicleFitment.create({ data: { factoryId, productVariantId: variantId, vehicleModelId: modelId, fitmentNotes: data.remarks || null } });
-        }
-      }
-
       // Quantity flows down the whole draft chain so the plan, work order and
       // job cards agree with the order.
       if (qty != null) {
@@ -914,10 +949,7 @@ async function assessOnOrderStock(factoryId: string, data: any): Promise<number>
 // Issue `qty` of matching finished goods out of stock for a split order — the
 // order keeps its id and only the shortfall goes to the floor.
 async function allocateFinishedStock(factoryId: string, data: any, qty: number): Promise<void> {
-  const variant = data.productVariantId
-    ? await prisma.productVariant.findUnique({ where: { id: data.productVariantId }, select: { itemId: true } })
-    : null;
-  const itemId = variant?.itemId;
+  const itemId = data.itemId ?? null;
   if (!itemId) return;
   let remaining = qty;
   const bins = await prisma.binBalance.findMany({ where: { itemId, factoryId, stockAvailable: { gt: 0 } }, orderBy: { stockAvailable: "desc" } });
@@ -962,7 +994,7 @@ async function fulfillFromMatchingStock(
       },
     },
     include: {
-      items: { include: { productVariant: true } },
+      items: true,
       plans: { include: { workOrders: { include: { jobCards: true } } } },
     },
     orderBy: { orderDate: "asc" },
@@ -984,7 +1016,7 @@ async function fulfillFromMatchingStock(
   if (!source) return null;
 
   const sourceItem = source.items[0];
-  const itemId = sourceItem?.productVariant?.itemId ?? null;
+  const itemId = sourceItem?.itemId ?? source.itemId ?? null;
 
   let customer = await prisma.customer.findFirst({
     where: { factoryId, name: { equals: data.customerName, mode: "insensitive" } },
@@ -1003,6 +1035,7 @@ async function fulfillFromMatchingStock(
       customerId: customer.id,
       status: "READY",
       fulfilledFromOrderId: source.id,
+      itemId,
       designId: data.designId || null,
       colorId: data.colorId || null,
       materialId: data.materialId || null,
@@ -1015,7 +1048,16 @@ async function fulfillFromMatchingStock(
       remarks: data.remarks || null,
       dynamicData: data.dynamicFields ?? undefined,
       items: sourceItem
-        ? { create: [{ productVariantId: sourceItem.productVariantId, quantity: data.quantity, unitPrice: 0 }] }
+        ? {
+            create: [
+              {
+                itemId: sourceItem.itemId ?? itemId,
+                ...(sourceItem.productVariantId ? { productVariantId: sourceItem.productVariantId } : {}),
+                quantity: data.quantity,
+                unitPrice: 0,
+              },
+            ],
+          }
         : undefined,
     },
   });

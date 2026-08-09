@@ -14,30 +14,10 @@ datasource db {
 // ENUMS
 // ==========================================
 
-// The *behavioural archetype* — which app shell a user gets (worker scanner,
-// supervisor approval queue, owner console). This stays a closed enum on
-// purpose: each value has hand-written UX and routing behind it, so a tenant
-// inventing a seventh archetype would get a blank screen, not a new role.
-//
-// What a user is *allowed to do* is NOT this. That lives on the Role model,
-// which is org-scoped and freely customisable. Two axes:
-//
-//   SystemRole → which UI you see        (closed, code-backed)
-//   Role       → what you may do         (open, data-driven, per-tenant)
-//
-// A tenant wanting "Senior Inspector who may also approve dispatch" creates a
-// Role with those permissions pointing at the SUPERVISOR archetype. No
-// migration, no code change.
-enum SystemRole {
-  OWNER
-  CO_OWNER
-  MANAGER
-  SUPERVISOR
-  WORKER
-  // Creates on-ordered (customer) productions only — never stock productions.
-  // Their productions land in Pending/Draft; only a manager or owner releases
-  // them to production.
-  STORE_MANAGER
+enum BomMode {
+  OFF
+  RECIPE
+  INGREDIENTS
 }
 
 enum ItemType {
@@ -51,6 +31,182 @@ enum ItemType {
   TOOL
   ASSET
   SERVICE
+}
+
+// The owner-defined item tree: six seeded roots (Raw Material, Semi-Finished,
+// Finished Good, Consumable, Packaging, Trading Goods) with any depth of
+// subgroups beneath them. A group carries the spec fields its items answer and
+// the templates that turn those answers into a name and a code.
+model ItemGroup {
+  id                String              @id @default(cuid())
+  factoryId         String
+  parentId          String?
+  parent            ItemGroup?          @relation("ItemGroupTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children          ItemGroup[]         @relation("ItemGroupTree")
+  name              String
+  // Feeds {group} in code templates, e.g. "SC" for Seat Cover.
+  shortCode         String?
+  // Root groups define the type; children inherit it at read time.
+  itemType          ItemType
+  nameTemplate      String?
+  codeTemplate      String?
+  /// Per-group headers for the three built-in columns. Null means "use the
+  /// default word". The row's identity columns cannot be hidden; the alias can,
+  /// because record sheets reuse that slot for their own meaning.
+  codeLabel         String?
+  nameLabel         String?
+  aliasLabel        String?
+  aliasHidden       Boolean             @default(false)
+  isProducible      Boolean             @default(false)
+  isPurchasable     Boolean             @default(false)
+  isSalable         Boolean             @default(false)
+  hasBOM            Boolean             @default(false)
+  hasQC             Boolean             @default(false)
+  hasRouting        Boolean             @default(false)
+  hasCAD            Boolean             @default(false)
+  /// Whether this category's items are physically stocked and bought — i.e. do
+  /// they need units, conversions and an alias at all. Vehicles, Brands, Designs
+  /// and Colours are attributes, not stock: their SKU form hides Identity &
+  /// Units, and the BOM component search skips them.
+  hasInventoryUnits Boolean             @default(true)
+  /// Which BOM editor this category's items get, and what the wizard's BOM
+  /// button writes.
+  ///
+  /// This used to be inferred — isProducible AND stocked AND not bought meant
+  /// "recipe", a category nothing referenced meant "neither" — which was a
+  /// guess about the factory's intent dressed up as a rule. A factory that
+  /// wants recipes on its raw materials, or ingredients on a semi-finished
+  /// good, now says so instead of fighting the inference.
+  ///
+  /// OFF          no BOM editor at all
+  /// RECIPE       an assembly recipe of its own, plus per-SKU overrides
+  /// INGREDIENTS  components it hands to whatever picks it
+  bomMode           BomMode             @default(OFF)
+  /// A checklist any category can carry, not only producible ones — and not
+  /// only for QC. Cutting and Packing run one too.
+  /// Many-to-many: a category runs one checklist per department, so "Seat Cover"
+  /// is on the Cutting list and the Stitching list at the same time. A single FK
+  /// here meant ticking it on one template silently unticked it everywhere else.
+  defaultChecklists ChecklistTemplate[] @relation("ItemGroupDefaultChecklist")
+  /// Ordered departments copied into BlueprintRouteStep at item creation:
+  /// [{ departmentId, estimatedTimeMins }]. A list, not a table —
+  /// BlueprintRouteStep already carries the real per-step shape.
+  defaultRouteJson  Json?
+  // Root groups render as a tab in the Master Data Studio.
+  isSheet           Boolean             @default(false)
+  /// Seeded roots the backend depends on (Finished Good, Raw Material, ...).
+  /// They may be renamed for the factory's own vocabulary, but never deleted and
+  /// never retyped: order booking, stock and production all key off their type.
+  isSystem          Boolean             @default(false)
+  sortOrder         Int                 @default(0)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  specFields       SpecField[]
+  referencedBy     SpecField[]       @relation("SpecFieldTarget")
+  items            ItemMaster[]
+  bomTemplateLines BomTemplateLine[]
+
+  @@unique([factoryId, parentId, name])
+  @@index([factoryId])
+}
+
+enum SpecFieldKind {
+  VALUE
+  OPTION
+  REFERENCE
+}
+
+/// What a REFERENCE field points at. ITEM_GROUP resolves to ItemMaster rows in
+/// that group; every other value resolves to an attribute master.
+enum SpecRefTarget {
+  ITEM_GROUP
+  VEHICLE_BRAND
+  VEHICLE_MODEL
+  VEHICLE_GENERATION
+  DESIGN
+  COLOR
+  SUPPLIER
+  CUSTOMER
+  WAREHOUSE
+  WAREHOUSE_BIN
+  EMPLOYEE
+  DEPARTMENT
+  MACHINE
+}
+
+// One field on a group's spec sheet. Inherited by every descendant group, so
+// "GSM" defined on Fabric is answered by Leatherite and Suede items too.
+model SpecField {
+  id         String        @id @default(cuid())
+  factoryId  String
+  groupId    String
+  group      ItemGroup     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name       String
+  /// Token used in name/code templates, e.g. "brand" for {brand}.
+  key        String
+  kind       SpecFieldKind
+  /// VALUE only. Reuses the existing FieldType enum.
+  valueType  FieldType?
+  /// VALUE only. Rendered after the value: 4 + "HDR" -> "4HDR".
+  unitSuffix String?
+
+  /// REFERENCE only.
+  refTarget          SpecRefTarget?
+  targetGroupId      String?
+  targetGroup        ItemGroup?     @relation("SpecFieldTarget", fields: [targetGroupId], references: [id], onDelete: Restrict)
+  includeDescendants Boolean        @default(true)
+  /// REFERENCE only. Which column of the target category this picks from.
+  ///
+  /// Null keeps the original behaviour: pick a whole record, shown by its name.
+  /// Set means the dropdown offers that column's values instead — a Seat Cover
+  /// linking to Vehicle > Car and showing its Brand column offers Tata and
+  /// Maruti, not the vehicles themselves.
+  ///
+  /// Restrict, not SetNull: silently falling back to the record list would put
+  /// every vehicle in a dropdown that has only ever shown brands, and the owner
+  /// would have no idea why.
+  targetFieldId      String?
+  targetField        SpecField?     @relation("SpecFieldColumn", fields: [targetFieldId], references: [id], onDelete: Restrict)
+  displayedBy        SpecField[]    @relation("SpecFieldColumn")
+  dependsOnFieldId   String?
+  dependsOn          SpecField?     @relation("SpecFieldDeps", fields: [dependsOnFieldId], references: [id], onDelete: SetNull)
+  dependents         SpecField[]    @relation("SpecFieldDeps")
+
+  isRequired Boolean   @default(false)
+  sortOrder  Int       @default(0)
+  /// Soft delete. Archived fields keep their stored answers.
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  options                     SpecFieldOption[]
+  values                      ItemFieldValue[]
+  bomLines                    BomTemplateLine[] @relation("BomTemplateSourceField")
+  bomTemplateQuantityFrom     BomTemplateLine[] @relation("BomTemplateQuantityFrom")
+  bomTemplateQuantityVia      BomTemplateLine[] @relation("BomTemplateQuantityVia")
+  bomContributionSlots        BomContribution[] @relation("BomContributionSource")
+  bomContributionQuantityFrom BomContribution[] @relation("BomContributionQuantityFrom")
+
+  @@unique([groupId, key])
+  @@index([factoryId])
+}
+
+model SpecFieldOption {
+  id        String    @id @default(cuid())
+  fieldId   String
+  field     SpecField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  /// Stored identity.
+  value     String
+  /// Shown in the dropdown and printed by the name template.
+  label     String
+  /// Printed by the code template, e.g. "DB".
+  shortCode String?
+  sortOrder Int       @default(0)
+
+  values        ItemFieldValue[]
+  contributions BomContribution[]
+
+  @@unique([fieldId, value])
 }
 
 enum QCStatus {
@@ -84,63 +240,8 @@ enum TimelineEventType {
 // IDENTITY ENGINE
 // ==========================================
 
-// ==========================================
-// TENANCY
-// ==========================================
-
-// The billing and configuration tenant. A Factory is a *site* within an Org —
-// splitting these lets one customer run several plants (or a plant plus a
-// service branch) under one contract, one chart of accounts and one currency.
-//
-// Every Org gets exactly one Factory on migration, so existing single-site
-// customers see no change.
-model Organization {
-  id       String  @id @default(cuid())
-  name     String
-  slug     String  @unique
-  logoUrl  String?
-  // ISO 4217. Set at the Org because financial consolidation happens here,
-  // not per site.
-  currency String  @default("INR")
-  // IANA zone, e.g. "Asia/Kolkata". Drives period close and shift boundaries.
-  timezone String  @default("Asia/Kolkata")
-  // Month (1-12) the fiscal year opens on. India defaults to April.
-  fiscalYearStartMonth Int @default(4)
-
-  settings  Json?    @default("{}")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  factories    Factory[]
-  roles        Role[]
-  entitlements ModuleEntitlement[]
-  productTypes ProductType[]
-}
-
-// Which modules an Org has bought. Replaces Factory.modulesEnabled, which was
-// a JSON string written in two places and read in none. A row here is the
-// authoritative answer to "may this tenant use module X".
-model ModuleEntitlement {
-  id             String    @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  // Registry key, e.g. "inventory", "quality", "automotive".
-  moduleKey      String
-  enabled        Boolean   @default(true)
-  // Null means perpetual; set for trials.
-  expiresAt      DateTime?
-  settings       Json?     @default("{}")
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  @@unique([organizationId, moduleKey])
-  @@index([organizationId])
-}
-
 model Factory {
   id               String   @id @default(cuid())
-  organizationId   String
-  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name             String
   slug             String   @unique
   logoUrl          String?
@@ -150,10 +251,13 @@ model Factory {
   onboardingStatus String   @default("SETUP")
   setupFee         Int      @default(0)
   monthlyFee       Int      @default(0)
+  modulesEnabled   String?  @default("[]")
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   users           User[]
+  organizationId  String
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   departments     Department[]
   agreements      Agreement[]
   supportSessions SupportSession[]
@@ -207,84 +311,43 @@ model WorkflowStage {
   requirePhoto   Boolean  @default(false)
   requireRemarks Boolean  @default(false)
   isQcStage      Boolean  @default(false) // QC stages run the inspection flow instead of stage capture
-  assignedRole   SystemRole? // Archetype allowed to complete this stage
+  assignedRole   Role?    @relation(fields: [roleId], references: [id]) // Role allowed to complete this stage
   qcTemplateId   String? // Optional template to check during this stage
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   factory  Factory   @relation(fields: [factoryId], references: [id], onDelete: Restrict)
   jobCards JobCard[]
+  roleId   String?
 
   @@index([factoryId])
 }
 
-// An org-scoped, named set of permissions. Seeded with one row per SystemRole
-// so existing users keep exactly today's access, then freely editable and
-// extendable per tenant.
-model Role {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name           String
-  description    String?
-  // Which app shell members of this role get. Several Roles may share one
-  // archetype (e.g. "Inspector" and "Senior Inspector" are both SUPERVISOR).
-  systemRole     SystemRole
-  // Seeded defaults cannot be deleted — they are the fallback if a custom role
-  // is removed while still assigned.
-  isSystem       Boolean      @default(false)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-
-  permissions RolePermission[]
-  users       User[]
-
-  @@unique([organizationId, name])
-  @@index([organizationId])
-}
-
-// One granted permission key on a role. Keys are contributed by modules at
-// registration (see src/platform/modules), so this table is intentionally not
-// constrained to an enum — installing a module must not require a migration.
-model RolePermission {
-  id     String @id @default(cuid())
-  roleId String
-  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  // Namespaced, e.g. "sales_order.create", "quality.inspect".
-  key    String
-
-  @@unique([roleId, key])
-  @@index([roleId])
-}
-
 model User {
-  id                String    @id @default(cuid())
+  id                String     @id @default(cuid())
   factoryId         String
-  factory           Factory   @relation(fields: [factoryId], references: [id], onDelete: Restrict)
-  authId            String?   @unique
+  factory           Factory    @relation(fields: [factoryId], references: [id], onDelete: Restrict)
+  authId            String?    @unique
   name              String
-  employeeId        Int       @unique @default(autoincrement())
-  phone             String?   @unique
-  // Behavioural archetype. Kept denormalised on the user because routing and
-  // the app shell read it on every request, before any role join.
+  employeeId        Int        @unique @default(autoincrement())
+  phone             String?    @unique
   role              SystemRole
-  // Permission grants. Nullable during migration; backfilled to the seeded
-  // system role matching `role`.
   roleId            String?
-  customRole        Role?     @relation(fields: [roleId], references: [id], onDelete: SetNull)
-  status            String    @default("active")
+  customRole        Role?      @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  status            String     @default("active")
   pinHash           String?
   email             String?
   notificationPrefs Json? // { email: bool, whatsapp: bool } — in-app always on
-  language          String    @default("en")
-  themePreference   String    @default("system")
-  isActive          Boolean   @default(true)
-  failedAttempts    Int       @default(0)
+  language          String     @default("en")
+  customFields      Json?      @default("{}")
+  themePreference   String     @default("system")
+  isActive          Boolean    @default(true)
+  failedAttempts    Int        @default(0)
   lockedUntil       DateTime?
   createdById       String?
   lastLoginAt       DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 
   employeeProfile EmployeeProfile?
   notifications   Notification[]
@@ -306,29 +369,29 @@ model User {
 // the chain position; isQcStage routes the card through the inspection flow; a
 // template gives the stage a QC-style checklist the worker completes.
 model Department {
-  id             String      @id @default(cuid())
-  factoryId      String
-  factory        Factory     @relation(fields: [factoryId], references: [id], onDelete: Cascade)
-  name           String // Cutting, Stitching, QC, Packing, etc.
-  description    String?
-  sortOrder      Int         @default(0)
-  isQcStage      Boolean     @default(false)
-  requirePhoto   Boolean     @default(false)
-  requireRemarks Boolean     @default(false)
+  id               String   @id @default(cuid())
+  factoryId        String
+  factory          Factory  @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+  name             String // Cutting, Stitching, QC, Packing, etc.
+  description      String?
+  sortOrder        Int      @default(0)
+  isQcStage        Boolean  @default(false)
+  requirePhoto     Boolean  @default(false)
+  requireRemarks   Boolean  @default(false)
   // When true, a worker's stage completion waits for the department supervisor
   // to approve before the chain advances (QC-style sign-off for any department).
   // This is the standard flow — worker submits, supervisor approves, the job
   // moves to the next department — so new departments opt in by default.
-  requiresApproval Boolean   @default(true)
-  templateId     String?
-  template       QCTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  active         Boolean     @default(true)
-  capacity       Float?
-  createdAt      DateTime    @default(now())
+  requiresApproval Boolean  @default(true)
+  active           Boolean  @default(true)
+  capacity         Float?
+  createdAt        DateTime @default(now())
 
-  members    User[]               @relation("DepartmentMembers")
-  jobCards   JobCard[]
-  routeSteps BlueprintRouteStep[]
+  members        User[]               @relation("DepartmentMembers")
+  jobCards       JobCard[]
+  routeSteps     BlueprintRouteStep[]
+  /// Checklist templates dedicated to this department.
+  ownedTemplates ChecklistTemplate[]  @relation("DepartmentTemplates")
 
   @@unique([factoryId, name])
   @@index([factoryId])
@@ -420,11 +483,12 @@ model Approval {
   entityId      String
   requestedById String
   approverId    String? // If assigned to a specific user
-  approverRole  SystemRole? // Or assigned to any user with this archetype
+  approverRole  Role?     @relation(fields: [roleId], references: [id]) // Or assigned to any user with this role
   status        String    @default("PENDING") // PENDING, APPROVED, REJECTED
   comments      String?   @db.Text
   resolvedAt    DateTime?
   createdAt     DateTime  @default(now())
+  roleId        String?
 
   @@index([factoryId])
   @@index([entityType, entityId])
@@ -466,15 +530,186 @@ model ItemMaster {
   // Owner-defined custom fields (e.g. "xyz"): values keyed by ItemFieldDefinition.id.
   customFields    Json?                @default("{}")
 
-  conversions        UOMConversion[]
-  stockLedgerEntries StockLedgerEntry[]
-  binBalances        BinBalance[]
-  bomItems           BOMItem[]             @relation("MaterialUsed")
-  purchaseOrderItems PurchaseOrderItem[]
-  salesOrders        SalesOrder[]          @relation("OrderMaterial")
-  reservations       MaterialReservation[] @relation("ReservedMaterial")
+  // Spec engine. The group supplies the fields this item answers, the name and
+  // code templates, and (later) the BOM template.
+  groupId           String?
+  group             ItemGroup?        @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  manufacturingType ManufacturingType @default(BUY)
+  /// Stable hash of (groupId, all answers). The item's real identity.
+  specHash          String?
+
+  conversions               UOMConversion[]
+  stockLedgerEntries        StockLedgerEntry[]
+  binBalances               BinBalance[]
+  bomItems                  BOMItem[]             @relation("MaterialUsed")
+  purchaseOrderItems        PurchaseOrderItem[]
+  salesOrders               SalesOrder[]          @relation("OrderMaterial")
+  salesOrdersAsColour       SalesOrder[]          @relation("OrderColour")
+  salesOrdersAsDesign       SalesOrder[]          @relation("OrderDesign")
+  salesOrdersAsVehicleBrand SalesOrder[]          @relation("OrderVehicleBrand")
+  salesOrdersAsVehicleModel SalesOrder[]          @relation("OrderVehicleModel")
+  reservations              MaterialReservation[] @relation("ReservedMaterial")
+  specValues                ItemFieldValue[]
+  referencedBy              ItemFieldValue[]      @relation("SpecItemRef")
+  bomTemplateLines          BomTemplateLine[]     @relation("BomTemplateItem")
+  bomContributedBy          BomContribution[]     @relation("BomContributionOwner")
+  bomContributesTo          BomContribution[]     @relation("BomContributionComponent")
+  bomOverrides              ItemBomOverride[]     @relation("ItemBomOverrideOwner")
+  bomOverriddenIn           ItemBomOverride[]     @relation("ItemBomOverrideComponent")
+  blueprint                 Blueprint?
+  salesOrdersAsItem         SalesOrder[]          @relation("OrderItem")
+  salesOrderLines           SalesOrderItem[]      @relation("SalesOrderLineItem")
 
   @@unique([factoryId, itemCode])
+  @@unique([factoryId, specHash])
+  @@index([factoryId])
+  @@index([groupId])
+}
+
+/// Decides whether an item has a BOM. Not derivable from ItemType: a
+/// consumable is bought, a semi-finished is made, some items are both.
+enum ManufacturingType {
+  MAKE
+  BUY
+  BOTH
+}
+
+// One answer to one spec field. Normalized rather than a JSON blob so that
+// "every item using Leatherite Beige" is a join, and so item references carry a
+// real foreign key.
+model ItemFieldValue {
+  id        String     @id @default(cuid())
+  factoryId String
+  itemId    String
+  item      ItemMaster @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  fieldId   String
+  field     SpecField  @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  valueText   String?
+  valueNumber Float?
+  valueBool   Boolean?
+
+  optionId String?
+  option   SpecFieldOption? @relation(fields: [optionId], references: [id], onDelete: Restrict)
+
+  /// REFERENCE to another item. Real FK — these become BOM lines.
+  valueItemId String?
+  valueItem   ItemMaster? @relation("SpecItemRef", fields: [valueItemId], references: [id], onDelete: Restrict)
+
+  /// REFERENCE to an attribute master (vehicle/design/colour). No FK is possible
+  /// because the target table varies by SpecField.refTarget.
+  valueRefId String?
+
+  @@unique([itemId, fieldId])
+  @@index([valueItemId])
+  @@index([factoryId, fieldId])
+}
+
+// A line in a group's BOM recipe. The component is either a fixed item or
+// whatever item was answered in a reference field — which is what lets filling
+// the spec produce the bill of materials.
+model BomTemplateLine {
+  id        String    @id @default(cuid())
+  factoryId String
+  groupId   String
+  group     ItemGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  /// Fixed component.
+  itemId String?
+  item   ItemMaster? @relation("BomTemplateItem", fields: [itemId], references: [id], onDelete: Restrict)
+
+  /// Component taken from a reference field's answer.
+  sourceFieldId String?
+  sourceField   SpecField? @relation("BomTemplateSourceField", fields: [sourceFieldId], references: [id], onDelete: Cascade)
+
+  quantity     Float   @default(1)
+  /// When set, quantity comes from the named source instead of the fixed value.
+  /// Supported: "design.fabricConsumption".
+  quantityFrom String?
+  wastePercent Float   @default(0)
+  sortOrder    Int     @default(0)
+
+  quantityFromFieldId String?
+  quantityFromField   SpecField? @relation("BomTemplateQuantityFrom", fields: [quantityFromFieldId], references: [id], onDelete: SetNull)
+
+  quantityViaFieldId String?
+  quantityViaField   SpecField? @relation("BomTemplateQuantityVia", fields: [quantityViaFieldId], references: [id], onDelete: SetNull)
+
+  @@index([factoryId])
+  @@index([groupId])
+}
+
+/// A component brought in by *choosing a value*, rather than by belonging to a
+/// category.
+///
+/// This is SAP's object dependency, minus the rule language: instead of writing
+/// a condition on a BOM line, the owner attaches the component to the value that
+/// requires it. Picking the design "ERGO FIT Vertex" on any finished good brings
+/// its piping and thread along, entered once and reused across every vehicle.
+///
+/// Deliberately not restricted to designs. If a fabric turns out to need a
+/// backing sheet, the owner attaches it to that fabric and it composes in — being
+/// wrong about which kinds of value carry components is a likelier failure than
+/// the owner misusing the freedom.
+model BomContribution {
+  id        String @id @default(cuid())
+  factoryId String
+
+  /// Exactly one of these owns the contribution — enforced in the action, since
+  /// the DB cannot express "exactly one of three".
+  /// A chosen option, e.g. "With Armrest".
+  optionId    String?
+  option      SpecFieldOption? @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  /// A referenced master record, e.g. a Design.
+  refId       String?
+  /// A specific item, e.g. the fabric Suede Grey.
+  ownerItemId String?
+  ownerItem   ItemMaster?      @relation("BomContributionOwner", fields: [ownerItemId], references: [id], onDelete: Cascade)
+
+  /// The component it brings: either a fixed item...
+  componentItemId String?
+  componentItem   ItemMaster? @relation("BomContributionComponent", fields: [componentItemId], references: [id], onDelete: Restrict)
+  /// ...or whatever was answered in this field — the "[fabric slot]".
+  sourceFieldId   String?
+  sourceField     SpecField?  @relation("BomContributionSource", fields: [sourceFieldId], references: [id], onDelete: Cascade)
+
+  quantity     Float   @default(1)
+  quantityFrom String?
+  wastePercent Float   @default(0)
+  sortOrder    Int     @default(0)
+
+  quantityFromFieldId String?
+  quantityFromField   SpecField? @relation("BomContributionQuantityFrom", fields: [quantityFromFieldId], references: [id], onDelete: SetNull)
+
+  @@index([factoryId])
+  @@index([optionId])
+  @@index([refId])
+  @@index([ownerItemId])
+}
+
+/// One item's departure from what its category and contributions produce.
+///
+/// Separate from BomTemplateLine because an override can *remove* an inherited
+/// line, and "a template line that means delete something" would be a trap on a
+/// table whose other rows mean the opposite.
+model ItemBomOverride {
+  id        String @id @default(cuid())
+  factoryId String
+
+  itemId String
+  item   ItemMaster @relation("ItemBomOverrideOwner", fields: [itemId], references: [id], onDelete: Cascade)
+
+  componentItemId String
+  componentItem   ItemMaster @relation("ItemBomOverrideComponent", fields: [componentItemId], references: [id], onDelete: Restrict)
+
+  /// Drop this component for this item, whatever the recipe says.
+  removed Boolean @default(false)
+
+  quantity     Float @default(1)
+  wastePercent Float @default(0)
+  sortOrder    Int   @default(0)
+
+  @@unique([itemId, componentItemId])
   @@index([factoryId])
 }
 
@@ -522,11 +757,12 @@ model UOMConversion {
 }
 
 model Warehouse {
-  id        String   @id @default(cuid())
-  factoryId String
-  name      String
-  kind      String   @default("WAREHOUSE") // WAREHOUSE | STORE
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  factoryId    String
+  name         String
+  kind         String   @default("WAREHOUSE") // WAREHOUSE | STORE
+  customFields Json?    @default("{}")
+  createdAt    DateTime @default(now())
 
   zones      WarehouseZone[]
   dispatches Dispatch[]
@@ -633,19 +869,6 @@ model MaterialReservation {
   @@index([workOrderId])
 }
 
-// BOM attached to a spec choice (design or fabric); merged with the
-// variant BOM when production issues materials.
-model SpecBOM {
-  id        String @id @default(cuid())
-  factoryId String
-  refType   String // DESIGN | FABRIC
-  refId     String
-  items     Json // [{ itemId, quantity, wastePercent }]
-
-  @@unique([refType, refId])
-  @@index([factoryId])
-}
-
 model Dispatch {
   id                     String     @id @default(cuid())
   factoryId              String
@@ -673,67 +896,36 @@ model Dispatch {
 // CATALOG ENGINE
 // ==========================================
 
-model ProductCategory {
-  id        String    @id @default(cuid())
-  factoryId String
-  name      String
-  products  Product[]
-
-  @@unique([factoryId, name])
-}
-
-model Product {
-  id          String           @id @default(cuid())
-  factoryId   String
-  categoryId  String
-  category    ProductCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  name        String
-  skuPrefix   String?
-  description String?
-  variants    ProductVariant[]
-  templates   QCTemplate[]
-  designs     Design[]
-}
-
-model ProductVariant {
-  id        String  @id @default(cuid())
-  productId String
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  itemId    String? @unique // Link to Inventory Engine (optional until an ItemMaster is attached)
-  name      String
-  sku       String  @unique
-  price     Float   @default(0)
-
-  fitments   ProductVehicleFitment[]
-  blueprint  Blueprint?
-  salesItems SalesOrderItem[]
-}
+// Retired: ProductCategory / Product / ProductVariant. Production keys on the
+// finished-good ItemMaster and its ItemGroup now.
 
 // ==========================================
 // BLUEPRINT ENGINE (The DNA)
 // ==========================================
 
 model Blueprint {
-  id               String         @id @default(cuid())
-  factoryId        String
-  productVariantId String         @unique
-  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
-  activeVersionId  String? // Points to BlueprintVersion.id
+  id              String     @id @default(cuid())
+  factoryId       String
+  // The blueprint now hangs off the item: production is planned against what is
+  // made, and what is made is an item.
+  itemId          String     @unique
+  item            ItemMaster @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  activeVersionId String? // Points to BlueprintVersion.id
 
   versions BlueprintVersion[]
 }
 
 model BlueprintVersion {
-  id                String      @id @default(cuid())
+  id                String             @id @default(cuid())
   blueprintId       String
-  blueprint         Blueprint   @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+  blueprint         Blueprint          @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
   versionNumber     Int
   name              String // e.g. "V1 - Standard Routing"
-  estimatedTimeMins Float       @default(0)
+  estimatedTimeMins Float              @default(0)
   qcTemplateId      String?
-  qcTemplate        QCTemplate? @relation(fields: [qcTemplateId], references: [id])
-  isActive          Boolean     @default(false)
-  createdAt         DateTime    @default(now())
+  qcTemplate        ChecklistTemplate? @relation(fields: [qcTemplateId], references: [id])
+  isActive          Boolean            @default(false)
+  createdAt         DateTime           @default(now())
 
   bom             BOM?
   routeSteps      BlueprintRouteStep[]
@@ -770,83 +962,6 @@ model FactoryDocument {
 // VEHICLE FITMENT ENGINE
 // ==========================================
 
-model VehicleBrand {
-  id          String         @id @default(cuid())
-  factoryId   String
-  name        String
-  models      VehicleModel[]
-  salesOrders SalesOrder[]      @relation("OrderVehicleBrand")
-}
-
-model VehicleModel {
-  id          String                  @id @default(cuid())
-  factoryId   String?
-  year        String?
-  brandId     String
-  brand       VehicleBrand            @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  name        String
-  generations VehicleGeneration[]
-  fitments    ProductVehicleFitment[]
-  salesOrders SalesOrder[]            @relation("OrderVehicleModel")
-}
-
-model VehicleGeneration {
-  id        String                  @id @default(cuid())
-  factoryId String?
-  modelId   String
-  model     VehicleModel            @relation(fields: [modelId], references: [id], onDelete: Cascade)
-  name      String
-  years     VehicleYear[]
-  fitments  ProductVehicleFitment[]
-
-  // Spec constraints for variant generation (empty = all allowed, no gating).
-  // Owner curates real-world specs per Model+Generation so nonsense combos like
-  // "Alto 7HDR" never surface in variant search. Fabrics/designs stay open for all.
-  allowedSeatTypes String[] @default([]) // e.g. ["Single Back","Double Back"]
-  allowedHeadrests Int[]    @default([]) // e.g. [4,5]
-  allowedArmrests  String[] @default([]) // e.g. ["Arm","No Arm"]; empty = both
-}
-
-model VehicleYear {
-  id           String                  @id @default(cuid())
-  factoryId    String?
-  generationId String
-  generation   VehicleGeneration       @relation(fields: [generationId], references: [id], onDelete: Cascade)
-  year         Int
-  variants     VehicleVariant[]
-  fitments     ProductVehicleFitment[]
-}
-
-model VehicleVariant {
-  id        String                  @id @default(cuid())
-  factoryId String?
-  yearId    String
-  year      VehicleYear             @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  name      String
-  fitments  ProductVehicleFitment[]
-}
-
-model ProductVehicleFitment {
-  id               String         @id @default(cuid())
-  factoryId        String
-  productVariantId String
-  productVariant   ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
-
-  vehicleVariantId    String?
-  vehicleVariant      VehicleVariant?    @relation(fields: [vehicleVariantId], references: [id], onDelete: Cascade)
-  vehicleYearId       String?
-  vehicleYear         VehicleYear?       @relation(fields: [vehicleYearId], references: [id], onDelete: Cascade)
-  vehicleGenerationId String?
-  vehicleGeneration   VehicleGeneration? @relation(fields: [vehicleGenerationId], references: [id], onDelete: Cascade)
-  vehicleModelId      String?
-  vehicleModel        VehicleModel?      @relation(fields: [vehicleModelId], references: [id], onDelete: Cascade)
-
-  fitmentNotes String?
-  createdAt    DateTime @default(now())
-
-  @@index([productVariantId])
-}
-
 // ==========================================
 // PROCUREMENT ENGINE
 // ==========================================
@@ -865,6 +980,7 @@ model Supplier {
   bankAccount   String?
   paymentTerms  String?
   leadTimeDays  Int?
+  customFields  Json?    @default("{}")
   createdAt     DateTime @default(now())
 
   purchaseOrders PurchaseOrder[]
@@ -881,13 +997,13 @@ model PurchaseRequest {
 }
 
 model PurchaseOrder {
-  id         String   @id @default(cuid())
-  factoryId  String
-  poNumber   String   @unique
-  supplierId String
-  supplier   Supplier @relation(fields: [supplierId], references: [id])
-  status     String // DRAFT, SUBMITTED, PARTIALLY_RECEIVED, COMPLETED, CANCELLED
-  orderDate  DateTime @default(now())
+  id           String    @id @default(cuid())
+  factoryId    String
+  poNumber     String    @unique
+  supplierId   String
+  supplier     Supplier  @relation(fields: [supplierId], references: [id])
+  status       String // DRAFT, SUBMITTED, PARTIALLY_RECEIVED, COMPLETED, CANCELLED
+  orderDate    DateTime  @default(now())
   expectedDate DateTime?
 
   items PurchaseOrderItem[]
@@ -1019,7 +1135,7 @@ model JobCard {
   // review shows exactly which template each department used (product-based:
   // mats and seat covers resolve to different templates). Null on legacy cards.
   templateId String?
-  template   QCTemplate? @relation("JobCardTemplate", fields: [templateId], references: [id], onDelete: SetNull)
+  template   ChecklistTemplate? @relation("JobCardTemplate", fields: [templateId], references: [id], onDelete: SetNull)
 
   @@index([factoryId])
   @@index([workOrderId])
@@ -1028,21 +1144,27 @@ model JobCard {
 // A stage submission: what the operator captured when working a stage card.
 // One row per submission attempt, so rework history is preserved.
 model StageEntry {
-  id            String   @id @default(cuid())
-  factoryId     String
-  jobCardId     String
-  jobCard       JobCard  @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
-  submittedById String?
-  beforeImages  Json? // array of public URLs
-  afterImages   Json? // array of public URLs
-  measurements  String?
-  materialNotes String?
-  remarks       String?
+  id               String   @id @default(cuid())
+  factoryId        String
+  jobCardId        String
+  jobCard          JobCard  @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  submittedById    String?
+  beforeImages     Json? // array of public URLs
+  afterImages      Json? // array of public URLs
+  measurements     String?
+  materialNotes    String?
+  remarks          String?
   // Department stage-checklist results when the stage carries a template:
-  // [{ checkpointId, name, ok, remarks, images: [publicUrl] }]
-  checklist     Json?
-  outcome       String   @default("SUBMITTED") // SUBMITTED, APPROVED, REWORK
-  createdAt     DateTime @default(now())
+  // [{ checkpointId, name, ok, value, remarks, images: [publicUrl] }]
+  checklist        Json?
+  // Walkthrough video for stages whose template asks for one (e.g. Packing).
+  // QC records its clip on the Inspection; a department stage has none, so the
+  // clip lives here.
+  videoUrl         String?
+  videoPath        String?
+  videoDurationSec Int?
+  outcome          String   @default("SUBMITTED") // SUBMITTED, APPROVED, REWORK
+  createdAt        DateTime @default(now())
 
   @@index([jobCardId])
   @@index([factoryId])
@@ -1053,27 +1175,27 @@ model StageEntry {
 // ==========================================
 
 model Customer {
-  id           String       @id @default(cuid())
-  factoryId    String
-  customerCode String?
-  name         String
-  companyName  String?
-  phone        String?
-  altPhone     String?
-  email        String?
-  gstNumber    String?
-  billingAddress  String?
-  shippingAddress String?
-  notes        String?
+  id                  String       @id @default(cuid())
+  factoryId           String
+  customerCode        String?
+  name                String
+  companyName         String?
+  phone               String?
+  altPhone            String?
+  email               String?
+  gstNumber           String?
+  billingAddress      String?
+  shippingAddress     String?
+  notes               String?
   // Retail / Dealer / OEM / Internal (and any free tags). Dealers are simply a
   // tagged customer, not a separate entity.
-  tags         String[]     @default([])
+  tags                String[]     @default([])
   assignedSalesperson String?
-  creditLimit  Float        @default(0)
-  paymentTerms String?
-  customFields Json?        @default("{}")
-  createdAt    DateTime     @default(now())
-  salesOrders  SalesOrder[]
+  creditLimit         Float        @default(0)
+  paymentTerms        String?
+  customFields        Json?        @default("{}")
+  createdAt           DateTime     @default(now())
+  salesOrders         SalesOrder[]
 
   @@unique([factoryId, customerCode])
 }
@@ -1098,60 +1220,77 @@ enum OrderType {
 }
 
 model SalesOrder {
-  id          String    @id @default(cuid())
-  factoryId   String
-  soNumber    String    @unique
-  customerId  String
-  status      String // DRAFT, APPROVED, IN_PRODUCTION, READY, DISPATCHED
+  id                   String    @id @default(cuid())
+  factoryId            String
+  soNumber             String    @unique
+  customerId           String
+  status               String // DRAFT, APPROVED, IN_PRODUCTION, READY, DISPATCHED
   // Who booked the order — used to scope a store manager to their own orders.
-  createdById String?
+  createdById          String?
   // Retail / Dealer / OEM / Internal. A "dealer order" is just an order whose
   // type is DEALER — there is no separate dealer entity or portal.
-  orderType   OrderType @default(RETAIL)
+  orderType            OrderType @default(RETAIL)
   // Identity of the physical production bag: printed once before manufacturing
   // and carried CAD -> Cutting -> Stitching -> QC -> Packing -> Dispatch.
-  labelCode   String?   @unique
-  totalAmount Float     @default(0)
+  labelCode            String?   @unique
+  totalAmount          Float     @default(0)
   expectedDeliveryDate DateTime?
-  orderDate   DateTime @default(now())
+  orderDate            DateTime  @default(now())
 
-  // Order configuration captured by the V1 creation studio
-  materialId           String?
-  material             ItemMaster?      @relation("OrderMaterial", fields: [materialId], references: [id], onDelete: SetNull)
-  designId             String?
-  design               Design?          @relation(fields: [designId], references: [id], onDelete: SetNull)
-  colorId              String?
-  color                Color?           @relation(fields: [colorId], references: [id], onDelete: SetNull)
-  productTypeId        String?
-  productType          ProductType?     @relation(fields: [productTypeId], references: [id], onDelete: SetNull)
-  inspectorId          String?
-  inspector            User?            @relation("OrderInspector", fields: [inspectorId], references: [id], onDelete: SetNull)
-  fulfilledFromOrderId String? // stock-matched: the production whose goods and passport this order uses
+  // THE source of truth for what this order makes. Production, BOM, QC and
+  // routing all resolve from here. Set for every order — createOrder derives it
+  // from the spec via resolveOrderItem when the studio does not supply one.
+  itemId String?
+  // Restrict, not SetNull: an order silently losing the item it was placed
+  // for is worse than a refused delete, and every other reference (BOM, stock)
+  // already refuses.
+  item   ItemMaster? @relation("OrderItem", fields: [itemId], references: [id], onDelete: Restrict)
+
+  // Denormalised copies of the item's spec, kept because dashboard, floor,
+  // reports, labels and CAD read them directly for display. They are written
+  // from the same answers that resolve `itemId`, so they cannot disagree with
+  // it — but they are a display cache, NOT a second source of truth. Never
+  // branch production logic on these; read `item` instead.
+  materialId            String?
+  material              ItemMaster?      @relation("OrderMaterial", fields: [materialId], references: [id], onDelete: SetNull)
+  designId              String?
+  design                ItemMaster?      @relation("OrderDesign", fields: [designId], references: [id], onDelete: SetNull)
+  // Colours are ordinary items in an ordinary category now, so the order points
+  // at ItemMaster like it does for material. The column name stays `colorId` —
+  // renaming it would touch every caller for no gain.
+  colorId               String?
+  color                 ItemMaster?      @relation("OrderColour", fields: [colorId], references: [id], onDelete: SetNull)
+  // Legacy ProductType id, kept as a bare column; the ProductType table is gone.
+  productTypeId         String?
+  inspectorId           String?
+  inspector             User?            @relation("OrderInspector", fields: [inspectorId], references: [id], onDelete: SetNull)
+  fulfilledFromOrderId  String? // stock-matched: the production whose goods and passport this order uses
   // Scheduled release: workers don't see the job until this date arrives, then
   // it's their task for the day. Null means "on the floor now".
-  scheduledFor         DateTime?
-  fulfilledFromStockQty Float?  @default(0) // partial stock: how many of the order were taken from stock
-  productionBatchId    String? // set when drafts are released together as one batch
-  productionBatch      ProductionBatch? @relation(fields: [productionBatchId], references: [id], onDelete: SetNull)
+  scheduledFor          DateTime?
+  fulfilledFromStockQty Float?           @default(0) // partial stock: how many of the order were taken from stock
+  productionBatchId     String? // set when drafts are released together as one batch
+  productionBatch       ProductionBatch? @relation(fields: [productionBatchId], references: [id], onDelete: SetNull)
   // Vehicle is stored per-order. Previously it lived only as a fitment on the
   // (shared) product variant, so two orders of the same product type showed
   // each other's vehicle. These columns give every order its own identity.
-  vehicleBrandId       String?
-  vehicleBrand         VehicleBrand?    @relation("OrderVehicleBrand", fields: [vehicleBrandId], references: [id], onDelete: SetNull)
-  vehicleModelId       String?
-  vehicleModel         VehicleModel?    @relation("OrderVehicleModel", fields: [vehicleModelId], references: [id], onDelete: SetNull)
-  vehicleYear          String?
-  seatType             String?
-  hasArmrest           Boolean          @default(false)
-  headrestCount        Int?
-  remarks              String?
-  photoReference       String?
-  dynamicData          Json?
+  vehicleBrandId        String?
+  vehicleBrand          ItemMaster?      @relation("OrderVehicleBrand", fields: [vehicleBrandId], references: [id], onDelete: SetNull)
+  vehicleModelId        String?
+  vehicleModel          ItemMaster?      @relation("OrderVehicleModel", fields: [vehicleModelId], references: [id], onDelete: SetNull)
+  vehicleYear           String?
+  seatType              String?
+  hasArmrest            Boolean          @default(false)
+  headrestCount         Int?
+  remarks               String?
+  photoReference        String?
+  dynamicData           Json?
 
-  customer   Customer         @relation(fields: [customerId], references: [id])
-  items      SalesOrderItem[]
-  plans      ProductionPlan[]
-  dispatches Dispatch[]
+  customer    Customer         @relation(fields: [customerId], references: [id])
+  items       SalesOrderItem[]
+  plans       ProductionPlan[]
+  dispatches  Dispatch[]
+  productType ProductType?     @relation(fields: [productTypeId], references: [id])
 }
 
 enum FieldType {
@@ -1162,41 +1301,15 @@ enum FieldType {
   TOGGLE
   BUTTONS
   CHECKBOX
-}
-
-model Design {
-  id                String   @id @default(cuid())
-  factoryId         String
-  // Design family (ULTRA, ERGO FIT, QUILTS...). Distinct from the product: a
-  // family groups designs by style, the product says what they are made for.
-  category          String?
-  productId         String?
-  product           Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
-  name              String
-  imageUrls         String[] @default([]) // reference photos shown to workers/QC
-  // CAD department master data: the standard fabric consumption for this design
-  // (metres per unit) drives automatic material calculation, and the CAD file is
-  // the cutting pattern handed to the Cutting department.
-  fabricConsumption Float?
-  cadFileUrl        String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  salesOrders SalesOrder[]
-
-  @@index([factoryId])
-}
-
-model Color {
-  id        String   @id @default(cuid())
-  factoryId String
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  salesOrders SalesOrder[]
-
-  @@index([factoryId])
+  /// All of these store a plain string in ItemFieldValue.valueText — there is
+  /// no `value` column. What differs is the input and how the cell renders:
+  /// IMAGE and FILE hold a URL, DATE an ISO date, COLOR a #RRGGBB, TEXTAREA
+  /// multi-line prose.
+  IMAGE
+  FILE
+  DATE
+  COLOR
+  TEXTAREA
 }
 
 // A validated Carxen product configuration: the vehicle + product + spec
@@ -1204,100 +1317,8 @@ model Color {
 // per-production (the variable part) and are intentionally NOT stored here —
 // this table is the reusable "up-to-specs" template that drives the studio's
 // progressive auto-selection and batch auto-population.
-model ProductCombination {
-  id         String   @id @default(cuid())
-  factoryId  String
-  brand      String
-  model      String
-  generation String?
-  category   String?
-  product    String?
-  seatType   String   @default("DB") // SB (Single Back) | DB (Double Back)
-  headrests  Int      @default(4) // 2,4,5,6,7,8
-  armrest    Boolean  @default(false)
-  active     Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@index([factoryId])
-}
-
-// The definition of a kind of thing the tenant sells or makes. This is the
-// generalisation point: everything vertical-specific about an order should be
-// expressed as ProductFields on a ProductType, never as columns on SalesOrder.
-//
-// Org-scoped rather than factory-scoped — a customer running two plants sells
-// the same catalogue from both.
-model ProductType {
-  id             String  @id @default(cuid())
-  factoryId      String
-  organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name           String // e.g., "Seat Cover", "Table", "Shirt", "Consulting Engagement"
-  // Stable machine key used by templates and imports, e.g. "seat_cover".
-  key            String?
-  // Template for the one-line human label, over field keys:
-  //   "{brand} {model} {generation} {product} {seat_type} {headrests}"
-  // Replaces the hardcoded ordering in src/lib/variant-descriptor.ts.
-  labelTemplate  String?
-  // False for service/engagement types that never produce a physical good and
-  // so have no job card, label or dispatch.
-  isPhysical     Boolean @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  fields      ProductField[]
-  salesOrders SalesOrder[]
-
-  @@index([factoryId])
-  @@index([organizationId])
-}
-
-model ProductField {
-  id            String    @id @default(cuid())
-  productTypeId String
-  name          String // e.g., "Wood Type", "Dimensions", "Thread Color"
-  // Stable machine key — what dynamicData is keyed by and what labelTemplate
-  // interpolates. Renaming `name` must never orphan stored values.
-  key           String?
-  type          FieldType
-  options       Json? // Array of options if SELECT type (e.g. ["Oak", "Teak"])
-  isRequired    Boolean   @default(false)
-  sortOrder     Int       @default(0)
-
-  // --- parity with the hardcoded automotive path ---
-
-  // Pull options from a master-data table instead of a static list, e.g.
-  // "vehicle_brand" or "material". Mutually exclusive with `options`.
-  optionSource  String?
-  // For hierarchical pickers: the field whose value filters this one's options
-  // (model depends on brand, generation depends on model). This is what makes
-  // the vehicle cascade expressible without dedicated tables.
-  parentFieldId String?
-  parentField   ProductField?  @relation("FieldHierarchy", fields: [parentFieldId], references: [id], onDelete: SetNull)
-  children      ProductField[] @relation("FieldHierarchy")
-  // Show this field only when the expression holds, e.g. {"field":"product",
-  // "matches":"seat"}. Generalises productHasSeatSpecs(), which hardcodes the
-  // rule that only seat products have bench/headrest geometry.
-  visibleWhen   Json?
-  // Type-appropriate constraints: {"min":2,"max":8,"step":1} or {"pattern":...}.
-  validation    Json?
-  // Carried onto the job card and the public passport. Off by default so
-  // internal-only fields do not leak to customers.
-  showOnJobCard Boolean @default(false)
-  showOnPassport Boolean @default(false)
-  unit          String?
-  helpText      String?
-
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  productType ProductType @relation(fields: [productTypeId], references: [id], onDelete: Cascade)
-
-  @@unique([productTypeId, key])
-  @@index([productTypeId])
-  @@index([parentFieldId])
-}
+// Retired: ProductCombination (the studio's variant search replaced it) and
+// ProductType / ProductField (spec columns live on ItemGroup now).
 
 // Groups draft productions released to the floor together (e.g. several
 // identical Brezza orders accumulated in Draft, clubbed into one run).
@@ -1316,8 +1337,13 @@ model SalesOrderItem {
   id                 String            @id @default(cuid())
   salesOrderId       String
   salesOrder         SalesOrder        @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
-  productVariantId   String
-  productVariant     ProductVariant    @relation(fields: [productVariantId], references: [id])
+  // The finished good this line produces — the source of truth now that
+  // Product / ProductVariant are being retired.
+  itemId             String?
+  item               ItemMaster?       @relation("SalesOrderLineItem", fields: [itemId], references: [id], onDelete: Restrict)
+  // Legacy sales-variant id, kept as a bare column; the ProductVariant table is
+  // gone. Order lines resolve through itemId.
+  productVariantId   String?
   quantity           Float
   blueprintVersionId String?
   blueprintVersion   BlueprintVersion? @relation(fields: [blueprintVersionId], references: [id])
@@ -1376,7 +1402,16 @@ model LeaveApplication {
 // QUALITY ENGINE (FROZEN/PRESERVED)
 // ==========================================
 
-model QCTemplate {
+/// A checklist a department runs against a job: Cutting's pre-cut checks,
+/// Packing's dispatch checks, QC's inspection. It was called QCTemplate, which
+/// taught everyone it was a QC feature — the model has always been generic
+/// (Department.templateId points here, and nothing on Checkpoint is about
+/// quality), but nobody ever attached one to Cutting because of the name.
+///
+/// `@@map` keeps the table exactly where it is: this is a rename of the
+/// concept, not a migration of the data.
+model ChecklistTemplate {
+
   id               String   @id @default(cuid())
   factoryId        String
   name             String
@@ -1390,30 +1425,36 @@ model QCTemplate {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  parentTemplate QCTemplate?       @relation("TemplateVersions", fields: [parentTemplateId], references: [id], onDelete: SetNull)
-  childTemplates QCTemplate[]      @relation("TemplateVersions")
-  sections       TemplateSection[]
-  products       Product[]
-  departments    Department[]
-  jobCards       JobCard[]          @relation("JobCardTemplate")
+  parentTemplate    ChecklistTemplate?  @relation("TemplateVersions", fields: [parentTemplateId], references: [id], onDelete: SetNull)
+  childTemplates    ChecklistTemplate[] @relation("TemplateVersions")
+  /// The one department this checklist belongs to (Cutting, Packing, QC...).
+  /// A template is dedicated to a single stage; which products it covers is the
+  /// separate, many-valued question answered by defaultForItemGroups.
+  ownerDepartmentId String?
+  ownerDepartment   Department?         @relation("DepartmentTemplates", fields: [ownerDepartmentId], references: [id], onDelete: SetNull)
+
+  sections             TemplateSection[]
+  jobCards             JobCard[]         @relation("JobCardTemplate")
+  defaultForItemGroups ItemGroup[]       @relation("ItemGroupDefaultChecklist")
 
   blueprintVersions BlueprintVersion[]
 
   @@index([factoryId])
   @@index([parentTemplateId])
+  @@map("QCTemplate")
 }
 
 model TemplateSection {
-  id            String     @id @default(cuid())
+  id            String            @id @default(cuid())
   factoryId     String
   templateId    String
-  template      QCTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template      ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
   title         String
   titleHi       String?
   titleHinglish String?
   sortOrder     Int
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
   checkpoints Checkpoint[]
 
@@ -1437,6 +1478,18 @@ model Checkpoint {
   // checkpoints nobody had configured.
   requireImage         Boolean         @default(false)
   requireRemarks       Boolean         @default(false)
+  // Whether the worker must answer this checkpoint. Optional ones can be left
+  // blank without blocking submission.
+  isRequired           Boolean         @default(true)
+  /// How the worker answers: PASS_FAIL (default), TEXT, NUMBER, MEASUREMENT.
+  /// This is what makes "Measurements" / "Material used" ordinary checkpoints an
+  /// owner can add, rename or drop, instead of fields hardcoded into the form.
+  inputType            String          @default("PASS_FAIL")
+  /// Shown under the input as a hint, e.g. "e.g. Back panel 58 x 64 cm".
+  placeholder          String?
+  // A reference photo of the correct result, shown to the worker while they
+  // answer so they can compare their work against it.
+  referenceImageUrl    String?
   sortOrder            Int
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
@@ -1485,6 +1538,8 @@ model CheckpointSubmission {
   checkpointId       String
   checkpoint         Checkpoint @relation(fields: [checkpointId], references: [id], onDelete: Cascade)
   passFail           String?
+  /// The typed answer for non pass/fail checkpoints (text, number, measurement).
+  value              String?
   remarks            String?
   completedAt        DateTime?
   verificationStatus String?
@@ -1553,3 +1608,125 @@ model ReworkRecord {
 // DISPATCH ENGINE
 // ==========================================
 
+model ProductType {
+  id             String        @id @default(cuid())
+  factoryId      String
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  key            String?
+  labelTemplate  String?
+  isPhysical     Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  fields      ProductField[]
+  salesOrders SalesOrder[]
+
+  @@index([factoryId])
+  @@index([organizationId])
+}
+
+model ProductField {
+  id            String    @id @default(cuid())
+  productTypeId String
+  name          String
+  key           String?
+  type          FieldType
+  options       Json?
+  isRequired    Boolean   @default(false)
+  sortOrder     Int       @default(0)
+
+  optionSource   String?
+  parentFieldId  String?
+  parentField    ProductField?  @relation("FieldHierarchy", fields: [parentFieldId], references: [id], onDelete: SetNull)
+  children       ProductField[] @relation("FieldHierarchy")
+  visibleWhen    Json?
+  validation     Json?
+  showOnJobCard  Boolean        @default(false)
+  showOnPassport Boolean        @default(false)
+  unit           String?
+  helpText       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  productType ProductType @relation(fields: [productTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([productTypeId, key])
+  @@index([productTypeId])
+  @@index([parentFieldId])
+}
+
+model Organization {
+  id                   String  @id @default(cuid())
+  name                 String
+  slug                 String  @unique
+  logoUrl              String?
+  currency             String  @default("INR")
+  timezone             String  @default("Asia/Kolkata")
+  fiscalYearStartMonth Int     @default(4)
+
+  settings  Json?    @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  factories    Factory[]
+  roles        Role[]
+  entitlements ModuleEntitlement[]
+  productTypes ProductType[]
+}
+
+model ModuleEntitlement {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  moduleKey      String
+  enabled        Boolean      @default(true)
+  expiresAt      DateTime?
+  settings       Json?        @default("{}")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, moduleKey])
+  @@index([organizationId])
+}
+
+model Role {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  systemRole     SystemRole
+  isSystem       Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  permissions    RolePermission[]
+  users          User[]
+  workflowStages WorkflowStage[]
+  approvals      Approval[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+model RolePermission {
+  id     String @id @default(cuid())
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  key    String
+
+  @@unique([roleId, key])
+  @@index([roleId])
+}
+
+enum SystemRole {
+  OWNER
+  CO_OWNER
+  MANAGER
+  SUPERVISOR
+  WORKER
+  STORE_MANAGER
+}

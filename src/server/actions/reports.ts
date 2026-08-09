@@ -27,7 +27,21 @@ export async function getReportsData(fromISO?: string, toISO?: string) {
       where: { factoryId },
       include: {
         stage: true,
-        workOrder: { include: { productionPlan: { include: { blueprintVersion: { include: { blueprint: { include: { productVariant: { include: { product: true } } } } } } } } } },
+        // Three joins deep to ProductVariant -> Product, on every row, for a
+        // name nothing here reads. The item carries its own name.
+        workOrder: {
+          include: {
+            productionPlan: {
+              include: {
+                blueprintVersion: {
+                  include: {
+                    blueprint: { include: { item: { select: { id: true, name: true, itemCode: true } } } },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     }),
     prisma.user.findMany({ where: { factoryId }, select: { id: true, name: true, role: true } }),

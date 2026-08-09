@@ -227,9 +227,9 @@ async function main() {
     for (const variant of product.variants) {
       // Ensure blueprint + active version exist (createOrder self-heals these,
       // but variants that were never ordered won't have one yet).
-      let blueprint = await prisma.blueprint.findUnique({ where: { productVariantId: variant.id }, include: { versions: true } });
+      let blueprint = await prisma.blueprint.findUnique({ where: { itemId: variant.itemId }, include: { versions: true } });
       if (!blueprint) {
-        blueprint = await prisma.blueprint.create({ data: { factoryId, productVariantId: variant.id }, include: { versions: true } });
+        blueprint = await prisma.blueprint.create({ data: { factoryId, itemId: variant.itemId }, include: { versions: true } });
       }
       let version = blueprint.versions.find((v) => v.isActive) ?? blueprint.versions[0];
       if (!version) {

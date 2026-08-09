@@ -11,16 +11,10 @@ type OrderInfo = {
   productName: string;
   variantName: string | null;
   quantity: number;
-  designName: string | null;
-  designCategory: string | null;
   designImage: string | null;
   cadFileUrl: string | null;
-  fabricName: string | null;
-  colorName: string | null;
-  seatType: string | null;
-  headrestCount: number | null;
-  hasArmrest: boolean;
-  vehicleYear: string | null;
+  // The item's own answered fields, product-agnostic — no hardcoded labels.
+  specDetails: { label: string; value: string }[];
   remarks: string | null;
 };
 
@@ -37,12 +31,6 @@ export function ProductionLabel({
   order: OrderInfo;
   materials: MaterialLine[];
 }) {
-  const specs = [
-    order.seatType,
-    order.headrestCount ? `${order.headrestCount} HDR` : null,
-    order.hasArmrest ? "Armrest" : null,
-  ].filter(Boolean).join(" · ");
-
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-6 print:hidden">
@@ -81,11 +69,9 @@ export function ProductionLabel({
           <Field label="Customer" value={order.customerName} />
           <Field label="Quantity" value={`${order.quantity}`} />
           <Field label="Product" value={[order.productName, order.variantName].filter(Boolean).join(" — ")} />
-          <Field label="Specifications" value={specs || "—"} />
-          <Field label="Design" value={[order.designCategory, order.designName].filter(Boolean).join(" / ") || "—"} />
-          <Field label="Fabric" value={order.fabricName || "—"} />
-          <Field label="Colour" value={order.colorName || "—"} />
-          <Field label="Vehicle Year" value={order.vehicleYear || "—"} />
+          {order.specDetails.map((d) => (
+            <Field key={d.label} label={d.label} value={d.value || "—"} />
+          ))}
         </div>
 
         {/* Cutting issues exactly this much material and no more. */}

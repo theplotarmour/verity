@@ -5,6 +5,7 @@ import { getDispatches, getDispatchableOrders } from "@/server/actions/dispatch"
 import { getPendingDeliveries } from "@/server/actions/purchase";
 import { getItemFormData } from "@/server/actions/items";
 import InventoryClient from "./InventoryClient";
+import { getStockableItems } from "@/server/queries/spec";
 
 export default async function InventoryPage() {
   const dbUser = await getOwnerUser();
@@ -13,7 +14,7 @@ export default async function InventoryPage() {
   // Adjustment history is reachable from the Raw tab's movement ledger
   // (transactionType ADJUSTMENT) and no longer fetched as its own dataset —
   // the dedicated tab was folded into the Adjust action + existing ledger.
-  const [overview, ledger, warehouses, materials, variants, dispatches, dispatchableOrders, pendingDeliveries, variance, batches, itemFormData] = await Promise.all([
+  const [overview, ledger, warehouses, materials, variants, dispatches, dispatchableOrders, pendingDeliveries, variance, batches, itemFormData, stockableItems] = await Promise.all([
     getInventoryOverview(),
     getStockLedger(),
     getWarehouses(),
@@ -25,6 +26,7 @@ export default async function InventoryPage() {
     getMaterialVariance(),
     getItemBatches(),
     getItemFormData(),
+      getStockableItems(),
   ]);
 
   return (
@@ -33,6 +35,7 @@ export default async function InventoryPage() {
       ledger={ledger}
       warehouses={warehouses}
       materials={materials}
+      stockableItems={stockableItems}
       variants={variants}
       dispatches={dispatches}
       dispatchableOrders={dispatchableOrders}

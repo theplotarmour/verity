@@ -55,7 +55,7 @@ export function HistoryDetailClient({ job, basePath }: { job: any; basePath: str
           </span>
         </div>
         <h1 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-text-primary">
-          {[job.order?.vehicleBrand?.name, job.order?.vehicleModel?.name].filter(Boolean).join(" ") || job.order?.orderNumber}
+          {job.order?.itemName || job.order?.productName || job.order?.orderNumber}
         </h1>
         <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-tertiary">
           {job.workerName && <span>Worker: {job.workerName}</span>}

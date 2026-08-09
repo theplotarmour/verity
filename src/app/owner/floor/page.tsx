@@ -4,12 +4,10 @@ import { canUser } from "@/lib/server/permissions";
 import { getFloorOverview } from "@/server/actions/floor";
 import { PageHeader } from "@/components/design/PageHeader";
 import { FloorClient } from "./FloorClient";
-import { guardModulePage } from "@/platform/modules/guard";
 
 export default async function FloorPage() {
   const dbUser = await getOwnerUser();
   if (!dbUser) redirect("/onboarding");
-  await guardModulePage("quality");
   if (!(await canUser(dbUser, "QC_QUEUE"))) redirect("/unauthorized");
 
   const departments = await getFloorOverview();

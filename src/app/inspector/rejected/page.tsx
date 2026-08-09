@@ -39,7 +39,7 @@ export default async function InspectorRejectedPage() {
               <p className="text-lg font-semibold text-text-primary">
                 {batch.batchNumber}
               </p>
-              <p className="mt-1 text-sm text-text-secondary">{batch.order.vehicleBrand?.name} {batch.order.vehicleModel?.name} </p>
+              <p className="mt-1 text-sm text-text-secondary">{batch.order.itemName || batch.order.productName || batch.order.orderNumber}</p>
             </div>
             <Badge className={getStatusClasses(batch.status as any)}>
               {titleCaseStatus(batch.status as any)}

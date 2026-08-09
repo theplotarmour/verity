@@ -22,10 +22,10 @@ async function ensureDefaultBin(factoryId: string, warehouseId: string) {
 async function resolveOrderItem(salesOrderId: string) {
   const order = await prisma.salesOrder.findUniqueOrThrow({
     where: { id: salesOrderId },
-    include: { items: { include: { productVariant: true } } },
+    include: { items: true },
   });
   const item = order.items[0];
-  return { order, itemId: item?.productVariant?.itemId ?? null, quantity: item?.quantity ?? 1 };
+  return { order, itemId: item?.itemId ?? (order as any).itemId ?? null, quantity: item?.quantity ?? 1 };
 }
 
 // Orders eligible for dispatch. A production only becomes dispatchable once the
@@ -193,7 +193,15 @@ export async function getDispatches() {
   return prisma.dispatch.findMany({
     where: { factoryId: user.factoryId },
     include: {
-      salesOrder: { include: { customer: true, items: { include: { productVariant: { include: { product: true } } } } } },
+      // item, not the ProductVariant -> Product hop: those tables are empty, so
+      // the logistics list showed every shipment as the word "Order".
+      salesOrder: {
+        include: {
+          customer: true,
+          item: { select: { name: true, group: { select: { name: true } } } },
+          items: true,
+        },
+      },
       destinationWarehouse: true,
     },
     orderBy: { dispatchedAt: "desc" },

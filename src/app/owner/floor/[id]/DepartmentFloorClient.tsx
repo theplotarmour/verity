@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Play, Clock, PauseCircle, ShieldCheck, CheckCircle2, User as UserIcon, Package, Car, ExternalLink,
+  Play, Clock, PauseCircle, ShieldCheck, CheckCircle2, User as UserIcon, Package, ExternalLink,
   Loader2,
 } from "lucide-react";
 import { Surface } from "@/components/design/Surface";
@@ -29,11 +29,7 @@ function statusTone(status: string): string {
 }
 
 function specLine(o: any): string {
-  const parts = [
-    o.seatType, o.headrestCount ? `${o.headrestCount}HDR` : null, o.hasArmrest ? "Arm" : null,
-    o.fabric, o.design, o.color,
-  ].filter(Boolean);
-  return parts.join(" · ");
+  return (o.specDetails ?? []).slice(0, 3).map((d: any) => d.value).filter(Boolean).join(" · ");
 }
 
 function StatCard({ icon, value, label, tone }: { icon: React.ReactNode; value: number; label: string; tone: string }) {
@@ -145,7 +141,7 @@ function ApproveActions({ j }: { j: any }) {
 }
 
 function JobRow({ j, isQc, members }: { j: any; isQc: boolean; members: any[] }) {
-  const veh = [j.order.brand, j.order.model].filter(Boolean).join(" ");
+  const primary = j.order.itemName || j.order.product || "—";
   return (
     <div className="flex items-start gap-3 rounded-xl border border-border/70 bg-surface-2/40 p-3.5">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface text-[11px] font-bold text-text-secondary">
@@ -158,8 +154,8 @@ function JobRow({ j, isQc, members }: { j: any; isQc: boolean; members: any[] })
           {j.order.customer && <span className="text-[11px] text-text-tertiary">· {j.order.customer}</span>}
         </div>
         <p className="mt-0.5 flex items-center gap-1.5 text-xs font-medium text-text-secondary">
-          <Car className="h-3.5 w-3.5 text-text-tertiary" />
-          {veh || "—"}{j.order.product ? ` · ${j.order.product}` : ""}
+          <Package className="h-3.5 w-3.5 text-text-tertiary" />
+          {primary}{j.order.product && j.order.product !== primary ? ` · ${j.order.product}` : ""}
         </p>
         {specLine(j.order) && <p className="mt-0.5 text-[11px] text-text-tertiary">{specLine(j.order)}</p>}
       </div>
@@ -231,7 +227,7 @@ export function DepartmentFloorClient({ data }: { data: any }) {
                   {m.currentJob ? (
                     <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-[var(--brand)]/5 px-2.5 py-1.5 text-[11px] font-medium text-text-secondary">
                       <Play className="h-3 w-3 text-[var(--brand)]" />
-                      {m.currentJob.order.soNumber} · {[m.currentJob.order.brand, m.currentJob.order.model].filter(Boolean).join(" ") || m.currentJob.order.product}
+                      {m.currentJob.order.soNumber} · {m.currentJob.order.itemName || m.currentJob.order.product}
                     </p>
                   ) : (
                     <p className="mt-2 text-[11px] text-text-tertiary">Idle</p>

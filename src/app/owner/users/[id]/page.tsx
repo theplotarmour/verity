@@ -271,7 +271,7 @@ export default async function EmployeeProfilePage({
                         {/* Order info */}
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-sm text-text-primary truncate group-hover:text-[var(--brand)] transition-colors">
-                            {order.vehicleBrand?.name} {order.vehicleModel?.name}
+                            {order.itemName || order.item?.name || order.orderNumber}
                           </p>
                           <p className="text-xs text-text-secondary mt-0.5">
                             {order.customer?.name} · #{order.orderNumber}

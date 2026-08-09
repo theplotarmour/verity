@@ -1,7 +1,10 @@
 "use client";
 
+import * as React from "react";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
+import { useDropdownPosition } from "./dropdown-position";
 
 export function Card({
   className,
@@ -167,21 +170,189 @@ export function TextArea(
   );
 }
 
+/** One `<option>` child, flattened for the custom list. */
+type SelectChoice = { value: string; label: string; disabled: boolean };
+
+function readChoices(children: React.ReactNode): SelectChoice[] {
+  const out: SelectChoice[] = [];
+  const walk = (nodes: React.ReactNode) => {
+    React.Children.forEach(nodes, (child) => {
+      if (!React.isValidElement(child)) return;
+      // <optgroup> is flattened; the app does not use its grouping semantics.
+      if (child.type === "optgroup") return walk((child.props as { children?: React.ReactNode }).children);
+      if (child.type !== "option") return;
+      const props = child.props as React.OptionHTMLAttributes<HTMLOptionElement> & {
+        children?: React.ReactNode;
+      };
+      const label =
+        typeof props.children === "string"
+          ? props.children
+          : Array.isArray(props.children)
+            ? props.children.filter((c) => typeof c === "string").join("")
+            : String(props.value ?? "");
+      out.push({
+        value: String(props.value ?? label),
+        label,
+        disabled: Boolean(props.disabled),
+      });
+    });
+  };
+  walk(children);
+  return out;
+}
+
+/**
+ * A dropdown that looks like the rest of Verity rather than like the operating
+ * system.
+ *
+ * The native control renders as a grey platform list that ignores our tokens
+ * entirely, which on a tablet on a factory floor reads as a different app. The
+ * real `<select>` is kept mounted and hidden so form semantics, `name`,
+ * validation and refs all still work — and so `onChange` receives a genuine
+ * HTMLSelectElement as its target, which every existing call site reads.
+ */
+/** Below this a list is quicker to read than to filter. */
+const SEARCHABLE_FROM = 7;
+
 export function Select(
   props: React.SelectHTMLAttributes<HTMLSelectElement> & { error?: boolean }
 ) {
-  const { error, ...rest } = props;
+  const { error, children, className, ...rest } = props;
+  const ref = React.useRef<HTMLSelectElement>(null);
+  const listRef = React.useRef<HTMLDivElement>(null);
+  const [open, setOpen] = React.useState(false);
+  const choices = React.useMemo(() => readChoices(children), [children]);
+  // Fixed-position and portalled: an absolute list is clipped by any scrolling
+  // ancestor, and it has to open upward near the bottom of the screen.
+  const { anchorRef, style } = useDropdownPosition<HTMLButtonElement>(open);
+
+  const current = rest.value ?? rest.defaultValue;
+  const selected = choices.find((c) => c.value === String(current ?? "")) ?? null;
+
+  // Every dropdown in the app is searchable, rather than only the handful built
+  // on SpecSelect. Adding it here reaches every call site at once instead of
+  // rewriting each form — and a category tree or a unit list grows past the
+  // point of scanning long before anyone thinks to convert that particular form.
+  //
+  // Short lists are left alone: a search box above two options is noise.
+  const [query, setQuery] = React.useState("");
+  const searchable = choices.length > SEARCHABLE_FROM;
+  const shown = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return choices;
+    return choices.filter((c) => c.label.toLowerCase().includes(q));
+  }, [choices, query]);
+
+  function choose(choice: SelectChoice) {
+    setOpen(false);
+    setQuery("");
+    const node = ref.current;
+    if (!node) return;
+    node.value = choice.value;
+    // A real change event so uncontrolled consumers and React's own listeners
+    // both see it, rather than a hand-rolled object that only looks like one.
+    node.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function closeAfterFocusSettles() {
+    window.setTimeout(() => {
+      const active = document.activeElement;
+      if (anchorRef.current?.contains(active) || listRef.current?.contains(active)) return;
+      setOpen(false);
+    }, 0);
+  }
+
   return (
-    <select
-      {...rest}
-      className={cn(
-        "h-[44px] w-full rounded-[12px] border bg-background px-3 text-sm text-text-primary outline-none transition-all duration-200 focus:ring-0",
-        error 
-          ? "border-danger text-danger focus:border-danger focus:shadow-[inset_0_0_14px_-4px_rgba(239,68,68,0.25)]" 
-          : "border-border focus:border-[var(--brand)]/70 focus:shadow-[inset_0_0_14px_-4px_var(--brand)]/15",
-        props.className,
+    <div className="relative">
+      <select {...rest} ref={ref} className="sr-only" tabIndex={-1} aria-hidden>
+        {children}
+      </select>
+
+      <button
+        type="button"
+        ref={anchorRef}
+        disabled={rest.disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => {
+          setQuery("");
+          setOpen((o) => !o);
+        }}
+        // Delayed so a click inside the list — including the search box —
+        // lands before the list unmounts.
+        onBlur={closeAfterFocusSettles}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setOpen(false);
+          if (e.key === "ArrowDown" || e.key === "Enter") setOpen(true);
+        }}
+        className={cn(
+          "flex h-[44px] w-full items-center justify-between gap-2 rounded-[12px] border bg-background px-3 text-left text-sm outline-none transition-all duration-200 disabled:opacity-50",
+          selected ? "text-text-primary" : "text-text-tertiary",
+          error
+            ? "border-danger text-danger focus:border-danger"
+            : "border-border focus:border-[var(--brand)]/70",
+          className
+        )}
+      >
+        <span className="truncate">{selected?.label ?? choices[0]?.label ?? ""}</span>
+        <span aria-hidden className="shrink-0 text-xs text-text-tertiary">
+          ▾
+        </span>
+      </button>
+
+      {open && style && createPortal(
+        <div
+          ref={listRef}
+          role="listbox"
+          style={style}
+          className="z-[9999] flex flex-col overflow-hidden rounded-[12px] border border-border bg-surface shadow-lg"
+        >
+          {searchable && (
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onMouseDown={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setOpen(false);
+                // Enter on a single remaining match picks it, so a search can
+                // be completed without reaching for the mouse.
+                if (e.key === "Enter" && shown.length === 1 && !shown[0].disabled) {
+                  e.preventDefault();
+                  choose(shown[0]);
+                }
+              }}
+              placeholder="Search…"
+              className="shrink-0 border-b border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none placeholder:text-text-tertiary"
+            />
+          )}
+          <ul className="min-h-0 flex-1 overflow-auto">
+          {shown.length === 0 && (
+            <li className="px-3 py-2 text-sm text-text-tertiary">No matches</li>
+          )}
+          {shown.map((choice) => (
+            <li
+              key={choice.value}
+              role="option"
+              aria-selected={choice.value === selected?.value}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                if (!choice.disabled) choose(choice);
+              }}
+              className={cn(
+                "cursor-pointer px-3 py-2 text-sm text-text-primary hover:bg-brand-soft hover:text-[var(--brand)]",
+                choice.disabled && "cursor-not-allowed opacity-40",
+                choice.value === selected?.value && "bg-brand-soft text-[var(--brand)]"
+              )}
+            >
+              {choice.label}
+            </li>
+          ))}
+          </ul>
+        </div>,
+        document.body
       )}
-    />
+    </div>
   );
 }
 

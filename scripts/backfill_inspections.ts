@@ -18,7 +18,7 @@ async function main() {
     if (ins.submissions.length < 10) {
       console.log(`Inspection ${ins.id} has only ${ins.submissions.length} checkpoints. Upgrading to the new comprehensive list...`);
 
-      const template = await prisma.qCTemplate.findFirst({
+      const template = await prisma.checklistTemplate.findFirst({
         where: { factoryId: ins.factoryId, status: "active", isLatest: true },
         include: { sections: { include: { checkpoints: true } } }
       });

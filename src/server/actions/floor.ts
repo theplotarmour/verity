@@ -1,13 +1,17 @@
 "use server";
 
 import prisma from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { getOwnerUser } from "@/lib/server/owner";
 import { revalidatePath } from "next/cache";
+import { describeSpecDetails } from "@/lib/server/specUtils";
 
 const ACTIVE_STATUSES = ["WAITING", "IN_PROGRESS", "ON_HOLD", "BLOCKED", "QC_PENDING", "AWAITING_APPROVAL", "REWORK_REQUIRED"];
 
 // A compact shape for a live job card on the floor: which order, what it is, who
 // is on it, and its state — enough for both the overview cards and the detail page.
+// satisfies, so a relation dropped from the schema fails the build here rather
+// than at runtime: excess-property checking does not reach a shared const.
 const floorJobInclude = {
   department: { select: { id: true, name: true, isQcStage: true } },
   stage: { select: { name: true } },
@@ -20,25 +24,30 @@ const floorJobInclude = {
         select: {
           salesOrder: {
             select: {
-              soNumber: true, seatType: true, headrestCount: true, hasArmrest: true,
+              soNumber: true,
               customer: { select: { name: true } },
-              material: { select: { name: true } },
-              design: { select: { name: true, category: true } },
-              color: { select: { name: true } },
-              vehicleBrand: { select: { name: true } },
-              vehicleModel: { select: { name: true, brand: { select: { name: true } } } },
+              // The ordered item and its answered spec columns — the generic,
+              // product-agnostic source of what is being built.
+              item: {
+                select: {
+                  name: true,
+                  group: { select: { name: true } },
+                  specValues: {
+                    include: {
+                      field: { select: { name: true, sortOrder: true, unitSuffix: true } },
+                      option: { select: { label: true } },
+                      valueItem: { select: { name: true, aliasName: true } },
+                    },
+                  },
+                },
+              },
             },
           },
           blueprintVersion: {
             select: {
               blueprint: {
                 select: {
-                  productVariant: {
-                    select: {
-                      product: { select: { name: true } },
-                      fitments: { select: { vehicleModel: { select: { name: true, brand: { select: { name: true } } } } }, take: 1 },
-                    },
-                  },
+                  item: { select: { name: true, group: { select: { name: true } } } },
                 },
               },
             },
@@ -47,12 +56,11 @@ const floorJobInclude = {
       },
     },
   },
-} as const;
+} as const satisfies Prisma.JobCardInclude;
 
 function shapeJob(jc: any) {
   const so = jc.workOrder?.productionPlan?.salesOrder;
-  const variant = jc.workOrder?.productionPlan?.blueprintVersion?.blueprint?.productVariant;
-  const fit = variant?.fitments?.[0];
+  const item = so?.item ?? jc.workOrder?.productionPlan?.blueprintVersion?.blueprint?.item;
   return {
     id: jc.id,
     status: jc.status,
@@ -65,15 +73,11 @@ function shapeJob(jc: any) {
     order: {
       soNumber: so?.soNumber ?? jc.workOrder?.woNumber ?? "—",
       customer: so?.customer?.name ?? null,
-      brand: so?.vehicleBrand?.name ?? fit?.vehicleModel?.brand?.name ?? null,
-      model: so?.vehicleModel?.name ?? fit?.vehicleModel?.name ?? null,
-      product: variant?.product?.name ?? null,
-      seatType: so?.seatType ?? null,
-      headrestCount: so?.headrestCount ?? null,
-      hasArmrest: so?.hasArmrest ?? false,
-      fabric: so?.material?.name ?? null,
-      design: so?.design ? `${so.design.category ? so.design.category + " " : ""}${so.design.name}` : null,
-      color: so?.color?.name ?? null,
+      // The item's category ("Seat Cover" / "Corrugated Box"), then its full name.
+      product: item?.group?.name ?? item?.name ?? null,
+      itemName: item?.name ?? null,
+      // Every answered spec, product-agnostic, in the group's column order.
+      specDetails: describeSpecDetails(item),
     },
   };
 }

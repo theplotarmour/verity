@@ -8,10 +8,13 @@ export async function getQCTemplates() {
   const session = await getUserSession()
   if (!session) throw new Error('Unauthorized')
 
-  return await prisma.qCTemplate.findMany({
+  return await prisma.checklistTemplate.findMany({
     where: { factoryId: session.factoryId, status: 'active' },
     include: {
-      products: { select: { id: true, name: true } },
+      ownerDepartment: { select: { id: true, name: true, isQcStage: true } },
+      // The categories that actually run this checklist. Without it the list
+      // page had nothing to read and every template claimed to be the default.
+      defaultForItemGroups: { select: { id: true, name: true }, orderBy: { name: "asc" } },
       sections: {
         orderBy: { sortOrder: 'asc' },
         include: {
@@ -25,22 +28,12 @@ export async function getQCTemplates() {
   })
 }
 
-// Products available to tag templates against (for the "Applies to products"
-// selector in the builder).
-export async function getTemplateProducts() {
-  const session = await getUserSession()
-  if (!session) throw new Error('Unauthorized')
-  return prisma.product.findMany({
-    where: { factoryId: session.factoryId },
-    select: { id: true, name: true, category: { select: { name: true } } },
-    orderBy: { name: 'asc' },
-  })
-}
-
 export async function saveQCTemplate(data: {
   id?: string
   name: string
   requiresVideo?: boolean
+  /** The single department this checklist belongs to. */
+  ownerDepartmentId?: string | null
   sections: Array<{
     id?: string
     title: string
@@ -57,13 +50,13 @@ export async function saveQCTemplate(data: {
       instructionsHinglish?: string
       requireImage: boolean
       requireRemarks: boolean
+      isRequired?: boolean
+      referenceImageUrl?: string | null
+      inputType?: string
+      placeholder?: string | null
       sortOrder: number
     }>
   }>
-  // Products this template applies to. Empty = the factory-wide default that
-  // covers any product with no product-specific template (e.g. mats get their
-  // own template, everything else falls back to the untagged default).
-  productIds?: string[]
 }) {
   const session = await getUserSession()
   if (!session) return { error: 'Unauthorized' }
@@ -71,27 +64,24 @@ export async function saveQCTemplate(data: {
 
   try {
     let templateId = data.id
-    const productRefs = (data.productIds ?? []).map((id) => ({ id }))
 
     if (templateId) {
-      // Update template name + product tags (set replaces the whole set)
-      await prisma.qCTemplate.update({
+      await prisma.checklistTemplate.update({
         where: { id: templateId },
         data: {
           name: data.name,
           ...(data.requiresVideo !== undefined ? { requiresVideo: data.requiresVideo } : {}),
-          ...(data.productIds ? { products: { set: productRefs } } : {}),
+          ...(data.ownerDepartmentId !== undefined ? { ownerDepartmentId: data.ownerDepartmentId || null } : {}),
         }
       })
     } else {
-      // Create new template
-      const newTpl = await prisma.qCTemplate.create({
+      const newTpl = await prisma.checklistTemplate.create({
         data: {
           factoryId,
           name: data.name,
           status: 'active',
           requiresVideo: data.requiresVideo ?? false,
-          ...(productRefs.length ? { products: { connect: productRefs } } : {}),
+          ownerDepartmentId: data.ownerDepartmentId || null,
         }
       })
       templateId = newTpl.id
@@ -167,6 +157,10 @@ export async function saveQCTemplate(data: {
               instructionsHinglish: cpData.instructionsHinglish || null,
               requireImage: cpData.requireImage,
               requireRemarks: cpData.requireRemarks,
+              isRequired: cpData.isRequired ?? true,
+              referenceImageUrl: cpData.referenceImageUrl || null,
+              inputType: cpData.inputType || "PASS_FAIL",
+              placeholder: cpData.placeholder || null,
               sortOrder: cpData.sortOrder
             }
           })
@@ -183,6 +177,10 @@ export async function saveQCTemplate(data: {
               instructionsHinglish: cpData.instructionsHinglish || null,
               requireImage: cpData.requireImage,
               requireRemarks: cpData.requireRemarks,
+              isRequired: cpData.isRequired ?? true,
+              referenceImageUrl: cpData.referenceImageUrl || null,
+              inputType: cpData.inputType || "PASS_FAIL",
+              placeholder: cpData.placeholder || null,
               sortOrder: cpData.sortOrder
             }
           })
@@ -204,7 +202,7 @@ export async function deleteQCTemplate(templateId: string) {
 
   try {
     // Soft delete template
-    await prisma.qCTemplate.update({
+    await prisma.checklistTemplate.update({
       where: { id: templateId },
       data: { status: 'deleted' }
     })
@@ -306,3 +304,96 @@ export async function deleteSectionAction(sectionId: string) {
     return { error: error.message || 'Failed to delete section' }
   }
 }
+
+/**
+ * What a checklist applies to.
+ *
+ * Both links already exist in the schema, in the direction that lets one
+ * checklist serve many things: ItemGroup.defaultChecklists and
+ * Department.templateId. So "Seat Cover QC" can cover every seat-cover
+ * subcategory and the QC department at once, rather than being locked to one.
+ */
+export async function getTemplateAssignments(templateId: string) {
+  const session = await getUserSession();
+  if (!session) throw new Error('Unauthorized');
+  const user = { factoryId: session.factoryId };
+
+  const [groups, departments] = await Promise.all([
+    // Any category, at any depth. This was restricted to producible subgroups,
+    // which decided on the owner's behalf what is worth inspecting — a bought-in
+    // fabric can need a goods-in check, and a root category is as legitimate a
+    // place to hang a checklist as a leaf.
+    prisma.itemGroup.findMany({
+      where: { factoryId: user.factoryId },
+      select: {
+        id: true,
+        name: true,
+        parent: { select: { name: true } },
+        // Only whether *this* template is among the category's checklists; a
+        // category legitimately belongs to several, one per department.
+        defaultChecklists: { where: { id: templateId }, select: { id: true } },
+      },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    }),
+    prisma.department.findMany({
+      where: { factoryId: user.factoryId, active: true },
+      select: { id: true, name: true, isQcStage: true },
+      orderBy: { sortOrder: "asc" },
+    }),
+  ]);
+
+  return {
+    groups: groups.map((g) => ({
+      id: g.id,
+      name: g.name,
+      parentName: g.parent?.name ?? null,
+      assigned: g.defaultChecklists.length > 0,
+      // Nothing is taken from anywhere any more: ticking a category here leaves
+      // its other departments' checklists alone.
+      takenBy: null,
+    })),
+    // Departments are no longer ticked per template: a checklist belongs to one
+    // department, chosen in the builder header.
+    departments: departments.map((d) => ({ id: d.id, name: d.name, isQcStage: d.isQcStage })),
+  };
+}
+
+/**
+ * Tick or untick one category on one checklist.
+ *
+ * Takes the template explicitly rather than a nullable id, because untick has to
+ * disconnect *this* template and leave the category's other departments' lists
+ * alone — the old single-column write is exactly what unmapped Cutting when
+ * Stitching was ticked.
+ */
+export async function setTemplateForItemGroup(
+  groupId: string,
+  templateId: string,
+  assigned: boolean
+) {
+  const session = await getUserSession();
+  if (!session) return { error: 'Unauthorized' };
+  const user = { factoryId: session.factoryId };
+  // connect/disconnect rather than overwriting a single column, so mapping
+  // "Seat Cover" to the Stitching checklist cannot unmap it from Cutting.
+  const group = await prisma.itemGroup.findFirst({
+    where: { id: groupId, factoryId: user.factoryId },
+    select: { id: true },
+  });
+  if (!group) return { error: 'Category not found' };
+  await prisma.itemGroup.update({
+    where: { id: group.id },
+    data: {
+      defaultChecklists: assigned
+        ? { connect: { id: templateId } }
+        : { disconnect: { id: templateId } },
+    },
+  });
+  // Existing items keep the checklist their blueprint was built with. Changing
+  // the category's default should not silently re-scope a job already in flight;
+  // Rebuild blueprint on the item is the deliberate way to pick it up.
+  revalidatePath("/owner/master-data");
+  revalidatePath("/owner/settings");
+  return { ok: true };
+}
+

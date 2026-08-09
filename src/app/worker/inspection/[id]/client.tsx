@@ -10,7 +10,6 @@ import { submitCheckpoints } from '@/server/actions/worker'
 import { QcVideoCapture } from '@/components/factory/QcVideoCapture'
 import { Button as SoftButton } from '@/components/ui/primitives'
 import { OrderSpecCard } from '@/components/factory/OrderSpecCard'
-import { BRAND_ACCENT } from "@/lib/brand";
 
 const getDB = async () => {
   return await openDB('factory-qc-db', 2, {
@@ -86,7 +85,7 @@ export default function InspectionClient({ batch, dict }: { batch: any, dict: an
 
   // Accent Color from Factory Settings
   const settings = (batch.factory?.settings as any) || {};
-  const accentColor = settings.themeColor || BRAND_ACCENT;
+  const accentColor = settings.themeColor || "#007AFF";
 
   // File capture elements
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -230,6 +229,8 @@ export default function InspectionClient({ batch, dict }: { batch: any, dict: an
   const alreadySubmitted = ["WAITING_QC", "REWORK_REQUIRED"].includes(batch.inspection?.status ?? "");
 
   const everyStepAnswered = checkpoints.every((cp: any) => {
+    // Optional checkpoints never block submission.
+    if (cp.isRequired === false) return true;
     const ans = answers[cp.id];
     if (!ans || ans.passFail === null || ans.passFail === undefined) return false;
     if (cp.requireImage && !ans.photo) return false;
@@ -307,7 +308,7 @@ export default function InspectionClient({ batch, dict }: { batch: any, dict: an
   const yesNoCheckpoints = activeCheckpoints.filter((cp: any) => !cp.requireImage);
 
   // Check if Yes/No sub-stage is completed
-  const yesNoCompleted = yesNoCheckpoints.every((cp: any) => answers[cp.id]?.passFail !== null);
+  const yesNoCompleted = yesNoCheckpoints.every((cp: any) => cp.isRequired === false || answers[cp.id]?.passFail != null);
 
   // Determine current active layout view inside section
   const showYesNoList = yesNoCheckpoints.length > 0 && !yesNoCompleted;
@@ -320,6 +321,7 @@ export default function InspectionClient({ batch, dict }: { batch: any, dict: an
 
   // Check if active section's all checkpoints are completed
   const activeSectionCompleted = activeCheckpoints.every((cp: any) => {
+    if (cp.isRequired === false) return true;
     const ans = answers[cp.id];
     if (!ans || ans.passFail === null) return false;
     if (cp.requireImage && !ans.photo) return false;
@@ -369,10 +371,8 @@ export default function InspectionClient({ batch, dict }: { batch: any, dict: an
             <ChevronLeft className="w-5 h-5 text-text-secondary dark:text-neutral-300" />
           </button>
           <div className="flex flex-col">
-            <span className="text-base font-bold font-display text-slate-950 dark:text-neutral-50 leading-none">
-              {batch.order?.vehicleBrand?.name 
-                ? `${batch.order.vehicleBrand.name} ${batch.order.vehicleModel?.name || ""}`
-                : `${batch.order?.productType?.name || "Order"} #${batch.order?.orderNumber || ""}`}
+            <span className="text-base font-bold font-display text-text-primary leading-none">
+              {batch.order?.itemName || `${batch.order?.productName || "Order"} #${batch.order?.orderNumber || ""}`}
             </span>
             <span className="text-[10px] text-text-secondary dark:text-neutral-400 font-medium mt-1 uppercase tracking-wider">
               {isSummaryPage ? (isHi ? 'विवरण समीक्षा' : 'Review Summary') : getSectionTitle(currentSection)}
@@ -575,6 +575,14 @@ export default function InspectionClient({ batch, dict }: { batch: any, dict: an
                             {getCheckpointInstructions(cp)}
                           </p>
                         )}
+                        {cp.isRequired === false && (
+                          <span className="mt-1 inline-block text-[9px] font-bold uppercase tracking-wider text-text-tertiary">Optional</span>
+                        )}
+                        {cp.referenceImageUrl && (
+                          /* Reference photo of the correct result, to compare against. */
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img src={cp.referenceImageUrl} alt="reference" className="mt-2 h-20 w-20 rounded-lg border border-border object-cover" />
+                        )}
                       </div>
 
                       {/* Pass / Fail Action Buttons */}
@@ -672,7 +680,7 @@ export default function InspectionClient({ batch, dict }: { batch: any, dict: an
                   {isHi ? 'कैमरा सत्यापन' : 'Camera Verification Step'}
                 </span>
                 
-                <h3 className="text-lg font-bold text-slate-950 dark:text-neutral-50 leading-tight mt-1 mb-2">
+                <h3 className="text-lg font-bold text-text-primary leading-tight mt-1 mb-2">
                   {getCheckpointName(currentCameraCp)}
                 </h3>
                 
@@ -690,9 +698,16 @@ export default function InspectionClient({ batch, dict }: { batch: any, dict: an
                 )}
                 
                 {(currentCameraCp.instructions || currentCameraCp.instructionsHi || currentCameraCp.instructionsHinglish) && (
-                  <p className="text-text-secondary dark:text-neutral-400 text-xs mb-5 font-medium leading-relaxed">
+                  <p className="text-text-secondary dark:text-neutral-400 text-xs mb-3 font-medium leading-relaxed">
                     {getCheckpointInstructions(currentCameraCp)}
                   </p>
+                )}
+                {currentCameraCp.referenceImageUrl && (
+                  <div className="mb-4">
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-text-tertiary mb-1">Reference</p>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={currentCameraCp.referenceImageUrl} alt="reference" className="h-28 w-28 rounded-xl border border-border object-cover" />
+                  </div>
                 )}
               </div>
 

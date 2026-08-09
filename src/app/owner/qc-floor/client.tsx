@@ -25,7 +25,7 @@ export function QCFloorClient({ inspections = [], workers = [], inspectors = [],
   }), [inspections, q]);
 
   const filteredPassports = useMemo(() => passports.filter((row: any) => {
-    const text = `${row.verificationCode ?? ""} ${row.inspection?.batch?.order?.orderNumber ?? ""} ${row.inspection?.batch?.order?.vehicleBrand?.name ?? ""} ${row.inspection?.batch?.order?.vehicleModel?.name ?? ""}`.toLowerCase();
+    const text = `${row.verificationCode ?? ""} ${row.inspection?.batch?.order?.orderNumber ?? ""} ${row.inspection?.batch?.order?.itemName ?? ""}`.toLowerCase();
     return text.includes(q);
   }), [passports, q]);
 
@@ -86,7 +86,7 @@ export function QCFloorClient({ inspections = [], workers = [], inspectors = [],
                       <Badge className="bg-surface-2 text-text-secondary">{row.verificationCode}</Badge>
                     </div>
                     <p className="mt-1 text-sm text-text-secondary">
-                      {row.inspection?.batch?.order?.vehicleBrand?.name} {row.inspection?.batch?.order?.vehicleModel?.name} · {new Date(row.createdAt).toLocaleDateString([], { day: "2-digit", month: "short", year: "numeric" })}
+                      {row.inspection?.batch?.order?.itemName || row.inspection?.batch?.order?.productName || row.inspection?.batch?.order?.orderNumber} · {new Date(row.createdAt).toLocaleDateString([], { day: "2-digit", month: "short", year: "numeric" })}
                     </p>
                   </div>
                 </div>
@@ -111,7 +111,7 @@ export function QCFloorClient({ inspections = [], workers = [], inspectors = [],
                   orderId={inspection.batch?.order?.id}
                   batchNumber={inspection.batch?.batchNumber || "N/A"}
                   orderNumber={inspection.batch?.order?.orderNumber || "N/A"}
-                  vehicleName={`${inspection.batch?.order?.vehicleBrand?.name || ""} ${inspection.batch?.order?.vehicleModel?.name || ""} ${inspection.batch?.order?.vehicleYear || ""}`}
+                  vehicleName={inspection.batch?.order?.itemName || inspection.batch?.order?.productName || ""}
                   quantity={inspection.batch?.quantity || 1}
                   workerName={inspection.batch?.order?.worker?.name}
                   workerAvatar={null}

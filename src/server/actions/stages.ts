@@ -8,7 +8,7 @@ import { createStoragePath } from "@/lib/storage/paths";
 import { jobCardInclude, toWorkerJob, jobCardBatchLabel } from "@/lib/server/jobCardAdapter";
 import { canAccessJobCard } from "@/lib/server/jobCardAccess";
 import { recordTimeline } from "@/lib/server/stages";
-import { receiveFinishedGoods } from "@/server/actions/inventory";
+import { receiveFinishedGoods } from "@/server/internal/stockMovements";
 import { publishChange } from "@/lib/server/live-bus";
 import { getSessionHomePath } from "@/lib/server/roleHome";
 
@@ -53,6 +53,75 @@ function revalidateStagePaths(factoryId?: string, actorId?: string) {
   if (factoryId) publishChange(factoryId, "STAGE", actorId);
 }
 
+/**
+ * Which checklist a stage card runs.
+ *
+ * A template is dedicated to one department and lists the product categories it
+ * covers, so the answer is the active template whose department matches this
+ * card and whose categories include the ordered item's own category (or an
+ * ancestor of it — a checklist hung on "Finished Good" covers every sheet under
+ * it). Falls back to the department's own pinned template, then to a
+ * category-agnostic template for that department, so existing setups keep
+ * resolving unchanged.
+ */
+async function resolveStageTemplateId(factoryId: string, jobCard: any): Promise<string | null> {
+  const departmentId: string | null = jobCard.departmentId ?? null;
+  const itemGroupId: string | null =
+    jobCard.workOrder?.productionPlan?.salesOrder?.item?.groupId ??
+    jobCard.workOrder?.productionPlan?.blueprintVersion?.blueprint?.item?.groupId ??
+    null;
+
+  if (departmentId && itemGroupId) {
+    // The item's category and every ancestor, so a checklist can be hung at any
+    // level of the tree.
+    const groups = await prisma.itemGroup.findMany({
+      where: { factoryId },
+      select: { id: true, parentId: true },
+    });
+    const byId = new Map(groups.map((g) => [g.id, g]));
+    const chain: string[] = [];
+    let cur = byId.get(itemGroupId);
+    let guard = groups.length + 1;
+    while (cur && guard-- > 0) {
+      chain.push(cur.id);
+      cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+    }
+
+    const matched = await prisma.checklistTemplate.findFirst({
+      where: {
+        factoryId,
+        status: "active",
+        ownerDepartmentId: departmentId,
+        defaultForItemGroups: { some: { id: { in: chain } } },
+      },
+      orderBy: { updatedAt: "desc" },
+      select: { id: true },
+    });
+    if (matched) return matched.id;
+  }
+
+  // Only a template that names no category at all is universal. A "Seat Cover"
+  // checklist with categories ticked must never reach a Mats order, and the old
+  // department pin is gone precisely because it let one leak that way.
+  if (departmentId) {
+    const universal = await prisma.checklistTemplate.findFirst({
+      where: {
+        factoryId,
+        status: "active",
+        ownerDepartmentId: departmentId,
+        defaultForItemGroups: { none: {} },
+      },
+      orderBy: { updatedAt: "desc" },
+      select: { id: true },
+    });
+    if (universal) return universal.id;
+  }
+
+  // Nothing matched: the worker sees no checklist, which is honest. Serving
+  // another category's checks would be worse than serving none.
+  return null;
+}
+
 // Full context for the worker stage screen: the job (legacy shape), its
 // stage, previous submissions (rework history) and sibling stage cards.
 export async function getStageJob(jobCardId: string) {
@@ -85,9 +154,14 @@ export async function getStageJob(jobCardId: string) {
   // A non-QC department can carry a checklist template the operator must clear to
   // complete the stage (the same builder QC uses). QC stages run the inspection
   // flow instead, so their template is never surfaced here.
-  const templateId = !stageForScreen?.isQcStage ? jobCard.department?.templateId : null;
+  const templateId = !stageForScreen?.isQcStage
+    ? await resolveStageTemplateId(session.factoryId, jobCard)
+    : null;
+  // The whole template runs here: it is already dedicated to this department
+  // (resolveStageTemplateId matched on that), so every section belongs to this
+  // stage. No per-section department mapping.
   const template = templateId
-    ? await prisma.qCTemplate.findFirst({
+    ? await prisma.checklistTemplate.findFirst({
         where: { id: templateId, factoryId: session.factoryId },
         include: {
           sections: {
@@ -191,6 +265,8 @@ export async function holdStage(jobCardId: string, reason?: string) {
 type ChecklistItemPayload = {
   checkpointId: string;
   ok?: boolean;
+  /** Typed answer for TEXT / NUMBER / MEASUREMENT checkpoints. */
+  value?: string;
   remarks?: string;
   images?: StageImagePayload[];
 };
@@ -202,13 +278,29 @@ export async function completeStage(jobCardId: string, payload: {
   materialNotes?: string;
   remarks?: string;
   checklist?: ChecklistItemPayload[];
+  /** Walkthrough clip, already uploaded to storage by the browser. */
+  video?: { url: string; path: string; durationSec?: number } | null;
 }) {
   const session = await getUserSession();
   if (!session || !canWorkStage(session.role)) return { error: "Unauthorized" };
 
   const jobCard = await prisma.jobCard.findFirst({
     where: { id: jobCardId, factoryId: session.factoryId },
-    include: { stage: true, department: true, workOrder: true },
+    include: {
+      stage: true,
+      department: true,
+      // The ordered item's category is half of the template resolution below.
+      workOrder: {
+        include: {
+          productionPlan: {
+            include: {
+              salesOrder: { select: { item: { select: { groupId: true } } } },
+              blueprintVersion: { include: { blueprint: { select: { item: { select: { groupId: true } } } } } },
+            },
+          },
+        },
+      },
+    },
   });
   if (!jobCard) return { error: "Job card not found" };
   if (!(await canAccessJobCard(session, jobCard))) return { error: "This job card isn't assigned to you." };
@@ -229,7 +321,9 @@ export async function completeStage(jobCardId: string, payload: {
   // If the department carries a checklist template, every checkpoint must be
   // cleared before the stage can complete — with per-checkpoint photo/remarks
   // when the checkpoint requires them (the same rules QC checkpoints use).
-  const templateId = jobCard.department?.templateId ?? null;
+  // Same resolution the worker screen used, so validation cannot demand a
+  // checklist different from the one they were shown.
+  const templateId = await resolveStageTemplateId(session.factoryId, jobCard);
   const checkpoints = templateId
     ? await prisma.checkpoint.findMany({
         where: { factoryId: session.factoryId, section: { templateId } },
@@ -239,13 +333,30 @@ export async function completeStage(jobCardId: string, payload: {
   const responseById = new Map((payload.checklist ?? []).map((c) => [c.checkpointId, c]));
   for (const cp of checkpoints) {
     const r = responseById.get(cp.id);
-    if (!r?.ok) return { error: `Checklist: "${cp.name}" is not marked done` };
-    if (cp.requireImage && !(r.images?.length)) {
+    // Optional checkpoints never block completion.
+    if ((cp as any).isRequired === false) continue;
+    // A typed checkpoint (Measurements, Material used...) is answered by its
+    // value; a pass/fail one by its tick.
+    if (((cp as any).inputType ?? "PASS_FAIL") === "PASS_FAIL") {
+      if (!r?.ok) return { error: `Checklist: "${cp.name}" is not marked done` };
+    } else if (!r?.value?.trim()) {
+      return { error: `Checklist: "${cp.name}" needs an answer` };
+    }
+    if (cp.requireImage && !(r?.images?.length)) {
       return { error: `Checklist: "${cp.name}" needs a photo` };
     }
-    if (cp.requireRemarks && !r.remarks?.trim()) {
+    if (cp.requireRemarks && !r?.remarks?.trim()) {
       return { error: `Checklist: "${cp.name}" needs a remark` };
     }
+  }
+
+  // A stage template can demand a walkthrough clip (e.g. Packing), the same way
+  // a QC template can.
+  const stageTemplate = templateId
+    ? await prisma.checklistTemplate.findFirst({ where: { id: templateId }, select: { requiresVideo: true } })
+    : null;
+  if (stageTemplate?.requiresVideo && !payload.video?.url) {
+    return { error: `${stageName(jobCard)} requires a walkthrough video` };
   }
 
   const uploadImages = async (images: StageImagePayload[] | undefined) => {
@@ -279,7 +390,9 @@ export async function completeStage(jobCardId: string, payload: {
         return {
           checkpointId: cp.id,
           name: cp.name,
+          inputType: (cp as any).inputType ?? "PASS_FAIL",
           ok: !!r?.ok,
+          value: r?.value?.trim() || null,
           remarks: r?.remarks?.trim() || null,
           images: await uploadImages(r?.images),
         };
@@ -297,6 +410,9 @@ export async function completeStage(jobCardId: string, payload: {
       materialNotes: payload.materialNotes?.trim() || null,
       remarks: payload.remarks?.trim() || null,
       checklist: checklistResolved ?? undefined,
+      videoUrl: payload.video?.url || null,
+      videoPath: payload.video?.path || null,
+      videoDurationSec: payload.video?.durationSec ?? null,
       outcome: "SUBMITTED",
     },
   });
@@ -417,18 +533,25 @@ async function advanceStageChain(
     });
   }, { timeout: 30000, maxWait: 10000 });
 
-  // Finished goods land in stock when the LAST stage completes (usually Packing).
+  // Finished goods land in stock when the LAST stage completes (usually Packing)
+  // — but stock production is not auto-warehoused. It surfaces on the Dispatch
+  // page instead, and the owner moves it to a warehouse/store/customer manually,
+  // which is what records the receipt. Customer orders still auto-receive.
   if (workOrderCompleted) {
     try {
       const plan = await prisma.productionPlan.findUnique({
         where: { id: jobCard.workOrder.productionPlanId },
-        include: { blueprintVersion: { include: { blueprint: true } } },
+        include: {
+          blueprintVersion: { include: { blueprint: { include: { item: true } } } },
+          salesOrder: { include: { customer: { select: { name: true } } } },
+        },
       });
-      if (plan) {
+      const isStockProduction = plan?.salesOrder?.customer?.name === "Stock Production";
+      if (plan && !isStockProduction) {
         await receiveFinishedGoods({
           factoryId,
           workOrderId: jobCard.workOrderId,
-          productVariantId: plan.blueprintVersion.blueprint.productVariantId,
+          itemId: plan.blueprintVersion.blueprint.itemId,
           quantity: jobCard.targetQty,
         });
       }

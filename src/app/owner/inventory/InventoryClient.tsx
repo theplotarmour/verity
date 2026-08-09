@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Plus, QrCode, Search, Loader2, X, ArrowUpRight, ArrowDownRight, ArrowLeftRight, SlidersHorizontal, Truck, Warehouse as WarehouseIcon, Store } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createStockEntry, adjustStock } from "@/server/actions/inventory";
+import { createLocation } from "@/server/actions/locations";
 import { ADJUSTMENT_TYPES } from "@/lib/inventory-constants";
 import { createDispatch } from "@/server/actions/dispatch";
 import { confirmPurchaseDelivery } from "@/server/actions/purchase";
@@ -14,11 +15,13 @@ import { Surface } from "@/components/design/Surface";
 import { Badge, Button, Input, Select, EmptyState } from "@/components/ui/primitives";
 import { useRouter } from "next/navigation";
 import dayjs from "dayjs";
+import { SpecCombobox } from "@/components/spec/SpecCombobox";
+import { ITEM_TYPE_LABELS } from "@/lib/item-constants";
 type Tab = "overview" | "raw" | "production" | "dispatch" | "warehouses" | "stores";
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "overview", label: "Overview" },
-  { id: "raw", label: "Raw Material" },
+  { id: "raw", label: "Stock" },
   { id: "production", label: "Production" },
   { id: "dispatch", label: "Dispatch" },
   { id: "warehouses", label: "Warehouses" },
@@ -33,7 +36,7 @@ const STOCK_MODAL_COPY: Record<Exclude<StockModalType, null>, { title: string; p
   TRANSFER: { title: "Transfer stock", pastTense: "Stock transferred", icon: ArrowLeftRight },
 };
 
-export default function InventoryClient({ overview, ledger, warehouses, materials, variants, dispatches, dispatchableOrders, pendingDeliveries = [], variance = [], batches = [], itemFormData = { items: [], categories: [] }, userRole }: any) {
+export default function InventoryClient({ overview, ledger, warehouses, materials, variants, stockableItems = [], dispatches, dispatchableOrders, pendingDeliveries = [], variance = [], batches = [], itemFormData = { items: [], categories: [] }, userRole }: any) {
   const router = useRouter();
   // Store managers only see store (finished-goods) inventory — no raw material,
   // production, dispatch or warehouse operations.
@@ -70,6 +73,28 @@ export default function InventoryClient({ overview, ledger, warehouses, material
     quantityChange: 1,
     batchNumber: "",
   });
+
+  // Stock is recorded against an ItemMaster row whatever its type; the old
+  // MATERIAL / PRODUCT toggle existed only because finished goods used to live
+  // in a different table.
+  const itemOptions = useMemo(
+    () =>
+      (stockableItems as any[]).map((i) => ({
+        id: i.id,
+        label: i.name,
+        sublabel: [i.itemCode, i.groupName].filter(Boolean).join(" · ") || null,
+        searchText: i.searchText as string,
+      })),
+    [stockableItems]
+  );
+  const selectedStockItem = useMemo(
+    () => (stockableItems as any[]).find((i) => i.id === formData.itemId) ?? null,
+    [stockableItems, formData.itemId]
+  );
+  const isRawSelected = selectedStockItem
+    ? ["RAW_MATERIAL", "CONSUMABLE", "PACKAGING"].includes(selectedStockItem.itemType)
+    : formData.itemType === "MATERIAL";
+
 
   // Manual stock adjustment modal
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
@@ -114,9 +139,9 @@ export default function InventoryClient({ overview, ledger, warehouses, material
     try {
       await createStockEntry({
         transactionType: stockModalType,
-        warehouseId: formData.itemType === "MATERIAL" ? factoryWarehouseId : formData.warehouseId,
-        materialId: formData.itemType === "MATERIAL" ? formData.itemId : undefined,
-        productVariantId: formData.itemType === "PRODUCT" ? formData.itemId : undefined,
+        warehouseId: isRawSelected ? factoryWarehouseId : formData.warehouseId,
+        // Always an ItemMaster id now — createStockEntry resolves it directly.
+        materialId: formData.itemId,
         batchNumber: formData.batchNumber || undefined,
         quantityChange: stockModalType === "ISSUE" ? -Math.abs(formData.quantityChange) : Math.abs(formData.quantityChange)
       });
@@ -181,7 +206,11 @@ export default function InventoryClient({ overview, ledger, warehouses, material
   const issuableBatches = (batches ?? []).filter(
     (b: any) => b.itemId === formData.itemId && b.remaining > 0 && b.stockStatus === "AVAILABLE"
   );
-  const rawRows = (overview?.rawMaterials ?? []).filter((m: any) => m.name.toLowerCase().includes(q) || m.sku.toLowerCase().includes(q));
+  const rawRows = (overview?.rawMaterials ?? []).filter((m: any) =>
+    [m.name, m.sku, m.itemCode, m.groupName, m.spec]
+      .filter(Boolean)
+      .some((v: string) => v.toLowerCase().includes(q))
+  );
   const reservationRows = (overview?.reservations ?? []).filter((r: any) => r.item?.name.toLowerCase().includes(q));
   const productionRows = (overview?.ongoingProductions ?? []).filter((p: any) =>
     p.woNumber.toLowerCase().includes(q) ||
@@ -239,7 +268,7 @@ export default function InventoryClient({ overview, ledger, warehouses, material
 
       {!storeOnly && (
       <div className="grid gap-4 md:grid-cols-4">
-        <StatCard label="Raw materials" value={String(stats.rawItems)} hint="Catalog items" />
+        <StatCard label="Stock items" value={String(stats.rawItems)} hint="Across all bought types" />
         <StatCard label="In production" value={String(stats.inProduction)} hint="Active issuances" />
         <StatCard label="Stocked lots" value={String(stats.stocked)} hint="Across locations" />
         <StatCard label="In transit" value={String(stats.inTransit)} hint="Being dispatched" />
@@ -309,7 +338,14 @@ export default function InventoryClient({ overview, ledger, warehouses, material
                       {s.lowStock.map((l: any) => (
                         <div key={l.id} className="flex items-center justify-between text-sm">
                           <span className="font-semibold text-text-primary">{l.name}</span>
-                          <span className="text-text-secondary">{l.netStock} / min {l.minStockLevel} {l.uom}</span>
+                          <span className="text-text-secondary">
+                            {l.netStock} / min {l.minStockLevel} {l.uom}
+                            {typeof l.secondaryQty === "number" && (
+                              <span className="ml-1 text-[11px] text-text-tertiary">
+                                ({Number(l.secondaryQty.toFixed(2))} {l.secondaryUOM})
+                              </span>
+                            )}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -330,7 +366,14 @@ export default function InventoryClient({ overview, ledger, warehouses, material
                           {val.map((v: any) => (
                             <tr key={v.id}>
                               <td className={`${td} font-semibold text-text-primary`}>{v.name}</td>
-                              <td className={`${td} text-right text-text-secondary`}>{v.netStock} {v.uom}</td>
+                              <td className={`${td} text-right text-text-secondary`}>
+                                {v.netStock} {v.uom}
+                                {typeof v.secondaryQty === "number" && (
+                                  <span className="block text-[10px] text-text-tertiary">
+                                    ({Number(v.secondaryQty.toFixed(2))} {v.secondaryUOM})
+                                  </span>
+                                )}
+                              </td>
                               <td className={`${td} text-right text-text-secondary`}>₹{v.rate.toFixed(2)}</td>
                               <td className={`${td} text-right font-semibold text-text-primary`}>{fmt(v.value)}</td>
                             </tr>
@@ -412,18 +455,29 @@ export default function InventoryClient({ overview, ledger, warehouses, material
           )}
 
           {activeTab === "raw" && (
-            rawRows.length === 0 ? <div className="p-10"><EmptyState title="No raw materials" description="Add materials in Master Data, then record receipts here." /></div> : (
+            rawRows.length === 0 ? <div className="p-10"><EmptyState title="No stock items" description="Add items in Master Data, then record receipts here." /></div> : (
               <table className="w-full border-collapse text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-surface"><tr className="border-b border-border">
-                  <th className={th}>Material</th><th className={th}>SKU</th><th className={th}>UOM</th><th className={`${th} text-right`}>Available</th><th className={th}>Status</th>
+                  <th className={th}>Item</th><th className={th}>Code</th><th className={th}>Group</th><th className={th}>Specification</th><th className={th}>UOM</th><th className={`${th} text-right`}>Available</th><th className={th}>Status</th>
                 </tr></thead>
                 <tbody className="divide-y divide-border/70">
                   {rawRows.map((m: any) => (
                     <tr key={m.id} className="hover:bg-surface-2/60 transition-colors">
                       <td className={`${td} font-semibold text-text-primary`}>{m.name}</td>
-                      <td className={`${td} font-mono text-xs text-text-secondary`}>{m.sku}</td>
+                      <td className={`${td} font-mono text-xs text-text-secondary`}>{m.itemCode || m.sku}</td>
+                      <td className={`${td} text-xs text-text-secondary`}>{m.groupName ?? "—"}</td>
+                      <td className={`${td} max-w-[22rem] truncate text-xs text-text-tertiary`} title={m.spec || undefined}>{m.spec || "—"}</td>
                       <td className={`${td} text-text-secondary`}>{m.defaultUOM}</td>
-                      <td className={`${td} text-right font-semibold ${m.netStock < 0 ? "text-danger" : "text-text-primary"}`}>{m.netStock}</td>
+                      <td className={`${td} text-right font-semibold ${m.netStock < 0 ? "text-danger" : "text-text-primary"}`}>
+                        {m.netStock}
+                        {/* Stock is held in the item's own unit; the second is
+                            how the floor counts it — 150 m is 3 rolls. */}
+                        {typeof m.secondaryQty === "number" && (
+                          <span className="ml-1 text-[11px] font-normal text-text-tertiary">
+                            ({Number(m.secondaryQty.toFixed(2))} {m.secondaryUOM})
+                          </span>
+                        )}
+                      </td>
                       <td className={td}>
                         {m.netStock <= m.minStockLevel
                           ? <Badge className="bg-danger-soft text-danger">Low stock</Badge>
@@ -478,7 +532,7 @@ export default function InventoryClient({ overview, ledger, warehouses, material
                           <td className={`${td} font-semibold text-text-primary`}>{r.item?.name}</td>
                           <td className={`${td} text-right font-semibold text-text-primary`}>{r.quantity}</td>
                           <td className={`${td} font-mono text-xs text-text-secondary`}>{r.workOrder?.woNumber ?? "—"}</td>
-                          <td className={`${td} text-text-secondary`}>{r.workOrder?.productionPlan?.blueprintVersion?.blueprint?.productVariant?.product?.name ?? "—"}</td>
+                          <td className={`${td} text-text-secondary`}>{r.workOrder?.productionPlan?.blueprintVersion?.blueprint?.item?.name ?? "—"}</td>
                           <td className={`${td} text-text-secondary`}>{dayjs(r.createdAt).format("MMM D, HH:mm")}</td>
                         </tr>
                       ))}
@@ -585,7 +639,7 @@ export default function InventoryClient({ overview, ledger, warehouses, material
         {stockModalType && (
           <Modal title={STOCK_MODAL_COPY[stockModalType].title} eyebrow="Inventory" onClose={() => setStockModalType(null)}>
             <form onSubmit={handleStockSubmit} className="space-y-4 p-6">
-              {formData.itemType === "MATERIAL" ? (
+              {isRawSelected ? (
                 // Raw materials always live in the fixed "Factory" location.
                 <Field label="Location">
                   <div className="flex h-10 items-center rounded-xl border border-border bg-surface-2 px-3 text-sm font-semibold text-text-secondary">
@@ -599,21 +653,24 @@ export default function InventoryClient({ overview, ledger, warehouses, material
                   </Select>
                 </Field>
               )}
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Item Type">
-                  <Select value={formData.itemType} onChange={(e) => setFormData({ ...formData, itemType: e.target.value, itemId: e.target.value === "MATERIAL" ? materials[0]?.id : variants[0]?.id })}>
-                    <option value="MATERIAL">Raw Material</option>
-                    <option value="PRODUCT">Finished Good</option>
-                  </Select>
-                </Field>
-                <Field label="Item">
-                  <Select value={formData.itemId} onChange={(e) => setFormData({ ...formData, itemId: e.target.value })} required>
-                    {formData.itemType === "MATERIAL"
-                      ? materials.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)
-                      : variants.map((v: any) => <option key={v.id} value={v.id}>{v.product.name} - {v.name}</option>)}
-                  </Select>
-                </Field>
-              </div>
+              {/* One list across every item type. The chosen item's own type
+                  decides how it is handled, so there is nothing to declare up
+                  front. */}
+              <Field label="Item">
+                <SpecCombobox
+                  options={itemOptions}
+                  value={formData.itemId || null}
+                  onChange={(id) => setFormData({ ...formData, itemId: id ?? "" })}
+                  placeholder="Search by name, code or group…"
+                  autoFocus
+                />
+                {selectedStockItem && (
+                  <p className="mt-1 text-[11px] text-text-tertiary">
+                    {ITEM_TYPE_LABELS[selectedStockItem.itemType as keyof typeof ITEM_TYPE_LABELS] ?? selectedStockItem.itemType}
+                    {selectedStockItem.groupName ? ` · ${selectedStockItem.groupName}` : ""} · {selectedStockItem.uom}
+                  </p>
+                )}
+              </Field>
               {stockModalType === "ISSUE" && issuableBatches.length > 0 && (
                 <Field label="Batch (oldest first)">
                   <Select value={formData.batchNumber ?? ""} onChange={(e) => setFormData({ ...formData, batchNumber: e.target.value })}>
@@ -781,17 +838,23 @@ function LocationCardGrid({ kind, warehouses, locationBalances, search, onOpen }
 
   if (cards.length === 0) {
     return (
-      <div className="p-10">
+      <div className="flex flex-col gap-4 p-5">
         <EmptyState
           title={`No ${kind === "STORE" ? "stores" : "warehouses"} yet`}
-          description={kind === "STORE" ? "Mark a location as a Store in Master Data, then deliver dispatches to it." : "Add a warehouse in Master Data to start tracking locations."}
+          description={
+            kind === "STORE"
+              ? "A store is somewhere finished orders get delivered to. Add one to dispatch against it."
+              : "A warehouse is where the factory keeps its own stock. Add one to start tracking it."
+          }
         />
+        <NewLocation kind={kind} />
       </div>
     );
   }
 
   return (
-    <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="flex flex-col gap-4 p-5">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {cards.map(({ warehouse, itemCount, totalQty }) => (
         <button
           key={warehouse.id}
@@ -812,7 +875,62 @@ function LocationCardGrid({ kind, warehouses, locationBalances, search, onOpen }
           </div>
         </button>
       ))}
+      </div>
+      <NewLocation kind={kind} />
     </div>
+  );
+}
+
+/**
+ * Adding a warehouse or a store.
+ *
+ * This lived on the Master Data Sheets page, which meant the only way to create
+ * the place stock sits was a spreadsheet three clicks away from the stock
+ * itself — and Inventory's empty state used to say "add a warehouse in Master
+ * Data", pointing at a screen that is now gone.
+ */
+function NewLocation({ kind }: { kind: "WAREHOUSE" | "STORE" }) {
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const label = kind === "STORE" ? "store" : "warehouse";
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    setError(null);
+    const result = await createLocation({ name, kind });
+    setSaving(false);
+    if ("error" in result && result.error) {
+      setError(result.error);
+      return;
+    }
+    setName("");
+    router.refresh();
+  }
+
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={kind === "STORE" ? "New store name" : "New warehouse name"}
+          aria-label={`New ${label} name`}
+          className="w-56 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text-primary outline-none transition focus:ring-1 focus:ring-brand"
+        />
+        <button
+          type="submit"
+          disabled={!name.trim() || saving}
+          className="rounded-xl bg-brand px-4 py-2 text-sm font-bold text-white transition disabled:opacity-50"
+        >
+          {saving ? "Adding…" : `Add ${label}`}
+        </button>
+      </div>
+      {error && <p className="text-sm text-danger">{error}</p>}
+    </form>
   );
 }
 
@@ -847,7 +965,14 @@ function LocationDetailModal({ locationId, warehouses, locationBalances, ledger,
                     <tr key={b.id}>
                       <td className={`${td} font-semibold text-text-primary`}>{b.itemName}</td>
                       <td className={`${td} font-mono text-xs text-text-secondary`}>{b.sku}</td>
-                      <td className={`${td} text-right font-semibold text-text-primary`}>{b.quantity}</td>
+                      <td className={`${td} text-right font-semibold text-text-primary`}>
+                        {b.quantity} {b.uom}
+                        {typeof b.secondaryQty === "number" && (
+                          <span className="block text-[10px] font-normal text-text-tertiary">
+                            ({Number(b.secondaryQty.toFixed(2))} {b.secondaryUOM})
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

@@ -8,7 +8,7 @@ export default function NotFound() {
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[var(--brand)]">
           Verity
         </p>
-        <h1 className="mt-3 font-display text-3xl font-bold tracking-[-0.05em] text-slate-950">
+        <h1 className="mt-3 font-display text-3xl font-bold tracking-[-0.05em] text-text-primary">
           Page not found
         </h1>
         <p className="mt-3 text-sm leading-6 text-text-secondary">

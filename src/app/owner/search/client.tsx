@@ -14,6 +14,8 @@ type SearchResults = {
   workers: any[];
   designs?: any[];
   materials?: any[];
+  /** Finished goods — the sellable catalogue. */
+  items?: any[];
   dispatches?: any[];
 };
 
@@ -31,6 +33,7 @@ export function SearchClient({
     results.workers.length > 0 ||
     (results.designs?.length ?? 0) > 0 ||
     (results.materials?.length ?? 0) > 0 ||
+    (results.items?.length ?? 0) > 0 ||
     (results.dispatches?.length ?? 0) > 0;
 
   return (
@@ -74,7 +77,7 @@ export function SearchClient({
                       <Badge variant="neutral">{titleCaseStatus(order.status)}</Badge>
                     </div>
                     <p className="mt-2 text-sm text-text-secondary">{order.customer?.name}</p>
-                    <p className="text-xs text-text-tertiary">{order.vehicleBrand?.name} {order.vehicleModel?.name}</p>
+                    <p className="text-xs text-text-tertiary">{order.itemName || order.item?.name || ""}</p>
                   </Link>
                 ))}
               </div>
@@ -155,6 +158,31 @@ export function SearchClient({
                     <p className="font-semibold text-text-primary">{design.name}</p>
                     <p className="mt-1 text-xs text-text-secondary uppercase tracking-wide">{design.category ?? "Uncategorised"}</p>
                   </div>
+                ))}
+              </div>
+            </Surface>
+          )}
+
+          {(results.items?.length ?? 0) > 0 && (
+            <Surface className="p-5">
+              <div className="flex items-center gap-2 border-b border-border pb-4 mb-4">
+                <Factory className="h-5 w-5 text-[var(--brand)]" />
+                <h2 className="text-[15px] font-semibold text-text-primary">Finished Goods</h2>
+                <Badge variant="neutral" className="ml-2">{results.items!.length}</Badge>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {results.items!.map((it) => (
+                  <Link
+                    key={it.id}
+                    href={`/owner/settings/master-data/item/${it.id}`}
+                    className="block rounded-[18px] border border-border bg-surface-2 p-4 transition hover:border-brand/30 hover:bg-background"
+                  >
+                    <p className="font-semibold text-text-primary">{it.name}</p>
+                    <p className="mt-1 font-mono text-xs text-text-tertiary">{it.itemCode}</p>
+                    {it.status === "DRAFT" && (
+                      <Badge variant="warning" className="mt-2">Draft</Badge>
+                    )}
+                  </Link>
                 ))}
               </div>
             </Surface>

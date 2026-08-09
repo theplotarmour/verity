@@ -17,28 +17,22 @@ import {
   Sparkles,
   Users,
   CircleCheckBig,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { Badge, Button, Input } from "@/components/ui/primitives";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { Settings, Shield, Plus , Package, ShoppingCart, Wrench, FlaskConical, Database } from "lucide-react";
+import { Settings, Shield, Plus , Package, ShoppingCart, Wrench, FlaskConical, Database, Building2 } from "lucide-react";
 import { SystemRole } from "@prisma/client";
 import { can, Permission, type PermissionMatrix } from "@/lib/permissions";
 import { InstallPromptBanner } from "./InstallPromptBanner";
-import { BRAND_ACCENT } from "@/lib/brand";
-import type { ModuleKey } from "@/platform/modules/registry";
 
 type NavItem = {
   label: string;
   href: string;
   icon: React.ReactNode;
   permission: Permission;
-  /**
-   * The module that owns this destination. Hidden unless the org is entitled.
-   * Nav gating is an affordance only — the page and its server actions must
-   * check entitlement too, since hiding a link does not protect a route.
-   */
-  module: ModuleKey;
 };
 
 type NavGroup = {
@@ -50,24 +44,24 @@ const navGroups: NavGroup[] = [
   {
     title: "Overview",
     items: [
-      { label: "Dashboard", href: "/owner/dashboard", icon: <Home className="h-4.5 w-4.5" />, permission: "VIEW_DASHBOARD", module: "core" },
+      { label: "Dashboard", href: "/owner/dashboard", icon: <Home className="h-4.5 w-4.5" />, permission: "VIEW_DASHBOARD" },
     ]
   },
   {
     title: "Operations",
     items: [
-      { label: "Inventory", href: "/owner/inventory", icon: <Package className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", module: "inventory" },
-      { label: "Purchase", href: "/owner/purchase", icon: <ShoppingCart className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", module: "procurement" },
-      { label: "Order Taking", href: "/owner/order-taking", icon: <ClipboardList className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", module: "sales" },
-      { label: "Production", href: "/owner/production", icon: <Wrench className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", module: "manufacturing" },
-      { label: "Logistics", href: "/owner/logistics", icon: <Truck className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", module: "sales" },
+      { label: "Inventory", href: "/owner/inventory", icon: <Package className="h-4.5 w-4.5" />, permission: "CREATE_ORDER" },
+      { label: "Purchase", href: "/owner/purchase", icon: <ShoppingCart className="h-4.5 w-4.5" />, permission: "CREATE_ORDER" },
+      { label: "Order Taking", href: "/owner/order-taking", icon: <ClipboardList className="h-4.5 w-4.5" />, permission: "CREATE_ORDER" },
+      { label: "Production", href: "/owner/production", icon: <Wrench className="h-4.5 w-4.5" />, permission: "CREATE_ORDER" },
+      { label: "Logistics", href: "/owner/logistics", icon: <Truck className="h-4.5 w-4.5" />, permission: "CREATE_ORDER" },
     ]
   },
   {
     title: "Quality",
     items: [
-      { label: "Floor", href: "/owner/floor", icon: <FlaskConical className="h-4.5 w-4.5" />, permission: "QC_QUEUE", module: "quality" },
-      { label: "Reports", href: "/owner/reports", icon: <CircleCheckBig className="h-4.5 w-4.5" />, permission: "VIEW_REPORTS", module: "quality" },
+      { label: "Floor", href: "/owner/floor", icon: <FlaskConical className="h-4.5 w-4.5" />, permission: "QC_QUEUE" },
+      { label: "Reports", href: "/owner/reports", icon: <CircleCheckBig className="h-4.5 w-4.5" />, permission: "VIEW_REPORTS" },
     ]
   },
 ];
@@ -75,10 +69,13 @@ const navGroups: NavGroup[] = [
 // Config-style destinations pinned to the top bar (next to the theme switch)
 // instead of the sidebar.
 const topbarItems: NavItem[] = [
-  { label: "Master Data", href: "/owner/settings/master-data", icon: <Database className="h-4 w-4" />, permission: "ACCESS_MASTER_DATA", module: "core" },
-  { label: "Team", href: "/owner/team", icon: <Users className="h-4 w-4" />, permission: "MANAGE_TEAM", module: "core" },
-  { label: "Departments", href: "/owner/departments", icon: <Factory className="h-4 w-4" />, permission: "MANAGE_TEAM", module: "core" },
-  { label: "Settings", href: "/owner/settings", icon: <Settings className="h-4 w-4" />, permission: "ACCESS_SETTINGS", module: "core" },
+  { label: "Master Data", href: "/owner/master-data", icon: <Database className="h-4 w-4" />, permission: "ACCESS_MASTER_DATA" },
+  // Customers are counterparties, not master data. They sit here beside Team
+  // and Departments — the other things a factory keeps but does not make.
+  { label: "Customers", href: "/owner/customers", icon: <Building2 className="h-4 w-4" />, permission: "CREATE_ORDER" },
+  { label: "Team", href: "/owner/team", icon: <Users className="h-4 w-4" />, permission: "MANAGE_TEAM" },
+  { label: "Departments", href: "/owner/departments", icon: <Factory className="h-4 w-4" />, permission: "MANAGE_TEAM" },
+  { label: "Settings", href: "/owner/settings", icon: <Settings className="h-4 w-4" />, permission: "ACCESS_SETTINGS" },
 ];
 
 // Flat list for active item detection (sidebar + topbar destinations)
@@ -99,7 +96,6 @@ export function OwnerShell({
   themeColor,
   userRole = "OWNER" as SystemRole,
   permissionMatrix,
-  entitledModules,
   children,
 }: {
   factoryName: string;
@@ -108,17 +104,25 @@ export function OwnerShell({
   themeColor?: string;
   userRole?: SystemRole;
   permissionMatrix?: PermissionMatrix;
-  /** Modules the org is entitled to, resolved server-side in the layout. */
-  entitledModules?: ModuleKey[];
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Undefined means "not yet wired" rather than "nothing entitled", so an
-  // unpassed prop must not blank the whole navigation.
-  const moduleAllowed = (m: ModuleKey) => entitledModules === undefined || entitledModules.includes(m);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Collapsing is the owner's call, remembered between visits. Below xl the
+  // sidebar is icon-only anyway; this is about reclaiming the 260px on a wide
+  // screen when the sheet in the middle is what matters.
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    setCollapsed(window.localStorage.getItem("verity.sidebarCollapsed") === "1");
+  }, []);
+  const toggleCollapsed = () =>
+    setCollapsed((was) => {
+      const next = !was;
+      window.localStorage.setItem("verity.sidebarCollapsed", next ? "1" : "0");
+      return next;
+    });
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -169,7 +173,7 @@ export function OwnerShell({
 
   return (
     <>
-      <InstallPromptBanner accentColor={themeColor || BRAND_ACCENT} />
+      <InstallPromptBanner accentColor={themeColor || "#007AFF"} />
       {themeColor && (
         <style dangerouslySetInnerHTML={{ __html: `
           :root {
@@ -196,8 +200,14 @@ export function OwnerShell({
         <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,87,255,0.08),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(0,182,122,0.06),transparent_24%)] dark:opacity-40" />
         
         {/* Sidebar */}
-        <aside className="w-[80px] xl:w-[260px] shrink-0 border-r border-border bg-[rgba(255,255,255,0.84)] dark:bg-[rgba(10,10,10,0.84)] backdrop-blur-xl flex flex-col min-w-0">
-          <div className="flex h-16 items-center justify-center xl:justify-start gap-3 border-b border-border px-5 shrink-0">
+        <aside className={cn(
+          "w-[80px] shrink-0 border-r border-border bg-[rgba(255,255,255,0.84)] dark:bg-[rgba(10,10,10,0.84)] backdrop-blur-xl flex flex-col min-w-0 transition-[width] duration-200",
+          !collapsed && "xl:w-[260px]"
+        )}>
+          <div className={cn(
+            "flex h-16 items-center gap-3 border-b border-border px-5 shrink-0",
+            collapsed ? "justify-center" : "justify-center xl:justify-start"
+          )}>
             <Link href="/owner/dashboard" className="flex items-center gap-3 min-w-0">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--brand)] text-white overflow-hidden">
                 {factoryLogo ? (
@@ -206,7 +216,7 @@ export function OwnerShell({
                   <Factory className="h-4 w-4" />
                 )}
               </div>
-              <div className="hidden xl:block min-w-0">
+              <div className={cn("min-w-0", collapsed ? "hidden" : "hidden xl:block")}>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-text-tertiary truncate">
                   Verity
                 </p>
@@ -214,6 +224,28 @@ export function OwnerShell({
               </div>
             </Link>
           </div>
+
+          {/* Only offered where it changes anything: under xl the sidebar is
+              already icon-only, so a toggle there would appear to do nothing. */}
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            className={cn(
+              "hidden xl:flex items-center gap-2 border-b border-border px-3 py-2 text-[11px] font-semibold text-text-tertiary transition hover:bg-surface-2/80 hover:text-text-primary",
+              collapsed ? "justify-center" : "justify-start"
+            )}
+          >
+            {collapsed ? (
+              <PanelLeftOpen className="h-4 w-4 shrink-0" />
+            ) : (
+              <>
+                <PanelLeftClose className="h-4 w-4 shrink-0" />
+                <span>Collapse</span>
+              </>
+            )}
+          </button>
 
           <div className="flex-1 overflow-y-auto px-3 xl:px-4 py-4 space-y-4">
             {navGroups.map((group) => {
@@ -223,13 +255,12 @@ export function OwnerShell({
               const storeManagerAllowed = ["/owner/order-taking", "/owner/dashboard", "/owner/inventory"];
               const visible = group.items.filter(item =>
                 can(userRole, item.permission, permissionMatrix) &&
-                moduleAllowed(item.module) &&
                 (userRole === "STORE_MANAGER" ? storeManagerAllowed.includes(item.href) : item.href !== "/owner/order-taking"));
               if (visible.length === 0) return null;
               return (
-                <SidebarGroup key={group.title} title={group.title}>
+                <SidebarGroup key={group.title} title={group.title} collapsed={collapsed}>
                   {visible.map((item) => (
-                    <SidebarLink key={item.href} item={item} active={pathname === item.href || pathname.startsWith(`${item.href}/`)} />
+                    <SidebarLink key={item.href} item={item} collapsed={collapsed} active={pathname === item.href || pathname.startsWith(`${item.href}/`)} />
                   ))}
                 </SidebarGroup>
               );
@@ -237,22 +268,22 @@ export function OwnerShell({
           </div>
 
           <div className="border-t border-border p-3 xl:p-4 shrink-0 mt-auto">
-            <div className="hidden xl:block text-center mb-4">
+            <div className={cn("text-center mb-4", collapsed ? "hidden" : "hidden xl:block")}>
               <p className="text-[10px] font-semibold text-text-tertiary tracking-[0.05em]">Powered by</p>
               <p className="text-xs font-bold tracking-widest text-[var(--brand)] mt-0.5">Verity</p>
             </div>
             <div className="rounded-[16px] border border-border bg-surface-2 p-3 xl:p-4 min-w-0">
-              <p className="hidden xl:block text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary truncate">Session</p>
+              <p className={cn("text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary truncate", collapsed ? "hidden" : "hidden xl:block")}>Session</p>
               <p className="mt-1 text-xs font-semibold text-text-primary truncate text-center xl:text-left">{userName}</p>
               <div className="mt-3 flex items-center justify-center xl:justify-between gap-2">
-                <Badge className="hidden xl:inline-flex bg-success-soft text-success">LIVE</Badge>
+                <Badge className={cn("bg-success-soft text-success", collapsed ? "hidden" : "hidden xl:inline-flex")}>LIVE</Badge>
                 <button
                   type="button"
                   onClick={handleLogout}
                   className="flex h-8 w-8 xl:w-auto items-center justify-center gap-2 rounded-lg border border-[var(--brand)]/30 bg-transparent xl:px-2.5 text-xs font-semibold text-[var(--brand)] transition-all hover:bg-[var(--brand)]/5 hover:border-[var(--brand)]/50"
                 >
                   <LogOut className="h-3.5 w-3.5" />
-                  <span className="hidden xl:inline">Logout</span>
+                  <span className={cn(collapsed ? "hidden" : "hidden xl:inline")}>Logout</span>
                 </button>
               </div>
             </div>
@@ -303,8 +334,17 @@ export function OwnerShell({
               {/* Config destinations (moved off the sidebar): Master Data, Team,
                   Departments, Settings — permission-gated icon buttons. */}
               <div className="flex items-center gap-1 pr-1">
+                {can(userRole, "ACCESS_MASTER_DATA", permissionMatrix) && (
+                  <Link
+                    href="/owner/master-data?add=1"
+                    className="mr-1 hidden h-8.5 items-center gap-1.5 rounded-full bg-[var(--brand)] px-3 text-[11px] font-bold text-white shadow-sm transition hover:opacity-90 lg:flex"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add Master Data
+                  </Link>
+                )}
                 {topbarItems
-                  .filter((item) => can(userRole, item.permission, permissionMatrix) && moduleAllowed(item.module))
+                  .filter((item) => can(userRole, item.permission, permissionMatrix))
                   .map((item) => {
                     const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                     return (
@@ -451,7 +491,7 @@ export function OwnerShell({
                   isActive ? "text-[var(--brand)]" : "text-text-secondary"
                 )}
               >
-                <div className={cn("p-1 rounded-xl", isActive && "bg-[var(--brand-soft)]")}>
+                <div className={cn("p-1.5 rounded-xl", isActive && "bg-[var(--brand-soft)]")}>
                   {item.icon}
                 </div>
                 <span className="text-[9px] font-semibold mt-0.5 tracking-wide">{item.label}</span>
@@ -468,13 +508,18 @@ export function OwnerShell({
 function SidebarGroup({
   title,
   children,
+  collapsed = false,
 }: {
   title: string;
   children: React.ReactNode;
+  collapsed?: boolean;
 }) {
   return (
     <div>
-      <p className="hidden xl:block px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-text-tertiary">
+      <p className={cn(
+        "px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-text-tertiary",
+        collapsed ? "hidden" : "hidden xl:block"
+      )}>
         {title}
       </p>
       <div className="space-y-1">{children}</div>
@@ -486,17 +531,23 @@ function SidebarLink({
   item,
   active,
   onClick,
+  collapsed = false,
 }: {
   item: NavItem;
   active: boolean;
   onClick?: () => void;
+  collapsed?: boolean;
 }) {
   return (
     <Link
       href={item.href}
       onClick={onClick}
+      // The label is the only thing that goes; the icon keeps its hit area, and
+      // the title attribute carries the name for a collapsed rail.
+      title={collapsed ? item.label : undefined}
       className={cn(
-        "flex items-center justify-center xl:justify-start gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition-all duration-200",
+        "flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
+        collapsed ? "justify-center" : "justify-center xl:justify-start",
         active
           ? "bg-[var(--brand)]/10 dark:bg-[var(--brand)]/15 text-[var(--brand)]"
           : "text-text-secondary hover:bg-surface-2/80 hover:text-text-primary dark:hover:bg-white/5",
@@ -510,7 +561,7 @@ function SidebarLink({
       )}>
         {item.icon}
       </span>
-      <span className="hidden xl:inline">{item.label}</span>
+      <span className={cn(collapsed ? "hidden" : "hidden xl:inline")}>{item.label}</span>
     </Link>
   );
 }

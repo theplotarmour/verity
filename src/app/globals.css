@@ -9,10 +9,8 @@
   --surface: #FFFFFF;
   --surface-secondary: #E5E5EA;
   --border: rgba(0, 0, 0, 0.08);
-  /* Verity indigo. Deliberately not green or red — those are load-bearing
-     pass/fail semantics everywhere in QC, so the brand stays out of them. */
-  --accent: #4C3FE4;
-  --accent-soft: rgba(76, 63, 228, 0.12);
+  --accent: #007AFF;
+  --accent-soft: rgba(0, 122, 255, 0.12);
   --accent-foreground: #FFFFFF;
 
   /* legacy compatibility aliases */
@@ -68,9 +66,9 @@
   --color-text-secondary: var(--text-secondary);
   --color-text-tertiary: var(--text-tertiary);
 
-  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-sans: var(--font-inter), var(--font-noto-sans-devanagari), -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-display: var(--font-inter), var(--font-noto-sans-devanagari), -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --font-hindi: var(--font-noto-sans-devanagari), ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -81,9 +79,8 @@
   --surface: #1C1C1E;
   --surface-secondary: #2C2C2E;
   --border: rgba(255, 255, 255, 0.08);
-  /* Lifted on dark so white label text still clears 4.5:1 on the accent fill. */
-  --accent: #6D5AF5;
-  --accent-soft: rgba(109, 90, 245, 0.16);
+  --accent: #007AFF;
+  --accent-soft: rgba(0, 122, 255, 0.15);
   --accent-foreground: #FFFFFF;
 
   --brand: var(--accent);
@@ -105,6 +102,16 @@
 }
 
 /* Base styles */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
 html,
 body {
   font-family: var(--font-sans);
@@ -114,7 +121,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: "cv11" 1;
   background-image:
-    radial-gradient(circle at top left, rgba(76, 63, 228, 0.03), transparent 26%),
+    radial-gradient(circle at top left, rgba(230, 0, 0, 0.02), transparent 26%),
     radial-gradient(circle at bottom right, rgba(0, 0, 0, 0.03), transparent 24%);
   /* Nothing should scroll the page sideways on a phone. Wide content (tables,
      label sheets) scrolls inside its own container instead. */

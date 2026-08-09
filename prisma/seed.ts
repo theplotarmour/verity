@@ -1,4 +1,5 @@
-import { PrismaClient, ItemType } from "@prisma/client";
+import { PrismaClient, ItemType, FieldType, SpecFieldKind, SpecRefTarget } from "@prisma/client";
+import { createDefaultMasterData } from "../src/lib/master-data/defaults";
 import { createHash } from "node:crypto";
 
 const prisma = new PrismaClient();
@@ -6,7 +7,7 @@ const prisma = new PrismaClient();
 // PINs are factory-salted and environment-independent (must match
 // src/lib/server/hash.ts hashPin)
 function hashPin(pin: string, factoryId: string) {
-  return createHash("sha256").update(`verity:${factoryId}:${pin}`).digest("hex");
+  return createHash("sha256").update(`veda:${factoryId}:${pin}`).digest("hex");
 }
 
 // Per-type item codes (RM-00001, FG-00001...) generated in-seed.
@@ -20,16 +21,42 @@ function nextCode(type: string) {
   return `${CODE_PREFIX[type]}-${String(codeCounters[type]).padStart(5, "0")}`;
 }
 
+export async function seedItemGroups(factoryId: string) {
+  return createDefaultMasterData(prisma, factoryId);
+}
+
+type BlueprintSeed = {
+  root: string;
+  name: string;
+  shortCode: string;
+  nameTemplate: string;
+  codeTemplate: string;
+  capabilities?: Partial<{
+    isProducible: boolean;
+    isPurchasable: boolean;
+    isSalable: boolean;
+    hasBOM: boolean;
+    hasQC: boolean;
+    hasRouting: boolean;
+    hasCAD: boolean;
+  }>;
+  fields: Array<{
+    name: string;
+    key: string;
+    kind: SpecFieldKind;
+    valueType?: FieldType | null;
+    unitSuffix?: string | null;
+    refTarget?: SpecRefTarget | null;
+    options?: Array<{ label: string; shortCode?: string | null }>;
+  }>;
+};
+
 async function main() {
   console.log("Seeding Carxen client-trial workspace...");
 
   const factoryId = "fac_demo";
   const organizationId = "org_demo";
 
-  // The seed cannot import @/platform/tenancy/provision (it is server-only and
-  // runs outside Next), so the same provisioning shape is inlined here. Keep
-  // the two in step: an Org, a Factory inside it, seeded system Roles with
-  // grants, and module entitlements.
   await prisma.organization.upsert({
     where: { id: organizationId },
     update: {},
@@ -42,7 +69,6 @@ async function main() {
     create: { id: factoryId, organizationId, name: "Carxen", slug: "carxen", logoUrl: null },
   });
 
-  // Carxen runs the automotive vertical on top of the horizontal defaults.
   const seededModules = [
     "core", "inventory", "manufacturing", "quality",
     "procurement", "sales", "hr", "automotive",
@@ -89,7 +115,7 @@ async function main() {
         organizationId,
         name: ROLE_LABELS[archetype],
         description: "Built-in role. Rename or copy it; it cannot be deleted.",
-        systemRole: archetype as never,
+        systemRole: archetype as any,
         isSystem: true,
         permissions: { create: grants.map((key) => ({ key })) },
       },
@@ -97,20 +123,164 @@ async function main() {
     roleIdByArchetype[archetype] = id;
   }
 
-  // ==========================================
-  // QC TEMPLATE (attached to the QC department)
-  // ==========================================
-  const template = await prisma.qCTemplate.create({
-    data: {
-      factoryId: factory.id,
-      name: "Car Seat Cover Quality Checks",
-      version: "1.0",
-      isLatest: true,
-      status: "active",
-    },
+  // Ensure default root categories are seeded
+  await seedItemGroups(factory.id);
+
+  // 1. Fetch default roots
+  const roots = await prisma.itemGroup.findMany({ where: { factoryId: factory.id, parentId: null } });
+  const rootByName = new Map(roots.map((g) => [g.name, g]));
+
+  const designGroup = rootByName.get("Design");
+  const colourGroup = rootByName.get("Colour");
+  const rawMaterialRoot = rootByName.get("Raw Material");
+  const finishedGoodRoot = rootByName.get("Finished Good");
+  const semiFinishedRoot = rootByName.get("Semi-Finished");
+  const consumableRoot = rootByName.get("Consumable");
+  const packagingRoot = rootByName.get("Packaging");
+
+  if (!designGroup || !colourGroup || !rawMaterialRoot || !finishedGoodRoot || !semiFinishedRoot || !consumableRoot || !packagingRoot) {
+    throw new Error("Required root item groups not found");
+  }
+
+  // 2. Seed nested vehicle subcategories under a root "Vehicle"
+  const vehicleGroup = await prisma.itemGroup.create({
+    data: { factoryId: factory.id, name: "Vehicle", itemType: "SERVICE", bomMode: "INGREDIENTS", shortCode: "VEH", isSheet: true, sortOrder: 9 },
   });
-  const qcSection = await prisma.templateSection.create({
-    data: { factoryId: factory.id, templateId: template.id, title: "Standard Stitching & Visual Inspections", sortOrder: 1 },
+
+  const brandGroup = await prisma.itemGroup.create({
+    data: { factoryId: factory.id, parentId: vehicleGroup.id, name: "Brand", itemType: "SERVICE", bomMode: "INGREDIENTS", shortCode: "BRD", isSheet: true, sortOrder: 0 },
+  });
+
+  const modelGroup = await prisma.itemGroup.create({
+    data: { factoryId: factory.id, parentId: brandGroup.id, name: "Model", itemType: "SERVICE", bomMode: "INGREDIENTS", shortCode: "MDL", isSheet: true, sortOrder: 0 },
+  });
+  const modelBrandField = await prisma.specField.create({
+    data: { factoryId: factory.id, groupId: modelGroup.id, name: "Brand", key: "brand", kind: "REFERENCE", refTarget: "ITEM_GROUP", targetGroupId: brandGroup.id, sortOrder: 0 },
+  });
+
+  const genGroup = await prisma.itemGroup.create({
+    data: { factoryId: factory.id, parentId: modelGroup.id, name: "Generation", itemType: "SERVICE", bomMode: "INGREDIENTS", shortCode: "GEN", isSheet: true, sortOrder: 0 },
+  });
+  const genBrandField = await prisma.specField.create({
+    data: { factoryId: factory.id, groupId: genGroup.id, name: "Brand", key: "brand", kind: "REFERENCE", refTarget: "ITEM_GROUP", targetGroupId: brandGroup.id, sortOrder: 0 },
+  });
+  const genModelField = await prisma.specField.create({
+    data: { factoryId: factory.id, groupId: genGroup.id, name: "Model", key: "model", kind: "REFERENCE", refTarget: "ITEM_GROUP", targetGroupId: modelGroup.id, sortOrder: 1 },
+  });
+
+  const carGroup = await prisma.itemGroup.create({
+    data: { factoryId: factory.id, parentId: genGroup.id, name: "Car", itemType: "SERVICE", bomMode: "INGREDIENTS", shortCode: "CAR", isSheet: true, sortOrder: 0 },
+  });
+  const carBrandField = await prisma.specField.create({
+    data: { factoryId: factory.id, groupId: carGroup.id, name: "Brand", key: "brand", kind: "REFERENCE", refTarget: "ITEM_GROUP", targetGroupId: brandGroup.id, sortOrder: 0 },
+  });
+  const carModelField = await prisma.specField.create({
+    data: { factoryId: factory.id, groupId: carGroup.id, name: "Model", key: "model", kind: "REFERENCE", refTarget: "ITEM_GROUP", targetGroupId: modelGroup.id, sortOrder: 1 },
+  });
+  const carGenField = await prisma.specField.create({
+    data: { factoryId: factory.id, groupId: carGroup.id, name: "Generation", key: "generation", kind: "REFERENCE", refTarget: "ITEM_GROUP", targetGroupId: genGroup.id, sortOrder: 2 },
+  });
+
+  // 3. Seed vehicle item records
+  const brandHonda = await prisma.itemMaster.create({
+    data: { factoryId: factory.id, groupId: brandGroup.id, name: "Honda", sku: "VEH-BRD-HONDA", status: "ACTIVE", itemType: "SERVICE", defaultUOM: "PCS" }
+  });
+  const brandHyundai = await prisma.itemMaster.create({
+    data: { factoryId: factory.id, groupId: brandGroup.id, name: "Hyundai", sku: "VEH-BRD-HYUNDAI", status: "ACTIVE", itemType: "SERVICE", defaultUOM: "PCS" }
+  });
+  const brandToyota = await prisma.itemMaster.create({
+    data: { factoryId: factory.id, groupId: brandGroup.id, name: "Toyota", sku: "VEH-BRD-TOYOTA", status: "ACTIVE", itemType: "SERVICE", defaultUOM: "PCS" }
+  });
+
+  const modelCity = await prisma.itemMaster.create({
+    data: {
+      factoryId: factory.id, groupId: modelGroup.id, name: "City", sku: "VEH-MDL-CITY", status: "ACTIVE", itemType: "SERVICE", defaultUOM: "PCS",
+      specValues: { create: [{ fieldId: modelBrandField.id, valueItemId: brandHonda.id, factoryId: factory.id }] }
+    }
+  });
+  const modelI20 = await prisma.itemMaster.create({
+    data: {
+      factoryId: factory.id, groupId: modelGroup.id, name: "i20", sku: "VEH-MDL-I20", status: "ACTIVE", itemType: "SERVICE", defaultUOM: "PCS",
+      specValues: { create: [{ fieldId: modelBrandField.id, valueItemId: brandHyundai.id, factoryId: factory.id }] }
+    }
+  });
+
+  const genCity4 = await prisma.itemMaster.create({
+    data: {
+      factoryId: factory.id, groupId: genGroup.id, name: "Gen 4", sku: "VEH-GEN-CITY4", status: "ACTIVE", itemType: "SERVICE", defaultUOM: "PCS",
+      specValues: { create: [
+        { fieldId: genBrandField.id, valueItemId: brandHonda.id, factoryId: factory.id },
+        { fieldId: genModelField.id, valueItemId: modelCity.id, factoryId: factory.id }
+      ]}
+    }
+  });
+  const genCity5 = await prisma.itemMaster.create({
+    data: {
+      factoryId: factory.id, groupId: genGroup.id, name: "Gen 5", sku: "VEH-GEN-CITY5", status: "ACTIVE", itemType: "SERVICE", defaultUOM: "PCS",
+      specValues: { create: [
+        { fieldId: genBrandField.id, valueItemId: brandHonda.id, factoryId: factory.id },
+        { fieldId: genModelField.id, valueItemId: modelCity.id, factoryId: factory.id }
+      ]}
+    }
+  });
+  const genI20Elite = await prisma.itemMaster.create({
+    data: {
+      factoryId: factory.id, groupId: genGroup.id, name: "Elite", sku: "VEH-GEN-I20ELITE", status: "ACTIVE", itemType: "SERVICE", defaultUOM: "PCS",
+      specValues: { create: [
+        { fieldId: genBrandField.id, valueItemId: brandHyundai.id, factoryId: factory.id },
+        { fieldId: genModelField.id, valueItemId: modelI20.id, factoryId: factory.id }
+      ]}
+    }
+  });
+
+  const carCityPetrol = await prisma.itemMaster.create({
+    data: {
+      factoryId: factory.id, groupId: carGroup.id, name: "Honda City Gen 5 Petrol", sku: "VEH-CAR-HC5P", status: "ACTIVE", itemType: "SERVICE", defaultUOM: "PCS",
+      specValues: { create: [
+        { fieldId: carBrandField.id, valueItemId: brandHonda.id, factoryId: factory.id },
+        { fieldId: carModelField.id, valueItemId: modelCity.id, factoryId: factory.id },
+        { fieldId: carGenField.id, valueItemId: genCity5.id, factoryId: factory.id }
+      ]}
+    }
+  });
+  const carI20Asta = await prisma.itemMaster.create({
+    data: {
+      factoryId: factory.id, groupId: carGroup.id, name: "Hyundai i20 Elite Asta", sku: "VEH-CAR-HI20EA", status: "ACTIVE", itemType: "SERVICE", defaultUOM: "PCS",
+      specValues: { create: [
+        { fieldId: carBrandField.id, valueItemId: brandHyundai.id, factoryId: factory.id },
+        { fieldId: carModelField.id, valueItemId: modelI20.id, factoryId: factory.id },
+        { fieldId: carGenField.id, valueItemId: genI20Elite.id, factoryId: factory.id }
+      ]}
+    }
+  });
+
+  // 4. Seed Design items
+  const designVertex = await prisma.itemMaster.create({
+    data: { factoryId: factory.id, groupId: designGroup.id, name: "Ergo Fit Vertex", sku: "DSN-VERTEX", status: "ACTIVE", itemType: "SERVICE", defaultUOM: "PCS" }
+  });
+  const designDiamond = await prisma.itemMaster.create({
+    data: { factoryId: factory.id, groupId: designGroup.id, name: "Diamond Stitch", sku: "DSN-DIAMOND", status: "ACTIVE", itemType: "SERVICE", defaultUOM: "PCS" }
+  });
+
+  // 5. Seed Colour items
+  const colourBlack = await prisma.itemMaster.create({
+    data: { factoryId: factory.id, groupId: colourGroup.id, name: "Black", sku: "CLR-BLACK", status: "ACTIVE", itemType: "SERVICE", defaultUOM: "PCS" }
+  });
+  const colourBeige = await prisma.itemMaster.create({
+    data: { factoryId: factory.id, groupId: colourGroup.id, name: "Beige", sku: "CLR-BEIGE", status: "ACTIVE", itemType: "SERVICE", defaultUOM: "PCS" }
+  });
+  const colourTan = await prisma.itemMaster.create({
+    data: { factoryId: factory.id, groupId: colourGroup.id, name: "Tan", sku: "CLR-TAN", status: "ACTIVE", itemType: "SERVICE", defaultUOM: "PCS" }
+  });
+
+  // 6. Seed Subcategories under roots (like Fabric raw materials)
+  const fabricGroup = await prisma.itemGroup.create({
+    data: { factoryId: factory.id, parentId: rawMaterialRoot.id, name: "Fabric", itemType: "RAW_MATERIAL", shortCode: "FAB", bomMode: "INGREDIENTS", isSheet: true, sortOrder: 0 },
+  });
+
+  // 7. Seed checklist templates
+  const qcTemplate = await prisma.checklistTemplate.create({
+    data: { factoryId: factory.id, name: "Car Seat Cover Quality Checks", version: "1.0", isLatest: true, status: "active" },
   });
   const qcCheckpoints = [
     { name: "Stitch Alignment", instructions: "Ensure stitch spacing is consistent at 4mm and borders are aligned." },
@@ -118,6 +288,9 @@ async function main() {
     { name: "Strap & Buckle Security", instructions: "Test tension of plastic hooks and elastic straps." },
     { name: "Side Airbag Seam Check", instructions: "Verify special easy-break thread is used for side-airbag seams." },
   ];
+  const qcSection = await prisma.templateSection.create({
+    data: { factoryId: factory.id, templateId: qcTemplate.id, title: "Standard Stitching & Visual Inspections", sortOrder: 1 },
+  });
   for (let i = 0; i < qcCheckpoints.length; i++) {
     await prisma.checkpoint.create({
       data: {
@@ -128,9 +301,7 @@ async function main() {
     });
   }
 
-  // A lightweight stage checklist template for the Cutting department, so the
-  // trial shows that every department — not just QC — can carry a template.
-  const cuttingTemplate = await prisma.qCTemplate.create({
+  const cuttingTemplate = await prisma.checklistTemplate.create({
     data: { factoryId: factory.id, name: "Cutting Checklist", version: "1.0", isLatest: true, status: "active" },
   });
   const cutSection = await prisma.templateSection.create({
@@ -145,15 +316,156 @@ async function main() {
     });
   }
 
-  // ==========================================
-  // DEPARTMENTS (the production chain)
-  // ==========================================
+  // 8. Seed Blueprints library using generic references
+  const CARXEN_BLUEPRINTS: BlueprintSeed[] = [
+    {
+      root: "Finished Good",
+      name: "Seat Cover",
+      shortCode: "SC",
+      nameTemplate: "{group} {brand} {model} {generation} {backType} {headrests} {armrest} {design} {colour}",
+      codeTemplate: "SC-{brand}-{model}-{generation}-{backType}{headrests}-{armrest}",
+      capabilities: { isProducible: true, isSalable: true, hasBOM: true, hasQC: true, hasRouting: true, hasCAD: true },
+      fields: [
+        { name: "Brand", key: "brand", kind: "REFERENCE", refTarget: "ITEM_GROUP" },
+        { name: "Model", key: "model", kind: "REFERENCE", refTarget: "ITEM_GROUP" },
+        { name: "Generation", key: "generation", kind: "REFERENCE", refTarget: "ITEM_GROUP" },
+        { name: "Back Type", key: "backType", kind: "OPTION", options: [{ label: "Single Back", shortCode: "SB" }, { label: "Double Back", shortCode: "DB" }] },
+        { name: "Headrests", key: "headrests", kind: "VALUE", valueType: "NUMBER", unitSuffix: "HDR" },
+        { name: "Armrest", key: "armrest", kind: "OPTION", options: [{ label: "No Arm", shortCode: "NA" }, { label: "With Arm", shortCode: "WA" }] },
+        { name: "Design", key: "design", kind: "REFERENCE", refTarget: "ITEM_GROUP" },
+        { name: "Fabric", key: "fabric", kind: "REFERENCE", refTarget: "ITEM_GROUP" },
+        { name: "Colour", key: "colour", kind: "REFERENCE", refTarget: "ITEM_GROUP" },
+      ],
+    },
+    { root: "Finished Good", name: "Floor Mats", shortCode: "FM", nameTemplate: "{group} {brand} {model} {matType} {colour}", codeTemplate: "FM-{brand}-{model}-{matType}", capabilities: { isProducible: true, isSalable: true, hasBOM: true, hasQC: true, hasRouting: true }, fields: [
+      { name: "Brand", key: "brand", kind: "REFERENCE", refTarget: "ITEM_GROUP" },
+      { name: "Model", key: "model", kind: "REFERENCE", refTarget: "ITEM_GROUP" },
+      { name: "Mat Type", key: "matType", kind: "OPTION", options: [{ label: "5D", shortCode: "5D" }, { label: "7D", shortCode: "7D" }] },
+      { name: "Colour", key: "colour", kind: "REFERENCE", refTarget: "ITEM_GROUP" },
+    ] },
+    { root: "Finished Good", name: "Steering Cover", shortCode: "ST", nameTemplate: "{group} {size} {fabric} {colour}", codeTemplate: "ST-{size}-{colour}", capabilities: { isProducible: true, isSalable: true, hasQC: true }, fields: [
+      { name: "Size", key: "size", kind: "OPTION", options: [{ label: "Small", shortCode: "S" }, { label: "Medium", shortCode: "M" }, { label: "Large", shortCode: "L" }] },
+      { name: "Fabric", key: "fabric", kind: "REFERENCE", refTarget: "ITEM_GROUP" },
+      { name: "Colour", key: "colour", kind: "REFERENCE", refTarget: "ITEM_GROUP" },
+    ] },
+    { root: "Finished Good", name: "Neck Pillow", shortCode: "NP", nameTemplate: "{group} {fabric} {colour}", codeTemplate: "NP-{fabric}-{colour}", capabilities: { isProducible: true, isSalable: true, hasBOM: true, hasQC: true }, fields: [
+      { name: "Fabric", key: "fabric", kind: "REFERENCE", refTarget: "ITEM_GROUP" },
+      { name: "Colour", key: "colour", kind: "REFERENCE", refTarget: "ITEM_GROUP" },
+    ] },
+    { root: "Raw Material", name: "Fabric", shortCode: "FAB", nameTemplate: "{materialType} {colour} {gsm}", codeTemplate: "FAB-{materialType}-{colour}", capabilities: { isPurchasable: true, hasQC: true }, fields: [
+      { name: "Material Type", key: "materialType", kind: "OPTION", options: [{ label: "Leather", shortCode: "LTR" }, { label: "PVC", shortCode: "PVC" }, { label: "Suede", shortCode: "SDE" }] },
+      { name: "Colour", key: "colour", kind: "REFERENCE", refTarget: "ITEM_GROUP" },
+      { name: "GSM", key: "gsm", kind: "VALUE", valueType: "NUMBER", unitSuffix: "GSM" },
+      { name: "Supplier", key: "supplier", kind: "REFERENCE", refTarget: "SUPPLIER" },
+    ] },
+    { root: "Raw Material", name: "Foam", shortCode: "FOM", nameTemplate: "Foam {density} {thickness}", codeTemplate: "FOM-{density}-{thickness}", capabilities: { isPurchasable: true }, fields: [
+      { name: "Density", key: "density", kind: "VALUE", valueType: "NUMBER", unitSuffix: "kg/m3" },
+      { name: "Thickness", key: "thickness", kind: "VALUE", valueType: "NUMBER", unitSuffix: "mm" },
+      { name: "Supplier", key: "supplier", kind: "REFERENCE", refTarget: "SUPPLIER" },
+    ] },
+    { root: "Raw Material", name: "Thread", shortCode: "THR", nameTemplate: "Thread {colour} {ply}", codeTemplate: "THR-{colour}-{ply}", capabilities: { isPurchasable: true }, fields: [
+      { name: "Colour", key: "colour", kind: "REFERENCE", refTarget: "ITEM_GROUP" },
+      { name: "Ply", key: "ply", kind: "VALUE", valueType: "TEXT" },
+      { name: "Supplier", key: "supplier", kind: "REFERENCE", refTarget: "SUPPLIER" },
+    ] },
+    ...["PVC", "Leather", "Velcro", "Elastic", "Clips"].map((name): BlueprintSeed => ({ root: "Raw Material", name, shortCode: name.slice(0, 3).toUpperCase(), nameTemplate: `{group} {colour}`, codeTemplate: `${name.slice(0, 3).toUpperCase()}-{colour}`, capabilities: { isPurchasable: true }, fields: [{ name: "Colour", key: "colour", kind: "REFERENCE", refTarget: "ITEM_GROUP" }, { name: "Supplier", key: "supplier", kind: "REFERENCE", refTarget: "SUPPLIER" }] })),
+    ...["Glue", "Needles", "Scissors", "Cleaner", "Oil"].map((name): BlueprintSeed => ({ root: "Consumable", name, shortCode: name.slice(0, 3).toUpperCase(), nameTemplate: `{group} {packSize}`, codeTemplate: `${name.slice(0, 3).toUpperCase()}-{packSize}`, capabilities: { isPurchasable: true }, fields: [{ name: "Pack Size", key: "packSize", kind: "VALUE", valueType: "TEXT" }, { name: "Supplier", key: "supplier", kind: "REFERENCE", refTarget: "SUPPLIER" }] })),
+    ...["Poly Bag", "Carton", "Sticker", "Barcode Label"].map((name): BlueprintSeed => ({ root: "Packaging", name, shortCode: name.split(" ").map((p) => p[0]).join("").toUpperCase(), nameTemplate: `{group} {size}`, codeTemplate: `${name.split(" ").map((p) => p[0]).join("").toUpperCase()}-{size}`, capabilities: { isPurchasable: true }, fields: [{ name: "Size", key: "size", kind: "VALUE", valueType: "TEXT" }, { name: "Supplier", key: "supplier", kind: "REFERENCE", refTarget: "SUPPLIER" }] })),
+    ...["Cut Fabric", "Stitched Panels", "Embroidery", "Foam Laminated Fabric"].map((name): BlueprintSeed => ({ root: "Semi-Finished", name, shortCode: name.split(" ").map((p) => p[0]).join("").toUpperCase(), nameTemplate: `{group} {brand} {model}`, codeTemplate: `${name.split(" ").map((p) => p[0]).join("").toUpperCase()}-{brand}-{model}`, capabilities: { isProducible: true, hasBOM: true, hasRouting: true }, fields: [{ name: "Brand", key: "brand", kind: "REFERENCE", refTarget: "ITEM_GROUP" }, { name: "Model", key: "model", kind: "REFERENCE", refTarget: "ITEM_GROUP" }] })),
+    ...["Car Perfume", "Neck Pillow", "Steering Grip"].map((name): BlueprintSeed => ({ root: "Trading Goods", name, shortCode: name.split(" ").map((p) => p[0]).join("").toUpperCase(), nameTemplate: `{group} {brand}`, codeTemplate: `${name.split(" ").map((p) => p[0]).join("").toUpperCase()}-{brand}`, capabilities: { isPurchasable: true, isSalable: true }, fields: [{ name: "Brand", key: "brand", kind: "VALUE", valueType: "TEXT" }, { name: "Supplier", key: "supplier", kind: "REFERENCE", refTarget: "SUPPLIER" }] })),
+  ];
+
+  for (const [sortOrder, blueprint] of CARXEN_BLUEPRINTS.entries()) {
+    const root = rootByName.get(blueprint.root);
+    if (!root) continue;
+    const group = await prisma.itemGroup.upsert({
+      where: { factoryId_parentId_name: { factoryId: factory.id, parentId: root.id, name: blueprint.name } },
+      update: {
+        shortCode: blueprint.shortCode,
+        nameTemplate: blueprint.nameTemplate,
+        codeTemplate: blueprint.codeTemplate,
+        ...blueprint.capabilities,
+        // Stated, not defaulted: bomMode defaults to OFF, which would leave a
+        // seeded finished good with no BOM editor at all.
+        bomMode: blueprint.capabilities?.isProducible ? "RECIPE" : "OFF",
+        defaultChecklists: blueprint.capabilities?.hasQC ? { connect: { id: qcTemplate.id } } : undefined,
+      },
+      create: {
+        factoryId: factory.id,
+        parentId: root.id,
+        itemType: root.itemType,
+        name: blueprint.name,
+        shortCode: blueprint.shortCode,
+        nameTemplate: blueprint.nameTemplate,
+        codeTemplate: blueprint.codeTemplate,
+        sortOrder,
+        ...blueprint.capabilities,
+        // Stated, not defaulted: bomMode defaults to OFF, which would leave a
+        // seeded finished good with no BOM editor at all.
+        bomMode: blueprint.capabilities?.isProducible ? "RECIPE" : "OFF",
+        defaultChecklists: blueprint.capabilities?.hasQC ? { connect: { id: qcTemplate.id } } : undefined,
+      },
+    });
+
+    for (const [fieldOrder, field] of blueprint.fields.entries()) {
+      let targetGroupId: string | null = null;
+      if (field.kind === "REFERENCE" && field.refTarget === "ITEM_GROUP") {
+        if (field.key === "brand") targetGroupId = brandGroup.id;
+        else if (field.key === "model") targetGroupId = modelGroup.id;
+        else if (field.key === "generation") targetGroupId = genGroup.id;
+        else if (field.key === "design") targetGroupId = designGroup.id;
+        else if (field.key === "colour") targetGroupId = colourGroup.id;
+        else if (field.key === "fabric") targetGroupId = fabricGroup.id;
+      }
+
+      const specField = await prisma.specField.upsert({
+        where: { groupId_key: { groupId: group.id, key: field.key } },
+        update: {
+          name: field.name,
+          kind: field.kind,
+          valueType: field.valueType ?? null,
+          unitSuffix: field.unitSuffix ?? null,
+          refTarget: field.refTarget ?? null,
+          targetGroupId,
+          sortOrder: fieldOrder,
+        },
+        create: {
+          factoryId: factory.id,
+          groupId: group.id,
+          name: field.name,
+          key: field.key,
+          kind: field.kind,
+          valueType: field.valueType ?? null,
+          unitSuffix: field.unitSuffix ?? null,
+          refTarget: field.refTarget ?? null,
+          targetGroupId,
+          sortOrder: fieldOrder,
+        },
+      });
+
+      for (const [optionOrder, option] of (field.options ?? []).entries()) {
+        await prisma.specFieldOption.upsert({
+          where: { fieldId_value: { fieldId: specField.id, value: option.label } },
+          update: { label: option.label, shortCode: option.shortCode ?? null, sortOrder: optionOrder },
+          create: {
+            fieldId: specField.id,
+            value: option.label,
+            label: option.label,
+            shortCode: option.shortCode ?? null,
+            sortOrder: optionOrder,
+          },
+        });
+      }
+    }
+  }
+
+  // 9. Seed production chain departments
   const DEPARTMENTS = [
-    { name: "CAD", sortOrder: 0, requirePhoto: false, requireRemarks: false, requiresApproval: false, isQcStage: false, templateId: null as string | null },
-    { name: "Cutting", sortOrder: 1, requirePhoto: true, requireRemarks: false, requiresApproval: true, isQcStage: false, templateId: cuttingTemplate.id },
-    { name: "Stitching", sortOrder: 2, requirePhoto: true, requireRemarks: false, requiresApproval: true, isQcStage: false, templateId: null },
-    { name: "Quality Check", sortOrder: 3, requirePhoto: false, requireRemarks: false, requiresApproval: false, isQcStage: true, templateId: template.id },
-    { name: "Packing", sortOrder: 4, requirePhoto: true, requireRemarks: false, requiresApproval: false, isQcStage: false, templateId: null },
+    { name: "CAD", sortOrder: 0, requirePhoto: false, requireRemarks: false, requiresApproval: false, isQcStage: false },
+    { name: "Cutting", sortOrder: 1, requirePhoto: true, requireRemarks: false, requiresApproval: true, isQcStage: false },
+    { name: "Stitching", sortOrder: 2, requirePhoto: true, requireRemarks: false, requiresApproval: true, isQcStage: false },
+    { name: "Quality Check", sortOrder: 3, requirePhoto: false, requireRemarks: false, requiresApproval: false, isQcStage: true },
+    { name: "Packing", sortOrder: 4, requirePhoto: true, requireRemarks: false, requiresApproval: false, isQcStage: false },
   ];
   const departments: Record<string, any> = {};
   for (const d of DEPARTMENTS) {
@@ -162,17 +474,23 @@ async function main() {
   const orderedDepts = DEPARTMENTS.map((d) => departments[d.name]);
   const qcDept = departments["Quality Check"];
 
-  // ==========================================
-  // USERS (owner + department roster)
-  // ==========================================
-  await prisma.user.upsert({
-    where: { phone: "9971907190" },
-    update: { pinHash: hashPin("5782", factory.id), name: "Yashu Malik", role: "OWNER", roleId: roleIdByArchetype.OWNER, isActive: true },
-    create: { factoryId: factory.id, role: "OWNER", roleId: roleIdByArchetype.OWNER, name: "Yashu Malik", language: "en", phone: "9971907190", pinHash: hashPin("5782", factory.id) },
+  // Link templates to departments via ownerDepartmentId
+  await prisma.checklistTemplate.update({
+    where: { id: cuttingTemplate.id },
+    data: { ownerDepartmentId: departments["Cutting"].id }
+  });
+  await prisma.checklistTemplate.update({
+    where: { id: qcTemplate.id },
+    data: { ownerDepartmentId: departments["Quality Check"].id }
   });
 
-  // [name, phone, role, departmentName] — PIN 1234 for everyone. The QC
-  // department's supervisor is the QC inspector — there is no separate role.
+  // 10. Seed Users
+  await prisma.user.upsert({
+    where: { phone: "9971907190" },
+    update: { roleId: roleIdByArchetype.OWNER,  pinHash: hashPin("7190", factory.id), name: "Yashu Malik", role: "OWNER", isActive: true },
+    create: { roleId: roleIdByArchetype.OWNER,  factoryId: factory.id, role: "OWNER", name: "Yashu Malik", language: "en", phone: "9971907190", pinHash: hashPin("7190", factory.id) },
+  });
+
   const staff: Array<[string, string, string, string | null]> = [
     ["Rohit Verma", "8800000001", "MANAGER", null],
     ["Anil Sharma", "8800000005", "WORKER", "CAD"],
@@ -186,7 +504,7 @@ async function main() {
   for (const [name, phone, role, deptName] of staff) {
     usersByPhone[phone] = await prisma.user.create({
       data: {
-        factoryId: factory.id, name, phone, role: role as any, language: "en",
+        factoryId: factory.id, name, phone, role: role as any, roleId: roleIdByArchetype[role], language: "en",
         pinHash: hashPin("1234", factory.id),
         departmentId: deptName ? departments[deptName].id : null,
       },
@@ -199,151 +517,139 @@ async function main() {
   const workerFor = (deptName: string) =>
     ({ CAD: usersByPhone["8800000005"], Cutting: cuttingWorker, Stitching: stitchWorker, "Quality Check": inspector1, Packing: packWorker } as Record<string, any>)[deptName] ?? null;
 
-  // ==========================================
-  // CATEGORY TREE (Item Master masters)
-  // ==========================================
-  const CATEGORY_TREE: Record<string, string[]> = {
-    "Raw Material": ["PU Leather", "PVC Leather", "Fabric", "Foam", "Thread", "Elastic", "Velcro", "Zipper", "Piping", "Labels", "Plastic Parts", "Metal Parts", "Rubber Parts"],
-    "Finished Goods": [], "Semi Finished": [], "Packaging": [], "Consumables": [], "Machinery": [], "Spare Parts": [],
-  };
-  const categories: Record<string, any> = {};
-  const subcats: Record<string, any> = {};
-  for (const [catName, subs] of Object.entries(CATEGORY_TREE)) {
-    const cat = await prisma.materialCategory.create({ data: { factoryId: factory.id, name: catName } });
-    categories[catName] = cat;
-    for (const s of subs) {
-      subcats[`${catName}:${s}`] = await prisma.materialSubcategory.create({ data: { factoryId: factory.id, categoryId: cat.id, name: s } });
-    }
-  }
-  // Fabrics keep their own top-level category (the app tells fabrics apart by it).
-  const fabricCat = await prisma.materialCategory.create({ data: { factoryId: factory.id, name: "Fabric" } });
-
-  // ==========================================
-  // ITEM MASTER (single catalogue)
-  // ==========================================
+  // 11. Seed generic catalog items
   async function makeItem(opts: {
     name: string; type: ItemType; uom: string; secondaryUOM?: string;
-    categoryId?: string; subcategoryId?: string; brand?: string; minStock?: number; keywords?: string[];
+    groupId: string; minStock?: number; keywords?: string[];
   }) {
     const code = nextCode(opts.type);
     return prisma.itemMaster.create({
       data: {
         factoryId: factory.id, name: opts.name, itemCode: code, sku: code, itemType: opts.type,
         defaultUOM: opts.uom, secondaryUOM: opts.secondaryUOM ?? null,
-        categoryId: opts.categoryId ?? null, subcategoryId: opts.subcategoryId ?? null,
-        brand: opts.brand ?? null, status: "ACTIVE",
+        groupId: opts.groupId, status: "ACTIVE",
         minStockLevel: opts.minStock ?? 0, searchKeywords: opts.keywords ?? [],
       },
     });
   }
 
-  // Fabrics (used in variant search + BOM)
+  // Find Fabric group (a subcategory of Raw Material)
+  const fabricGroupItem = await prisma.itemGroup.findFirst({ where: { factoryId: factory.id, name: "Fabric" } });
+  if (!fabricGroupItem) throw new Error("Fabric group not found");
+
   const fabricDefs: Array<[string, string]> = [["Shaka SPC", "Shaka"], ["Lifto SPC", "Lifto"], ["Heavy Napa", "Napa"]];
   const fabricItems: Record<string, any> = {};
   for (const [name, kw] of fabricDefs) {
-    fabricItems[name] = await makeItem({ name, type: "RAW_MATERIAL", uom: "SQM", categoryId: fabricCat.id, minStock: 20, keywords: [kw] });
+    fabricItems[name] = await makeItem({ name, type: "RAW_MATERIAL", uom: "SQM", groupId: fabricGroupItem.id, minStock: 20, keywords: [kw] });
   }
   const fabricShaka = fabricItems["Shaka SPC"];
 
-  // Other raw materials, filed under Raw Material subcategories
-  const rawDefs: Array<{ name: string; sub: string; uom: string; min?: number }> = [
-    { name: "Napa Black PU Leather", sub: "PU Leather", uom: "SQM", min: 30 },
-    { name: "Napa Beige PU Leather", sub: "PU Leather", uom: "SQM", min: 30 },
-    { name: "6mm Bonding Foam", sub: "Foam", uom: "MTR", min: 20 },
-    { name: "10mm Bonding Foam", sub: "Foam", uom: "MTR", min: 20 },
-    { name: "Bonded Nylon Thread", sub: "Thread", uom: "ROLL", min: 15 },
-    { name: "Easy-Break Airbag Thread", sub: "Thread", uom: "ROLL", min: 10 },
-    { name: "YKK Zipper 8in", sub: "Zipper", uom: "PCS", min: 100 },
-    { name: "Elastic Strap 25mm", sub: "Elastic", uom: "MTR", min: 50 },
-    { name: "Velcro Hook 20mm", sub: "Velcro", uom: "MTR", min: 40 },
-    { name: "Carxen Woven Label", sub: "Labels", uom: "PCS", min: 200 },
-    { name: "Plastic Retainer Hook", sub: "Plastic Parts", uom: "PCS", min: 200 },
+  // Find existing groups created during blueprint library seeding
+  const foamGroup = await prisma.itemGroup.findFirst({ where: { factoryId: factory.id, parentId: rawMaterialRoot.id, name: "Foam" } });
+  const threadGroup = await prisma.itemGroup.findFirst({ where: { factoryId: factory.id, parentId: rawMaterialRoot.id, name: "Thread" } });
+  const elasticGroup = await prisma.itemGroup.findFirst({ where: { factoryId: factory.id, parentId: rawMaterialRoot.id, name: "Elastic" } });
+  const velcroGroup = await prisma.itemGroup.findFirst({ where: { factoryId: factory.id, parentId: rawMaterialRoot.id, name: "Velcro" } });
+
+  if (!foamGroup || !threadGroup || !elasticGroup || !velcroGroup) {
+    throw new Error("One or more required blueprint groups not found");
+  }
+
+  // Create subcategories that are not in the blueprint list
+  const zipperGroup = await prisma.itemGroup.create({
+    data: { factoryId: factory.id, parentId: rawMaterialRoot.id, name: "Zipper", itemType: "RAW_MATERIAL", shortCode: "ZIP", isSheet: true, sortOrder: 3 },
+  });
+  const labelsGroup = await prisma.itemGroup.create({
+    data: { factoryId: factory.id, parentId: rawMaterialRoot.id, name: "Labels", itemType: "RAW_MATERIAL", shortCode: "LBL", isSheet: true, sortOrder: 6 },
+  });
+  const plasticPartsGroup = await prisma.itemGroup.create({
+    data: { factoryId: factory.id, parentId: rawMaterialRoot.id, name: "Plastic Parts", itemType: "RAW_MATERIAL", shortCode: "PLP", isSheet: true, sortOrder: 7 },
+  });
+
+  const rawDefs: Array<{ name: string; group: any; uom: string; min?: number }> = [
+    { name: "Napa Black PU Leather", group: fabricGroupItem, uom: "SQM", min: 30 },
+    { name: "Napa Beige PU Leather", group: fabricGroupItem, uom: "SQM", min: 30 },
+    { name: "6mm Bonding Foam", group: foamGroup, uom: "MTR", min: 20 },
+    { name: "10mm Bonding Foam", group: foamGroup, uom: "MTR", min: 20 },
+    { name: "Bonded Nylon Thread", group: threadGroup, uom: "ROLL", min: 15 },
+    { name: "Easy-Break Airbag Thread", group: threadGroup, uom: "ROLL", min: 10 },
+    { name: "YKK Zipper 8in", group: zipperGroup, uom: "PCS", min: 100 },
+    { name: "Elastic Strap 25mm", group: elasticGroup, uom: "MTR", min: 50 },
+    { name: "Velcro Hook 20mm", group: velcroGroup, uom: "MTR", min: 40 },
+    { name: "Carxen Woven Label", group: labelsGroup, uom: "PCS", min: 200 },
+    { name: "Plastic Retainer Hook", group: plasticPartsGroup, uom: "PCS", min: 200 },
   ];
   for (const r of rawDefs) {
-    await makeItem({ name: r.name, type: "RAW_MATERIAL", uom: r.uom, categoryId: categories["Raw Material"].id, subcategoryId: subcats[`Raw Material:${r.sub}`].id, minStock: r.min });
+    await makeItem({ name: r.name, type: "RAW_MATERIAL", uom: r.uom, groupId: r.group.id, minStock: r.min });
   }
 
-  // Packaging + a couple of consumables / tools so those types are represented
-  await makeItem({ name: "Carton Box (Seat Set)", type: "PACKAGING", uom: "PCS", categoryId: categories["Packaging"].id, minStock: 100 });
-  await makeItem({ name: "Bubble Wrap Roll", type: "PACKAGING", uom: "ROLL", categoryId: categories["Packaging"].id, minStock: 20 });
-  await makeItem({ name: "Fabric Marking Chalk", type: "CONSUMABLE", uom: "BOX", categoryId: categories["Consumables"].id, minStock: 10 });
-  await makeItem({ name: "Industrial Scissors", type: "TOOL", uom: "PCS", categoryId: categories["Spare Parts"].id, minStock: 2 });
-  await makeItem({ name: "Sewing Machine Needle Pack", type: "SPARE_PART", uom: "PKT", categoryId: categories["Spare Parts"].id, minStock: 20 });
-
-  // Finished good
-  const fgItem = await makeItem({ name: "Premium Seat Cover - Standard", type: "FINISHED_PRODUCT", uom: "SET", categoryId: categories["Finished Goods"].id });
-
-  // ==========================================
-  // CATALOG: designs, colors, vehicles, product type
-  // ==========================================
-  const designNames: Array<[string, string]> = [
-    ["ULTRA", "Triple Seam"], ["ULTRA", "New N Type"], ["ULTRA", "Super Capt"], ["ULTRA", "Arrow"],
-    ["ULTRA", "Winger"], ["ULTRA", "Rocker"], ["ULTRA", "Original"], ["ULTRA", "Head Atelier"],
-    ["ULTRA", "5 Lines"], ["ULTRA", "Prism"],
-    ["ERGO FIT", "Vertex"], ["ERGO FIT", "Archer"], ["ERGO FIT", "Spykar"], ["ERGO FIT", "Hilfiger"],
-    ["PRO SERIES", "Lancer"], ["PRO SERIES", "Super Lancer"], ["PRO SERIES", "Lexa Plus"],
-    ["PRO SERIES", "7 Lines"], ["PRO SERIES", "New N-Type"],
-    ["PRO (+)", "Radiator"], ["PRO (+)", "N Radiator"],
-    ["QUILTS", "Zig Zag"], ["QUILTS", "Wavy Quilt"], ["QUILTS", "Snake"], ["QUILTS", "Qubec"],
-    ["QUILTS", "Diamond"], ["QUILTS", "Eagle"], ["QUILTS", "Chain Type"], ["QUILTS", "Recti Quilt"],
-    ["QUILTS", "Gt-Line"],
-    ["SUPER QUILTS", "Edition"], ["SUPER QUILTS", "Wire quilt"], ["SUPER QUILTS", "Football"],
-    ["SUPER QUILTS", "S-Taper"], ["SUPER QUILTS", "Capsule Cut"],
-  ];
-  for (const [category, name] of designNames) {
-    await prisma.design.create({ data: { factoryId: factory.id, category, name } });
-  }
-  const designTriple = await prisma.design.findFirst({ where: { factoryId: factory.id, name: "Triple Seam" } });
-
-  for (const name of ["Black", "Beige", "Tan", "Grey", "Red", "White"]) {
-    await prisma.color.create({ data: { factoryId: factory.id, name } });
-  }
-  const colorBlack = await prisma.color.findFirst({ where: { factoryId: factory.id, name: "Black" } });
-
-  const vehicleData: Array<[string, Array<[string, string]>]> = [
-    ["Maruti Suzuki", [["Baleno", "2015-2019"], ["Swift", "2018-2023"], ["Brezza", "2016-2022"]]],
-    ["Hyundai", [["Creta", "2015-2020"], ["i20", "2020-2024"]]],
-    ["Honda", [["City", "2017-2023"], ["Amaze", "2018-2024"]]],
-    ["Tata", [["Nexon", "2017-2023"], ["Punch", "2021-2025"]]],
-  ];
-  for (const [brandName, models] of vehicleData) {
-    const brand = await prisma.vehicleBrand.create({ data: { factoryId: factory.id, name: brandName } });
-    for (const [modelName, genRange] of models) {
-      const model = await prisma.vehicleModel.create({ data: { factoryId: factory.id, brandId: brand.id, name: modelName } });
-      await prisma.vehicleGeneration.create({ data: { factoryId: factory.id, modelId: model.id, name: genRange } });
-    }
-  }
-
-  const seatCoverType = await prisma.productType.create({
-    data: {
-      factoryId: factory.id, name: "Seat Cover",
-      fields: {
-        create: [
-          { name: "Seat Type", type: "TOGGLE", options: ["Single Back", "Double Back"], isRequired: true, sortOrder: 1 },
-          { name: "Headrest Count", type: "BUTTONS", options: ["2", "4", "5", "6", "7", "8"], sortOrder: 2 },
-          { name: "Armrest", type: "CHECKBOX", options: ["Yes", "No"], sortOrder: 3 },
-        ],
-      },
-    },
+  // Packaging + Consumables
+  const boxGroup = await prisma.itemGroup.create({
+    data: { factoryId: factory.id, parentId: packagingRoot.id, name: "Boxes", itemType: "PACKAGING", shortCode: "BOX", isSheet: true, sortOrder: 0 },
   });
-  const seatTypeField = await prisma.productField.findFirst({ where: { name: "Seat Type", productTypeId: seatCoverType.id } });
+  const wrapGroup = await prisma.itemGroup.create({
+    data: { factoryId: factory.id, parentId: packagingRoot.id, name: "Wrap", itemType: "PACKAGING", shortCode: "WRP", isSheet: true, sortOrder: 1 },
+  });
+  const markingGroup = await prisma.itemGroup.create({
+    data: { factoryId: factory.id, parentId: consumableRoot.id, name: "Marking", itemType: "CONSUMABLE", shortCode: "MRK", isSheet: true, sortOrder: 0 },
+  });
+  const toolsGroup = await prisma.itemGroup.create({
+    data: { factoryId: factory.id, parentId: consumableRoot.id, name: "Tools", itemType: "CONSUMABLE", shortCode: "TLS", isSheet: true, sortOrder: 1 },
+  });
+  const sparesGroup = await prisma.itemGroup.create({
+    data: { factoryId: factory.id, parentId: consumableRoot.id, name: "Spares", itemType: "CONSUMABLE", shortCode: "SPR", isSheet: true, sortOrder: 2 },
+  });
 
-  // ==========================================
-  // PRODUCT + VARIANT + BLUEPRINT + BOM
-  // ==========================================
-  const productCategory = await prisma.productCategory.create({ data: { factoryId: factory.id, name: "Seat Covers" } });
-  const product = await prisma.product.create({ data: { factoryId: factory.id, categoryId: productCategory.id, name: "Premium Seat Cover", skuPrefix: "SC-PRM" } });
-  const variant = await prisma.productVariant.create({ data: { productId: product.id, name: "Standard", sku: "SC-PRM-STD", itemId: fgItem.id } });
+  await makeItem({ name: "Carton Box (Seat Set)", type: "PACKAGING", uom: "PCS", groupId: boxGroup.id, minStock: 100 });
+  await makeItem({ name: "Bubble Wrap Roll", type: "PACKAGING", uom: "ROLL", groupId: wrapGroup.id, minStock: 20 });
+  await makeItem({ name: "Fabric Marking Chalk", type: "CONSUMABLE", uom: "BOX", groupId: markingGroup.id, minStock: 10 });
+  await makeItem({ name: "Industrial Scissors", type: "RAW_MATERIAL", uom: "PCS", groupId: toolsGroup.id, minStock: 2 });
+  await makeItem({ name: "Sewing Machine Needle Pack", type: "RAW_MATERIAL", uom: "PKT", groupId: sparesGroup.id, minStock: 20 });
 
-  const blueprint = await prisma.blueprint.create({ data: { factoryId: factory.id, productVariantId: variant.id } });
-  const bpVersion = await prisma.blueprintVersion.create({ data: { blueprintId: blueprint.id, versionNumber: 1, name: "V1 - Standard", qcTemplateId: template.id, isActive: true } });
+  // Finished Goods Item
+  const seatCoverGroup = await prisma.itemGroup.findFirst({ where: { factoryId: factory.id, name: "Seat Cover" } });
+  if (!seatCoverGroup) throw new Error("Seat Cover group not found");
+  const fgItem = await makeItem({ name: "Premium Seat Cover - Standard", type: "FINISHED_PRODUCT", uom: "SET", groupId: seatCoverGroup.id });
+  await prisma.itemMaster.update({
+    where: { id: fgItem.id },
+    data: { manufacturingType: "MAKE", specHash: "carxen-trial-fg-spec-hash" }
+  });
+
+  // 12. Seed UOMConversions for Dual Units
+  // thread conversion: 1 roll = 500 m
+  const nylonThread = await prisma.itemMaster.findFirst({ where: { factoryId: factory.id, name: "Bonded Nylon Thread" } });
+  if (nylonThread) {
+    await prisma.itemMaster.update({
+      where: { id: nylonThread.id },
+      data: { secondaryUOM: "MTR" },
+    });
+    await prisma.uOMConversion.create({
+      data: { itemId: nylonThread.id, fromUOM: "ROLL", toUOM: "MTR", conversionFactor: 500 },
+    });
+  }
+
+  // 13. Blueprint keyed directly on the finished-good item.
+  const blueprint = await prisma.blueprint.create({ data: { factoryId: factory.id, itemId: fgItem.id } });
+  const bpVersion = await prisma.blueprintVersion.create({ data: { blueprintId: blueprint.id, versionNumber: 1, name: "V1 - Standard", qcTemplateId: qcTemplate.id, isActive: true } });
   await prisma.blueprint.update({ where: { id: blueprint.id }, data: { activeVersionId: bpVersion.id } });
+
+  // Create blueprint route steps
+  const sortedDepts = [departments["CAD"], departments["Cutting"], departments["Stitching"], departments["Quality Check"], departments["Packing"]];
+  for (let i = 0; i < sortedDepts.length; i++) {
+    await prisma.blueprintRouteStep.create({
+      data: {
+        blueprintVersionId: bpVersion.id,
+        departmentId: sortedDepts[i].id,
+        sequence: i + 1,
+        estimatedTimeMins: 15,
+        instructions: `Instructions for stage ${sortedDepts[i].name}`
+      }
+    });
+  }
+
   const bom = await prisma.bOM.create({ data: { factoryId: factory.id, blueprintVersionId: bpVersion.id } });
   await prisma.bOMItem.create({ data: { bomId: bom.id, itemId: fabricShaka.id, quantity: 2, wastePercent: 5 } });
 
-  // ==========================================
-  // CUSTOMERS, SUPPLIERS, WAREHOUSE, OPENING STOCK
-  // ==========================================
+  // 14. Seed Customers, Warehouse, Zones
   const customerNames: Array<[string, string]> = [
     ["Honda Dealership Delhi", "9810000001"],
     ["AutoStyle Karol Bagh", "9810000002"],
@@ -361,7 +667,7 @@ async function main() {
   const shelf = await prisma.warehouseShelf.create({ data: { factoryId: factory.id, rackId: rack.id, name: "Default" } });
   const bin = await prisma.warehouseBin.create({ data: { factoryId: factory.id, shelfId: shelf.id, name: "Default" } });
 
-  // Opening stock for every raw material (incl. fabrics)
+  // Opening stock
   const rawStockItems = await prisma.itemMaster.findMany({ where: { factoryId: factory.id, itemType: { in: ["RAW_MATERIAL", "PACKAGING", "CONSUMABLE"] } } });
   for (const item of rawStockItems) {
     await prisma.binBalance.create({ data: { factoryId: factory.id, itemId: item.id, binId: bin.id, stockAvailable: 120 } });
@@ -376,11 +682,7 @@ async function main() {
     data: { factoryId: factory.id, poNumber: "PO-TRIAL-000", supplierId: supplier.id, status: "COMPLETED", items: { create: [{ materialId: fabricShaka.id, quantity: 100, rate: 250, receivedQty: 100 }] } },
   });
 
-  // ==========================================
-  // DEMO ORDERS flowing through the department chain
-  // ==========================================
-  // reached = index of the department the physical bag currently sits at.
-  //   0..4 = at CAD/Cutting/Stitching/QC/Packing; 5 = fully produced.
+  // 15. Seed mock orders
   type Progress = "cutting" | "stitching" | "qc" | "packing" | "dispatched" | "delivered";
   const REACHED: Record<Progress, number> = { cutting: 1, stitching: 2, qc: 3, packing: 4, dispatched: 5, delivered: 5 };
 
@@ -392,11 +694,11 @@ async function main() {
         factoryId: factory.id, soNumber: opts.soNumber, customerId: customers[opts.customerIdx].id,
         status: opts.progress === "dispatched" ? "DISPATCHED" : opts.progress === "delivered" ? "DISPATCHED" : "IN_PRODUCTION",
         labelCode: opts.soNumber,
-        designId: designTriple?.id ?? null, colorId: colorBlack?.id ?? null, materialId: fabricShaka.id,
-        productTypeId: seatCoverType.id, inspectorId: inspector1.id,
+        designId: designVertex.id, colorId: colourBlack.id, materialId: fabricShaka.id,
+        inspectorId: inspector1.id,
         seatType: "Double Back", headrestCount: 4, hasArmrest: true,
-        dynamicData: seatTypeField ? { [seatTypeField.id]: "Double Back" } : undefined,
-        items: { create: [{ productVariantId: variant.id, quantity: opts.qty, unitPrice: 0 }] },
+        itemId: fgItem.id,
+        items: { create: [{ itemId: fgItem.id, quantity: opts.qty, unitPrice: 0 }] },
       },
     });
     const plan = await prisma.productionPlan.create({
@@ -406,7 +708,6 @@ async function main() {
       data: { factoryId: factory.id, woNumber: opts.soNumber, productionPlanId: plan.id, status: finished ? "COMPLETED" : "IN_PROGRESS", targetQty: opts.qty, producedQty: finished ? opts.qty : 0, startDate: new Date() },
     });
 
-    // One job card per department, statused by how far the bag has travelled.
     let qcCard: any = null;
     for (let i = 0; i < orderedDepts.length; i++) {
       const dept = orderedDepts[i];
@@ -426,7 +727,6 @@ async function main() {
       if (dept.isQcStage) qcCard = card;
     }
 
-    // Inspection lives on the QC card.
     const pastQc = finished || reached > 3;
     const inspStatus = reached < 3 ? "PENDING" : reached === 3 ? "WAITING_QC" : "APPROVED";
     const inspection = await prisma.inspection.create({
@@ -437,7 +737,7 @@ async function main() {
         approvedAt: pastQc ? new Date() : null,
       },
     });
-    const checkpoints = await prisma.checkpoint.findMany({ where: { section: { templateId: template.id } } });
+    const checkpoints = await prisma.checkpoint.findMany({ where: { section: { templateId: qcTemplate.id } } });
     for (const cp of checkpoints) {
       await prisma.checkpointSubmission.create({
         data: {
@@ -452,7 +752,6 @@ async function main() {
     if (pastQc) {
       await prisma.qualityApproval.create({ data: { factoryId: factory.id, inspectionId: inspection.id, inspectorId: inspector1.id, status: "APPROVED", comments: "Approved" } });
       await prisma.qualityReport.create({ data: { factoryId: factory.id, inspectionId: inspection.id, verificationCode: "V-" + opts.soNumber.replace(/[^A-Z0-9]/g, "").slice(-8) } });
-      // Finished goods land in the warehouse.
       await prisma.binBalance.upsert({
         where: { itemId_binId: { itemId: fgItem.id, binId: bin.id } },
         update: { stockAvailable: { increment: opts.qty } },

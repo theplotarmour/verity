@@ -89,7 +89,13 @@ export function ItemsTree({ query = "" }: { query?: string }) {
 
   const uncategorised = useMemo(() => items.filter((it) => !it.categoryId && match(it)), [items, q]);
 
-  const toggle = (id: string) => setOpen((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggle = (id: string) =>
+    setOpen((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
 
   // --- category / subcategory CRUD (Busy-style inline add) ---
   const createCat = async () => {

@@ -150,7 +150,7 @@ export function Navbar({ factoryName, userName }: { factoryName: string; userNam
                 >
                   <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                     <div>
-                      <p className="text-sm font-semibold text-slate-950">Notifications</p>
+                      <p className="text-sm font-semibold text-text-primary">Notifications</p>
                       <p className="text-xs text-text-secondary">
                         {unreadCount ? `${unreadCount} unread` : "No unread items"}
                       </p>
@@ -210,7 +210,7 @@ export function Navbar({ factoryName, userName }: { factoryName: string; userNam
                   className="absolute right-0 mt-3 w-64 overflow-hidden rounded-[24px] border border-border bg-white shadow-[0_22px_60px_rgba(15,23,42,0.16)]"
                 >
                   <div className="border-b border-slate-100 px-4 py-4">
-                    <p className="text-sm font-semibold text-slate-950">{userName}</p>
+                    <p className="text-sm font-semibold text-text-primary">{userName}</p>
                     <p className="mt-1 text-xs text-text-secondary">{factoryName}</p>
                   </div>
                   <div className="p-2">

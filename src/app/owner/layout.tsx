@@ -5,8 +5,6 @@ import { redirect } from "next/navigation";
 import { getOwnerUser } from "@/lib/server/owner";
 import { OwnerShell } from "@/components/layout/owner-shell";
 import { sanitizeMatrix } from "@/lib/server/permissions";
-import { entitledModules } from "@/platform/modules/entitlements";
-import { BRAND_ACCENT } from "@/lib/brand";
 
 export default async function OwnerLayout({ children }: { children: React.ReactNode }) {
   const dbUser = await getOwnerUser();
@@ -15,12 +13,9 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
   const factory = dbUser.factory;
 
   const settings = (factory?.settings as any) || {};
-  const themeColor = settings.themeColor || BRAND_ACCENT;
+  const themeColor = settings.themeColor || "#E11D48"; // fallback red
   // Nav visibility follows the factory's own permission matrix, not the code defaults.
   const permissionMatrix = sanitizeMatrix(settings.permissions);
-  // Module entitlements gate which destinations exist at all, independent of
-  // whether the user's role would permit them.
-  const modules = await entitledModules(factory.organizationId);
 
   return (
     <>
@@ -34,7 +29,6 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
       themeColor={themeColor}
       userRole={dbUser.role}
       permissionMatrix={permissionMatrix}
-      entitledModules={modules}
     >
       {children}
     </OwnerShell>

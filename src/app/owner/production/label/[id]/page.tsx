@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/server/auth";
 import { getMaterialRequirement } from "@/server/actions/cad";
-import { designLabel } from "@/lib/variant-descriptor";
+import { describeSpecDetails } from "@/lib/server/specUtils";
 import { ProductionLabel } from "./ProductionLabel";
 
 // The production label is printed by CAD before manufacturing begins and stays
@@ -18,17 +18,22 @@ export default async function ProductionLabelPage({ params }: { params: Promise<
     where: { id, factoryId: session.factoryId },
     include: {
       customer: { select: { name: true } },
-      design: { select: { name: true, category: true, imageUrls: true, cadFileUrl: true } },
-      color: { select: { name: true } },
-      material: { select: { name: true } },
-      productType: { select: { name: true } },
-      items: {
-        include: {
-          productVariant: {
-            include: { product: { select: { name: true } } },
+      // The order's item is what was actually made: its name/category is the
+      // label text, its spec values are the printed fields.
+      item: {
+        select: {
+          name: true,
+          group: { select: { name: true } },
+          specValues: {
+            include: {
+              field: { select: { name: true, sortOrder: true, unitSuffix: true } },
+              option: { select: { label: true } },
+              valueItem: { select: { name: true, aliasName: true } },
+            },
           },
         },
       },
+      items: true,
     },
   });
   if (!order) notFound();
@@ -55,19 +60,13 @@ export default async function ProductionLabelPage({ params }: { params: Promise<
         soNumber: order.soNumber,
         customerName: order.customer?.name ?? "Stock Production",
         orderDate: order.orderDate.toISOString(),
-        productName: order.items[0]?.productVariant?.product?.name ?? order.productType?.name ?? "Product",
-        variantName: order.items[0]?.productVariant?.name ?? null,
+        productName: order.item?.group?.name ?? order.item?.name ?? "Product",
+        // The item's full composed name — what someone reading the bag needs.
+        variantName: order.item?.name ?? null,
         quantity: order.items.reduce((sum, i) => sum + i.quantity, 0),
-        designName: order.design ? designLabel(order.design.name, order.design.category) : null,
-        designCategory: order.design?.category ?? null,
-        designImage: order.design?.imageUrls?.[0] ?? null,
-        cadFileUrl: order.design?.cadFileUrl ?? null,
-        fabricName: order.material?.name ?? null,
-        colorName: order.color?.name ?? null,
-        seatType: order.seatType ?? null,
-        headrestCount: order.headrestCount ?? null,
-        hasArmrest: order.hasArmrest,
-        vehicleYear: order.vehicleYear ?? null,
+        designImage: null,
+        cadFileUrl: null,
+        specDetails: describeSpecDetails(order.item),
         remarks: order.remarks ?? null,
       }}
       materials={requirement?.lines ?? []}

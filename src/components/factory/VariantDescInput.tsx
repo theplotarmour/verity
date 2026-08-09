@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AlertCircle, Check, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useDropdownPosition } from "@/components/ui/dropdown-position";
 import {
   formatVariant,
   productHasSeatSpecs,
@@ -40,7 +42,7 @@ export type VariantCatalog = {
   products: string[];
 };
 
-type Stage = "base" | "seatType" | "headrests" | "armrest" | "fabric" | "designFamily" | "design" | "color";
+type Stage = "base" | "seatType" | "headrests" | "armrest" | "fabric" | "design" | "color";
 
 export type DesignOption = { name: string; family: string; label: string };
 
@@ -71,10 +73,8 @@ function stagesFor(
   // still assemble (and complete) a vehicle base instead of getting stuck on an
   // empty fabric/design dropdown.
   if (opts.hasFabrics) s.push("fabric");
-  if (opts.hasDesigns) {
-    if (opts.hasFamilies) s.push("designFamily");
-    s.push("design");
-  }
+  // Family + design are one dropdown now (options read "ULTRA Triple Seam").
+  if (opts.hasDesigns) s.push("design");
   // Colour is the last stage: it feeds the colour field lower in the popup.
   if (opts.hasColors) s.push("color");
   return s;
@@ -134,15 +134,8 @@ function segmentsFromValue(v: VariantValue, designs: DesignOption[]): Segment[] 
     }
     if (v.fabricName) segs.push({ stage: "fabric", label: v.fabricName, patch: { fabric: v.fabricName } });
     else return segs;
-    if (v.designName) {
-      // Insert the family stage ahead of the design so the assembled stages line
-      // up with the family-first flow, and show the design segment without its
-      // family prefix (the family is its own segment).
-      const match = designs.find((d) => d.label.toLowerCase() === v.designName.toLowerCase());
-      const fam = match?.family;
-      if (fam) segs.push({ stage: "designFamily", label: fam, patch: {} });
-      segs.push({ stage: "design", label: match && fam ? match.name : v.designName, patch: { design: v.designName } });
-    }
+    // Design carries its family in the label ("ULTRA Triple Seam") — one segment.
+    if (v.designName) segs.push({ stage: "design", label: v.designName, patch: { design: v.designName } });
     if (v.colorName) segs.push({ stage: "color", label: v.colorName, patch: { color: v.colorName } });
   }
   return segs;
@@ -160,7 +153,6 @@ export function VariantDescInput({
   className,
   compact = false,
 }: {
-  combinations?: any[];
   catalog?: VariantCatalog;
   fabricNames: string[];
   designNames: string[];
@@ -178,6 +170,9 @@ export function VariantDescInput({
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  // Portalled and fixed, so the staged picker is not clipped by the dialog it
+  // sits in and opens upward when there is no room below.
+  const { anchorRef, style } = useDropdownPosition<HTMLInputElement>(open, 320);
 
   // Distinct vehicle+product bases, built once from the catalog.
   const bases: Option[] = useMemo(() => {
@@ -229,8 +224,6 @@ export function VariantDescInput({
     return specConstraints[specKey(descriptor.brand, descriptor.model, descriptor.generation ?? "")];
   }, [specConstraints, descriptor.brand, descriptor.model, descriptor.generation]);
 
-  // The design family the user picked, if any — used to narrow the design stage.
-  const pickedFamily = segments.find((s) => s.stage === "designFamily")?.label ?? "";
   const stages = useMemo(() => stagesFor(descriptor.product, stageOpts), [descriptor.product, hasFamilies, hasFabrics, hasDesigns, hasColors]);
   const currentStage: Stage | null = segments.length < stages.length ? stages[segments.length] : null;
   const complete = currentStage === null;
@@ -270,28 +263,19 @@ export function VariantDescInput({
       case "fabric":
         opts = (fabricNames ?? []).filter(Boolean).map((f) => ({ label: f, patch: { fabric: f } }));
         break;
-      case "designFamily":
-        opts = families.map((f) => ({ label: f, patch: {} }));
-        break;
       case "design":
-        // Only the designs inside the family the user just chose (or all of
-        // them when designs have no families).
-        // When a family segment already precedes this stage, show the bare
-        // design name (the family is its own segment) so the assembled text
-        // reads "ERGO FIT Archer", not "ERGO FIT ERGO FIT Archer". The stored
-        // descriptor keeps the full label for downstream consistency.
-        opts = designs
-          .filter((d) => !pickedFamily || d.family === pickedFamily)
-          .map((d) => ({ label: hasFamilies && d.family ? d.name : d.label, patch: { design: d.label } }));
+        // Family and design in one list: the label carries both ("ULTRA Triple
+        // Seam"), which is exactly what gets stored on the descriptor.
+        opts = designs.map((d) => ({ label: d.label, patch: { design: d.label } }));
         break;
       case "color":
         opts = colorList.map((c) => ({ label: c, patch: { color: c } }));
         break;
     }
     const q = query.trim();
-    const filtered = q ? opts.filter((o) => matchesAll(o.label, q)) : opts;
-    return filtered.slice(0, 60);
-  }, [currentStage, bases, fabricNames, designs, families, pickedFamily, query, activeConstraint, colorList]);
+    // No cap — the dropdown scrolls, so the whole list stays reachable.
+    return q ? opts.filter((o) => matchesAll(o.label, q)) : opts;
+  }, [currentStage, bases, fabricNames, designs, query, activeConstraint, colorList]);
 
   const committedText = segments.map((s) => s.label).join(" ");
   const displayText = committedText + (committedText && !complete ? " " : "") + (complete ? "" : query);
@@ -302,7 +286,6 @@ export function VariantDescInput({
     headrests: "headrest count",
     armrest: "armrest",
     fabric: "fabric",
-    designFamily: "design family",
     design: "design",
     color: "colour",
   };
@@ -409,6 +392,7 @@ export function VariantDescInput({
           <Search className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
         </span>
         <input
+          ref={anchorRef}
           type="text"
           value={displayText}
           placeholder={segments.length === 0 ? "Search brand, model, product — e.g. baleno seat" : ""}
@@ -458,12 +442,17 @@ export function VariantDescInput({
         </p>
       )}
 
-      {open && !complete && options.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
-          <div className="border-b border-border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+      {open && !complete && options.length > 0 && style && createPortal(
+        <div
+          style={style}
+          className="z-[9999] flex flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-lg"
+        >
+          <div className="shrink-0 border-b border-border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
             {currentStage ? `Pick ${stageHint[currentStage]}` : ""}
           </div>
-          <ul className="max-h-64 overflow-y-auto py-1">
+          {/* The header is fixed and the list scrolls, so a squeezed dropdown
+              near the screen edge still reaches every option. */}
+          <ul className="min-h-0 flex-1 overflow-y-auto py-1">
             {options.map((o, i) => (
               <li key={o.label}>
                 <button
@@ -480,7 +469,8 @@ export function VariantDescInput({
               </li>
             ))}
           </ul>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

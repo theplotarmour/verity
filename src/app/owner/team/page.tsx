@@ -13,6 +13,7 @@ export default async function TeamPage() {
   const [users, activeJobCards, jobCardCounts, departments] = await Promise.all([
     prisma.user.findMany({
       where: { factoryId: dbUser.factoryId },
+      include: { department: { select: { name: true } } },
       orderBy: { name: 'asc' },
     }),
     prisma.jobCard.findMany({
@@ -49,7 +50,7 @@ export default async function TeamPage() {
   const members = users.map((user) => {
     const active = activeByUser.get(user.id);
     const activeOrders = active
-      ? [{ id: active.id, vehicleBrand: active.order.vehicleBrand ?? { name: '' }, vehicleModel: active.order.vehicleModel ?? { name: '' } }]
+      ? [{ id: active.id, itemName: active.order.itemName ?? active.order.productName ?? '' }]
       : [];
     return {
       ...user,

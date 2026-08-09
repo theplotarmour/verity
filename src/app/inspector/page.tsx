@@ -77,7 +77,7 @@ export default async function InspectorInboxPage({
                     <div className="flex justify-between items-start">
                       <div>
                         <h3 className="text-base font-bold tracking-tight text-text-primary">
-                          {inspection.batch.order.vehicleBrand?.name} {inspection.batch.order.vehicleModel?.name}
+                          {inspection.batch.order.itemName || inspection.batch.order.productName || inspection.batch.order.orderNumber}
                         </h3>
                         <p className="text-xs text-text-secondary mt-1">
                           {dict.worker}: <span className="font-semibold text-text-primary">{inspection.batch.order.worker?.name || "—"}</span>

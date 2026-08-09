@@ -27,9 +27,7 @@ export function VerificationPanel({ data, qrCodeUrl, url, submissions, allEviden
       try {
         await navigator.share({
           title: `Quality Passport - ${
-            data.inspection.batch.order.vehicleBrand?.name 
-              ? `${data.inspection.batch.order.vehicleBrand.name} ${data.inspection.batch.order.vehicleModel?.name || ""}`
-              : (data.inspection.batch.order.productType?.name || "Product")
+            data.inspection.batch.order.itemName || data.inspection.batch.order.productName || "Product"
           }`,
           text: `Verified authenticity certificate`,
           url: url,
@@ -120,7 +118,7 @@ export function VerificationPanel({ data, qrCodeUrl, url, submissions, allEviden
 
       {(data.inspection.batch.order.designImages?.length ?? 0) > 0 && (
         <div className="rounded-[28px] border border-border bg-white dark:bg-neutral-900 p-6 shadow-sm">
-          <DesignReference images={data.inspection.batch.order.designImages} designName={data.inspection.batch.order.designName} />
+          <DesignReference images={data.inspection.batch.order.designImages} designName={data.inspection.batch.order.itemName ?? "Design"} />
         </div>
       )}
 

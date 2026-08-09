@@ -89,11 +89,13 @@ export default async function SupervisorHome() {
                         {isBlocked && <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-text-tertiary">Locked</span>}
                       </div>
                       <h3 className="mt-2 text-lg font-semibold tracking-[-0.03em] text-text-primary truncate">
-                        {job.order.vehicleBrand?.name} {job.order.vehicleModel?.name}
+                        {job.order.itemName || job.order.productName || job.order.orderNumber}
                       </h3>
                       <p className="mt-1 text-sm text-text-secondary break-words">
-                        {job.order.orderNumber} - {job.quantity ?? 1} units - {job.order.seatType}, {job.order.headrestCount} HDR
-                        {job.order.hasArmrest ? ", Armrest" : ""}
+                        {job.order.orderNumber} - {job.quantity ?? 1} units
+                        {(job.order.specDetails ?? []).slice(0, 3).map((d: any) => d.value).filter(Boolean).length > 0
+                          ? ` - ${(job.order.specDetails ?? []).slice(0, 3).map((d: any) => d.value).filter(Boolean).join(", ")}`
+                          : ""}
                       </p>
                       {job.reworkReason ? <p className="mt-2 text-xs font-semibold text-danger">QC: {job.reworkReason}</p> : null}
                     </div>

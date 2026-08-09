@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Package, Car, Layers, Boxes, Users, ClipboardCheck, CheckCircle2, XCircle,
+  Package, ListChecks, Layers, Boxes, Users, ClipboardCheck, CheckCircle2, XCircle,
   ChevronDown, ChevronRight, FileText, Calendar, Hash, Truck, User as UserIcon,
   Loader2, Lock,
 } from "lucide-react";
@@ -260,21 +260,30 @@ export function OrderReviewDossier({ review }: { review: any }) {
         )}
       </SectionCard>
 
-      {/* Spec details */}
-      <SectionCard icon={<Car className="h-4 w-4" />} title="Specification" subtitle="What is being produced">
+      {/* Spec details — the item's own fields, product-agnostic. */}
+      <SectionCard icon={<ListChecks className="h-4 w-4" />} title="Specification" subtitle="What is being produced">
         <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-          <Field label="Brand" value={spec.brand} />
-          <Field label="Model" value={spec.model} />
-          <Field label="Generation" value={spec.generation} />
           <Field label="Product" value={spec.product} />
-          {spec.category && <Field label="Category" value={spec.category} />}
-          {spec.seatType && <Field label="Bench type" value={spec.seatType} />}
-          {spec.headrestCount != null && <Field label="Headrests" value={`${spec.headrestCount} HDR`} />}
-          <Field label="Armrest" value={spec.hasArmrest ? "Yes" : "No"} />
-          <Field label="Fabric" value={spec.fabric} />
-          <Field label="Design" value={spec.design} />
-          <Field label="Color" value={spec.color} />
+          {spec.specDetails.map((d: { label: string; value: string }) => (
+            <Field key={d.label} label={d.label} value={d.value} />
+          ))}
         </div>
+
+        {/* Every picture the SKU carries: the product render plus whatever its
+            referenced specs bring (fabric swatch, design artwork). */}
+        {(spec.images ?? []).length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {(spec.images as string[]).map((src) => (
+              <a key={src} href={src} target="_blank" rel="noopener noreferrer">
+                <img
+                  src={src}
+                  alt=""
+                  className="h-20 w-20 rounded-lg border border-border object-cover transition hover:ring-2 hover:ring-[var(--brand)]/40"
+                />
+              </a>
+            ))}
+          </div>
+        )}
       </SectionCard>
 
       {/* Material details */}

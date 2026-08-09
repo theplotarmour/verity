@@ -19,14 +19,15 @@ export async function planSalesOrder(orderId: string) {
 
     // Create a Production Plan for each item in the order
     for (const item of order.items) {
-      // Find the active blueprint for this variant
+      if (!item.itemId) continue;
+      // Find the active blueprint for this item (blueprints are keyed on the item).
       const blueprint = await prisma.blueprintVersion.findFirst({
-        where: { blueprint: { productVariantId: item.productVariantId }, isActive: true }
+        where: { blueprint: { itemId: item.itemId }, isActive: true }
       });
-      
+
       // If no published blueprint, fallback to draft (for Phase 1 simplicity)
       const fallbackBlueprint = blueprint || await prisma.blueprintVersion.findFirst({
-        where: { blueprint: { productVariantId: item.productVariantId } }
+        where: { blueprint: { itemId: item.itemId } }
       });
 
       if (fallbackBlueprint) {
@@ -131,7 +132,7 @@ export async function getActiveWorkOrders() {
       productionPlan: {
         include: {
           blueprintVersion: {
-            include: { blueprint: { include: { productVariant: { include: { product: true } } } } },
+            include: { blueprint: { include: { item: true } } },
           },
         },
       },
@@ -147,7 +148,7 @@ export async function getActiveWorkOrders() {
     ...wo,
     createdAt: wo.startDate ?? new Date(),
     quantity: wo.targetQty,
-    productVariant: wo.productionPlan.blueprintVersion.blueprint.productVariant,
+    productVariant: null,
     tasks: wo.jobCards,
   }));
 }
@@ -214,7 +215,7 @@ export async function getAllProductionTasks() {
           productionPlan: {
             include: {
               blueprintVersion: {
-                include: { blueprint: { include: { productVariant: { include: { product: true } } } } },
+                include: { blueprint: { include: { item: true } } },
               },
             },
           },
@@ -230,7 +231,7 @@ export async function getAllProductionTasks() {
     ...jc,
     workOrder: {
       ...jc.workOrder,
-      productVariant: jc.workOrder.productionPlan.blueprintVersion.blueprint.productVariant,
+      productVariant: null,
     },
   }));
 }
@@ -239,114 +240,6 @@ export async function getDepartments() {
   const user = await getOwnerUser();
   if (!user) return [];
   return prisma.department.findMany({ where: { factoryId: user.factoryId } });
-}
-
-export async function saveBOM(variantId: string, items: { materialId: string; qtyFormula: string; wastePercentage: number }[]) {
-  const user = await getOwnerUser();
-  if (!user) throw new Error("Unauthorized");
-
-  await prisma.$transaction(async (tx) => {
-    // BOMs hang off the blueprint version now; self-heal the chain for
-    // variants that predate blueprints.
-    let blueprint = await tx.blueprint.findUnique({
-      where: { productVariantId: variantId },
-      include: { versions: true },
-    });
-    if (!blueprint) {
-      blueprint = await tx.blueprint.create({
-        data: { factoryId: user.factoryId, productVariantId: variantId },
-        include: { versions: true },
-      });
-    }
-    let version = blueprint.versions.find((v) => v.isActive) ?? blueprint.versions[0];
-    if (!version) {
-      version = await tx.blueprintVersion.create({
-        data: {
-          blueprintId: blueprint.id,
-          versionNumber: 1,
-          name: "V1 - Standard",
-          isActive: true,
-        },
-      });
-      await tx.blueprint.update({ where: { id: blueprint.id }, data: { activeVersionId: version.id } });
-    }
-
-    let bom = await tx.bOM.findUnique({ where: { blueprintVersionId: version.id } });
-    if (!bom) {
-      bom = await tx.bOM.create({
-        data: { factoryId: user.factoryId, blueprintVersionId: version.id },
-      });
-    }
-
-    await tx.bOMItem.deleteMany({ where: { bomId: bom.id } });
-    if (items.length > 0) {
-      await tx.bOMItem.createMany({
-        data: items.map((item) => ({
-          bomId: bom!.id,
-          itemId: item.materialId,
-          quantity: parseFloat(item.qtyFormula) || 1,
-          wastePercent: item.wastePercentage,
-        })),
-      });
-    }
-  }, { timeout: 30000, maxWait: 10000 });
-
-  revalidatePath("/owner/settings");
-}
-
-export async function createWorkOrder(data: {
-  productVariantId: string;
-  quantity: number;
-  startDate?: Date;
-  endDate?: Date;
-}) {
-  const user = await getOwnerUser();
-  if (!user) throw new Error("Unauthorized");
-
-  // WorkOrders require a ProductionPlan + BlueprintVersion; self-heal the
-  // chain for variants without one.
-  let blueprint = await prisma.blueprint.findUnique({
-    where: { productVariantId: data.productVariantId },
-    include: { versions: true },
-  });
-  if (!blueprint) {
-    blueprint = await prisma.blueprint.create({
-      data: { factoryId: user.factoryId, productVariantId: data.productVariantId },
-      include: { versions: true },
-    });
-  }
-  let version = blueprint.versions.find((v) => v.isActive) ?? blueprint.versions[0];
-  if (!version) {
-    version = await prisma.blueprintVersion.create({
-      data: { blueprintId: blueprint.id, versionNumber: 1, name: "V1 - Standard", isActive: true },
-    });
-    await prisma.blueprint.update({ where: { id: blueprint.id }, data: { activeVersionId: version.id } });
-  }
-
-  const plan = await prisma.productionPlan.create({
-    data: {
-      factoryId: user.factoryId,
-      blueprintVersionId: version.id,
-      quantity: data.quantity,
-      status: "RELEASED",
-    },
-  });
-
-  const count = await prisma.workOrder.count({ where: { factoryId: user.factoryId } });
-  const wo = await prisma.workOrder.create({
-    data: {
-      factoryId: user.factoryId,
-      woNumber: `WO-${String(count + 1).padStart(5, "0")}`,
-      productionPlanId: plan.id,
-      targetQty: data.quantity,
-      startDate: data.startDate,
-      endDate: data.endDate,
-      status: "PLANNED",
-    },
-  });
-
-  revalidatePath("/owner/production");
-  return wo;
 }
 
 export async function updateWorkOrderStatus(id: string, status: string) {
@@ -372,7 +265,7 @@ export async function getCompletedWorkOrders() {
       productionPlan: {
         include: {
           blueprintVersion: {
-            include: { blueprint: { include: { productVariant: { include: { product: true } } } } },
+            include: { blueprint: { include: { item: true } } },
           },
         },
       },
@@ -385,7 +278,7 @@ export async function getCompletedWorkOrders() {
     ...wo,
     createdAt: wo.startDate ?? new Date(),
     quantity: wo.targetQty,
-    productVariant: wo.productionPlan.blueprintVersion.blueprint.productVariant,
+    productVariant: null,
   }));
 }
 
@@ -400,7 +293,7 @@ export async function completeWorkOrder(id: string, warehouseId: string) {
         include: {
           blueprintVersion: {
             include: {
-              blueprint: { include: { productVariant: true } },
+              blueprint: { include: { item: true } },
               bom: { include: { items: true } },
             },
           },
@@ -412,7 +305,12 @@ export async function completeWorkOrder(id: string, warehouseId: string) {
   if (!wo) throw new Error("Work order not found");
   if (wo.status === "COMPLETED") throw new Error("Work order already completed");
 
-  const variant = wo.productionPlan.blueprintVersion.blueprint.productVariant;
+  // The blueprint's item is what was produced. A spec-created item may have no
+  // sales variant, so finished goods are received against the item and the
+  // variant is only used where the legacy stock helper still needs it.
+  // The blueprint's item is what was produced, and what stock is received
+  // against. A spec-created item need not have a sales variant.
+  const producedItem = wo.productionPlan.blueprintVersion.blueprint.item;
   const bomItems = wo.productionPlan.blueprintVersion.bom?.items ?? [];
 
   // Consume raw materials according to the BOM (backflush)
@@ -432,7 +330,7 @@ export async function completeWorkOrder(id: string, warehouseId: string) {
   await createStockEntry({
     transactionType: "RECEIPT",
     warehouseId,
-    productVariantId: variant.id,
+    materialId: producedItem.id,
     quantityChange: wo.targetQty,
     referenceDocType: "WORK_ORDER",
     referenceDocId: wo.id,

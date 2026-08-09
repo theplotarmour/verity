@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { Select } from "@/components/ui/primitives";
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { updateUserLanguage } from '@/server/actions/user'
@@ -69,7 +70,7 @@ export function WorkerSettingsClient({ initialLanguage, ownerPhone }: { initialL
         </div>
         <div className="flex items-center gap-2">
           {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-text-tertiary" />}
-          <select 
+          <Select 
             value={lang} 
             onChange={handleLanguageChange}
             disabled={isLoading}
@@ -77,7 +78,7 @@ export function WorkerSettingsClient({ initialLanguage, ownerPhone }: { initialL
           >
             <option value="en">English</option>
             <option value="hi">हिंदी (Hindi)</option>
-          </select>
+          </Select>
         </div>
       </div>
 

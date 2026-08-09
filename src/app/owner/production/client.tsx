@@ -24,7 +24,8 @@ import { Badge, Button, Input, Select } from "@/components/ui/primitives";
 import { PRODUCTION_STATUS_LABELS, type ProductionStatus } from "@/lib/production-status";
 import { getStatusClasses, titleCaseStatus } from "@/lib/utils";
 import { createOrder, createBatchOrders, releaseDrafts, updateOrder } from "@/server/actions/orders";
-import { VariantDescInput, specKey, type VariantValue } from "@/components/factory/VariantDescInput";
+import { specKey, type VariantValue } from "@/components/factory/VariantDescInput";
+import { ItemSearchInput } from "@/components/factory/ItemSearchInput";
 import { productHasSeatSpecs, designLabel } from "@/lib/variant-descriptor";
 import { uploadStorageImage } from "@/server/actions/storage";
 import { createStoragePath } from "@/lib/storage/paths";
@@ -142,6 +143,10 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
     headrestCount: 4,
     remarks: "",
     photoReference: "",
+    // Set when the variant came from the catalogue search. createOrder can
+    // re-derive the item from the spec, but an exact id cannot be thrown off by
+    // a label that formats differently here than it does there.
+    itemId: "",
   }));
   const [batchLines, setBatchLines] = useState<Array<{
     id: string;
@@ -268,8 +273,7 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
       !search ||
       item.orderNumber?.toLowerCase().includes(search) ||
       item.customer?.name?.toLowerCase().includes(search) ||
-      item.vehicleBrand?.name?.toLowerCase().includes(search) ||
-      item.vehicleModel?.name?.toLowerCase().includes(search)
+      item.itemName?.toLowerCase().includes(search)
     )),
     [runningOrders, search]
   );
@@ -308,8 +312,7 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
       return (
         item.orderNumber?.toLowerCase().includes(search) ||
         item.customer?.name?.toLowerCase().includes(search) ||
-        item.vehicleBrand?.name?.toLowerCase().includes(search) ||
-        item.vehicleModel?.name?.toLowerCase().includes(search) ||
+        item.itemName?.toLowerCase().includes(search) ||
         item.batches?.[0]?.batchNumber?.toLowerCase().includes(search)
       );
     }),
@@ -458,10 +461,13 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
       ].filter(Boolean),
     })),
     products: [
+      // Item groups first: they are where producible categories actually live
+      // now. The legacy lists stay as a fallback for factories not yet migrated.
+      ...(data.finishedGoodGroups ?? []).map((g: any) => g.name),
       ...productTypes.map((pt: any) => pt.name),
       ...(data.products ?? []).map((p: any) => p.name),
     ].filter(Boolean),
-  }), [brands, models, productTypes, data.products]);
+  }), [brands, models, productTypes, data.products, data.finishedGoodGroups]);
 
   // Per Model+Generation spec constraints, so the variant search never offers
   // impossible specs (e.g. "Alto 7HDR"). Empty allowances = everything allowed,
@@ -808,7 +814,7 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
       newErrors.customerPhone = true;
     }
     
-    if (!isBatchMode && productTypes.length === 0) {
+    if (!isBatchMode && productTypes.length === 0 && !draft.itemId) {
       if (!draft.vehicleBrandId || !draft.vehicleModelId) {
         newErrors.vehicleSearch = true;
         toast.error("Vehicle model is required.");
@@ -967,6 +973,7 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
         orderType: isOnOrdered ? orderType : "RETAIL",
         expectedDeliveryDate: isOnOrdered && expectedDeliveryDate ? expectedDeliveryDate : undefined,
         productVariantId: (finalDraft as any).productVariantId || "",
+        itemId: (finalDraft as any).itemId || undefined,
       };
       const result = await createOrder(payload as any);
       // Partial stock: not enough to fulfil the whole order. Ask the owner rather
@@ -1078,7 +1085,7 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
                   </button>
                 ))}
                 <span className="ml-auto text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Worker:</span>
-                <select
+                <Select
                   value={workerFilter}
                   onChange={(e) => setWorkerFilter(e.target.value)}
                   className="h-7 rounded-xl border border-border bg-surface text-xs text-text-primary px-2 focus:outline-none focus:ring-1 focus:ring-[var(--brand)]"
@@ -1087,7 +1094,7 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
                   {workers.map((w: any) => (
                     <option key={w.id} value={w.id}>{w.name}</option>
                   ))}
-                </select>
+                </Select>
               </div>
 
               {openOrders.length === 0 ? (
@@ -1105,8 +1112,8 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
                         <TableRow>
                           <TableHead>Order</TableHead>
                           <TableHead>Customer</TableHead>
-                          <TableHead>Vehicle</TableHead>
-                          <TableHead>Setup</TableHead>
+                          <TableHead>Item</TableHead>
+                          <TableHead>Spec</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead className="text-right">Action</TableHead>
                         </TableRow>
@@ -1131,13 +1138,11 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
                               <div className="mt-1 text-xs text-text-tertiary">{new Date(order.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</div>
                             </TableCell>
                             <TableCell>
-                              <div className="font-medium text-text-primary">{order.vehicleBrand?.name} {order.vehicleModel?.name}</div>
-                              <div className="mt-1 text-xs text-text-tertiary">{order.vehicleYear}</div>
+                              <div className="font-medium text-text-primary">{order.itemName || order.productName || "—"}</div>
                             </TableCell>
                             <TableCell>
                               <div className="text-xs text-text-secondary">
-                                <div>{order.design?.name}</div>
-                                <div className="mt-1">{order.material?.name} • {order.color?.name}</div>
+                                {(order.specDetails ?? []).slice(0, 3).map((d: any) => d.value).filter(Boolean).join(" · ") || "—"}
                               </div>
                             </TableCell>
                             <TableCell>
@@ -1187,12 +1192,12 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
                             <p className="font-medium text-text-primary mt-0.5 truncate flex items-center gap-1.5">{order.customer?.name} <OrderTypeBadge orderType={order.orderType} /></p>
                           </div>
                           <div>
-                            <p className="text-text-tertiary uppercase font-bold tracking-wider text-[9px]">Vehicle</p>
-                            <p className="font-medium text-text-primary mt-0.5 truncate">{order.vehicleBrand?.name} {order.vehicleModel?.name} {order.vehicleYear ? `(${order.vehicleYear})` : ""}</p>
+                            <p className="text-text-tertiary uppercase font-bold tracking-wider text-[9px]">Item</p>
+                            <p className="font-medium text-text-primary mt-0.5 truncate">{order.itemName || order.productName || "—"}</p>
                           </div>
                           <div className="col-span-2 mt-1">
-                            <p className="text-text-tertiary uppercase font-bold tracking-wider text-[9px]">Setup</p>
-                            <p className="text-text-secondary mt-0.5 truncate">{order.design?.name} • {order.material?.name} • {order.color?.name}</p>
+                            <p className="text-text-tertiary uppercase font-bold tracking-wider text-[9px]">Spec</p>
+                            <p className="text-text-secondary mt-0.5 truncate">{(order.specDetails ?? []).slice(0, 3).map((d: any) => d.value).filter(Boolean).join(" · ") || "—"}</p>
                           </div>
                         </div>
                         <div className="pt-2">
@@ -1279,7 +1284,7 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
                             className="h-4 w-4 rounded border-border accent-[var(--brand)] cursor-pointer"
                           />
                         </th>
-                        {["Order", "Vehicle", "Customer", "Qty", "Specs", "Created", ""].map((h) => (
+                        {["Order", "Item", "Customer", "Qty", "Spec", "Created", ""].map((h) => (
                           <th key={h} className="px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">{h}</th>
                         ))}
                       </tr>
@@ -1320,16 +1325,12 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
                               </div>
                             </td>
                             <td className="px-4 py-3.5 font-semibold text-text-primary">
-                              {order.vehicleBrand?.name} {order.vehicleModel?.name}{order.vehicleYear ? ` · ${order.vehicleYear}` : ""}
+                              {order.itemName || order.productName || "—"}
                             </td>
                             <td className="px-4 py-3.5 text-text-secondary">{order.customer?.name ?? "Stock"}</td>
                             <td className="px-4 py-3.5 font-semibold text-text-primary">{order.quantity}</td>
                             <td className="px-4 py-3.5 text-xs text-text-secondary">
-                              {order.seatType === "Single Back" ? "SB" : "DB"}
-                              {order.headrestCount ? `;${order.headrestCount}HDR` : ""}
-                              {order.hasArmrest ? ";Arm" : ""}
-                              {order.material?.name ? ` · ${order.material.name}` : ""}
-                              {order.design?.name ? ` · ${order.design.name}` : ""}
+                              {(order.specDetails ?? []).slice(0, 3).map((d: any) => d.value).filter(Boolean).join(" · ") || "—"}
                             </td>
                             <td className="px-4 py-3.5 text-text-tertiary text-xs">{new Date(order.createdAt).toLocaleString([], { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</td>
                             <td className="px-4 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
@@ -1579,16 +1580,10 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
                     <div className="space-y-6">
                       <div className="rounded-[24px] border border-border bg-surface-2/30 p-4">
                         {/* Blocks carry their own quantities — no separate total field. */}
-                        <VariantDescInput
-                          combinations={combinations}
-                          catalog={variantCatalog}
-                          fabricNames={fabricNames}
-                          designNames={designNames}
-                          designOptions={designOptions}
-                          specConstraints={specConstraints}
-                          colorNames={colors.map((c: any) => c.name)}
+                        <ItemSearchInput
                           value={variantValue}
                           onApply={applyVariantValue}
+                          onPickItem={(itemId) => updateDraft({ itemId: itemId ?? "" })}
                         />
                       </div>
 
@@ -1652,14 +1647,7 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
                                 {/* Per-block editable variant description (seeds from the main
                                     selection; edits stay local to this block). */}
                                 <div className="mt-4">
-                                  <VariantDescInput
-                                    combinations={combinations}
-                                    catalog={variantCatalog}
-                                    fabricNames={fabricNames}
-                                    designNames={designNames}
-                                    designOptions={designOptions}
-                                    specConstraints={specConstraints}
-                                    colorNames={colors.map((c: any) => c.name)}
+                                  <ItemSearchInput
                                     value={lineVariantValue(line)}
                                     onApply={(v) => applyLineVariantValue(line.id, v)}
                                     compact
@@ -1812,18 +1800,19 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
                   {!isBatchMode && (
                     <>
                       <SectionBlock number="2" title="Variant Search" description="Search or select the brand, model, generation, product, specs, fabrics, design." />
+                      {/* Both columns carry a label and the same 48px control
+                          height, so the search box and Quantity line up. Without
+                          the label on the left the search sat a row higher than
+                          the field beside it. */}
                       <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px] items-start">
-                        <VariantDescInput
-                          combinations={combinations}
-                          catalog={variantCatalog}
-                          fabricNames={fabricNames}
-                          designNames={designNames}
-                          designOptions={designOptions}
-                          specConstraints={specConstraints}
-                          colorNames={colors.map((c: any) => c.name)}
-                          value={variantValue}
-                          onApply={applyVariantValue}
-                        />
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">Item</label>
+                          <ItemSearchInput
+                            value={variantValue}
+                            onApply={applyVariantValue}
+                            onPickItem={(itemId) => updateDraft({ itemId: itemId ?? "" })}
+                          />
+                        </div>
 
                         <div className="space-y-1">
                           <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">Quantity</label>
@@ -1831,13 +1820,14 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
                             type="tel"
                             inputMode="numeric"
                             placeholder="Qty"
+                            className="h-12"
                             value={String(draft.quantity)}
                             onChange={(event) => updateDraft({ quantity: Number(event.target.value.replace(/\D/g, "").slice(0, 3)) || 0 })}
                           />
                         </div>
                       </div>
  
-                    {productTypes.length > 0 ? (
+                    {productTypes.length > 0 && (
                     <div className="space-y-4">
                       <SectionBlock number="3" title="Product Specification" description="Choose product type and enter specifications." />
                       
@@ -1972,67 +1962,6 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
                         ))}
                       </div>
                     </div>
-                    ) : (
-                      <>
-                      <SectionBlock number="3" title="Manufacturing Specs" description="Configure the seat covers based on the Excel requirements." />
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">Seat Type</label>
-                          <div className="flex rounded-xl bg-surface-secondary p-1 border border-border/60 w-fit">
-                            {["Single Back", "Double Back"].map((opt) => (
-                              <button
-                                key={opt}
-                                type="button"
-                                onClick={() => updateDraft({ seatType: opt })}
-                                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all duration-200 cursor-pointer ${
-                                  draft.seatType === opt
-                                    ? "bg-[var(--brand)] text-white shadow-sm"
-                                    : "text-text-secondary hover:text-text-primary"
-                                }`}
-                              >
-                                {opt}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">Headrest Count</label>
-                          <div className="flex flex-wrap gap-1.5 pt-1">
-                            {[2, 4, 5, 6, 7, 8].map((count) => {
-                              const active = draft.headrestCount === count;
-                              return (
-                                <button
-                                  key={count}
-                                  type="button"
-                                  onClick={() => updateDraft({ headrestCount: count })}
-                                  className={`h-9 w-9 text-xs font-bold rounded-xl border transition cursor-pointer ${
-                                    active
-                                      ? "border-brand bg-brand-soft text-brand shadow-sm"
-                                      : "border-border bg-surface hover:bg-surface-2 text-text-primary"
-                                  }`}
-                                >
-                                  {count}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 mt-2">
-                        <input
-                          type="checkbox"
-                          id="hasArmrest"
-                          checked={draft.hasArmrest}
-                          onChange={(e) => updateDraft({ hasArmrest: e.target.checked })}
-                          className="h-4 w-4 rounded border-border accent-[var(--brand)] cursor-pointer"
-                        />
-                        <label htmlFor="hasArmrest" className="text-sm font-medium text-text-primary">
-                          Includes Armrest covers (ARM)
-                        </label>
-                      </div>
-                      </>
                     )}
                     </>
                   )}
@@ -2078,50 +2007,6 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
                     </div>
                   </div>
 
-                  <div className="my-6 border-b border-border"></div>
-
-                  <SectionBlock number="4" title="Fabric & Finish" description="Choose the fabric, design, and color for production." />
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">Fabric</label>
-                      <Select className="bg-background w-full" value={draft.materialId} onChange={(event) => updateDraft({ materialId: event.target.value })}>
-                        {materials.map((item: any) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name}
-                          </option>
-                        ))}
-                      </Select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">Design Finish</label>
-                      <Select className="bg-background w-full" value={draft.designId} onChange={(event) => updateDraft({ designId: event.target.value })}>
-                        {Array.from(new Set(designs.map((d: any) => d.category || "Other"))).map((cat: any) => (
-                          <optgroup key={cat} label={cat}>
-                            {designs
-                              .filter((d: any) => (d.category || "Other") === cat)
-                              .map((item: any) => (
-                                <option key={item.id} value={item.id}>
-                                  {item.name}
-                                </option>
-                              ))}
-                          </optgroup>
-                        ))}
-                      </Select>
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">Color Accent</label>
-                      <Select className="bg-background w-full" value={draft.colorId} onChange={(event) => updateDraft({ colorId: event.target.value })}>
-                        {colors.map((item: any) => (
-                          <option key={item.id} value={item.id}>
-                            {getColorIndicator(item.name)} {item.name}
-                          </option>
-                        ))}
-                      </Select>
-                    </div>
-
-                  </div>
                     </>
                   )}
                 </div>

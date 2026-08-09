@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Car, Palette, Layers, FileText, Ruler } from "lucide-react";
+import { ChevronDown, ChevronRight, Layers, FileText, Ruler } from "lucide-react";
 import { Surface } from "@/components/design/Surface";
 import { DesignReference } from "@/components/factory/DesignReference";
 
-// The full build spec for floor staff (workers + supervisors): vehicle, product,
-// design, fabric, colour, seat specs, quantity and remarks.
+// The full build spec for floor staff (workers + supervisors): the item and
+// every one of its answered spec fields, product-agnostic — a seat cover, a box
+// and a shirt each show their own fields under their own labels.
 //
 // Customer identity is deliberately excluded — the floor needs to know WHAT to
 // build, not WHO it is for.
@@ -25,14 +26,9 @@ export function OrderSpecCard({ order, defaultOpen = true }: { order: any; defau
   const [open, setOpen] = useState(defaultOpen);
   if (!order) return null;
 
-  const vehicle = [order.vehicleBrand?.name, order.vehicleModel?.name].filter(Boolean).join(" ");
-  const seatSpec = [
-    order.seatType,
-    order.headrestCount ? `${order.headrestCount} HDR` : null,
-    order.hasArmrest ? "Armrest" : null,
-  ].filter(Boolean).join(" · ");
-  const specFields: Array<{ label: string; value: string }> = order.specFields ?? [];
+  const specFields: Array<{ label: string; value: string }> = order.specDetails ?? order.specFields ?? [];
   const designImages: string[] = order.designImages ?? [];
+  const heading = order.itemName || order.productName || order.orderNumber;
 
   return (
     <Surface className="overflow-hidden">
@@ -44,7 +40,7 @@ export function OrderSpecCard({ order, defaultOpen = true }: { order: any; defau
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">Order spec</p>
           <p className="truncate text-sm font-semibold text-text-primary">
-            {vehicle || order.productName || order.orderNumber}
+            {heading}
           </p>
         </div>
         <span className="shrink-0 rounded-full bg-surface-2 px-2 py-0.5 text-[10px] font-bold text-text-secondary">
@@ -55,33 +51,12 @@ export function OrderSpecCard({ order, defaultOpen = true }: { order: any; defau
       {open && (
         <div className="border-t border-border px-4 py-3">
           <div className="divide-y divide-border/50">
-            <div className="pb-1">
-              <p className="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-text-tertiary">
-                <Car className="h-3 w-3" /> Vehicle
-              </p>
-              <Row label="Model" value={vehicle} />
-              <Row label="Generation" value={order.vehicleYear} />
-            </div>
-
             <div className="py-1">
               <p className="my-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-text-tertiary">
-                <Layers className="h-3 w-3" /> Product
+                <Layers className="h-3 w-3" /> {order.productName || "Specification"}
               </p>
-              <Row label="Product" value={order.productName} />
-              <Row label="Variant" value={order.variantName} />
-              <Row label="Specs" value={seatSpec} />
+              <Row label="Item" value={order.itemName} />
               {specFields.map((s) => <Row key={s.label} label={s.label} value={s.value} />)}
-            </div>
-
-            <div className="py-1">
-              <p className="my-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-text-tertiary">
-                <Palette className="h-3 w-3" /> Material &amp; finish
-              </p>
-              <Row label="Design" value={order.designName} />
-              <Row label="Family" value={order.designFamily} />
-              <Row label="Fabric" value={order.fabricName} />
-              <Row label="Colour" value={order.colorName} />
-              {order.fabricConsumption ? <Row label="Fabric/unit" value={`${order.fabricConsumption} m`} /> : null}
             </div>
 
             {(order.remarks || order.cadFileUrl) && (
@@ -103,7 +78,7 @@ export function OrderSpecCard({ order, defaultOpen = true }: { order: any; defau
           {designImages.length > 0 && (
             <div className="mt-3">
               <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-text-tertiary">Design reference</p>
-              <DesignReference images={designImages} designName={order.designName ?? "Design"} compact />
+              <DesignReference images={designImages} designName={order.itemName ?? "Design"} compact />
             </div>
           )}
         </div>

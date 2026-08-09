@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Fragment } from "react";
 import {
   CheckCircle,
   XCircle,
@@ -15,7 +15,7 @@ import { verifyCheckpoint, approveInspection, rejectInspection } from "@/server/
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { Input, Button, Badge } from "@/components/ui/primitives";
+import { Input, Button, Badge, Select } from "@/components/ui/primitives";
 import { toast } from "@/components/ui/toast";
 import { OrderSpecCard } from "@/components/factory/OrderSpecCard";
 
@@ -198,7 +198,7 @@ export function ReviewCheckpoints({
   };
 
   // ---- Shared fragments ---------------------------------------------------
-  const TabBar = ({ mobile }: { mobile?: boolean }) => (
+  const renderTabBar = (mobile?: boolean) => (
     <div className={cn(
       "flex items-center gap-1 overflow-x-auto scrollbar-none shrink-0 border-b border-border",
       mobile ? "px-3 py-2 bg-surface-2/30" : "px-4 pt-3 bg-surface-2/30",
@@ -239,7 +239,7 @@ export function ReviewCheckpoints({
     </div>
   );
 
-  const CheckpointRow = ({ sub, idx }: { sub: any; idx: number }) => {
+  const renderCheckpointRow = (sub: any, idx: number) => {
     const failed = sub.passFail === "FAIL";
     const approved = sub.verificationStatus === "APPROVED";
     const rejected = sub.verificationStatus === "REJECTED";
@@ -286,7 +286,7 @@ export function ReviewCheckpoints({
     );
   };
 
-  const SectionVerdictBar = ({ sec }: { sec: Section }) => {
+  const renderSectionVerdictBar = (sec: Section) => {
     const reviewed = sectionVerified(sec);
     if (reviewed) {
       const rejected = sec.subs.some((s) => s.verificationStatus === "REJECTED");
@@ -309,7 +309,7 @@ export function ReviewCheckpoints({
     );
   };
 
-  const VideoReview = () => {
+  const renderVideoReview = () => {
     if (!videoRequired) return null;
     return (
       <div className="rounded-2xl border border-border bg-surface p-4 space-y-3">
@@ -343,10 +343,15 @@ export function ReviewCheckpoints({
     );
   };
 
-  const FinalPanel = () => (
+  // Plain render helpers, not components. Declared inside the page they close
+  // over its state, and mounting them as <FinalPanel /> made React treat each
+  // render as a brand-new component type — remounting the subtree and losing
+  // input focus and local state every keystroke. Calling them returns the same
+  // elements without ever creating a component during render.
+  const renderFinalPanel = () => (
     <div className="mx-auto w-full max-w-md space-y-4">
       <OrderSpecCard order={inspection.batch?.order} defaultOpen={false} />
-      <VideoReview />
+      {renderVideoReview()}
       <div className="rounded-2xl border border-border bg-surface p-4">
         <p className="text-sm font-bold text-text-primary">Sign off the quality passport</p>
         <p className="mt-1 text-xs text-text-secondary">
@@ -356,11 +361,11 @@ export function ReviewCheckpoints({
         {packingOperators.length > 0 && (
           <div className="mt-3">
             <label className="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">Assign packing operator</label>
-            <select value={packerId} onChange={(e) => setPackerId(e.target.value)}
+            <Select value={packerId} onChange={(e) => setPackerId(e.target.value)}
               className="mt-1 h-9 w-full rounded-xl border border-border bg-background px-2 text-xs font-medium text-text-primary">
               <option value="">Leave unassigned</option>
               {packingOperators.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            </Select>
           </div>
         )}
         <Button onClick={finalApprove} disabled={!canApprove} className="mt-3 w-full gap-2 disabled:opacity-40">
@@ -370,10 +375,10 @@ export function ReviewCheckpoints({
           <Input placeholder="Rejection reason…" value={rejectReason}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRejectReason(e.target.value)} className="h-10 rounded-xl text-xs" required />
           {reworkTargets.length > 0 && (
-            <select value={rejectTargetId} onChange={(e) => setRejectTargetId(e.target.value)}
+            <Select value={rejectTargetId} onChange={(e) => setRejectTargetId(e.target.value)}
               className="h-10 w-full rounded-xl border border-border bg-surface px-3 text-xs font-semibold text-text-primary">
               {reworkTargets.map((t) => <option key={t.id} value={t.id}>Return to: {t.stageName}</option>)}
-            </select>
+            </Select>
           )}
           <Button type="submit" variant="danger" className="w-full gap-1.5 text-xs"><XCircle className="h-4 w-4" /> Send for rework</Button>
         </form>
@@ -381,21 +386,21 @@ export function ReviewCheckpoints({
     </div>
   );
 
-  const SectionPanel = ({ sec }: { sec: Section }) => (
+  const renderSectionPanel = (sec: Section) => (
     <div className="mx-auto w-full max-w-2xl space-y-4">
-      {sec.subs.map((sub, idx) => <CheckpointRow key={sub.id} sub={sub} idx={idx} />)}
-      <SectionVerdictBar sec={sec} />
+      {sec.subs.map((sub, idx) => <Fragment key={sub.id}>{renderCheckpointRow(sub, idx)}</Fragment>)}
+      {renderSectionVerdictBar(sec)}
     </div>
   );
 
-  const Header = () => (
+  const renderHeader = () => (
     <div className="flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3 shrink-0 md:px-6 md:py-4">
       <div className="flex min-w-0 items-center gap-3">
         <Link href={backUrl} className="shrink-0 text-text-secondary hover:text-text-primary"><ArrowLeft className="h-5 w-5" /></Link>
         <div className="min-w-0">
           <span className="block text-[10px] font-mono font-bold uppercase text-text-tertiary">Reviewing {inspection.batch?.batchNumber}</span>
           <h1 className="truncate text-base font-bold tracking-tight text-text-primary md:text-lg">
-            {inspection.batch?.order?.vehicleBrand?.name} {inspection.batch?.order?.vehicleModel?.name}
+            {inspection.batch?.order?.itemName || inspection.batch?.order?.productName || inspection.batch?.order?.orderNumber}
           </h1>
         </div>
       </div>
@@ -427,7 +432,7 @@ export function ReviewCheckpoints({
                     <span className="text-[9px] font-mono font-bold uppercase text-text-tertiary">{item.batch?.batchNumber}</span>
                     <span className={cn("h-2 w-2 rounded-full", item.status === "WAITING_QC" ? "bg-warning" : "bg-danger")} />
                   </div>
-                  <p className="mt-1.5 truncate text-sm font-bold text-text-primary">{item.batch?.order?.vehicleBrand?.name} {item.batch?.order?.vehicleModel?.name}</p>
+                  <p className="mt-1.5 truncate text-sm font-bold text-text-primary">{item.batch?.order?.itemName || item.batch?.order?.productName || item.batch?.order?.orderNumber}</p>
                   <p className="mt-1 text-[11px] text-text-secondary">By {item.batch?.order?.worker?.name || "Worker"}</p>
                 </div>
               </Link>
@@ -438,7 +443,7 @@ export function ReviewCheckpoints({
 
       {/* Main */}
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <Header />
+        {renderHeader()}
         {emptyState ? (
           <div className="flex flex-1 items-center justify-center p-8 text-center text-text-tertiary">
             <div>
@@ -448,9 +453,9 @@ export function ReviewCheckpoints({
           </div>
         ) : (
           <>
-            <TabBar />
+            {renderTabBar()}
             <div className="flex-1 overflow-y-auto p-4 md:p-6">
-              {isFinalTab ? <FinalPanel /> : currentSection ? <SectionPanel sec={currentSection} /> : null}
+              {isFinalTab ? renderFinalPanel() : currentSection ? renderSectionPanel(currentSection) : null}
             </div>
           </>
         )}

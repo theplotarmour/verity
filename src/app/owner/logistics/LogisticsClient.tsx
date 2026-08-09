@@ -100,7 +100,7 @@ export default function LogisticsClient({ dispatches }: any) {
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-text-tertiary">{d.salesOrder?.soNumber}</p>
                     <p className="mt-1 text-sm font-semibold text-text-primary">
-                      {d.salesOrder?.items?.[0]?.productVariant?.product?.name ?? "Order"}
+                      {d.salesOrder?.item?.group?.name ?? d.salesOrder?.item?.name ?? "Order"}
                       {d.salesOrder?.items?.[0]?.quantity ? ` · ${d.salesOrder.items[0].quantity} units` : ""}
                     </p>
                   </div>

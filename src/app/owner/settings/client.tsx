@@ -10,23 +10,19 @@ import {
   Download, CheckCircle2, Info, Edit, Settings, Database, Activity, HardDrive, 
   Cpu, FileCode, Trash2, ArrowRight, UserCheck, ShieldCheck
 } from "lucide-react";
-import { addBrand, addModel, removeBrand, removeModel, updateBrand, updateModel } from "@/server/actions/masterData";
 import { Surface } from "@/components/design/Surface";
 import { NotificationPrefsCard } from "@/components/settings/NotificationPrefsCard";
-import { Button, Input, Badge } from "@/components/ui/primitives";
+import { Button, Input, Badge, Select } from "@/components/ui/primitives";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { SystemRole, User } from "@prisma/client";
 import { transferOwnership } from "@/server/actions/team";
 import { toast } from "@/components/ui/toast";
-import { MasterSheetView } from "./MasterSheetView";
-import { QCTemplateBuilder } from "./QCTemplateBuilder";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { tokens } from "@/design-system/tokens";
 import { typography } from "@/design-system/typography";
 import { components } from "@/design-system/components";
 import { layouts } from "@/design-system/layouts";
-import { BRAND_ACCENT } from "@/lib/brand";
 
 export function SettingsClient({ 
   initialData, 
@@ -43,7 +39,6 @@ export function SettingsClient({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [loading, setLoading] = useState(false);
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
   
   // Notion-style page edit state
   const [isEditMode, setIsEditMode] = useState(false);
@@ -185,12 +180,6 @@ export function SettingsClient({
     if (!name.trim()) return;
     setLoading(true);
     try {
-      if (type === "brand") await updateBrand(id, name.trim());
-      
-      else if (type === "model") {
-        const modelObj = models.find((m: any) => m.id === id);
-        await updateModel(id, name.trim(), modelObj?.year || "");
-      }
       toast.success("Updated successfully");
       setEditingExplorerItem(null);
       router.refresh();
@@ -206,8 +195,6 @@ export function SettingsClient({
     if (!selectedItem) return;
     try {
       const { id, type } = selectedItem;
-      if (type === "brand") await removeBrand(id);
-      else if (type === "model") await removeModel(id);
       
       
       setSelectedItem(null);
@@ -221,7 +208,6 @@ export function SettingsClient({
 
   // Accent Colors mapping
   const ACCENT_COLORS = [
-    { name: "Verity", hex: BRAND_ACCENT },
     { name: "Blue", hex: "#007AFF" },
     { name: "Graphite", hex: "#8E8E93" },
     { name: "Red", hex: "#FF3B30" },
@@ -582,13 +568,15 @@ export function SettingsClient({
                     <p className={typography.caption}>Central intelligence repository.</p>
                   </div>
                 </div>
-                <Link
-                  href="/owner/settings/master-data"
-                  className="h-8 px-3.5 rounded-xl bg-[var(--brand)] text-white text-[10px] font-bold flex items-center gap-1.5 hover:opacity-90 transition cursor-pointer shadow-sm"
-                >
-                  <FileSpreadsheet className="h-3.5 w-3.5" />
-                  Open Master Data Studio
-                </Link>
+                <div className="flex items-center gap-2">
+                  <Link
+                    href="/owner/master-data"
+                    className="h-8 px-3.5 rounded-xl bg-[var(--brand)] text-white text-[10px] font-bold flex items-center gap-1.5 hover:opacity-90 transition cursor-pointer shadow-sm"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5" />
+                    Master Data Studio
+                  </Link>
+                </div>
               </div>
 
               <div className="space-y-4">
@@ -622,23 +610,6 @@ export function SettingsClient({
                   </div>
                 </div>
               </div>
-            </Surface>
-
-            {/* QC Template Builder card (full editor lives on its own page) */}
-            <Surface className={cn(components.card.identity, "bg-surface border border-border rounded-3xl p-5")}>
-              <div className="flex justify-between items-center border-b border-border/40 pb-4 mb-4 shrink-0">
-                <div className="flex flex-col">
-                  <span className={typography.labelL}>Workflow</span>
-                  <h2 className={`${typography.headingL} mt-0.5`}>Templates</h2>
-                </div>
-                <Link
-                  href="/owner/settings/qc-templates"
-                  className="h-8 px-3.5 rounded-xl border border-border bg-surface text-text-secondary hover:text-text-primary text-[10px] font-bold transition cursor-pointer flex items-center gap-1.5"
-                >
-                  Open Templates Page
-                </Link>
-              </div>
-              <QCTemplateBuilder />
             </Surface>
 
             {/* Notification preferences */}
@@ -717,89 +688,10 @@ export function SettingsClient({
 
       {/* Add Brand Modal */}
       <AnimatePresence>
-        {showAddBrand && (
-          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
-            <div onClick={() => setShowAddBrand(false)} className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="relative w-full max-w-sm bg-surface rounded-[24px] border border-border p-6 shadow-2xl z-10"
-            >
-              <h3 className="text-base font-bold text-text-primary mb-4">Add Brand Record</h3>
-              <Input
-                placeholder="Brand Name (e.g. Honda)"
-                value={newBrandName}
-                onChange={(e) => setNewBrandName(e.target.value)}
-                className="h-10 text-xs rounded-xl mb-4"
-              />
-              <div className="flex gap-2.5 justify-end">
-                <Button variant="secondary" onClick={() => setShowAddBrand(false)}>Cancel</Button>
-                <Button 
-                  onClick={async () => {
-                    if (!newBrandName.trim()) return;
-                    await addBrand(newBrandName.trim());
-                    setNewBrandName("");
-                    setShowAddBrand(false);
-                    router.refresh();
-                    toast.success("Brand added");
-                  }}
-                  className="bg-[var(--brand)] text-white border-transparent cursor-pointer"
-                >
-                  Save
-                </Button>
-              </div>
-            </motion.div>
-          </div>
-        )}
       </AnimatePresence>
 
       {/* Add Model Modal */}
       <AnimatePresence>
-        {showAddModel && (
-          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
-            <div onClick={() => setShowAddModel(false)} className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="relative w-full max-w-sm bg-surface rounded-[24px] border border-border p-6 shadow-2xl z-10"
-            >
-              <h3 className="text-base font-bold text-text-primary mb-4">Add Model Record</h3>
-              <div className="space-y-3 mb-4">
-                <Input
-                  placeholder="Model Name (e.g. Civic)"
-                  value={newModelName}
-                  onChange={(e) => setNewModelName(e.target.value)}
-                  className="h-10 text-xs rounded-xl"
-                />
-                <Input
-                  placeholder="Model Year (e.g. 2025)"
-                  value={newModelYear}
-                  onChange={(e) => setNewModelYear(e.target.value)}
-                  className="h-10 text-xs rounded-xl"
-                />
-              </div>
-              <div className="flex gap-2.5 justify-end">
-                <Button variant="secondary" onClick={() => setShowAddModel(false)}>Cancel</Button>
-                <Button 
-                  onClick={async () => {
-                    if (!newModelName.trim() || !activeBrandId) return;
-                    await addModel(activeBrandId, newModelName.trim(), newModelYear.trim());
-                    setNewModelName("");
-                    setNewModelYear("");
-                    setShowAddModel(false);
-                    router.refresh();
-                    toast.success("Model added");
-                  }}
-                  className="bg-[var(--brand)] text-white border-transparent cursor-pointer"
-                >
-                  Save
-                </Button>
-              </div>
-            </motion.div>
-          </div>
-        )}
       </AnimatePresence>
 
       {/* Add Material Modal */}
@@ -958,7 +850,7 @@ export function SettingsClient({
                   <div className="space-y-4">
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold text-text-secondary">Select target co-owner</label>
-                      <select
+                      <Select
                         value={transferTargetId}
                         onChange={(e) => setTransferTargetId(e.target.value)}
                         className="w-full h-10 border border-border rounded-xl px-3 text-xs font-semibold bg-surface text-text-primary focus:outline-none focus:ring-1 focus:ring-[var(--brand)]"
@@ -967,7 +859,7 @@ export function SettingsClient({
                         {coOwners.map(u => (
                           <option key={u.id} value={u.id}>{u.name} ({u.phone})</option>
                         ))}
-                      </select>
+                      </Select>
                     </div>
 
                     <div className="space-y-1.5">
@@ -1009,27 +901,6 @@ export function SettingsClient({
         )}
       </AnimatePresence>
 
-      <MasterSheetView 
-        isOpen={isSheetOpen}
-        onClose={() => setIsSheetOpen(false)}
-        masterData={{
-          brands,
-          models,
-          productCategories: masterData.productCategories,
-          products: masterData.products,
-          productVariants: masterData.productVariants,
-          templates,
-          suppliers: masterData.suppliers,
-          warehouses: masterData.warehouses,
-          materialCategories: masterData.materialCategories,
-          materials: masterData.materials,
-          designs: (masterData as any).designs,
-          colors: (masterData as any).colors,
-          productTypes: (masterData as any).productTypes,
-          specBoms: (masterData as any).specBoms,
-          
-        }}
-      />
 
       <ConfirmDialog
         isOpen={isConfirmTransferOpen}

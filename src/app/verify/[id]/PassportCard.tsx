@@ -4,12 +4,8 @@ import { motion } from "framer-motion";
 import { BadgeCheck, Factory, User } from "lucide-react";
 
 export function PassportCard({ data }: { data: any }) {
-  const brandName = data.inspection.batch.order.vehicleBrand?.name 
-    ? data.inspection.batch.order.vehicleBrand.name 
-    : (data.inspection.batch.order.productType?.name || "Premium");
-  const modelName = data.inspection.batch.order.vehicleModel?.name 
-    ? data.inspection.batch.order.vehicleModel.name 
-    : (`#${data.inspection.batch.order.orderNumber || ""}`);
+  const brandName = data.inspection.batch.order.itemName || data.inspection.batch.order.productName || "Premium";
+  const modelName = `#${data.inspection.batch.order.orderNumber || ""}`;
 
   return (
     <motion.div

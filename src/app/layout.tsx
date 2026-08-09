@@ -1,16 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Noto_Sans_Devanagari } from "next/font/google";
+import { Inter, Noto_Sans_Devanagari } from "next/font/google";
 import { RootProviders } from "@/components/providers/root-providers";
-import { BRAND_ACCENT, BRAND_DESCRIPTION, BRAND_FULL_TITLE, BRAND_NAME } from "@/lib/brand";
 import "./globals.css";
 
-const geist = Geist({
-  variable: "--font-geist",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
@@ -22,16 +16,17 @@ const notoSansDevanagari = Noto_Sans_Devanagari({
 
 export const metadata: Metadata = {
   title: {
-    default: BRAND_FULL_TITLE,
-    template: `%s | ${BRAND_FULL_TITLE}`,
+    default: "Verity - Vision For Enterprise Digital Advancement",
+    template: "%s | Verity - Vision For Enterprise Digital Advancement",
   },
-  description: BRAND_DESCRIPTION,
-  applicationName: BRAND_NAME,
+  description:
+    "Premium automotive manufacturing OS for digital QC, approvals, and customer-facing proof reports.",
+  applicationName: "Verity",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: BRAND_NAME,
+    title: "Verity",
   },
 };
 
@@ -39,7 +34,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: BRAND_ACCENT,
+  themeColor: "#007AFF",
 };
 
 export default function RootLayout({
@@ -50,7 +45,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geist.variable} ${geistMono.variable} ${notoSansDevanagari.variable} min-h-screen overflow-x-hidden scroll-smooth`}
+      className={`${inter.variable} ${notoSansDevanagari.variable} min-h-screen overflow-x-hidden scroll-smooth`}
     >
       <body className="min-h-screen overflow-x-hidden bg-background text-text-primary font-sans antialiased">
         <RootProviders>{children}</RootProviders>

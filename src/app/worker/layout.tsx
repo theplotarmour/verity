@@ -6,7 +6,6 @@ import { getUserSession } from '@/lib/server/auth'
 import prisma from '@/lib/prisma'
 import { InstallPromptBanner } from '@/components/layout/InstallPromptBanner'
 import { LanguageProvider } from '@/components/providers/language-provider'
-import { BRAND_ACCENT } from "@/lib/brand";
 
 export default async function WorkerLayout({ children }: { children: React.ReactNode }) {
   const session = await getUserSession()
@@ -16,7 +15,7 @@ export default async function WorkerLayout({ children }: { children: React.React
   }) : null;
   const lang = user?.language || session?.language || 'en';
   const settings = (user?.factory?.settings as any) || {};
-  const accentColor = settings.themeColor || BRAND_ACCENT;
+  const accentColor = settings.themeColor || "#007AFF";
 
   return (
     <div className="relative flex h-[100dvh] flex-col overflow-hidden bg-background">

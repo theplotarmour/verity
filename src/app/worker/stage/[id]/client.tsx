@@ -12,12 +12,46 @@ import { Surface } from "@/components/design/Surface";
 import { toast } from "@/components/ui/toast";
 import { promptDialog } from "@/components/ui/dialog-service";
 import { startStage, holdStage, completeStage, approveStageCard, rejectStageCard } from "@/server/actions/stages";
+import { createStageVideoUploadUrl, resolveStageVideoUrl } from "@/server/actions/stage-video";
+import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { OrderSpecCard } from "@/components/factory/OrderSpecCard";
 import { cn } from "@/lib/utils";
 
 type StageImage = { dataUrl: string; fileName: string; contentType: string; size: number };
 
-type ChecklistState = Record<string, { ok: boolean; remarks: string; images: StageImage[] }>;
+type ChecklistState = Record<string, { ok: boolean; value: string; remarks: string; images: StageImage[] }>;
+
+// A worker who pauses mid-stage must return to exactly what they had typed and
+// photographed. localStorage would blow its ~5MB quota on a few phone photos, so
+// the draft (text + checklist + before/after images) lives in IndexedDB, keyed
+// by job id. Cleared once the stage is completed.
+const stageDraftDB = async () => {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const req = indexedDB.open('verity_stage_drafts', 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('drafts')) db.createObjectStore('drafts', { keyPath: 'id' });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+};
+const idbGet = async (id: string): Promise<any> => {
+  try {
+    const db = await stageDraftDB();
+    return await new Promise((resolve) => {
+      const r = db.transaction('drafts').objectStore('drafts').get(id);
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => resolve(null);
+    });
+  } catch { return null; }
+};
+const idbPut = async (val: any) => {
+  try { const db = await stageDraftDB(); db.transaction('drafts', 'readwrite').objectStore('drafts').put(val); } catch { /* best effort */ }
+};
+const idbDel = async (id: string) => {
+  try { const db = await stageDraftDB(); db.transaction('drafts', 'readwrite').objectStore('drafts').delete(id); } catch { /* best effort */ }
+};
 
 export default function StageClient({ data }: { data: any }) {
   const router = useRouter();
@@ -41,18 +75,80 @@ export default function StageClient({ data }: { data: any }) {
   const [remarks, setRemarks] = useState("");
   const [checklist, setChecklist] = useState<ChecklistState>({});
   const [busy, setBusy] = useState(false);
+  const draftLoaded = useRef(false);
+  // Walkthrough clip for stages whose checklist asks for one (e.g. Packing).
+  const [video, setVideo] = useState<{ url: string; path: string; durationSec?: number } | null>(null);
+  const [videoBusy, setVideoBusy] = useState(false);
+  const videoInputRef = useRef<HTMLInputElement | null>(null);
+  const videoRequired = !!template?.requiresVideo;
 
-  const cpState = (id: string) => checklist[id] ?? { ok: false, remarks: "", images: [] };
-  const updateCp = (id: string, patch: Partial<{ ok: boolean; remarks: string; images: StageImage[] }>) =>
-    setChecklist((prev) => ({ ...prev, [id]: { ...(prev[id] ?? { ok: false, remarks: "", images: [] }), ...patch } }));
+  // Checkpoints the owner configured to capture a typed answer (Measurements,
+  // Material used, ...) instead of a pass/fail tick.
+  const typedCheckpoints = checkpoints.filter((cp: any) => (cp.inputType ?? "PASS_FAIL") !== "PASS_FAIL");
+  const passFailCheckpoints = checkpoints.filter((cp: any) => (cp.inputType ?? "PASS_FAIL") === "PASS_FAIL");
+
+  const uploadVideo = async (file: File) => {
+    setVideoBusy(true);
+    try {
+      const ticket: any = await createStageVideoUploadUrl({
+        jobCardId: job.id,
+        fileName: file.name,
+        mimeType: file.type || "video/mp4",
+        sizeBytes: file.size,
+      });
+      if (ticket?.error) throw new Error(ticket.error);
+      const supabase = createSupabaseBrowserClient();
+      const { error } = await supabase.storage
+        .from(ticket.bucket)
+        .uploadToSignedUrl(ticket.path, ticket.token, file, { contentType: file.type || "video/mp4" });
+      if (error) throw new Error(error.message || "Upload failed");
+      const resolved: any = await resolveStageVideoUrl(ticket.path);
+      if (resolved?.error) throw new Error(resolved.error);
+      setVideo({ url: resolved.url, path: ticket.path });
+      toast.success("Video uploaded");
+    } catch (e: any) {
+      toast.error(e.message || "Could not upload video");
+    } finally {
+      setVideoBusy(false);
+    }
+  };
+
+  // Restore a paused draft once on mount, so "Pause & come back later" resumes
+  // exactly where the worker left off instead of an empty form.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const draft = await idbGet(job.id);
+      if (cancelled || !draft) { draftLoaded.current = true; return; }
+      if (typeof draft.measurements === 'string') setMeasurements(draft.measurements);
+      if (typeof draft.materialNotes === 'string') setMaterialNotes(draft.materialNotes);
+      if (typeof draft.remarks === 'string') setRemarks(draft.remarks);
+      if (draft.checklist) setChecklist(draft.checklist);
+      if (Array.isArray(draft.beforeImages)) setBeforeImages(draft.beforeImages);
+      if (Array.isArray(draft.afterImages)) setAfterImages(draft.afterImages);
+      draftLoaded.current = true;
+    })();
+    return () => { cancelled = true; };
+  }, [job.id]);
+
+  // Persist the draft on every change (after the initial restore), so a paused
+  // stage survives a closed tab, not just an in-app navigation.
+  useEffect(() => {
+    if (!draftLoaded.current) return;
+    void idbPut({ id: job.id, measurements, materialNotes, remarks, checklist, beforeImages, afterImages });
+  }, [job.id, measurements, materialNotes, remarks, checklist, beforeImages, afterImages]);
+
+  const cpState = (id: string) => checklist[id] ?? { ok: false, value: "", remarks: "", images: [] };
+  const updateCp = (id: string, patch: Partial<{ ok: boolean; value: string; remarks: string; images: StageImage[] }>) =>
+    setChecklist((prev) => ({ ...prev, [id]: { ...(prev[id] ?? { ok: false, value: "", remarks: "", images: [] }), ...patch } }));
   const addCpImage = (id: string, img: StageImage) =>
     setChecklist((prev) => {
-      const cur = prev[id] ?? { ok: false, remarks: "", images: [] };
+      const cur = prev[id] ?? { ok: false, value: "", remarks: "", images: [] };
       return { ...prev, [id]: { ...cur, images: [...cur.images, img] } };
     });
   const removeCpImage = (id: string, idx: number) =>
     setChecklist((prev) => {
-      const cur = prev[id] ?? { ok: false, remarks: "", images: [] };
+      const cur = prev[id] ?? { ok: false, value: "", remarks: "", images: [] };
       return { ...prev, [id]: { ...cur, images: cur.images.filter((_, i) => i !== idx) } };
     });
 
@@ -122,9 +218,18 @@ export default function StageClient({ data }: { data: any }) {
     // Enforce the department checklist before completing.
     for (const cp of checkpoints) {
       const r = cpState(cp.id);
-      if (!r.ok) { toast.error(`Checklist: "${cp.name}" is not marked done`); return; }
+      if (cp.isRequired === false) continue;
+      if ((cp.inputType ?? "PASS_FAIL") === "PASS_FAIL") {
+        if (!r.ok) { toast.error(`Checklist: "${cp.name}" is not marked done`); return; }
+      } else if (!r.value.trim()) {
+        toast.error(`Checklist: "${cp.name}" needs an answer`); return;
+      }
       if (cp.requireImage && r.images.length === 0) { toast.error(`Checklist: "${cp.name}" needs a photo`); return; }
       if (cp.requireRemarks && !r.remarks.trim()) { toast.error(`Checklist: "${cp.name}" needs a remark`); return; }
+    }
+    if (videoRequired && !video) {
+      toast.error("Record or upload the walkthrough video before completing");
+      return;
     }
     setBusy(true);
     try {
@@ -136,10 +241,13 @@ export default function StageClient({ data }: { data: any }) {
         remarks,
         checklist: checkpoints.map((cp) => {
           const r = cpState(cp.id);
-          return { checkpointId: cp.id, ok: r.ok, remarks: r.remarks, images: r.images };
+          return { checkpointId: cp.id, ok: r.ok, value: r.value, remarks: r.remarks, images: r.images };
         }),
+        video,
       });
       if ((res as any)?.error) throw new Error((res as any).error);
+      // Submitted — the paused draft is no longer needed.
+      await idbDel(job.id);
       // When the department needs sign-off the card is held, not finished — stay
       // on the page so the worker can see it's now with their supervisor.
       if ((res as any)?.pendingApproval) {
@@ -362,12 +470,12 @@ export default function StageClient({ data }: { data: any }) {
           </Surface>
 
           {/* Department checklist (template) */}
-          {checkpoints.length > 0 && (
+          {passFailCheckpoints.length > 0 && (
             <Surface className="p-4 space-y-3">
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">
                 {template.name} — checklist
               </p>
-              {checkpoints.map((cp: any) => (
+              {passFailCheckpoints.map((cp: any) => (
                 <ChecklistRow
                   key={cp.id}
                   cp={cp}
@@ -381,23 +489,93 @@ export default function StageClient({ data }: { data: any }) {
             </Surface>
           )}
 
-          {/* Details */}
-          <Surface className="p-4 space-y-3">
-            <div className="space-y-1">
-              <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">Measurements</label>
-              <Input placeholder="e.g. Back panel 58 x 64 cm" value={measurements} onChange={(e) => setMeasurements(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">Material used</label>
-              <Input placeholder="e.g. Napa Black roll #12" value={materialNotes} onChange={(e) => setMaterialNotes(e.target.value)} />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">
-                Remarks{stage.requireRemarks ? " *" : ""}
-              </label>
-              <Input placeholder="Notes or exceptions..." value={remarks} onChange={(e) => setRemarks(e.target.value)} />
-            </div>
-          </Surface>
+          {/* Template-driven detail questions (Measurements, Material used, ...).
+              These are ordinary checkpoints the owner configures, so they can be
+              renamed, reordered, made optional or dropped entirely. */}
+          {typedCheckpoints.length > 0 && (
+            <Surface className="p-4 space-y-3">
+              {typedCheckpoints.map((cp: any) => {
+                const st = cpState(cp.id);
+                return (
+                  <div key={cp.id} className="space-y-1">
+                    <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">
+                      {cp.name}{cp.isRequired === false ? "" : " *"}
+                    </label>
+                    {cp.instructions && <p className="text-[11px] text-text-secondary">{cp.instructions}</p>}
+                    {cp.referenceImageUrl && (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img src={cp.referenceImageUrl} alt="reference" className="h-20 w-20 rounded-lg border border-border object-cover" />
+                    )}
+                    <Input
+                      type={cp.inputType === "NUMBER" ? "number" : "text"}
+                      inputMode={cp.inputType === "NUMBER" ? "numeric" : undefined}
+                      placeholder={cp.placeholder || ""}
+                      value={st.value}
+                      onChange={(e) => updateCp(cp.id, { value: e.target.value })}
+                    />
+                  </div>
+                );
+              })}
+            </Surface>
+          )}
+
+          {/* Remarks stays because the department itself can demand it
+              (stage.requireRemarks); Measurements and Material used are no longer
+              hardcoded — a department that wants them adds them as checkpoints in
+              the checklist builder. */}
+          {stage.requireRemarks && (
+            <Surface className="p-4 space-y-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">
+                  Remarks *
+                </label>
+                <Input placeholder="Notes or exceptions..." value={remarks} onChange={(e) => setRemarks(e.target.value)} />
+              </div>
+            </Surface>
+          )}
+
+          {/* Walkthrough video — shown when this stage's checklist asks for one
+              (e.g. Packing). QC records its clip on the inspection; a department
+              stage records it here. */}
+          {videoRequired && (
+            <Surface className="p-4 space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">
+                Walkthrough video *
+              </p>
+              {video ? (
+                <div className="space-y-2">
+                  <video src={video.url} controls className="w-full rounded-xl border border-border" />
+                  <button type="button" onClick={() => setVideo(null)} className="text-[11px] font-semibold text-danger hover:underline">
+                    Remove and record again
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p className="text-[11px] text-text-secondary">
+                    Record a short clip of the finished work before completing this stage.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={videoBusy}
+                    onClick={() => videoInputRef.current?.click()}
+                    className="w-full gap-2"
+                  >
+                    {videoBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+                    {videoBusy ? "Uploading..." : "Record / upload video"}
+                  </Button>
+                  <input
+                    ref={videoInputRef}
+                    type="file"
+                    accept="video/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadVideo(f); e.target.value = ""; }}
+                  />
+                </>
+              )}
+            </Surface>
+          )}
 
           {/* Actions — the stage is already running by the time this renders
               (opening the screen starts it), so Complete is the primary action. */}
@@ -504,6 +682,18 @@ function ChecklistRow({ cp, state, onToggle, onRemarks, onAddImage, onRemoveImag
             {cp.requireRemarks && <span className="ml-1 text-[10px] font-bold text-warning">REMARK</span>}
           </span>
           {cp.instructions && <span className="block text-[11px] text-text-tertiary">{cp.instructions}</span>}
+          {cp.isRequired === false && (
+            <span className="mt-0.5 block text-[9px] font-bold uppercase tracking-wider text-text-tertiary">Optional</span>
+          )}
+          {/* The correct result to compare against, same as the camera and typed
+              checkpoints show. */}
+          {cp.referenceImageUrl && (
+            <img
+              src={cp.referenceImageUrl}
+              alt="reference"
+              className="mt-2 h-20 w-20 rounded-lg border border-border object-cover"
+            />
+          )}
         </span>
       </button>
 
@@ -517,33 +707,42 @@ function ChecklistRow({ cp, state, onToggle, onRemarks, onAddImage, onRemoveImag
               className="h-9 text-xs"
             />
           ) : null}
-          <div className="flex flex-wrap items-center gap-2">
-            {state.images.map((img, idx) => (
-              <div key={idx} className="relative">
-                <img src={img.dataUrl} alt={img.fileName} className="h-12 w-12 rounded-lg border border-border object-cover" />
-                <button
-                  type="button"
-                  onClick={() => onRemoveImage(idx)}
-                  className="absolute -right-1.5 -top-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-danger text-white"
-                  aria-label="Remove photo"
-                >
-                  <X className="h-2.5 w-2.5" />
-                </button>
-              </div>
-            ))}
-            <Button variant="secondary" onClick={() => inputRef.current?.click()} className="h-9 gap-1.5 text-xs">
-              <Camera className="h-3.5 w-3.5" /> {cp.requireRemarks && !state.remarks ? "Photo" : "Add photo"}
-            </Button>
-            <input
-              ref={inputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              multiple
-              className="hidden"
-              onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }}
-            />
-          </div>
+          {/* Photo capture belongs only to checkpoints with "Require Camera Snap
+              Verification" on. Anything already attached stays visible (and
+              removable) even if the setting was turned off afterwards. */}
+          {(cp.requireImage || state.images.length > 0) && (
+            <div className="flex flex-wrap items-center gap-2">
+              {state.images.map((img, idx) => (
+                <div key={idx} className="relative">
+                  <img src={img.dataUrl} alt={img.fileName} className="h-12 w-12 rounded-lg border border-border object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => onRemoveImage(idx)}
+                    className="absolute -right-1.5 -top-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-danger text-white"
+                    aria-label="Remove photo"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </div>
+              ))}
+              {cp.requireImage && (
+                <>
+                  <Button variant="secondary" onClick={() => inputRef.current?.click()} className="h-9 gap-1.5 text-xs">
+                    <Camera className="h-3.5 w-3.5" /> {cp.requireRemarks && !state.remarks ? "Photo" : "Add photo"}
+                  </Button>
+                  <input
+                    ref={inputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }}
+                  />
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

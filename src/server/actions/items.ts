@@ -3,6 +3,7 @@
 import prisma from "@/lib/prisma";
 import { deriveItemType } from "@/lib/item-constants";
 import { getOwnerUser } from "@/lib/server/owner";
+import { describeDeleteError } from "@/lib/server/prisma-errors";
 import { revalidatePath } from "next/cache";
 import { ItemType, Prisma } from "@prisma/client";
 import { uploadStorageImage } from "@/server/actions/storage";
@@ -297,8 +298,13 @@ export async function deleteItem(id: string) {
   try {
     await prisma.itemMaster.delete({ where: { id } });
     revalidatePath("/owner/inventory");
+    revalidatePath("/owner/master-data");
+    revalidatePath("/owner/settings/master-data/studio");
     return { success: true };
-  } catch {
-    return { error: "This item is used in stock, BOM or an order — deactivate it instead of deleting." };
+  } catch (error) {
+    // describeDeleteError names the actual blocker — a BOM, stock history, an
+    // order — which is the difference between a dead end and something the
+    // owner can act on.
+    return { error: describeDeleteError(error, "item") };
   }
 }

@@ -15,8 +15,8 @@ import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface MemberWithStats extends User {
-  workerOrders?: Array<{ id: string; vehicleBrand: { name: string }; vehicleModel: { name: string } }>;
-  inspectorOrders?: Array<{ id: string; vehicleBrand: { name: string }; vehicleModel: { name: string } }>;
+  workerOrders?: Array<{ id: string; itemName: string }>;
+  inspectorOrders?: Array<{ id: string; itemName: string }>;
   _count?: {
     workerOrders: number;
     inspectorOrders: number;
@@ -145,14 +145,14 @@ export function TeamClient({
     if (member.role === "SUPERVISOR") {
       if (member.inspectorOrders && member.inspectorOrders.length > 0) {
         const order = member.inspectorOrders[0];
-        return `Reviewing ${order.vehicleBrand?.name || ""} ${order.vehicleModel?.name || ""}`;
+        return `Reviewing ${order.itemName || ""}`;
       }
       return "Ready for Quality Check";
     }
     if (member.role === "WORKER") {
       if (member.workerOrders && member.workerOrders.length > 0) {
         const order = member.workerOrders[0];
-        return `Working: ${order.vehicleBrand?.name || ""} ${order.vehicleModel?.name || ""}`;
+        return `Working: ${order.itemName || ""}`;
       }
       return "Awaiting shift order";
     }
@@ -336,7 +336,9 @@ export function TeamClient({
                                     <Badge className="bg-brand-soft text-brand text-[7px] px-1 py-0 border border-brand/10 leading-none">You</Badge>
                                   )}
                                 </p>
-                                <span className="text-[9px] font-bold text-text-tertiary uppercase tracking-wider">{roleLabel(m.role)}</span>
+                                <span className="text-[9px] font-bold text-text-tertiary uppercase tracking-wider">
+                                  {roleLabel(m.role)}{(m as any).department?.name ? ` · ${(m as any).department.name}` : ""}
+                                </span>
                               </div>
                             </div>
                             <span className={cn(

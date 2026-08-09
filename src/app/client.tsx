@@ -154,7 +154,8 @@ export function HomeClient({ hasSession, role, homePath }: { hasSession: boolean
           <div className="w-[55%] h-full flex flex-col justify-between p-12 bg-[#F5F5F7] dark:bg-neutral-900 border-r border-border shrink-0 min-w-0">
             {/* Logo */}
             <div className="flex items-center gap-2">
-              <VerityLogo size={34} colorClass="text-text-primary dark:text-white" />
+              <img src="/brand/logo-dark.png" className="h-6 w-auto dark:hidden" alt="Verity Logo" />
+              <img src="/brand/logo-light.png" className="h-6 w-auto hidden dark:block" alt="Verity Logo" />
               <span className="font-display font-bold text-base tracking-[0.1em] text-text-primary">Verity</span>
             </div>
 
@@ -273,7 +274,8 @@ export function HomeClient({ hasSession, role, homePath }: { hasSession: boolean
           {/* Top Logo */}
           <div className="flex justify-between items-center shrink-0">
             <div className="flex items-center gap-1.5">
-              <VerityLogo size={28} colorClass="text-text-primary dark:text-white" />
+              <img src="/brand/logo-dark.png" className="h-5 w-auto dark:hidden" alt="Verity Logo" />
+              <img src="/brand/logo-light.png" className="h-5 w-auto hidden dark:block" alt="Verity Logo" />
               <span className="font-display font-bold text-xs tracking-wider text-text-primary">Verity</span>
             </div>
           </div>
