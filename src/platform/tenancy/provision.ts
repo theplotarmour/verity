@@ -3,6 +3,7 @@ import "server-only";
 import type { Prisma, SystemRole } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { type ModuleKey, allModules, withDependencies } from "@/platform/modules/registry";
+import { DEFAULT_GRANTS } from "./default-grants";
 
 /**
  * Tenant provisioning.
@@ -13,60 +14,6 @@ import { type ModuleKey, allModules, withDependencies } from "@/platform/modules
  * a bare Factory with slightly different defaults, and roles/permissions were
  * implicit in code.
  */
-
-/** Default permission grants per archetype. Mirrors the Phase 0 migration. */
-const DEFAULT_GRANTS: Record<SystemRole, string[]> = {
-  OWNER: [
-    "dashboard.view", "settings.access", "branding.access", "billing.access",
-    "master_data.access", "team.manage", "team.assign_roles",
-    "org.transfer_ownership", "reports.view", "reports.export",
-    "product_type.manage", "sales_order.view", "sales_order.create",
-    "sales_order.delete", "sales_order.approve", "customer.manage",
-    // Service operations. Filtered by entitlement below, so a factory tenant
-    // without `sites` never actually receives these.
-    "ticket.view", "ticket.manage", "service_wo.view", "service_wo.manage",
-    "site.view", "site.manage", "site.deploy",
-    "project.view", "project.manage", "timesheet.record", "timesheet.approve",
-    "asset.view", "asset.manage", "asset.maintain",
-    "schedule.view", "schedule.manage", "schedule.swap",
-    "invoice.view", "invoice.manage", "payroll.view", "payroll.export",
-  ],
-  CO_OWNER: [
-    "dashboard.view", "settings.access", "branding.access", "master_data.access",
-    "team.manage", "team.assign_roles", "reports.view", "reports.export",
-    "product_type.manage", "sales_order.view", "sales_order.create",
-    "sales_order.delete", "sales_order.approve", "customer.manage",
-    "ticket.view", "ticket.manage", "service_wo.view", "service_wo.manage",
-    "site.view", "site.manage", "site.deploy",
-    "project.view", "project.manage", "timesheet.record", "timesheet.approve",
-    "asset.view", "asset.manage", "asset.maintain",
-    "schedule.view", "schedule.manage", "schedule.swap",
-    "invoice.view", "invoice.manage", "payroll.view", "payroll.export",
-  ],
-  MANAGER: [
-    "dashboard.view", "master_data.access", "team.manage", "reports.view",
-    "reports.export", "sales_order.view", "sales_order.create", "customer.manage",
-    "ticket.view", "ticket.manage", "service_wo.view", "service_wo.manage",
-    "site.view", "site.manage", "site.deploy",
-    "project.view", "project.manage", "timesheet.record", "timesheet.approve",
-    "asset.view", "asset.manage", "asset.maintain",
-    "schedule.view", "schedule.manage", "schedule.swap",
-    "invoice.view", "invoice.manage", "payroll.view", "payroll.export",
-  ],
-  SUPERVISOR: [
-    "dashboard.view", "reports.view", "quality.queue", "quality.inspect",
-    "production.supervise",
-    // A supervisor runs a site day to day: they post staff and work the queue,
-    // but do not sign contracts or raise invoices.
-    "site.view", "site.deploy",
-    "ticket.view", "ticket.manage", "service_wo.view", "service_wo.manage",
-    "project.view", "timesheet.record",
-    "asset.view", "asset.maintain",
-    "schedule.view", "schedule.manage",
-  ],
-  WORKER: ["production.jobs", "timesheet.record", "schedule.view", "schedule.swap"],
-  STORE_MANAGER: ["dashboard.view", "sales_order.view", "sales_order.create"],
-};
 
 const ROLE_LABELS: Record<SystemRole, string> = {
   OWNER: "Owner",

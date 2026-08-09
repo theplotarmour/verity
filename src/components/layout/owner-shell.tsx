@@ -50,6 +50,17 @@ type NavItem = {
    * is what actually stops an un-entitled tenant who types the URL.
    */
   requiredModule?: ModuleKey;
+  /**
+   * Registry permission key (`@/platform/modules/registry`) required to see
+   * this item. Preferred over `permission`, which is the deprecated 15-value
+   * union with no service-side entries — that union is why every service
+   * destination was gated on CREATE_ORDER, so anyone who could book an order
+   * could also see Billing.
+   *
+   * Production items still use `permission` until they are migrated
+   * deliberately; this field is the migration path, not a second system.
+   */
+  requires?: string;
 };
 
 type NavGroup = {
@@ -67,11 +78,11 @@ const navGroups: NavGroup[] = [
   {
     title: "Service Operations",
     items: [
-      { label: "Helpdesk", href: "/owner/helpdesk", icon: <LifeBuoy className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requiredModule: "helpdesk" },
-      { label: "Work Orders", href: "/owner/service-work-orders", icon: <Hammer className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requiredModule: "helpdesk" },
-      { label: "Projects", href: "/owner/projects", icon: <FolderKanban className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requiredModule: "projects" },
-      { label: "Sites", href: "/owner/sites", icon: <MapPin className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requiredModule: "sites" },
-      { label: "Scheduling", href: "/owner/scheduling", icon: <CalendarDays className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requiredModule: "scheduling" },
+      { label: "Helpdesk", href: "/owner/helpdesk", icon: <LifeBuoy className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "ticket.view", requiredModule: "helpdesk" },
+      { label: "Work Orders", href: "/owner/service-work-orders", icon: <Hammer className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "service_wo.view", requiredModule: "helpdesk" },
+      { label: "Projects", href: "/owner/projects", icon: <FolderKanban className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "project.view", requiredModule: "projects" },
+      { label: "Sites", href: "/owner/sites", icon: <MapPin className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "site.view", requiredModule: "sites" },
+      { label: "Scheduling", href: "/owner/scheduling", icon: <CalendarDays className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "schedule.view", requiredModule: "scheduling" },
     ]
   },
   {
@@ -88,14 +99,14 @@ const navGroups: NavGroup[] = [
     items: [
       { label: "Inventory", href: "/owner/inventory", icon: <Package className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requiredModule: "inventory" },
       { label: "Purchase", href: "/owner/purchase", icon: <ShoppingCart className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requiredModule: "procurement" },
-      { label: "Assets", href: "/owner/assets", icon: <HardHat className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requiredModule: "assets" },
+      { label: "Assets", href: "/owner/assets", icon: <HardHat className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "asset.view", requiredModule: "assets" },
       { label: "Quality", href: "/owner/qc-floor", icon: <CircleCheckBig className="h-4.5 w-4.5" />, permission: "QC_QUEUE", requiredModule: "quality" },
     ]
   },
   {
     title: "Finance",
     items: [
-      { label: "Billing", href: "/owner/billing", icon: <ReceiptText className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requiredModule: "billing" },
+      { label: "Billing", href: "/owner/billing", icon: <ReceiptText className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "invoice.view", requiredModule: "billing" },
       { label: "Reports", href: "/owner/reports", icon: <BarChart3 className="h-4.5 w-4.5" />, permission: "VIEW_REPORTS" },
     ]
   },
@@ -132,6 +143,7 @@ export function OwnerShell({
   userRole = "OWNER" as SystemRole,
   permissionMatrix,
   enabledModules,
+  grantedPermissions,
   children,
 }: {
   factoryName: string;
@@ -146,6 +158,8 @@ export function OwnerShell({
    * that has not been updated degrades to the old nav rather than an empty one.
    */
   enabledModules?: ModuleKey[];
+  /** Registry permission keys this user actually holds, resolved server-side. */
+  grantedPermissions?: string[];
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -214,9 +228,32 @@ export function OwnerShell({
       !item.requiredModule || enabled === null || enabled.has(item.requiredModule);
   }, [enabledModules]);
 
+  /**
+   * Permission gate for items carrying a registry key.
+   *
+   * Transitional rule: the tenant administrators (owner, co-owner, manager) are
+   * allowed through without holding the key. Those keys were added to
+   * DEFAULT_GRANTS after some tenants were provisioned, so their existing Role
+   * rows do not have them — requiring the key outright would silently remove
+   * the nav from the very people who administer it. Supervisors and workers get
+   * the exact check, which is the point: a store manager who can book an order
+   * no longer sees Billing.
+   *
+   * Remove this carve-out once existing roles have been backfilled.
+   */
+  const grantAllows = useMemo(() => {
+    const held = grantedPermissions ? new Set(grantedPermissions) : null;
+    const isAdmin = userRole === "OWNER" || userRole === "CO_OWNER" || userRole === "MANAGER";
+    return (item: NavItem) => {
+      if (!item.requires) return true;
+      if (held === null || isAdmin) return true;
+      return held.has(item.requires);
+    };
+  }, [grantedPermissions, userRole]);
+
   const visibleNavItems = useMemo(
-    () => navItems.filter(moduleAllows),
-    [moduleAllows],
+    () => navItems.filter((item) => moduleAllows(item) && grantAllows(item)),
+    [moduleAllows, grantAllows],
   );
 
   const activeItem = useMemo(
@@ -358,6 +395,7 @@ export function OwnerShell({
               const storeManagerAllowed = ["/owner/order-taking", "/owner/dashboard", "/owner/inventory"];
               const visible = group.items.filter(item =>
                 moduleAllows(item) &&
+                grantAllows(item) &&
                 can(userRole, item.permission, permissionMatrix) &&
                 (userRole === "STORE_MANAGER" ? storeManagerAllowed.includes(item.href) : item.href !== "/owner/order-taking"));
               if (visible.length === 0) return null;
