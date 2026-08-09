@@ -31,6 +31,9 @@ export type ModuleKey =
   | "projects"
   | "assets"
   | "helpdesk"
+  | "sites"
+  | "scheduling"
+  | "billing"
   | "automotive";
 
 export interface ModuleDefinition {
@@ -212,11 +215,50 @@ const MODULES: ModuleDefinition[] = [
   {
     key: "helpdesk",
     name: "Helpdesk",
-    description: "Tickets, SLAs and customer support queues.",
+    description:
+      "Tickets, SLAs and support queues, plus the service work orders dispatched from them.",
     requires: ["core"],
     permissions: [
       { key: "ticket.view", label: "View tickets", group: "Helpdesk" },
       { key: "ticket.manage", label: "Manage tickets", group: "Helpdesk" },
+      { key: "service_wo.view", label: "View service work orders", group: "Helpdesk" },
+      { key: "service_wo.manage", label: "Manage service work orders", group: "Helpdesk" },
+    ],
+  },
+  {
+    key: "sites",
+    name: "Sites & Locations",
+    description:
+      "Client sites, workforce deployment and site-level SLAs. Essential for service businesses.",
+    requires: ["core"],
+    permissions: [
+      { key: "site.view", label: "View sites", group: "Sites" },
+      { key: "site.manage", label: "Manage sites", group: "Sites" },
+      { key: "site.deploy", label: "Deploy staff to sites", group: "Sites" },
+    ],
+  },
+  {
+    key: "scheduling",
+    name: "Shift Scheduling",
+    description: "Calendar-based shift assignment per user and site, with swap requests.",
+    requires: ["core", "hr"],
+    permissions: [
+      { key: "schedule.view", label: "View schedules", group: "Scheduling" },
+      { key: "schedule.manage", label: "Publish schedules", group: "Scheduling" },
+      { key: "schedule.swap", label: "Request shift swaps", group: "Scheduling" },
+    ],
+  },
+  {
+    key: "billing",
+    name: "Billing & Payroll",
+    description:
+      "Service invoices to clients, and payroll input summaries from attendance and timesheets.",
+    requires: ["core", "sales"],
+    permissions: [
+      { key: "invoice.view", label: "View invoices", group: "Billing" },
+      { key: "invoice.manage", label: "Create and send invoices", group: "Billing" },
+      { key: "payroll.view", label: "View payroll inputs", group: "Billing" },
+      { key: "payroll.export", label: "Export payroll", group: "Billing" },
     ],
   },
   {

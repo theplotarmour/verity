@@ -3,8 +3,21 @@
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { hashPin } from "@/lib/server/hash";
-import { DEFAULT_MODULES, provisionTenant, systemRoleId } from "@/platform/tenancy/provision";
-import { type ModuleKey, allModules } from "@/platform/modules/registry";
+import {
+  DEFAULT_MODULES,
+  VERTICAL_PACKS,
+  modulesForPack,
+  provisionTenant,
+  systemRoleId,
+  verticalPackOptions,
+} from "@/platform/tenancy/provision";
+import {
+  type ModuleKey,
+  allModules,
+  getModule,
+  withDependencies,
+} from "@/platform/modules/registry";
+import { entitledModules } from "@/platform/modules/entitlements";
 
 // ==========================================
 // Verity HQ Agreements Actions
@@ -16,10 +29,33 @@ import { type ModuleKey, allModules } from "@/platform/modules/registry";
  */
 function modulesFromAgreement(raw: unknown): ModuleKey[] {
   const labels = Array.isArray(raw) ? raw.map((v) => String(v).toLowerCase()) : [];
+
+  // A vertical pack named in the agreement wins over label matching: "Facility
+  // Management" is a decision about what kind of business this is, not a guess
+  // at which module a phrase resembles.
+  const pack = labels.find((l) => Object.prototype.hasOwnProperty.call(VERTICAL_PACKS, l));
+  if (pack) return modulesForPack(pack);
+
   const matched = allModules()
     .filter((m) => labels.some((l) => l.includes(m.key) || l.includes(m.name.toLowerCase())))
     .map((m) => m.key);
   return matched.length > 0 ? matched : DEFAULT_MODULES;
+}
+
+/**
+ * The vertical packs an onboarding selector offers, each with the modules it
+ * resolves to (dependencies already expanded) so the UI can show "what's
+ * included" without re-deriving it.
+ */
+export async function listVerticalPacks() {
+  return verticalPackOptions().map((pack) => ({
+    key: pack.key,
+    label: pack.label,
+    modules: pack.modules.map((key) => ({
+      key,
+      name: getModule(key)?.name ?? key,
+    })),
+  }));
 }
 // ==========================================
 
@@ -165,6 +201,9 @@ export async function getClientsList() {
 
     return clients.map((c) => ({
       id: c.id,
+      // Entitlements hang off the Organization, not the Factory. Without this
+      // the admin module toggle has no id to act on.
+      organizationId: c.organizationId,
       name: c.name,
       slug: c.slug,
       industry: c.industry,
@@ -177,6 +216,64 @@ export async function getClientsList() {
   } catch (error) {
     return [];
   }
+}
+
+/**
+ * A tenant's current module entitlements, alongside the full catalogue, for an
+ * admin toggle UI.
+ */
+export async function getTenantModules(organizationId: string) {
+  const enabled = new Set(await entitledModules(organizationId));
+  return allModules().map((mod) => ({
+    key: mod.key,
+    name: mod.name,
+    description: mod.description,
+    requires: mod.requires,
+    alwaysOn: mod.alwaysOn ?? false,
+    enabled: enabled.has(mod.key),
+  }));
+}
+
+/**
+ * Set a tenant's modules to exactly this list.
+ *
+ * Disabling only flips the entitlement off. No data is deleted — a tenant who
+ * turns Helpdesk off for a quarter and back on must find their tickets where
+ * they left them, and "we dropped the tables" is not a recoverable mistake.
+ */
+export async function updateTenantModules(organizationId: string, moduleKeys: string[]) {
+  try {
+    const requested = moduleKeys.filter((k): k is ModuleKey => getModule(k as ModuleKey) !== undefined);
+    // Dependencies are added rather than rejected: entitling `manufacturing`
+    // without `inventory` is a configuration mistake, not a runtime one.
+    const resolved = new Set(withDependencies(requested));
+
+    await prisma.$transaction(
+      allModules().map((mod) => {
+        const enabled = mod.alwaysOn === true || resolved.has(mod.key);
+        return prisma.moduleEntitlement.upsert({
+          where: { organizationId_moduleKey: { organizationId, moduleKey: mod.key } },
+          create: { organizationId, moduleKey: mod.key, enabled },
+          update: { enabled, ...(enabled ? { expiresAt: null } : {}) },
+        });
+      }),
+    );
+
+    revalidatePath("/verity/clients");
+    revalidatePath("/owner", "layout");
+    return { success: true, modules: [...resolved] };
+  } catch (error: unknown) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Could not update modules.",
+    };
+  }
+}
+
+/** Apply a whole vertical pack to an existing tenant. */
+export async function applyVerticalPack(organizationId: string, packKey: string) {
+  if (!VERTICAL_PACKS[packKey]) return { success: false, error: "Unknown pack." };
+  return updateTenantModules(organizationId, modulesForPack(packKey));
 }
 
 export async function updateOnboardingStatus(factoryId: string, status: string) {
@@ -231,6 +328,12 @@ export async function createAndSignAgreementDirect(data: {
   ownerName: string;
   phone: string;
   signature: string;
+  /**
+   * Which kind of business this is. Drives the module bundle, so a security
+   * company is not provisioned with a production board it will never open.
+   * Omitted keeps the historical automotive-manufacturer default.
+   */
+  verticalPack?: string;
 }) {
   try {
     const slug = data.factoryName
@@ -247,14 +350,15 @@ export async function createAndSignAgreementDirect(data: {
     const finalSlug = existing ? `${slug}-${Math.floor(Math.random() * 1000)}` : slug;
 
     // 1. Create Factory Workspace
+    const pack = data.verticalPack ? VERTICAL_PACKS[data.verticalPack] : undefined;
     const { factoryId: newFactoryId, organizationId } = await provisionTenant({
       name: data.factoryName,
       slug: finalSlug,
-      industry: "Automotive Seat Covers",
+      industry: pack?.label ?? "Automotive Seat Covers",
       onboardingStatus: "LIVE",
       setupFee: 150000,
       monthlyFee: 18000,
-      modules: [...DEFAULT_MODULES, "automotive"],
+      modules: pack ? modulesForPack(data.verticalPack) : [...DEFAULT_MODULES, "automotive"],
     });
     const factory = await prisma.factory.findUniqueOrThrow({ where: { id: newFactoryId } });
 
