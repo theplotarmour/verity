@@ -1,5 +1,7 @@
 "use server";
 
+import { randomInt } from "node:crypto";
+
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { hashPin } from "@/lib/server/hash";
@@ -416,3 +418,180 @@ export async function createAndSignAgreementDirect(data: {
   }
 }
 
+
+// ==========================================
+// Verity HQ Provisioning
+// ==========================================
+
+/** A random 4-digit PIN. Matches the format the login keypad accepts. */
+function generatePin(): string {
+  return String(randomInt(1000, 10000));
+}
+
+/**
+ * Provision a client workspace and mint its owner account.
+ *
+ * The generated PIN is returned exactly once, in this response, and is never
+ * recoverable afterwards — only its salted hash is stored. That is deliberate:
+ * an admin screen that can re-display an existing credential is a credential
+ * store. Lost PINs are reset, not looked up.
+ */
+export async function provisionClient(input: {
+  name: string;
+  ownerName: string;
+  ownerPhone: string;
+  verticalPack: string;
+  setupFee?: number;
+  monthlyFee?: number;
+}) {
+  const operator = await requireHqAction();
+
+  const name = input.name?.trim();
+  const ownerName = input.ownerName?.trim();
+  const phone = (input.ownerPhone ?? "").replace(/\D/g, "");
+
+  if (!name) return { error: "A workspace name is required." };
+  if (!ownerName) return { error: "An owner name is required." };
+  if (phone.length < 10) return { error: "Enter a valid 10-digit owner phone number." };
+  if (!VERTICAL_PACKS[input.verticalPack]) return { error: "Pick a business type." };
+
+  // Phone is the username across the whole platform, so it must be unique
+  // globally rather than per tenant.
+  const clash = await prisma.user.findUnique({ where: { phone }, select: { id: true } });
+  if (clash) return { error: "That phone number already has an account." };
+
+  const base = name
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/[\s_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (!base) return { error: "That workspace name produces an empty address." };
+
+  // Walk the suffix rather than trusting a random number not to collide.
+  let slug = base;
+  for (let n = 2; await prisma.factory.findUnique({ where: { slug }, select: { id: true } }); n++) {
+    slug = `${base}-${n}`;
+  }
+
+  const pack = VERTICAL_PACKS[input.verticalPack];
+
+  try {
+    const { factoryId, organizationId } = await provisionTenant({
+      name,
+      slug,
+      industry: pack.label,
+      onboardingStatus: "SETUP",
+      setupFee: input.setupFee ?? 0,
+      monthlyFee: input.monthlyFee ?? 0,
+      modules: modulesForPack(input.verticalPack),
+    });
+
+    const pin = generatePin();
+    const owner = await prisma.user.create({
+      data: {
+        factoryId,
+        name: ownerName,
+        phone,
+        role: "OWNER",
+        roleId: await systemRoleId(organizationId, "OWNER"),
+        pinHash: hashPin(pin, factoryId),
+        isActive: true,
+        createdById: operator.userId,
+      },
+      select: { id: true },
+    });
+
+    revalidatePath("/verity/clients");
+    return {
+      success: true,
+      factoryId,
+      organizationId,
+      slug,
+      ownerId: owner.id,
+      // Shown once, then gone.
+      credentials: { name: ownerName, phone, pin },
+    };
+  } catch (error: unknown) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Could not provision the workspace.",
+    };
+  }
+}
+
+/**
+ * Issue a fresh PIN for a tenant user. Returned once, same rule as above.
+ * Clears any lockout, since a reset is also the answer to "they locked
+ * themselves out".
+ */
+export async function resetTenantUserPin(userId: string) {
+  await requireHqAction();
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, name: true, phone: true, factoryId: true },
+  });
+  if (!user) return { error: "User not found." };
+
+  const pin = generatePin();
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { pinHash: hashPin(pin, user.factoryId), failedAttempts: 0, lockedUntil: null },
+  });
+
+  revalidatePath(`/verity/clients/${user.factoryId}`);
+  return { success: true, credentials: { name: user.name, phone: user.phone ?? "", pin } };
+}
+
+/** One client workspace: entitlements, people, and the numbers on the account. */
+export async function getClientDetail(factoryId: string) {
+  await requireHqAction();
+
+  const factory = await prisma.factory.findUnique({
+    where: { id: factoryId },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      industry: true,
+      onboardingStatus: true,
+      setupFee: true,
+      monthlyFee: true,
+      createdAt: true,
+      organizationId: true,
+      organization: { select: { name: true, currency: true, timezone: true } },
+    },
+  });
+  if (!factory) return null;
+
+  const [users, modules] = await Promise.all([
+    prisma.user.findMany({
+      where: { factoryId },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        role: true,
+        isActive: true,
+        lastLoginAt: true,
+        lockedUntil: true,
+      },
+      orderBy: [{ role: "asc" }, { name: "asc" }],
+    }),
+    getTenantModules(factory.organizationId),
+  ]);
+
+  return {
+    factory: {
+      ...factory,
+      createdAt: factory.createdAt.toISOString(),
+    },
+    users: users.map((u) => ({
+      ...u,
+      lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
+      locked: !!u.lockedUntil && u.lockedUntil > new Date(),
+    })),
+    modules,
+  };
+}

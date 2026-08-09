@@ -4,10 +4,12 @@ import { createHash } from "node:crypto";
 
 const prisma = new PrismaClient();
 
-// PINs are factory-salted and environment-independent (must match
-// src/lib/server/hash.ts hashPin)
+// PINs are factory-salted and environment-independent. This MUST match
+// src/lib/server/hash.ts exactly — it drifted to a `veda:` prefix once, which
+// silently made every seeded account unable to log in: the seed wrote one hash
+// and the login checked another, with no error anywhere to say so.
 function hashPin(pin: string, factoryId: string) {
-  return createHash("sha256").update(`veda:${factoryId}:${pin}`).digest("hex");
+  return createHash("sha256").update(`verity:${factoryId}:${pin}`).digest("hex");
 }
 
 // Per-type item codes (RM-00001, FG-00001...) generated in-seed.
