@@ -47,3 +47,5 @@ next-env.d.ts
 # Generated service worker (served by src/app/sw.js/route.ts)
 public/sw.js
 public/sw.js.map
+
+tmp_backup_verity/
