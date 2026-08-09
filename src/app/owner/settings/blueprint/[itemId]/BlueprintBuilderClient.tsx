@@ -53,7 +53,7 @@ export function BlueprintBuilderClient({ item, initialBlueprint, departments, ma
             Draft v{initialBlueprint.version}
           </div>
           <Button className="h-9 gap-2">
-            <Save className="h-4 w-4" /> Save & Publish
+            <Save className="h-4 w-4" /> Save &amp; Publish
           </Button>
         </div>
       </div>

@@ -1469,7 +1469,7 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
                             className="text-[11px] font-semibold text-text-tertiary hover:text-text-primary">Reset</button>
                         )}
                       </div>
-                      <p className="text-[11px] text-text-secondary -mt-1">Pick a valid Carxen configuration — vehicle & specifications auto-fill. Only Fabric, Design & Colour stay manual.</p>
+                      <p className="text-[11px] text-text-secondary -mt-1">Pick a valid Carxen configuration — vehicle &amp; specifications auto-fill. Only Fabric, Design &amp; Colour stay manual.</p>
 
                       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                         {([
@@ -2092,7 +2092,7 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
                   <Button variant="secondary" onClick={() => { setEditingId(null); setIsStudioOpen(false); }}>
                     Cancel
                   </Button>
-                  <Button onClick={() => setShowConfirm(true)}>Review & start</Button>
+                  <Button onClick={() => setShowConfirm(true)}>Review &amp; start</Button>
                 </div>
               </div>
             </motion.div>

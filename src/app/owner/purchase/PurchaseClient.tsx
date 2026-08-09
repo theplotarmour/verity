@@ -447,7 +447,7 @@ export default function PurchaseClient({ orders, suppliers, materials, reorderSu
                       )}
 
                       <div>
-                        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">Materials & price history</p>
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-text-tertiary">Materials &amp; price history</p>
                         {materials.length === 0 ? <p className="text-sm text-text-tertiary">No materials purchased yet.</p> : (
                           <div className="space-y-2">
                             {materials.map((m: any) => (
