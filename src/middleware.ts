@@ -14,7 +14,10 @@ import { jwtVerify } from "jose";
  * "is this cookie real" is the most that can be answered here; "does this user
  * still exist" stays with the pages.
  */
-const PROTECTED = ["/owner", "/worker", "/inspector", "/supervisor"];
+// `/verity` is the cross-tenant HQ. The signature floor here is not its
+// authorisation — `requireHqPage` checks the operator allowlist — but an
+// unauthenticated request should never reach that far.
+const PROTECTED = ["/owner", "/worker", "/inspector", "/supervisor", "/verity"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

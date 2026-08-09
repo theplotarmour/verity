@@ -3,6 +3,7 @@
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { hashPin } from "@/lib/server/hash";
+import { requireHqAction } from "@/lib/server/hq-auth";
 import {
   DEFAULT_MODULES,
   VERTICAL_PACKS,
@@ -48,6 +49,7 @@ function modulesFromAgreement(raw: unknown): ModuleKey[] {
  * included" without re-deriving it.
  */
 export async function listVerticalPacks() {
+  await requireHqAction();
   return verticalPackOptions().map((pack) => ({
     key: pack.key,
     label: pack.label,
@@ -68,6 +70,7 @@ export async function createAgreement(data: {
   monthlyFee: number;
   createdBy: string;
 }) {
+  await requireHqAction();
   const agreement = await prisma.agreement.create({
     data: {
       factoryName: data.factoryName,
@@ -85,6 +88,7 @@ export async function createAgreement(data: {
 }
 
 export async function getAgreement(id: string) {
+  await requireHqAction();
   try {
     const agreement = await prisma.agreement.findUnique({
       where: { id },
@@ -96,6 +100,7 @@ export async function getAgreement(id: string) {
 }
 
 export async function acceptAgreement(id: string, signature: string) {
+  await requireHqAction();
   try {
     const agreement = await prisma.agreement.findUnique({
       where: { id },
@@ -186,6 +191,7 @@ export async function acceptAgreement(id: string, signature: string) {
 // ==========================================
 
 export async function getClientsList() {
+  await requireHqAction();
   try {
     const clients = await prisma.factory.findMany({
       include: {
@@ -223,6 +229,7 @@ export async function getClientsList() {
  * admin toggle UI.
  */
 export async function getTenantModules(organizationId: string) {
+  await requireHqAction();
   const enabled = new Set(await entitledModules(organizationId));
   return allModules().map((mod) => ({
     key: mod.key,
@@ -242,6 +249,7 @@ export async function getTenantModules(organizationId: string) {
  * they left them, and "we dropped the tables" is not a recoverable mistake.
  */
 export async function updateTenantModules(organizationId: string, moduleKeys: string[]) {
+  await requireHqAction();
   try {
     const requested = moduleKeys.filter((k): k is ModuleKey => getModule(k as ModuleKey) !== undefined);
     // Dependencies are added rather than rejected: entitling `manufacturing`
@@ -272,11 +280,13 @@ export async function updateTenantModules(organizationId: string, moduleKeys: st
 
 /** Apply a whole vertical pack to an existing tenant. */
 export async function applyVerticalPack(organizationId: string, packKey: string) {
+  await requireHqAction();
   if (!VERTICAL_PACKS[packKey]) return { success: false, error: "Unknown pack." };
   return updateTenantModules(organizationId, modulesForPack(packKey));
 }
 
 export async function updateOnboardingStatus(factoryId: string, status: string) {
+  await requireHqAction();
   try {
     await prisma.factory.update({
       where: { id: factoryId },
@@ -298,6 +308,7 @@ export async function createSupportSession(
   internalUserId: string,
   reason: string
 ) {
+  await requireHqAction();
   // Session expires in 2 hours
   const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
 
@@ -314,6 +325,7 @@ export async function createSupportSession(
 }
 
 export async function getSupportLogs(factoryId?: string) {
+  await requireHqAction();
   return await prisma.supportSession.findMany({
     where: factoryId ? { factoryId } : {},
     include: {
@@ -335,6 +347,7 @@ export async function createAndSignAgreementDirect(data: {
    */
   verticalPack?: string;
 }) {
+  await requireHqAction();
   try {
     const slug = data.factoryName
       .toLowerCase()
