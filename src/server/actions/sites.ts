@@ -454,15 +454,3 @@ export async function removeDeployment(deploymentId: string) {
   revalidateSitePaths(deployment.siteId);
   return { success: true };
 }
-
-/** Sites for a picker on another module's form. Empty when `sites` is off. */
-export async function listSiteOptions() {
-  const user = await getOwnerUser();
-  if (!user) return [];
-  const sites = await prisma.site.findMany({
-    where: { factoryId: user.factoryId, status: { not: "TERMINATED" } },
-    select: { id: true, name: true, siteCode: true, slaHours: true, customerId: true },
-    orderBy: { name: "asc" },
-  });
-  return sites;
-}

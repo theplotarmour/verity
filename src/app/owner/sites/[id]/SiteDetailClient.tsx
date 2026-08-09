@@ -22,7 +22,12 @@ import {
   formatDay,
   humanise,
 } from "@/components/service/kit";
-import { deployStaff, endDeployment, setSiteStatus } from "@/server/actions/sites";
+import {
+  deployStaff,
+  endDeployment,
+  removeDeployment,
+  setSiteStatus,
+} from "@/server/actions/sites";
 
 type Site = {
   id: string;
@@ -140,6 +145,27 @@ export function SiteDetailClient({
     });
   }
 
+  // Ending a posting is the normal path and keeps it in history. Removing one
+  // is for a posting that should never have existed — a wrong name, a
+  // duplicate — where leaving it in "Past postings" states something untrue.
+  async function remove(deployment: Deployment) {
+    const ok = await confirmDialog({
+      title: `Remove ${deployment.userName} from the roster?`,
+      description: "The posting is erased rather than closed. Use End if they simply left.",
+      confirmLabel: "Remove",
+      variant: "danger",
+    });
+    if (!ok) return;
+    start(async () => {
+      const result = await removeDeployment(deployment.id);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   async function end(deployment: Deployment) {
     const ok = await confirmDialog({
       title: `End ${deployment.userName}'s posting?`,
@@ -253,10 +279,16 @@ export function SiteDetailClient({
                     title={`Currently deployed (${active.length})`}
                     rows={active}
                     onEnd={end}
+                    onRemove={remove}
                     pending={pending}
                   />
                   {past.length > 0 ? (
-                    <RosterSection title={`Past postings (${past.length})`} rows={past} />
+                    <RosterSection
+                      title={`Past postings (${past.length})`}
+                      rows={past}
+                      onRemove={remove}
+                      pending={pending}
+                    />
                   ) : null}
                 </div>
               )
@@ -464,11 +496,13 @@ function RosterSection({
   title,
   rows,
   onEnd,
+  onRemove,
   pending,
 }: {
   title: string;
   rows: Deployment[];
   onEnd?: (row: Deployment) => void;
+  onRemove?: (row: Deployment) => void;
   pending?: boolean;
 }) {
   return (
@@ -491,11 +525,24 @@ function RosterSection({
                 {formatDay(d.startDate)} — {d.endDate ? formatDay(d.endDate) : "present"}
               </p>
             </div>
-            {onEnd ? (
-              <Button size="sm" variant="ghost" onClick={() => onEnd(d)} disabled={pending}>
-                End
-              </Button>
-            ) : null}
+            <div className="flex shrink-0 items-center gap-1">
+              {onEnd ? (
+                <Button size="sm" variant="ghost" onClick={() => onEnd(d)} disabled={pending}>
+                  End
+                </Button>
+              ) : null}
+              {onRemove ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-danger"
+                  onClick={() => onRemove(d)}
+                  disabled={pending}
+                >
+                  Remove
+                </Button>
+              ) : null}
+            </div>
           </div>
         ))}
       </div>

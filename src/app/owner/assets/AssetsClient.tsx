@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/design/PageHeader";
 import { Button, EmptyState, Input } from "@/components/ui/primitives";
 import { Dialog } from "@/components/ui/Dialog";
 import { toast } from "@/components/ui/toast";
+import { confirmDialog } from "@/components/ui/dialog-service";
 import {
   Field,
   FilterPills,
@@ -25,7 +26,7 @@ import {
   humanise,
   toDateInput,
 } from "@/components/service/kit";
-import { createAsset, updateAsset } from "@/server/actions/assets";
+import { createAsset, deleteAsset, updateAsset } from "@/server/actions/assets";
 
 export type AssetRow = {
   id: string;
@@ -125,6 +126,26 @@ export function AssetsClient({
           }
         : BLANK,
     );
+  }
+
+  async function remove(row: AssetRow) {
+    const ok = await confirmDialog({
+      title: `Delete ${row.name}?`,
+      description:
+        "An asset with maintenance history cannot be deleted — set it to Disposed so the cost record survives.",
+      confirmLabel: "Delete",
+      variant: "danger",
+    });
+    if (!ok) return;
+    start(async () => {
+      const result = await deleteAsset(row.id);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Asset deleted.");
+      router.refresh();
+    });
   }
 
   function submit() {
@@ -264,9 +285,20 @@ export function AssetsClient({
                     <StatusPill status={a.status} />
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Button size="sm" variant="ghost" onClick={() => open(a)}>
-                      Edit
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button size="sm" variant="ghost" onClick={() => open(a)}>
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-danger"
+                        onClick={() => remove(a)}
+                        disabled={pending}
+                      >
+                        Delete
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}

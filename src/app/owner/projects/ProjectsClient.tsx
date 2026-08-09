@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/design/PageHeader";
 import { Button, EmptyState, Input } from "@/components/ui/primitives";
 import { Dialog } from "@/components/ui/Dialog";
 import { toast } from "@/components/ui/toast";
+import { confirmDialog } from "@/components/ui/dialog-service";
 import {
   Field,
   FilterPills,
@@ -25,7 +26,7 @@ import {
   humanise,
   toDateInput,
 } from "@/components/service/kit";
-import { createProject, updateProject } from "@/server/actions/projects";
+import { createProject, deleteProject, updateProject } from "@/server/actions/projects";
 
 export type ProjectRow = {
   id: string;
@@ -120,6 +121,25 @@ export function ProjectsClient({
           }
         : BLANK,
     );
+  }
+
+  async function remove(row: ProjectRow) {
+    const ok = await confirmDialog({
+      title: `Delete ${row.name}?`,
+      description: `Its ${row.taskCount} task(s) and ${row.totalHours.toFixed(1)} logged hours go with it. This cannot be undone.`,
+      confirmLabel: "Delete",
+      variant: "danger",
+    });
+    if (!ok) return;
+    start(async () => {
+      const result = await deleteProject(row.id);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Project deleted.");
+      router.refresh();
+    });
   }
 
   function submit() {
@@ -253,9 +273,20 @@ export function ProjectsClient({
                       <StatusPill status={p.status} />
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Button size="sm" variant="ghost" onClick={() => open(p)}>
-                        Edit
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => open(p)}>
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-danger"
+                          onClick={() => remove(p)}
+                          disabled={pending}
+                        >
+                          Delete
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 );
