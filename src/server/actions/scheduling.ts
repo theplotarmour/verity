@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { ScheduleStatus, SwapStatus } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
+import { getUserSession } from "@/lib/server/auth";
 import { getOwnerUser } from "@/lib/server/owner";
 import { guardModuleAction } from "@/platform/modules/guard";
 import { hasModule } from "@/platform/modules/entitlements";
@@ -138,11 +139,19 @@ export async function getSchedulingData(input?: { from?: string; to?: string; da
   };
 }
 
-/** The signed-in person's own upcoming roster. */
+/**
+ * The signed-in person's own upcoming roster.
+ *
+ * Scoped to the session rather than `getOwnerUser()`, which redirects anyone
+ * below manager — this is the one scheduling surface a worker is meant to
+ * reach, so guarding it with the owner helper would have made it unreachable
+ * by exactly the people it is for.
+ */
 export async function getMySchedule(days = 14) {
   await guardModuleAction("scheduling");
-  const user = await getOwnerUser();
-  if (!user) return [];
+  const session = await getUserSession();
+  if (!session) return [];
+  const user = { id: session.userId, factoryId: session.factoryId };
 
   const start = toCalendarDate(new Date())!;
   const end = new Date(start.getTime() + Math.min(Math.max(days, 1), 90) * DAY_MS);
@@ -290,21 +299,34 @@ export async function deleteSchedule(scheduleId: string) {
 
 // --- Swaps -----------------------------------------------------------------
 
+/**
+ * Raise a swap request. Session-scoped for the same reason as `getMySchedule`:
+ * the person asking to be swapped out is a worker, not a manager.
+ */
 export async function requestSwap(input: {
   scheduleId: string;
   swapWithId?: string | null;
   reason?: string | null;
 }) {
   await guardModuleAction("scheduling");
-  const user = await getOwnerUser();
-  if (!user) return { error: "Unauthorized" };
+  const session = await getUserSession();
+  if (!session) return { error: "Unauthorized" };
+  const user = { id: session.userId, factoryId: session.factoryId };
 
   const factoryId = user.factoryId;
   const schedule = await prisma.shiftSchedule.findFirst({
     where: { id: input.scheduleId, factoryId },
-    select: { id: true },
+    select: { id: true, userId: true },
   });
   if (!schedule) return { error: "Schedule entry not found." };
+
+  // A worker may only hand off their own shift. Managers can reassign anyone
+  // directly, so there is no case where swapping someone else's shift on their
+  // behalf is the right route.
+  const isManager = ["OWNER", "CO_OWNER", "MANAGER", "SUPERVISOR"].includes(session.role);
+  if (schedule.userId !== user.id && !isManager) {
+    return { error: "You can only request a swap for your own shift." };
+  }
 
   if (input.swapWithId) {
     const replacement = await prisma.user.findFirst({
