@@ -9,7 +9,9 @@ interface CircularMarqueeLoaderProps {
 }
 
 export function CircularMarqueeLoader({ className, size = 200 }: CircularMarqueeLoaderProps) {
-  const text = "Verity • VISION FOR ENTERPRISE DIGITAL ADVANCEMENT • Verity LOOP ";
+  // The old ring read "VISION FOR ENTERPRISE DIGITAL ADVANCEMENT" — the
+  // previous product's name expanded. This is the current tagline.
+  const text = "VERITY • OPERATE • AUTOMATE • EVOLVE • ";
   
   return (
     <div 
@@ -48,7 +50,7 @@ export function CircularMarqueeLoader({ className, size = 200 }: CircularMarquee
         
         {/* Center Symbol */}
         <div className="relative z-10 flex items-center justify-center">
-          <VerityLogo size={size * 0.28} className="animate-pulse" colorClass="text-[var(--brand)]" />
+          <VerityLogo size={size * 0.28} className="animate-pulse" />
         </div>
       </div>
     </div>

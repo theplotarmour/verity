@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Check, ListTree, X } from "lucide-react";
 
 import type { GuideHeading } from "@/lib/markdown";
+import { VerityLogo } from "@/components/ui/VerityLogo";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "verity.guide.done";
@@ -97,6 +98,7 @@ export function GuideClient({
           >
             <ArrowLeft className="h-4 w-4" />
           </Link>
+          <VerityLogo size={24} />
           <div className="min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-text-tertiary">
               VerityAI

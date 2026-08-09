@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { VerityLogo } from "@/components/ui/VerityLogo";
 import { requireHqPage } from "@/lib/server/hq-auth";
 
 /**
@@ -18,9 +19,7 @@ export default async function HqLayout({ children }: { children: React.ReactNode
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/10 px-5">
         <div className="flex items-center gap-4">
           <Link href="/verity/clients" className="flex items-center gap-2.5">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#FF1D2A] text-[11px] font-bold">
-              V
-            </span>
+            <VerityLogo size={24} />
             <span className="font-display text-sm font-semibold tracking-[0.14em]">
               VERITY <span className="text-white/40">HQ</span>
             </span>

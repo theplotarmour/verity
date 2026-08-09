@@ -2,11 +2,11 @@
 // names or colours the product reads from here, so a future reskin is one edit.
 
 export const BRAND_NAME = "Verity";
-export const BRAND_TAGLINE = "Verified Manufacturing Intelligence";
-export const BRAND_FULL_TITLE = `${BRAND_NAME} - ${BRAND_TAGLINE}`;
+export const BRAND_TAGLINE = "Operate • Automate • Evolve";
+export const BRAND_FULL_TITLE = `${BRAND_NAME}AI — Universal Operations OS`;
 
 export const BRAND_DESCRIPTION =
-  "Premium manufacturing OS for digital QC, approvals, and customer-facing proof reports.";
+  "The universal operations platform for service and production businesses — workforce, work orders, quality, inventory and billing in one system.";
 
 /**
  * Public workspace URL used in invites, PIN resets and passport share links.
@@ -17,16 +17,19 @@ export const BRAND_URL =
   process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || "https://app.theverityai.xyz";
 
 /**
- * Default accent. Factories may override this per-workspace via settings, so
- * treat it as the fallback rather than a constant to compare against.
+ * Default accent — brand scarlet. Factories may override this per-workspace via
+ * settings, so treat it as the fallback rather than a constant to compare
+ * against.
  *
- * Deliberately indigo: green and red are load-bearing pass/fail semantics
- * across QC, and a brand colour in either family reads as a verdict.
+ * This was indigo, on the reasoning that a red brand colour would be confused
+ * with a QC failure. The brand is red, so the separation is made the other way
+ * instead: error states are pushed warm and orange (see globals.css), and a
+ * verdict is carried by its icon and fill rather than by hue alone.
  */
-export const BRAND_ACCENT = "#4C3FE4";
+export const BRAND_ACCENT = "#E11D2A";
 
-/** Lifted for dark surfaces so white label text still clears 4.5:1 on the fill. */
-export const BRAND_ACCENT_DARK = "#6D5AF5";
+/** Lifted for dark surfaces, where the deeper scarlet muddies. */
+export const BRAND_ACCENT_DARK = "#FF1D2A";
 
-/** PWA install/splash chrome. */
-export const BRAND_BACKGROUND = "#F5F5F7";
+/** PWA install/splash chrome. Dark is the default identity. */
+export const BRAND_BACKGROUND = "#0A0A0B";

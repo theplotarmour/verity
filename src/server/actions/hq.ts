@@ -410,7 +410,6 @@ export async function createAndSignAgreementDirect(data: {
       }
     });
 
-    // Demo vehicle, qc template and product seeding skipped as these tables are retired in Veda schema
 
     return { success: true, factoryId: factory.id, slug: factory.slug };
   } catch (error: any) {

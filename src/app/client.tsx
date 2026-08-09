@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, BookOpen, Delete, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { authenticateUser } from "@/server/actions/auth";
+import { VerityLogo } from "@/components/ui/VerityLogo";
 import { cn } from "@/lib/utils";
 
 /**
@@ -146,13 +147,7 @@ export function HomeClient({
         {/* Header */}
         <header className="flex h-20 shrink-0 items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <img
-              src="/brand/logo-light.png"
-              alt=""
-              className="h-7 w-auto"
-              width={28}
-              height={28}
-            />
+            <VerityLogo size={30} />
             <span className="font-display text-[15px] font-semibold tracking-[0.16em]">
               VERITY
               <span className="align-super text-[8px] text-white/40">AI</span>

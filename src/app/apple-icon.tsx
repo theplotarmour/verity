@@ -5,8 +5,9 @@ export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
 
 /**
- * The Verity mark on a dark plate. Generated rather than shipped as a PNG so
- * the icon can never drift from the logo component.
+ * The Verity mark on a near-black plate. Generated rather than shipped as a PNG
+ * so the icon can never drift from `VerityLogo` — the two used to draw
+ * different shapes entirely.
  */
 export default function AppleIcon() {
   return new ImageResponse(
@@ -18,24 +19,12 @@ export default function AppleIcon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#151517",
+          background: "#0A0A0B",
         }}
       >
-        <svg width="120" height="84" viewBox="0 0 100 70" fill="none">
-          <path
-            d="M 16,16 L 43,54"
-            stroke="#FFFFFF"
-            strokeWidth="11"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M 43,54 L 84,10"
-            stroke={BRAND_ACCENT}
-            strokeWidth="11"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+        <svg width="120" height="99" viewBox="0 0 120 100" fill="none">
+          <path d="M 6,6 L 30,6 L 60,94 Z" fill={BRAND_ACCENT} />
+          <path d="M 116,4 L 60,94 L 88,4 Z" fill="#9CA3AF" />
         </svg>
       </div>
     ),

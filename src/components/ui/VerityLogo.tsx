@@ -1,59 +1,49 @@
-"use client";
-
 import { cn } from "@/lib/utils";
 
-interface VerityLogoProps {
+/**
+ * The Verity mark.
+ *
+ * Two tapering blades meeting at a point: scarlet on the left, silver on the
+ * right, forming the V. Drawn rather than shipped as a raster so it stays sharp
+ * at every size and picks up the theme — and because the files that used to sit
+ * in `public/brand` were a stale zigzag and, in one case, a screenshot of the
+ * previous product's error screen.
+ *
+ * `mono` renders both blades in the current text colour, for places where the
+ * two-tone mark would fight the surface (a dense sidebar, a print sheet).
+ */
+export function VerityLogo({
+  className,
+  size = 48,
+  mono = false,
+}: {
   className?: string;
-  size?: number; // width in pixels
-  colorClass?: string; // e.g. "text-text-primary dark:text-white"
-}
-
-export function VerityLogo({ className, size = 48, colorClass = "text-text-primary" }: VerityLogoProps) {
-  // Height is dynamically 70% of size to maintain original aspect ratio
+  /** Width in pixels. Height follows the mark's 1.25:1 aspect. */
+  size?: number;
+  mono?: boolean;
+}) {
   return (
     <svg
-      viewBox="0 0 100 70"
+      viewBox="0 0 120 100"
       width={size}
-      height={size * 0.7}
+      height={size * 0.83}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className={cn("select-none transition-all duration-300", colorClass, className)}
+      role="img"
+      aria-label="Verity"
+      className={cn("select-none", className)}
     >
-      {/* Left White Segment (Left leg to mid up-slope) */}
+      {/* Scarlet blade — the descending stroke. */}
       <path
-        d="M 14,56 L 32,20 L 48,52 L 57.1,33.8"
-        stroke="currentColor"
-        strokeWidth="9"
-        strokeLinecap="butt"
-        strokeLinejoin="miter"
-        strokeMiterlimit="4"
+        d="M 6,6 L 30,6 L 60,94 Z"
+        fill={mono ? "currentColor" : "var(--brand, #E11D2A)"}
       />
-      
-      {/* Red Accent Block */}
+      {/* Silver blade — the rising stroke, carried higher than the scarlet so
+          the V reads as moving upward rather than sitting symmetrically. */}
       <path
-        d="M 57.1,33.8 L 62,24"
-        stroke="#E11D48" /* matches brand red */
-        strokeWidth="9"
-        strokeLinecap="butt"
-        strokeLinejoin="miter"
-      />
-      
-      {/* Grey/Silver Segment */}
-      <path
-        d="M 62,24 L 74,48"
-        stroke="#9CA3AF" /* matches silver/grey */
-        strokeWidth="9"
-        strokeLinecap="butt"
-        strokeLinejoin="miter"
-      />
-      
-      {/* Right White Segment (Valley to right leg) */}
-      <path
-        d="M 74,48 L 88,20"
-        stroke="currentColor"
-        strokeWidth="9"
-        strokeLinecap="butt"
-        strokeLinejoin="miter"
+        d="M 116,4 L 60,94 L 88,4 Z"
+        fill={mono ? "currentColor" : "#9CA3AF"}
+        opacity={mono ? 0.55 : 1}
       />
     </svg>
   );

@@ -35,6 +35,7 @@ import { Settings, Shield, Plus , Package, ShoppingCart, Wrench, FlaskConical, D
 import { SystemRole } from "@prisma/client";
 import { can, Permission, type PermissionMatrix } from "@/lib/permissions";
 import type { ModuleKey } from "@/platform/modules/registry";
+import { VerityLogo } from "@/components/ui/VerityLogo";
 import { InstallPromptBanner } from "./InstallPromptBanner";
 
 type NavItem = {
@@ -349,11 +350,11 @@ export function OwnerShell({
             collapsed ? "justify-center" : "justify-center xl:justify-start"
           )}>
             <Link href="/owner/dashboard" className="flex items-center gap-3 min-w-0">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--brand)] text-white overflow-hidden">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface-2">
                 {factoryLogo ? (
-                  <img src={factoryLogo} alt="Factory Logo" className="h-full w-full object-cover" />
+                  <img src={factoryLogo} alt="" className="h-full w-full object-cover" />
                 ) : (
-                  <Factory className="h-4 w-4" />
+                  <VerityLogo size={22} />
                 )}
               </div>
               <div className={cn("min-w-0", collapsed ? "hidden" : "hidden xl:block")}>
@@ -567,11 +568,11 @@ export function OwnerShell({
         {/* Mobile Header */}
         <header className="h-14 border-b border-border bg-[rgba(255,255,255,0.85)] dark:bg-[rgba(10,10,10,0.85)] backdrop-blur-lg flex items-center justify-between px-4 shrink-0 z-40">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="h-7 w-7 rounded-lg bg-[var(--brand)] text-white flex items-center justify-center overflow-hidden shrink-0">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-2">
               {factoryLogo ? (
-                <img src={factoryLogo} alt="Logo" className="h-full w-full object-cover" />
+                <img src={factoryLogo} alt="" className="h-full w-full object-cover" />
               ) : (
-                <Factory className="h-3.5 w-3.5" />
+                <VerityLogo size={18} />
               )}
             </div>
             <div className="min-w-0">
