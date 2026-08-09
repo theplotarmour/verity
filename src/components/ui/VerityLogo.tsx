@@ -3,47 +3,75 @@ import { cn } from "@/lib/utils";
 /**
  * The Verity mark.
  *
- * Two tapering blades meeting at a point: scarlet on the left, silver on the
- * right, forming the V. Drawn rather than shipped as a raster so it stays sharp
- * at every size and picks up the theme — and because the files that used to sit
- * in `public/brand` were a stale zigzag and, in one case, a screenshot of the
- * previous product's error screen.
+ * Two swept blades crossing to form the V: scarlet in front, graphite behind,
+ * each cut by a concave notch that leaves a talon point. Redrawn as vectors
+ * from the brand sheet rather than shipped as a raster — the mark appears at
+ * 18px in a sidebar and at 340px in the app icon, and a PNG cannot serve both.
  *
- * `mono` renders both blades in the current text colour, for places where the
- * two-tone mark would fight the surface (a dense sidebar, a print sheet).
+ * `mono` collapses both blades to the current text colour for surfaces where
+ * two-tone would fight the background (print, a dense monochrome rail).
  */
 export function VerityLogo({
   className,
   size = 48,
   mono = false,
+  id = "verity-mark",
 }: {
   className?: string;
-  /** Width in pixels. Height follows the mark's 1.25:1 aspect. */
+  /** Width in pixels. Height follows the mark's roughly 1:0.72 aspect. */
   size?: number;
   mono?: boolean;
+  /** Gradient ids must be unique when several marks share a page. */
+  id?: string;
 }) {
   return (
     <svg
-      viewBox="0 0 120 100"
+      viewBox="240 230 780 780"
       width={size}
-      height={size * 0.83}
+      height={size * 0.72}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       role="img"
       aria-label="Verity"
       className={cn("select-none", className)}
     >
-      {/* Scarlet blade — the descending stroke. */}
+      {!mono ? (
+        <defs>
+          <linearGradient id={`${id}-red`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#FF2A36" />
+            <stop offset="55%" stopColor="#E11D2A" />
+            <stop offset="100%" stopColor="#B80D1E" />
+          </linearGradient>
+          <linearGradient id={`${id}-steel`} x1="1" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#C9CDD3" />
+            <stop offset="45%" stopColor="#4B5058" />
+            <stop offset="100%" stopColor="#1F2328" />
+          </linearGradient>
+        </defs>
+      ) : null}
+
+      {/* Graphite blade — drawn first so the scarlet crosses in front, as on
+          the brand sheet. */}
       <path
-        d="M 6,6 L 30,6 L 60,94 Z"
-        fill={mono ? "currentColor" : "var(--brand, #E11D2A)"}
+        d="M 1236,258
+           L 859,258
+           C 734,268 666,430 654,558
+           C 754,470 859,412 939,405
+           C 880,646 800,822 700,978
+           Z"
+        fill={mono ? "currentColor" : `url(#${id}-steel)`}
+        opacity={mono ? 0.5 : 1}
       />
-      {/* Silver blade — the rising stroke, carried higher than the scarlet so
-          the V reads as moving upward rather than sitting symmetrically. */}
+
+      {/* Scarlet blade. */}
       <path
-        d="M 116,4 L 60,94 L 88,4 Z"
-        fill={mono ? "currentColor" : "#9CA3AF"}
-        opacity={mono ? 0.55 : 1}
+        d="M 18,258
+           L 395,258
+           C 520,268 588,430 600,558
+           C 500,470 395,412 315,405
+           C 374,646 454,822 554,978
+           Z"
+        fill={mono ? "currentColor" : `url(#${id}-red)`}
       />
     </svg>
   );

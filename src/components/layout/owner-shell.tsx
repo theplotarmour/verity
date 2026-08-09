@@ -37,6 +37,7 @@ import { can, Permission, type PermissionMatrix } from "@/lib/permissions";
 import type { ModuleKey } from "@/platform/modules/registry";
 import { VerityLogo } from "@/components/ui/VerityLogo";
 import { InstallPromptBanner } from "./InstallPromptBanner";
+import { BRAND_ACCENT } from "@/lib/brand";
 
 type NavItem = {
   label: string;
@@ -314,7 +315,7 @@ export function OwnerShell({
 
   return (
     <>
-      <InstallPromptBanner accentColor={themeColor || "#007AFF"} />
+      <InstallPromptBanner accentColor={themeColor || BRAND_ACCENT} />
       {themeColor && (
         <style dangerouslySetInnerHTML={{ __html: `
           :root {

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import prisma from "@/lib/prisma";
 import {
   type ModuleKey,
@@ -19,7 +21,15 @@ import {
  * the server action behind it must check too.
  */
 
-export async function entitledModules(organizationId: string): Promise<ModuleKey[]> {
+/**
+ * Memoised per request. A single owner page asks this five or six times — once
+ * for the nav, once per `guardModuleAction`, and once per `hasModule()` inside
+ * the page's own data loader. Each was a round trip, and against a
+ * one-connection pool they queued behind each other.
+ */
+export const entitledModules = cache(async function entitledModules(
+  organizationId: string,
+): Promise<ModuleKey[]> {
   const rows = await prisma.moduleEntitlement.findMany({
     where: {
       organizationId,
@@ -36,7 +46,7 @@ export async function entitledModules(organizationId: string): Promise<ModuleKey
     .filter((k) => getModule(k) !== undefined);
 
   return withDependencies(known);
-}
+});
 
 export async function hasModule(
   organizationId: string,

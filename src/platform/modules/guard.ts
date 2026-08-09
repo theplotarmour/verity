@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { redirect } from "next/navigation";
 
 import prisma from "@/lib/prisma";
@@ -15,7 +16,8 @@ import { hasModule } from "./entitlements";
  * server action belonging to an optional module should call one.
  */
 
-async function organizationIdForSession(): Promise<string | null> {
+/** Memoised: every guard on a page resolves the same session to the same org. */
+const organizationIdForSession = cache(async function organizationIdForSession(): Promise<string | null> {
   const session = await getUserSession();
   if (!session) return null;
   const factory = await prisma.factory.findUnique({
@@ -23,7 +25,7 @@ async function organizationIdForSession(): Promise<string | null> {
     select: { organizationId: true },
   });
   return factory?.organizationId ?? null;
-}
+});
 
 /**
  * Page guard. Redirects rather than throwing, so an un-entitled tenant landing

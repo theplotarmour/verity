@@ -7,6 +7,7 @@ import prisma from '@/lib/prisma'
 import { InstallPromptBanner } from '@/components/layout/InstallPromptBanner'
 import { LanguageProvider } from '@/components/providers/language-provider'
 import { hasModule } from '@/platform/modules/entitlements'
+import { BRAND_ACCENT } from "@/lib/brand";
 
 export default async function WorkerLayout({ children }: { children: React.ReactNode }) {
   const session = await getUserSession()
@@ -16,7 +17,7 @@ export default async function WorkerLayout({ children }: { children: React.React
   }) : null;
   const lang = user?.language || session?.language || 'en';
   const settings = (user?.factory?.settings as any) || {};
-  const accentColor = settings.themeColor || "#007AFF";
+  const accentColor = settings.themeColor || BRAND_ACCENT;
 
   // The Schedule tab only exists for tenants that actually publish a roster.
   const showSchedule = user?.factory

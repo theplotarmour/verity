@@ -7,6 +7,7 @@ import { PermissionMatrixCard } from "./PermissionMatrixCard";
 
 import prisma from "@/lib/prisma";
 import { itemsInRootCategory } from "@/lib/server/categoryItems";
+import { BRAND_ACCENT } from "@/lib/brand";
 
 export default async function OwnerSettingsPage() {
   const dbUser = await getOwnerUser();
@@ -50,7 +51,7 @@ export default async function OwnerSettingsPage() {
         factoryName: dbUser.factory?.name || "",
         ownerName: dbUser.name || "",
         phone: dbUser.phone || "",
-        themeColor: settings.themeColor || "#E11D48",
+        themeColor: settings.themeColor || BRAND_ACCENT,
         logoUrl: dbUser.factory?.logoUrl || null,
         factoryId: dbUser.factoryId,
       }}

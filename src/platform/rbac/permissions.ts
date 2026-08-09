@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import prisma from "@/lib/prisma";
 import { type ModuleKey, allPermissions, moduleForPermission } from "@/platform/modules/registry";
 import { entitledModules } from "@/platform/modules/entitlements";
@@ -25,7 +27,9 @@ export interface ResolvedAccess {
   modules: ModuleKey[];
 }
 
-export async function resolveAccess(userId: string): Promise<ResolvedAccess | null> {
+export const resolveAccess = cache(async function resolveAccess(
+  userId: string,
+): Promise<ResolvedAccess | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -53,7 +57,7 @@ export async function resolveAccess(userId: string): Promise<ResolvedAccess | nu
     permissions: new Set(effective),
     modules,
   };
-}
+});
 
 export function can(access: ResolvedAccess | null, permission: string): boolean {
   return access?.permissions.has(permission) ?? false;

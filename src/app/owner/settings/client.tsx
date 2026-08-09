@@ -208,6 +208,7 @@ export function SettingsClient({
 
   // Accent Colors mapping
   const ACCENT_COLORS = [
+    { name: "Verity Scarlet", hex: "#E11D2A" },
     { name: "Blue", hex: "#007AFF" },
     { name: "Graphite", hex: "#8E8E93" },
     { name: "Red", hex: "#FF3B30" },

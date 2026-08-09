@@ -10,6 +10,7 @@ import { submitCheckpoints } from '@/server/actions/worker'
 import { QcVideoCapture } from '@/components/factory/QcVideoCapture'
 import { Button as SoftButton } from '@/components/ui/primitives'
 import { OrderSpecCard } from '@/components/factory/OrderSpecCard'
+import { BRAND_ACCENT } from "@/lib/brand";
 
 const getDB = async () => {
   return await openDB('factory-qc-db', 2, {
@@ -85,7 +86,7 @@ export default function InspectionClient({ batch, dict }: { batch: any, dict: an
 
   // Accent Color from Factory Settings
   const settings = (batch.factory?.settings as any) || {};
-  const accentColor = settings.themeColor || "#007AFF";
+  const accentColor = settings.themeColor || BRAND_ACCENT;
 
   // File capture elements
   const fileInputRef = useRef<HTMLInputElement>(null);
