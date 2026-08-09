@@ -358,6 +358,25 @@ model User {
   // distinguishes worker vs inspector within that department.
   departmentId String?
   department   Department? @relation("DepartmentMembers", fields: [departmentId], references: [id], onDelete: SetNull)
+
+  // Service-module back-relations. Each is named because a User can stand in
+  // several roles against the same table (requester vs. replacement on a swap,
+  // reporter vs. assignee on a ticket) and Prisma cannot infer which is which.
+  managedSites      Site[]                @relation("SiteManager")
+  siteDeployments   SiteDeployment[]      @relation("SiteDeploymentUser")
+  assignedTickets   Ticket[]              @relation("TicketAssignee")
+  reportedTickets   Ticket[]              @relation("TicketReporter")
+  ticketComments    TicketComment[]       @relation("TicketCommentAuthor")
+  serviceWorkOrders ServiceWorkOrder[]    @relation("ServiceWOAssignee")
+  managedProjects   Project[]             @relation("ProjectManager")
+  assignedTasks     Task[]                @relation("TaskAssignee")
+  timesheetEntries  TimesheetEntry[]      @relation("TimesheetUser")
+  assignedAssets    Asset[]               @relation("AssetAssignee")
+  maintenanceLogs   AssetMaintenanceLog[] @relation("MaintenancePerformer")
+  shiftSchedules    ShiftSchedule[]       @relation("ShiftScheduleUser")
+  requestedSwaps    ShiftSwap[]           @relation("SwapRequester")
+  offeredSwaps      ShiftSwap[]           @relation("SwapRecipient")
+  payrollInputs     PayrollInput[]        @relation("PayrollInputUser")
 }
 
 // ==========================================
@@ -1197,6 +1216,15 @@ model Customer {
   createdAt           DateTime     @default(now())
   salesOrders         SalesOrder[]
 
+  // Service-side counterparty links. A customer owns sites; work, tickets,
+  // projects and invoices all hang off the customer directly as well, because
+  // not every service engagement has a physical site.
+  sites             Site[]
+  tickets           Ticket[]
+  serviceWorkOrders ServiceWorkOrder[]
+  projects          Project[]
+  serviceInvoices   ServiceInvoice[]
+
   @@unique([factoryId, customerCode])
 }
 
@@ -1373,6 +1401,11 @@ model Shift {
   startTime       String // e.g. "08:00"
   endTime         String // e.g. "16:00"
   gracePeriodMins Int    @default(15)
+
+  // A Shift is a definition, not a calendar entry. Deployments post a person to
+  // a site on a shift indefinitely; schedules pin one person to one date.
+  deployments SiteDeployment[]
+  schedules   ShiftSchedule[]
 }
 
 model AttendanceLog {
@@ -1411,7 +1444,6 @@ model LeaveApplication {
 /// `@@map` keeps the table exactly where it is: this is a rename of the
 /// concept, not a migration of the data.
 model ChecklistTemplate {
-
   id               String   @id @default(cuid())
   factoryId        String
   name             String
@@ -1436,6 +1468,10 @@ model ChecklistTemplate {
   sections             TemplateSection[]
   jobCards             JobCard[]         @relation("JobCardTemplate")
   defaultForItemGroups ItemGroup[]       @relation("ItemGroupDefaultChecklist")
+
+  /// Service work orders that run this checklist on completion. A checklist is
+  /// stage-shaped, so it serves a site visit as readily as a production stage.
+  serviceWorkOrders ServiceWorkOrder[] @relation("ServiceWOChecklist")
 
   blueprintVersions BlueprintVersion[]
 
@@ -1521,6 +1557,11 @@ model Inspection {
   videoUploadedAt   DateTime?
   videoUploadedById String?
 
+  // Where the inspection happened. Optional and nullable: production
+  // inspections have no site, and no existing row can be given one.
+  siteId String?
+  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
   submissions   CheckpointSubmission[]
   approval      QualityApproval?
   report        QualityReport?
@@ -1528,6 +1569,7 @@ model Inspection {
 
   @@index([factoryId])
   @@index([factoryId, status])
+  @@index([siteId])
 }
 
 model CheckpointSubmission {
@@ -1729,4 +1771,620 @@ enum SystemRole {
   SUPERVISOR
   WORKER
   STORE_MANAGER
+}
+
+// ==========================================
+// SERVICE OPERATIONS
+//
+// The production side of Verity models Customer -> Order -> WorkOrder -> JobCard.
+// Service businesses run the same skeleton with different nouns: Client -> Site
+// -> Deployment -> Ticket/ServiceWorkOrder -> Invoice. These models are that
+// second spine. They deliberately do not reuse `WorkOrder`, which requires a
+// ProductionPlan and a produced item — neither of which a site visit has.
+//
+// Tenancy convention here matches the rest of the file: `factoryId` is a bare
+// scalar with an index, not a relation, so Factory stays free of back-links.
+// ==========================================
+
+enum SiteStatus {
+  ACTIVE
+  ON_HOLD
+  TERMINATED
+}
+
+enum ServiceWOStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  PENDING_PARTS
+  COMPLETED
+  CANCELLED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_ON_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  BLOCKED
+  DONE
+  CANCELLED
+}
+
+enum AssetStatus {
+  ACTIVE
+  IN_REPAIR
+  IDLE
+  RETIRED
+  DISPOSED
+}
+
+enum ScheduleStatus {
+  SCHEDULED
+  ATTENDED
+  ABSENT
+  SWAPPED
+  CANCELLED
+}
+
+enum SwapStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PayrollStatus {
+  DRAFT
+  FINALISED
+  EXPORTED
+}
+
+// --- Sites ----------------------------------------------------------------
+
+/// A physical location belonging to a client where work happens: the guarded
+/// premises, the serviced building, the construction site. Distinct from
+/// Warehouse, which locates stock rather than work.
+model Site {
+  id        String @id @default(cuid())
+  factoryId String
+
+  name     String
+  siteCode String
+  address  String?
+  city     String?
+  state    String?
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  status SiteStatus @default(ACTIVE)
+
+  managerUserId String?
+  managerUser   User?   @relation("SiteManager", fields: [managerUserId], references: [id], onDelete: SetNull)
+
+  contractStart DateTime?
+  contractEnd   DateTime?
+  /// SLA response window in hours, used to stamp `slaDueAt` on work raised here.
+  slaHours      Int?
+  notes         String?
+
+  deployments SiteDeployment[]
+  workOrders  ServiceWorkOrder[]
+  tickets     Ticket[]
+  projects    Project[]
+  assets      Asset[]
+  schedules   ShiftSchedule[]
+  invoices    ServiceInvoice[]
+  inspections Inspection[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([factoryId, siteCode])
+  @@index([factoryId])
+  @@index([factoryId, status])
+  @@index([customerId])
+}
+
+/// A posting of one person to one site. `endDate` null means still deployed.
+model SiteDeployment {
+  id        String @id @default(cuid())
+  factoryId String
+
+  siteId String
+  site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("SiteDeploymentUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Free text rather than an enum: "Guard", "Housekeeper", "Technician" are
+  /// tenant vocabulary, and constraining them would fork the model per vertical.
+  role      String?
+  startDate DateTime
+  endDate   DateTime?
+
+  shiftId String?
+  shift   Shift?  @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([factoryId])
+  @@index([siteId, isActive])
+  @@index([userId])
+}
+
+// --- Helpdesk -------------------------------------------------------------
+
+model Ticket {
+  id           String @id @default(cuid())
+  factoryId    String
+  ticketNumber String
+
+  subject     String
+  description String?
+  category    String?
+
+  status   TicketStatus   @default(OPEN)
+  priority TicketPriority @default(MEDIUM)
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  siteId String?
+  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  assignedToId String?
+  assignedTo   User?   @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  reportedById String?
+  reportedBy   User?   @relation("TicketReporter", fields: [reportedById], references: [id], onDelete: SetNull)
+
+  /// Stamped from the site's `slaHours` at creation. Breach is derived, never
+  /// stored, so changing the SLA never rewrites history.
+  slaDueAt   DateTime?
+  resolvedAt DateTime?
+  closedAt   DateTime?
+
+  comments   TicketComment[]
+  workOrders ServiceWorkOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([factoryId, ticketNumber])
+  @@index([factoryId])
+  @@index([factoryId, status])
+  @@index([siteId])
+  @@index([assignedToId])
+}
+
+model TicketComment {
+  id        String @id @default(cuid())
+  factoryId String
+
+  ticketId String
+  ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  authorId String?
+  author   User?   @relation("TicketCommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  body       String
+  /// Internal notes are invisible to the customer-facing view of the thread.
+  isInternal Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([factoryId])
+  @@index([ticketId])
+}
+
+/// The service-sector counterpart to a production WorkOrder: dispatchable work
+/// at a site, optionally born from a ticket, optionally gated by a checklist.
+model ServiceWorkOrder {
+  id        String @id @default(cuid())
+  factoryId String
+
+  woNumber    String
+  title       String
+  description String?
+  /// "Corrective", "Preventive", "Inspection", "Installation".
+  category    String?
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  siteId String?
+  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  assignedToId String?
+  assignedTo   User?   @relation("ServiceWOAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  status   ServiceWOStatus @default(OPEN)
+  priority TicketPriority  @default(MEDIUM)
+
+  scheduledAt DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+  slaDueAt    DateTime?
+
+  ticketId String?
+  ticket   Ticket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+
+  checklistId String?
+  checklist   ChecklistTemplate? @relation("ServiceWOChecklist", fields: [checklistId], references: [id], onDelete: SetNull)
+
+  assetId String?
+  asset   Asset?  @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([factoryId, woNumber])
+  @@index([factoryId])
+  @@index([factoryId, status])
+  @@index([siteId])
+  @@index([assignedToId])
+}
+
+// --- Projects -------------------------------------------------------------
+
+model Project {
+  id            String @id @default(cuid())
+  factoryId     String
+  projectNumber String
+
+  name        String
+  description String?
+  status      ProjectStatus @default(PLANNING)
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  siteId String?
+  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  managerId String?
+  manager   User?   @relation("ProjectManager", fields: [managerId], references: [id], onDelete: SetNull)
+
+  startDate DateTime?
+  endDate   DateTime?
+
+  budget       Float @default(0)
+  /// Rate used to price timesheet hours when nothing more specific applies.
+  billableRate Float @default(0)
+
+  tasks      Task[]
+  timesheets TimesheetEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([factoryId, projectNumber])
+  @@index([factoryId])
+  @@index([factoryId, status])
+  @@index([customerId])
+}
+
+model Task {
+  id        String @id @default(cuid())
+  factoryId String
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  status      TaskStatus     @default(TODO)
+  priority    TicketPriority @default(MEDIUM)
+
+  assigneeId String?
+  assignee   User?   @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  dueDate     DateTime?
+  completedAt DateTime?
+
+  estimatedHours Float @default(0)
+
+  timesheets TimesheetEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([factoryId])
+  @@index([projectId, status])
+  @@index([assigneeId])
+}
+
+model TimesheetEntry {
+  id        String @id @default(cuid())
+  factoryId String
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  taskId String?
+  task   Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  userId String
+  user   User   @relation("TimesheetUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  date  DateTime
+  hours Float
+
+  notes      String?
+  billable   Boolean   @default(true)
+  /// Approval gates both billing and payroll, so it is a flag plus a time
+  /// rather than a status enum that could drift apart from those two consumers.
+  approved   Boolean   @default(false)
+  approvedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([factoryId])
+  @@index([projectId])
+  @@index([userId, date])
+}
+
+// --- Assets ---------------------------------------------------------------
+
+model Asset {
+  id        String @id @default(cuid())
+  factoryId String
+
+  assetCode    String
+  name         String
+  category     String?
+  /// Generator, HVAC unit, forklift: identity that survives a rename.
+  serialNumber String?
+  manufacturer String?
+  model        String?
+
+  status AssetStatus @default(ACTIVE)
+
+  siteId String?
+  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  assignedToId String?
+  assignedTo   User?   @relation("AssetAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  location String?
+
+  purchaseDate  DateTime?
+  purchaseCost  Float     @default(0)
+  warrantyUntil DateTime?
+
+  notes String?
+
+  maintenanceLogs      AssetMaintenanceLog[]
+  maintenanceSchedules AssetMaintenanceSchedule[]
+  workOrders           ServiceWorkOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([factoryId, assetCode])
+  @@index([factoryId])
+  @@index([factoryId, status])
+  @@index([siteId])
+}
+
+model AssetMaintenanceLog {
+  id        String @id @default(cuid())
+  factoryId String
+
+  assetId String
+  asset   Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  /// "Preventive", "Corrective", "Inspection".
+  type        String
+  description String?
+
+  performedById String?
+  performedBy   User?   @relation("MaintenancePerformer", fields: [performedById], references: [id], onDelete: SetNull)
+
+  performedAt   DateTime @default(now())
+  cost          Float    @default(0)
+  downtimeHours Float    @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([factoryId])
+  @@index([assetId, performedAt])
+}
+
+model AssetMaintenanceSchedule {
+  id        String @id @default(cuid())
+  factoryId String
+
+  assetId String
+  asset   Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  name            String
+  /// Interval in days. Simple by design: cron-shaped recurrence is a whole
+  /// scheduling engine, and every plan seen so far is "every N days".
+  intervalDays    Int
+  lastPerformedAt DateTime?
+  nextDueAt       DateTime
+  isActive        Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([factoryId])
+  @@index([assetId])
+  @@index([factoryId, nextDueAt])
+}
+
+// --- Scheduling -----------------------------------------------------------
+
+/// One person, one shift, one date, optionally one site. This is the calendar
+/// the `Shift` definition never was.
+model ShiftSchedule {
+  id        String @id @default(cuid())
+  factoryId String
+
+  userId String
+  user   User   @relation("ShiftScheduleUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  shiftId String
+  shift   Shift  @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  siteId String?
+  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  /// Midnight UTC of the calendar day. Time of day lives on the Shift.
+  date   DateTime
+  status ScheduleStatus @default(SCHEDULED)
+
+  notes String?
+
+  swaps ShiftSwap[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, date, shiftId])
+  @@index([factoryId])
+  @@index([factoryId, date])
+  @@index([siteId, date])
+}
+
+model ShiftSwap {
+  id        String @id @default(cuid())
+  factoryId String
+
+  scheduleId String
+  schedule   ShiftSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  requestedById String
+  requestedBy   User   @relation("SwapRequester", fields: [requestedById], references: [id], onDelete: Cascade)
+
+  swapWithId String?
+  swapWith   User?   @relation("SwapRecipient", fields: [swapWithId], references: [id], onDelete: SetNull)
+
+  reason     String?
+  status     SwapStatus @default(PENDING)
+  resolvedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([factoryId])
+  @@index([factoryId, status])
+  @@index([scheduleId])
+}
+
+// --- Billing --------------------------------------------------------------
+
+/// The bridge from operations to money. Not an accounting ledger — a
+/// client-facing invoice built from work that actually happened.
+model ServiceInvoice {
+  id        String @id @default(cuid())
+  factoryId String
+
+  invoiceNumber String
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  siteId String?
+  site   Site?   @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  status InvoiceStatus @default(DRAFT)
+
+  issueDate DateTime  @default(now())
+  dueDate   DateTime?
+
+  lineItems InvoiceLineItem[]
+
+  /// Denormalised totals, recomputed from the line items on every write so a
+  /// list view never has to load the items to show a number.
+  subtotal  Float @default(0)
+  taxAmount Float @default(0)
+  total     Float @default(0)
+
+  notes  String?
+  paidAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([factoryId, invoiceNumber])
+  @@index([factoryId])
+  @@index([factoryId, status])
+  @@index([customerId])
+}
+
+model InvoiceLineItem {
+  id        String         @id @default(cuid())
+  invoiceId String
+  invoice   ServiceInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  description String
+  quantity    Float
+  unitPrice   Float
+  amount      Float
+  taxRate     Float  @default(0)
+
+  @@index([invoiceId])
+}
+
+/// A period summary per employee, assembled from attendance and timesheets and
+/// handed to whatever payroll system the tenant already runs. Verity does not
+/// calculate pay; it supplies the inputs.
+model PayrollInput {
+  id        String @id @default(cuid())
+  factoryId String
+
+  userId String
+  user   User   @relation("PayrollInputUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  periodStart DateTime
+  periodEnd   DateTime
+
+  presentDays   Int   @default(0)
+  absentDays    Int   @default(0)
+  overtimeHours Float @default(0)
+  leaveDays     Int   @default(0)
+
+  /// From TimesheetEntry when the projects module is on; zero otherwise.
+  totalHours Float         @default(0)
+  status     PayrollStatus @default(DRAFT)
+
+  exportedAt DateTime?
+  notes      String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, periodStart, periodEnd])
+  @@index([factoryId])
+  @@index([factoryId, periodStart])
 }

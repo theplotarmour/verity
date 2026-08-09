@@ -6,6 +6,7 @@ import { getUserSession } from '@/lib/server/auth'
 import prisma from '@/lib/prisma'
 import { InstallPromptBanner } from '@/components/layout/InstallPromptBanner'
 import { LanguageProvider } from '@/components/providers/language-provider'
+import { hasModule } from '@/platform/modules/entitlements'
 
 export default async function WorkerLayout({ children }: { children: React.ReactNode }) {
   const session = await getUserSession()
@@ -16,6 +17,11 @@ export default async function WorkerLayout({ children }: { children: React.React
   const lang = user?.language || session?.language || 'en';
   const settings = (user?.factory?.settings as any) || {};
   const accentColor = settings.themeColor || "#007AFF";
+
+  // The Schedule tab only exists for tenants that actually publish a roster.
+  const showSchedule = user?.factory
+    ? await hasModule(user.factory.organizationId, "scheduling")
+    : false;
 
   return (
     <div className="relative flex h-[100dvh] flex-col overflow-hidden bg-background">
@@ -32,7 +38,7 @@ export default async function WorkerLayout({ children }: { children: React.React
           </div>
         </main>
 
-        <WorkerNav />
+        <WorkerNav showSchedule={showSchedule} />
       </LanguageProvider>
     </div>
   )

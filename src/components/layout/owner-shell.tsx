@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
 import {
   Truck,
   BarChart3,
@@ -19,6 +18,15 @@ import {
   CircleCheckBig,
   PanelLeftClose,
   PanelLeftOpen,
+  LifeBuoy,
+  Hammer,
+  FolderKanban,
+  MapPin,
+  CalendarDays,
+  HardHat,
+  ReceiptText,
+  LayoutGrid,
+  X,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { Badge, Button, Input } from "@/components/ui/primitives";
@@ -26,6 +34,7 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Settings, Shield, Plus , Package, ShoppingCart, Wrench, FlaskConical, Database, Building2 } from "lucide-react";
 import { SystemRole } from "@prisma/client";
 import { can, Permission, type PermissionMatrix } from "@/lib/permissions";
+import type { ModuleKey } from "@/platform/modules/registry";
 import { InstallPromptBanner } from "./InstallPromptBanner";
 
 type NavItem = {
@@ -33,6 +42,25 @@ type NavItem = {
   href: string;
   icon: React.ReactNode;
   permission: Permission;
+  /**
+   * The module that must be entitled for this destination to appear. Omitted
+   * means "always" — only for things every tenant has, like the dashboard.
+   *
+   * This is an affordance, not a control: `guardModulePage` on the page itself
+   * is what actually stops an un-entitled tenant who types the URL.
+   */
+  requiredModule?: ModuleKey;
+  /**
+   * Registry permission key (`@/platform/modules/registry`) required to see
+   * this item. Preferred over `permission`, which is the deprecated 15-value
+   * union with no service-side entries — that union is why every service
+   * destination was gated on CREATE_ORDER, so anyone who could book an order
+   * could also see Billing.
+   *
+   * Production items still use `permission` until they are migrated
+   * deliberately; this field is the migration path, not a second system.
+   */
+  requires?: string;
 };
 
 type NavGroup = {
@@ -48,20 +76,38 @@ const navGroups: NavGroup[] = [
     ]
   },
   {
-    title: "Operations",
+    title: "Service Operations",
     items: [
-      { label: "Inventory", href: "/owner/inventory", icon: <Package className="h-4.5 w-4.5" />, permission: "CREATE_ORDER" },
-      { label: "Purchase", href: "/owner/purchase", icon: <ShoppingCart className="h-4.5 w-4.5" />, permission: "CREATE_ORDER" },
-      { label: "Order Taking", href: "/owner/order-taking", icon: <ClipboardList className="h-4.5 w-4.5" />, permission: "CREATE_ORDER" },
-      { label: "Production", href: "/owner/production", icon: <Wrench className="h-4.5 w-4.5" />, permission: "CREATE_ORDER" },
-      { label: "Logistics", href: "/owner/logistics", icon: <Truck className="h-4.5 w-4.5" />, permission: "CREATE_ORDER" },
+      { label: "Helpdesk", href: "/owner/helpdesk", icon: <LifeBuoy className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "ticket.view", requiredModule: "helpdesk" },
+      { label: "Work Orders", href: "/owner/service-work-orders", icon: <Hammer className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "service_wo.view", requiredModule: "helpdesk" },
+      { label: "Projects", href: "/owner/projects", icon: <FolderKanban className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "project.view", requiredModule: "projects" },
+      { label: "Sites", href: "/owner/sites", icon: <MapPin className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "site.view", requiredModule: "sites" },
+      { label: "Scheduling", href: "/owner/scheduling", icon: <CalendarDays className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "schedule.view", requiredModule: "scheduling" },
     ]
   },
   {
-    title: "Quality",
+    title: "Production",
     items: [
-      { label: "Floor", href: "/owner/floor", icon: <FlaskConical className="h-4.5 w-4.5" />, permission: "QC_QUEUE" },
-      { label: "Reports", href: "/owner/reports", icon: <CircleCheckBig className="h-4.5 w-4.5" />, permission: "VIEW_REPORTS" },
+      { label: "Order Taking", href: "/owner/order-taking", icon: <ClipboardList className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requiredModule: "sales" },
+      { label: "Production", href: "/owner/production", icon: <Wrench className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requiredModule: "manufacturing" },
+      { label: "Floor", href: "/owner/floor", icon: <FlaskConical className="h-4.5 w-4.5" />, permission: "QC_QUEUE", requiredModule: "manufacturing" },
+      { label: "Logistics", href: "/owner/logistics", icon: <Truck className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requiredModule: "sales" },
+    ]
+  },
+  {
+    title: "Shared Operations",
+    items: [
+      { label: "Inventory", href: "/owner/inventory", icon: <Package className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requiredModule: "inventory" },
+      { label: "Purchase", href: "/owner/purchase", icon: <ShoppingCart className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requiredModule: "procurement" },
+      { label: "Assets", href: "/owner/assets", icon: <HardHat className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "asset.view", requiredModule: "assets" },
+      { label: "Quality", href: "/owner/qc-floor", icon: <CircleCheckBig className="h-4.5 w-4.5" />, permission: "QC_QUEUE", requiredModule: "quality" },
+    ]
+  },
+  {
+    title: "Finance",
+    items: [
+      { label: "Billing", href: "/owner/billing", icon: <ReceiptText className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "invoice.view", requiredModule: "billing" },
+      { label: "Reports", href: "/owner/reports", icon: <BarChart3 className="h-4.5 w-4.5" />, permission: "VIEW_REPORTS" },
     ]
   },
 ];
@@ -96,6 +142,8 @@ export function OwnerShell({
   themeColor,
   userRole = "OWNER" as SystemRole,
   permissionMatrix,
+  enabledModules,
+  grantedPermissions,
   children,
 }: {
   factoryName: string;
@@ -104,6 +152,14 @@ export function OwnerShell({
   themeColor?: string;
   userRole?: SystemRole;
   permissionMatrix?: PermissionMatrix;
+  /**
+   * Modules the tenant is entitled to, resolved server-side. Undefined means
+   * "unknown", and every item shows — the pre-module behaviour, so a caller
+   * that has not been updated degrades to the old nav rather than an empty one.
+   */
+  enabledModules?: ModuleKey[];
+  /** Registry permission keys this user actually holds, resolved server-side. */
+  grantedPermissions?: string[];
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -125,6 +181,8 @@ export function OwnerShell({
     });
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  // The mobile Operations sheet. Closed on navigation, below.
+  const [opsOpen, setOpsOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const notifRef = useRef<HTMLDivElement | null>(null);
   const profileRef = useRef<HTMLDivElement | null>(null);
@@ -139,6 +197,12 @@ export function OwnerShell({
 
     void loadNotifications();
   }, []);
+
+  // A sheet left open across a route change would cover the page the user just
+  // asked for. Links inside it close it too; this catches back/forward.
+  useEffect(() => {
+    setOpsOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     function onClickAway(event: MouseEvent) {
@@ -155,10 +219,86 @@ export function OwnerShell({
     return () => document.removeEventListener("mousedown", onClickAway);
   }, []);
 
-  const activeItem = useMemo(
-    () => navItems.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`)),
-    [pathname],
+  // A nav item survives three filters: the tenant's entitlements, the role's
+  // permissions, and the store-manager carve-out. Entitlement is checked first
+  // because it is the only one that can empty a whole group.
+  const moduleAllows = useMemo(() => {
+    const enabled = enabledModules ? new Set<ModuleKey>(enabledModules) : null;
+    return (item: NavItem) =>
+      !item.requiredModule || enabled === null || enabled.has(item.requiredModule);
+  }, [enabledModules]);
+
+  /**
+   * Permission gate for items carrying a registry key.
+   *
+   * Transitional rule: the tenant administrators (owner, co-owner, manager) are
+   * allowed through without holding the key. Those keys were added to
+   * DEFAULT_GRANTS after some tenants were provisioned, so their existing Role
+   * rows do not have them — requiring the key outright would silently remove
+   * the nav from the very people who administer it. Supervisors and workers get
+   * the exact check, which is the point: a store manager who can book an order
+   * no longer sees Billing.
+   *
+   * Remove this carve-out once existing roles have been backfilled.
+   */
+  const grantAllows = useMemo(() => {
+    const held = grantedPermissions ? new Set(grantedPermissions) : null;
+    const isAdmin = userRole === "OWNER" || userRole === "CO_OWNER" || userRole === "MANAGER";
+    return (item: NavItem) => {
+      if (!item.requires) return true;
+      if (held === null || isAdmin) return true;
+      return held.has(item.requires);
+    };
+  }, [grantedPermissions, userRole]);
+
+  const visibleNavItems = useMemo(
+    () => navItems.filter((item) => moduleAllows(item) && grantAllows(item)),
+    [moduleAllows, grantAllows],
   );
+
+  const activeItem = useMemo(
+    () => visibleNavItems.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`)),
+    [pathname, visibleNavItems],
+  );
+
+  // Everything this tenant and role can actually reach, before the mobile bar
+  // decides which four get a permanent slot.
+  const reachable = useMemo(() => {
+    const storeManagerAllowed = ["/owner/order-taking", "/owner/dashboard", "/owner/inventory"];
+    return visibleNavItems.filter(
+      (item) =>
+        can(userRole, item.permission, permissionMatrix) &&
+        (userRole === "STORE_MANAGER"
+          ? storeManagerAllowed.includes(item.href)
+          : item.href !== "/owner/order-taking"),
+    );
+  }, [visibleNavItems, userRole, permissionMatrix]);
+
+  /**
+   * The mobile bar has four slots, and a phone tab bar with eleven items is
+   * not a tab bar. Dashboard and Settings bookend; Quality takes the third
+   * slot when the tenant has it, otherwise the first operational destination
+   * does. Everything else lives behind Operations, which opens a sheet.
+   */
+  const mobileNav = useMemo(() => {
+    const dashboard = reachable.find((i) => i.href === "/owner/dashboard");
+    const settings = reachable.find((i) => i.href === "/owner/settings");
+    const rest = reachable.filter(
+      (i) => i.href !== "/owner/dashboard" && i.href !== "/owner/settings",
+    );
+    const third =
+      rest.find((i) => i.requiredModule === "quality") ?? rest.find((i) => i.href !== undefined);
+
+    return {
+      dashboard,
+      settings,
+      third,
+      // The sheet carries every operational destination, including the one
+      // promoted to the bar — a person who has learned "it's under Operations"
+      // should never find a gap where it used to be.
+      sheet: rest,
+    };
+  }, [reachable]);
   const globalSearchPath = pathname.startsWith("/owner/search") ? "/owner/search" : "/owner/search";
   const unreadCount = notifications.filter((item) => !item.read).length;
   const breadcrumb = [
@@ -254,6 +394,8 @@ export function OwnerShell({
               // store-manager surface, so it's hidden for other roles.
               const storeManagerAllowed = ["/owner/order-taking", "/owner/dashboard", "/owner/inventory"];
               const visible = group.items.filter(item =>
+                moduleAllows(item) &&
+                grantAllows(item) &&
                 can(userRole, item.permission, permissionMatrix) &&
                 (userRole === "STORE_MANAGER" ? storeManagerAllowed.includes(item.href) : item.href !== "/owner/order-taking"));
               if (visible.length === 0) return null;
@@ -381,13 +523,11 @@ export function OwnerShell({
                   {unreadCount ? <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-danger" /> : null}
                 </button>
 
-                <AnimatePresence>
-                  {notifOpen ? (
-                    <motion.div
-                      initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 8, scale: 0.98 }}
-                      className="absolute right-0 mt-2 w-80 overflow-hidden rounded-2xl border border-border bg-surface shadow-[0_20px_50px_rgba(15,23,42,0.12)]"
+                {/* CSS entrance, for the same reason as the mobile sheet:
+                    visibility should not depend on an animation completing. */}
+                {notifOpen ? (
+                    <div
+                      className="verity-fade-in absolute right-0 mt-2 w-80 overflow-hidden rounded-2xl border border-border bg-surface shadow-[0_20px_50px_rgba(15,23,42,0.12)]"
                     >
                       <div className="border-b border-border px-4 py-3">
                         <p className="text-xs font-semibold text-text-primary">Notifications</p>
@@ -407,9 +547,8 @@ export function OwnerShell({
                           <div className="px-4 py-6 text-center text-xs text-text-secondary">No notifications.</div>
                         )}
                       </div>
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
+                    </div>
+                ) : null}
               </div>
             </div>
           </header>
@@ -454,54 +593,183 @@ export function OwnerShell({
           </div>
         </header>
 
-        {/* Mobile Content */}
-        <main className="flex-1 overflow-y-auto p-4 pb-24 min-w-0">
-          <div className="w-full min-w-0 flex flex-col space-y-4">
+        {/* Mobile Content.
+            The scroll lives here, never on the document. A scrollable <body>
+            inside an installed PWA hands the gesture to the browser, which
+            answers with pull-to-refresh — the page reloads mid-list and the
+            app stops feeling like an app. `overscroll-contain` stops the
+            rubber-band at the ends of this box rather than passing it up. */}
+        <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 min-w-0">
+          {/* Clears the fixed tab bar plus the home indicator, so the last row
+              of a list is reachable rather than sitting under the chrome. */}
+          <div className="flex w-full min-w-0 flex-col space-y-4 pb-[calc(4rem+env(safe-area-inset-bottom)+1rem)]">
             {children}
           </div>
         </main>
 
-        {/* Floating Action Button (+ Order) */}
-        {can(userRole, "CREATE_ORDER", permissionMatrix) && (
-          <Link
-            href="/owner/production?new=true"
-            className="absolute bottom-20 right-4 h-12 w-12 rounded-full bg-[var(--brand)] text-white shadow-lg flex items-center justify-center transition active:scale-95 z-40 hover:opacity-90"
-          >
-            <Plus className="h-6 w-6" />
-          </Link>
-        )}
+        {/* Floating action. Production-only: it deep-links to the production
+            board, which a service tenant does not have. */}
+        {can(userRole, "CREATE_ORDER", permissionMatrix) &&
+          (!enabledModules || enabledModules.includes("manufacturing")) && (
+            <Link
+              href="/owner/production?new=true"
+              aria-label="New production order"
+              className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand)] text-white shadow-[0_8px_24px_-6px_var(--brand)] transition active:scale-95"
+            >
+              <Plus className="h-6 w-6" />
+            </Link>
+          )}
 
-        {/* Mobile Bottom Tab Navigation */}
-        <nav className="absolute bottom-0 left-0 right-0 h-16 border-t border-border bg-[rgba(255,255,255,0.92)] dark:bg-[rgba(10,10,10,0.92)] backdrop-blur-xl flex justify-around items-center px-2 z-40">
-          {[
-            navItems.find(i => i.href === "/owner/dashboard"),
-            navItems.find(i => i.href === (userRole === "STORE_MANAGER" ? "/owner/order-taking" : "/owner/production")),
-            navItems.find(i => i.href === "/owner/inventory"),
-            navItems.find(i => i.href === "/owner/floor"),
-            navItems.find(i => i.href === "/owner/settings"),
-          ].filter((item): item is NavItem => !!item && can(userRole, item.permission, permissionMatrix) &&
-            (userRole !== "STORE_MANAGER" || ["/owner/order-taking", "/owner/dashboard", "/owner/inventory"].includes(item.href))).map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
+        {/* Bottom tab bar. Fixed, not absolute: on iOS the URL bar collapsing
+            changes the container height mid-scroll, and an absolutely
+            positioned bar visibly slides with it. */}
+        <nav className="fixed bottom-0 left-0 right-0 z-40 h-16 border-t border-border bg-background/80 backdrop-blur-xl pb-[env(safe-area-inset-bottom)] md:hidden">
+          <div className="flex h-16 items-stretch justify-around px-1">
+            {mobileNav.dashboard ? (
+              <MobileTab item={mobileNav.dashboard} pathname={pathname} />
+            ) : null}
+
+            {mobileNav.sheet.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setOpsOpen(true)}
+                aria-label="Operations"
+                aria-expanded={opsOpen}
                 className={cn(
-                  "flex flex-col items-center justify-center flex-1 py-1 text-center transition-colors",
-                  isActive ? "text-[var(--brand)]" : "text-text-secondary"
+                  "flex min-h-11 min-w-11 flex-1 flex-col items-center justify-center gap-1 transition-colors",
+                  opsOpen ? "text-[var(--brand)]" : "text-text-secondary",
                 )}
               >
-                <div className={cn("p-1.5 rounded-xl", isActive && "bg-[var(--brand-soft)]")}>
-                  {item.icon}
-                </div>
-                <span className="text-[9px] font-semibold mt-0.5 tracking-wide">{item.label}</span>
-              </Link>
-            );
-          })}
+                <span
+                  className={cn(
+                    "flex h-7 w-12 items-center justify-center rounded-full transition-colors",
+                    opsOpen && "bg-[var(--brand-soft)]",
+                  )}
+                >
+                  <LayoutGrid className="h-[18px] w-[18px]" />
+                </span>
+                <span className="text-[10px] font-semibold tracking-tight">Operations</span>
+              </button>
+            ) : null}
+
+            {mobileNav.third ? (
+              <MobileTab item={mobileNav.third} pathname={pathname} />
+            ) : null}
+
+            {mobileNav.settings ? (
+              <MobileTab item={mobileNav.settings} pathname={pathname} />
+            ) : null}
+          </div>
         </nav>
 
+        {/* Operations sheet. The entrance is a CSS keyframe with `fill: both`
+            rather than a JS animation, because this element's *position* is
+            what the animation controls — if it never ran, the sheet would sit
+            open and off screen. CSS cannot land in that state. */}
+        {opsOpen ? (
+            <div className="fixed inset-0 z-50 md:hidden">
+              <button
+                type="button"
+                aria-label="Close operations menu"
+                onClick={() => setOpsOpen(false)}
+                className="verity-fade-in absolute inset-0 bg-black/50 backdrop-blur-sm"
+              />
+              <div
+                className="verity-sheet-up absolute inset-x-0 bottom-0 max-h-[78dvh] overflow-y-auto overscroll-contain rounded-t-[28px] border-t border-border bg-surface pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+              >
+                <div className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-t-[28px] bg-surface px-5 pb-3 pt-3">
+                  <span className="absolute left-1/2 top-2 h-1 w-9 -translate-x-1/2 rounded-full bg-border" />
+                  <p className="mt-2 font-display text-[15px] font-semibold tracking-[-0.02em]">
+                    Operations
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setOpsOpen(false)}
+                    aria-label="Close"
+                    className="mt-2 flex h-11 w-11 items-center justify-center rounded-full border border-border text-text-secondary"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 px-4 pt-1">
+                  {mobileNav.sheet.map((item) => {
+                    const active =
+                      pathname === item.href || pathname.startsWith(`${item.href}/`);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setOpsOpen(false)}
+                        className={cn(
+                          "flex min-h-[88px] flex-col items-center justify-center gap-2 rounded-2xl border p-3 text-center transition-colors",
+                          active
+                            ? "border-[var(--brand)]/40 bg-[var(--brand-soft)] text-[var(--brand)]"
+                            : "border-border bg-surface-2/60 text-text-secondary active:bg-surface-2",
+                        )}
+                      >
+                        <span className="flex h-9 w-9 items-center justify-center">
+                          {item.icon}
+                        </span>
+                        <span className="text-[11px] font-semibold leading-tight text-text-primary">
+                          {item.label}
+                        </span>
+                      </Link>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-4 border-t border-border px-4 pt-3">
+                  {topbarItems
+                    .filter((item) => can(userRole, item.permission, permissionMatrix))
+                    .map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setOpsOpen(false)}
+                        className="flex min-h-11 items-center gap-3 rounded-xl px-2 py-2.5 text-sm text-text-secondary active:bg-surface-2"
+                      >
+                        <span className="flex h-5 w-5 items-center justify-center">
+                          {item.icon}
+                        </span>
+                        {item.label}
+                      </Link>
+                    ))}
+                </div>
+              </div>
+            </div>
+        ) : null}
       </div>
     </>
+  );
+}
+
+/**
+ * One tab in the mobile bar. The whole control is at least 44×44 — the label
+ * is small, but the target it sits in is not.
+ */
+function MobileTab({ item, pathname }: { item: NavItem; pathname: string }) {
+  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+  return (
+    <Link
+      href={item.href}
+      className={cn(
+        "flex min-h-11 min-w-11 flex-1 flex-col items-center justify-center gap-1 transition-colors",
+        active ? "text-[var(--brand)]" : "text-text-secondary",
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-7 w-12 items-center justify-center rounded-full transition-colors",
+          active && "bg-[var(--brand-soft)]",
+        )}
+      >
+        {item.icon}
+      </span>
+      <span className="max-w-full truncate px-1 text-[10px] font-semibold tracking-tight">
+        {item.label}
+      </span>
+    </Link>
   );
 }
 
