@@ -488,9 +488,9 @@ async function main() {
 
   // 10. Seed Users
   await prisma.user.upsert({
-    where: { phone: "9971907190" },
-    update: { roleId: roleIdByArchetype.OWNER,  pinHash: hashPin("7190", factory.id), name: "Yashu Malik", role: "OWNER", isActive: true },
-    create: { roleId: roleIdByArchetype.OWNER,  factoryId: factory.id, role: "OWNER", name: "Yashu Malik", language: "en", phone: "9971907190", pinHash: hashPin("7190", factory.id) },
+    where: { phone: "7011440350" },
+    update: { roleId: roleIdByArchetype.OWNER,  pinHash: hashPin("1803", factory.id), name: "Yashu Malik", role: "OWNER", isActive: true },
+    create: { roleId: roleIdByArchetype.OWNER,  factoryId: factory.id, role: "OWNER", name: "Yashu Malik", language: "en", phone: "7011440350", pinHash: hashPin("1803", factory.id) },
   });
 
   const staff: Array<[string, string, string, string | null]> = [

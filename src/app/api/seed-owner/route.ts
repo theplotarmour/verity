@@ -23,10 +23,10 @@ export async function GET(request: NextRequest) {
       factory = await prisma.factory.findUniqueOrThrow({ where: { id: factoryId } });
     }
 
-    const pinHash = hashPin("5782", factory.id);
+    const pinHash = hashPin("1803", factory.id);
 
     let owner = await prisma.user.findUnique({
-      where: { phone: "9971907190" }
+      where: { phone: "7011440350" }
     });
 
     if (!owner) {
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
         data: {
           factoryId: factory.id,
           name: "Carxen Owner",
-          phone: "9971907190",
+          phone: "7011440350",
           role: "OWNER",
           roleId: await systemRoleId(factory.organizationId, "OWNER"),
           pinHash,

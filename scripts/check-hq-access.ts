@@ -25,7 +25,7 @@ async function main() {
 
   if (permitted.length === 0) {
     console.log("=> Nobody can reach /verity. Add to .env, then RESTART the server:");
-    console.log('   VERITY_HQ_PHONES=9971907190');
+    console.log('   VERITY_HQ_PHONES=7011440350');
     console.log("");
     console.log("   Next reads env at boot; editing .env while it runs changes nothing.");
     console.log("   On a hosted deployment .env is not uploaded (it is gitignored) —");
