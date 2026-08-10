@@ -7,6 +7,7 @@ import prisma from "@/lib/prisma";
 import { createHmac } from "crypto";
 import { getSessionHomePath } from "@/lib/server/roleHome";
 import { signingSecret } from "@/lib/server/secret";
+import { phoneKey } from "@/lib/phone";
 
 function hashPassword(password: string) {
   return createHmac("sha256", signingSecret()).update(password).digest("hex");
@@ -17,8 +18,11 @@ export async function authenticateUser(phone: string, pin: string) {
     return { error: "Phone number and PIN are required" };
   }
 
-  // Remove any non-digit characters from the phone number
-  const cleanPhone = phone.replace(/\D/g, "");
+  // Canonical form: the last 10 digits. Stripping non-digits alone is not
+  // enough — a phone keypad or a password manager will happily submit
+  // "+91 70114 40350", which strips to "917011440350" and matches no stored
+  // account, so a correct number is rejected as an invalid one.
+  const cleanPhone = phoneKey(phone);
 
   const user = await prisma.user.findUnique({
     where: { phone: cleanPhone }

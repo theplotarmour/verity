@@ -1,6 +1,7 @@
 "use server";
 
 import prisma from "@/lib/prisma";
+import { phoneKey } from "@/lib/phone";
 import { getOwnerUser } from "@/lib/server/owner";
 import { SystemRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
@@ -20,7 +21,9 @@ export async function createEmployee(data: { name: string; role: SystemRole; pho
     return { error: "Unauthorized" };
   }
 
-  const cleanPhone = data.phone.replace(/\D/g, "");
+  // Canonical — see the note in team.ts. A stored number that login cannot
+  // reproduce is an account nobody can use.
+  const cleanPhone = phoneKey(data.phone);
   if (!cleanPhone || cleanPhone.length < 10) {
     return { error: "Please enter a valid phone number" };
   }

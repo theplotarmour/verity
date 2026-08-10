@@ -1,6 +1,7 @@
 "use server";
 
 import prisma from "@/lib/prisma";
+import { phoneKey } from "@/lib/phone";
 import { getOwnerUser } from "@/lib/server/owner";
 import { SystemRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
@@ -46,7 +47,10 @@ export async function inviteMember(data: { name: string; role: SystemRole; phone
     return { error: "Ownership can only be transferred, not assigned." };
   }
 
-  const cleanPhone = data.phone.replace(/\D/g, "");
+  // Canonical, so a number written with a country prefix is stored in the same
+  // form login will look it up by. Storing "917011440350" creates an account
+  // that can never be signed into.
+  const cleanPhone = phoneKey(data.phone);
   if (!cleanPhone || cleanPhone.length < 10) {
     return { error: "Please enter a valid phone number" };
   }

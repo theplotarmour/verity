@@ -3,6 +3,7 @@
 import { randomInt } from "node:crypto";
 
 import prisma from "@/lib/prisma";
+import { phoneKey } from "@/lib/phone";
 import { revalidatePath } from "next/cache";
 import { hashPin } from "@/lib/server/hash";
 import { requireHqAction } from "@/lib/server/hq-auth";
@@ -135,15 +136,16 @@ export async function acceptAgreement(id: string, signature: string) {
     });
     const factory = await prisma.factory.findUniqueOrThrow({ where: { id: newFactoryId } });
 
-    // 2. Create Owner account (default PIN: "1234")
-    const pin = "1234";
+    // 2. Create Owner account. Generated PIN — see the note in
+    // createAndSignAgreementDirect for why a fixed default is not safe here.
+    const pin = generatePin();
     const hashed = hashPin(pin, factory.id);
 
     const owner = await prisma.user.create({
       data: {
         factoryId: factory.id,
         name: agreement.ownerName,
-        phone: agreement.phone,
+        phone: phoneKey(agreement.phone),
         role: "OWNER",
         roleId: await systemRoleId(organizationId, "OWNER"),
         pinHash: hashed,
@@ -183,7 +185,13 @@ export async function acceptAgreement(id: string, signature: string) {
       },
     });
 
-    return { success: true, factoryId: factory.id, ownerId: owner.id };
+    return {
+      success: true,
+      factoryId: factory.id,
+      ownerId: owner.id,
+      // Shown once, then unrecoverable.
+      credentials: { name: agreement.ownerName, phone: phoneKey(agreement.phone), pin },
+    };
   } catch (error: any) {
     return { success: false, error: error.message || "Failed to accept agreement" };
   }
@@ -380,15 +388,19 @@ export async function createAndSignAgreementDirect(data: {
     });
     const factory = await prisma.factory.findUniqueOrThrow({ where: { id: newFactoryId } });
 
-    // 2. Create Owner account (default PIN: "1234")
-    const pin = "1234";
+    // 2. Create Owner account.
+    //
+    // A generated PIN, not a fixed "1234". hashPin is salted by factoryId only,
+    // so a constant default makes every workspace's owner account guessable the
+    // moment someone knows the workspace exists. Returned once, below.
+    const pin = generatePin();
     const hashed = hashPin(pin, factory.id);
 
     const owner = await prisma.user.create({
       data: {
         factoryId: factory.id,
         name: data.ownerName,
-        phone: data.phone,
+        phone: phoneKey(data.phone),
         role: "OWNER",
         roleId: await systemRoleId(organizationId, "OWNER"),
         pinHash: hashed,
@@ -414,7 +426,13 @@ export async function createAndSignAgreementDirect(data: {
     });
 
 
-    return { success: true, factoryId: factory.id, slug: factory.slug };
+    return {
+      success: true,
+      factoryId: factory.id,
+      slug: factory.slug,
+      // Shown once. There is no way to read it back — only to reset it.
+      credentials: { name: data.ownerName, phone: phoneKey(data.phone), pin },
+    };
   } catch (error: any) {
     return { success: false, error: error.message || "Failed to onboard factory" };
   }
@@ -450,7 +468,10 @@ export async function provisionClient(input: {
 
   const name = input.name?.trim();
   const ownerName = input.ownerName?.trim();
-  const phone = (input.ownerPhone ?? "").replace(/\D/g, "");
+  // Canonical, so the number an operator types during onboarding is the number
+  // login will match. This is the first credential the client ever uses; getting
+  // it wrong means their very first sign-in fails.
+  const phone = phoneKey(input.ownerPhone ?? "");
 
   if (!name) return { error: "A workspace name is required." };
   if (!ownerName) return { error: "An owner name is required." };
