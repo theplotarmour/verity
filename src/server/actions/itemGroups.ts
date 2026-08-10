@@ -254,7 +254,8 @@ export async function updateGroupSettings(
     aliasLabel?: string | null;
     aliasHidden?: boolean;
     hasInventoryUnits?: boolean;
-    bomMode?: "OFF" | "RECIPE" | "INGREDIENTS";
+    /** Null is a real choice — "inherit from my parent" — not "leave alone". */
+    bomMode?: "OFF" | "RECIPE" | "INGREDIENTS" | null;
   }
 ) {
   const user = await getOwnerUser();

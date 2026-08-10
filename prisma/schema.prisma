@@ -85,7 +85,13 @@ model ItemGroup {
   /// OFF          no BOM editor at all
   /// RECIPE       an assembly recipe of its own, plus per-SKU overrides
   /// INGREDIENTS  components it hands to whatever picks it
-  bomMode           BomMode             @default(OFF)
+  ///
+  /// Nullable, and null does NOT mean OFF — it means "inherit from my parent",
+  /// resolved by `resolveBomMode`. A factory that sets RECIPE on "Seat Covers"
+  /// wants it on "Seat Covers > Bucket" too, and previously had to set it on
+  /// every child and keep them in step. Existing rows hold an explicit OFF and
+  /// are unaffected; only categories created after this can inherit.
+  bomMode           BomMode?
   /// A checklist any category can carry, not only producible ones — and not
   /// only for QC. Cutting and Packing run one too.
   /// Many-to-many: a category runs one checklist per department, so "Seat Cover"
@@ -381,6 +387,7 @@ model User {
   requestedSwaps    ShiftSwap[]           @relation("SwapRequester")
   offeredSwaps      ShiftSwap[]           @relation("SwapRecipient")
   payrollInputs     PayrollInput[]        @relation("PayrollInputUser")
+  orderDrafts       OrderDraft[]          @relation("OrderDraftAuthor")
 }
 
 // ==========================================
@@ -2465,4 +2472,187 @@ model ServiceCheckpointSubmission {
   @@unique([inspectionId, checkpointId])
   @@index([factoryId])
   @@index([inspectionId])
+}
+
+// ==========================================
+// HEADLESS INTEGRATION LAYER
+//
+// Verity is the operations engine, not the storefront and not the ledger.
+// Orders arrive from an external channel (Shopify, a dealer portal) and
+// milestones leave as webhooks for whatever is doing the books. These five
+// models are the boundary: who may call in, what already happened, where to
+// call out, and what is still owed.
+// ==========================================
+
+/// A saved-but-unsubmitted order the studio can come back to.
+///
+/// The order studio holds a lot of state — vehicle, spec, dynamic fields — and
+/// losing it to a closed tab is the difference between an order booked and an
+/// order not booked. `payload` is deliberately opaque Json: this is a draft of a
+/// form, not a domain object, and giving it columns would mean migrating it
+/// every time the studio gains a field.
+model OrderDraft {
+  id        String @id @default(cuid())
+  factoryId String
+
+  /// What the person called it, so a list of drafts is navigable.
+  label   String
+  payload Json
+
+  createdById String?
+  createdBy   User?   @relation("OrderDraftAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([factoryId])
+  @@index([factoryId, createdById])
+}
+
+/// A credential an external system uses to POST orders in.
+///
+/// The `factoryId` on this row is the ONLY thing that decides which tenant an
+/// inbound order lands in — never the request body. A payload that names a
+/// factory is a payload asking to write into someone else's workspace.
+///
+/// `tokenHash` not `token`: a leaked database dump should not be a set of live
+/// credentials. `signingSecret` is stored recoverably because HMAC verification
+/// needs the original bytes; it is the second factor, not the first.
+model ApiKey {
+  id        String @id @default(cuid())
+  factoryId String
+
+  /// Human label — "Shopify storefront", "Dealer portal staging".
+  name String
+
+  /// The visible, non-secret half, so an operator can tell two keys apart and
+  /// revoke the right one. Shown in full in the console; matches the token
+  /// prefix the caller sends.
+  prefix String @unique
+
+  /// SHA-256 of the full token. The token itself is shown once, at creation.
+  tokenHash String @unique
+
+  /// Shared secret for the `X-Verity-Signature` HMAC over the raw body. Stops a
+  /// leaked token alone from being enough, and stops replay of a modified body.
+  signingSecret String
+
+  /// Revocation without deletion, so the audit trail survives.
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ingests IngestRequest[]
+
+  @@index([factoryId])
+  @@index([factoryId, revokedAt])
+}
+
+/// One inbound request, recorded so a retry cannot book the order twice.
+///
+/// Shopify and every other sane webhook sender retries on timeout, and a
+/// timeout is exactly when the write most likely *did* land. Without this a
+/// slow response means two identical orders on the floor, which nobody notices
+/// until someone has cut fabric for both.
+///
+/// The stored `response` is replayed verbatim on a repeat, so the caller sees
+/// the same order id it would have seen the first time.
+model IngestRequest {
+  id        String @id @default(cuid())
+  factoryId String
+
+  apiKeyId String
+  apiKey   ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  /// Caller-supplied `Idempotency-Key`, or a hash of the body when absent.
+  idempotencyKey String
+
+  /// What was returned the first time, replayed on a repeat.
+  status   Int
+  response Json
+
+  /// The order this created, when it created one.
+  salesOrderId String?
+
+  createdAt DateTime @default(now())
+
+  /// Scoped to the tenant, not global: two tenants may legitimately use the
+  /// same key, and a global unique would let one tenant's traffic silently
+  /// suppress another's order.
+  @@unique([factoryId, idempotencyKey])
+  @@index([factoryId])
+}
+
+/// Where a tenant wants milestone notifications delivered.
+///
+/// The URL is tenant-supplied, which makes every delivery an authenticated
+/// outbound request to an address we do not control — i.e. SSRF. `lib/webhooks/
+/// url-guard.ts` refuses private and link-local ranges both when the endpoint is
+/// saved and again before each delivery, because DNS can be repointed in between.
+model WebhookEndpoint {
+  id        String @id @default(cuid())
+  factoryId String
+
+  name String
+  url  String
+
+  /// HMAC secret for the outgoing `X-Verity-Signature`, so the receiver can
+  /// verify the call came from us.
+  secret String
+
+  /// Event names this endpoint wants. Empty means all of them.
+  events String[]
+
+  isActive Boolean @default(true)
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  deliveries WebhookDelivery[]
+
+  @@index([factoryId])
+  @@index([factoryId, isActive])
+}
+
+/// The outbox. One row per delivery owed.
+///
+/// This table exists because there is no worker process on Vercel: a
+/// fire-and-forget `fetch` after the response is killed with the invocation, and
+/// the failure is invisible — the external system simply never hears that an
+/// order shipped. Writing the intent down first means a delivery survives the
+/// process that created it, and `attempts`/`nextAttemptAt` let a failed one be
+/// retried by the drain rather than lost.
+model WebhookDelivery {
+  id        String @id @default(cuid())
+  factoryId String
+
+  endpointId String
+  endpoint   WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  event   String
+  payload Json
+
+  /// PENDING, DELIVERING, DELIVERED, FAILED
+  status String @default("PENDING")
+
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now())
+  deliveredAt   DateTime?
+
+  /// Last failure, kept so an operator can see *why* rather than just "failed".
+  lastError  String?
+  lastStatus Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The drain claims work with this: pending rows whose time has come, oldest
+  /// first.
+  @@index([status, nextAttemptAt])
+  @@index([factoryId])
+  @@index([endpointId])
 }

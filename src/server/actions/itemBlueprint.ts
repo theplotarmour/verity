@@ -7,11 +7,42 @@
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { getItemBomFor } from "@/server/queries/spec";
+import {
+  type BomModeValue,
+  DEFAULT_BOM_MODE,
+  resolveBomModeFromTree,
+} from "@/lib/master-data/bom-mode";
 
 export type BlueprintResult = {
   blueprintVersionId: string | null;
   warnings: string[];
 };
+
+/**
+ * The BOM mode a category actually operates under, inheriting up the parent
+ * chain. See `lib/master-data/bom-mode.ts` for why null means "inherit".
+ *
+ * Takes `factoryId` rather than reading a session, for the same reason nothing
+ * else in this file is a `"use server"` export: a bare group id from a caller
+ * would read another tenant's category tree.
+ */
+export async function resolveBomMode(
+  factoryId: string,
+  groupId: string | null | undefined,
+): Promise<BomModeValue> {
+  if (!groupId) return DEFAULT_BOM_MODE;
+
+  // The whole tenant's tree in one query. A recursive per-level walk would be a
+  // round trip per ancestor, and these trees are small — tens of rows, not
+  // thousands. Scoped to the factory so a foreign id resolves to the default
+  // rather than to someone else's setting.
+  const groups = await prisma.itemGroup.findMany({
+    where: { factoryId },
+    select: { id: true, parentId: true, bomMode: true },
+  });
+
+  return resolveBomModeFromTree(groupId, groups);
+}
 
 /**
  * Give a producible item a blueprint with an active version, its QC template

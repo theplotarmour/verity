@@ -7,6 +7,7 @@ import { getItemUsedIn, loadRefLabels } from "@/server/queries/spec";
 import { DeleteItemButton } from "@/components/spec/DeleteItemButton";
 import { ItemBomEditor } from "@/components/spec/ItemBomEditor";
 import { ContributionEditor } from "@/components/spec/ContributionEditor";
+import { resolveBomMode } from "@/server/actions/itemBlueprint";
 
 export default async function ItemDetailPage({
   params,
@@ -50,7 +51,10 @@ export default async function ItemDetailPage({
   // The inference was defensible but it was still the code deciding what the
   // factory meant, and there was no way to disagree with it — a raw material
   // that genuinely has a recipe could not be given one.
-  const bomMode = item.group?.bomMode ?? "OFF";
+  // Resolved up the category tree, not read off the row: a null bomMode means
+  // "inherit", so reading it directly showed a child of a RECIPE category as
+  // having no BOM at all.
+  const bomMode = await resolveBomMode(dbUser.factoryId, item.group?.id);
   const showRecipe = bomMode === "RECIPE";
   const showContributions = bomMode === "INGREDIENTS";
 

@@ -24,6 +24,7 @@ import { listUsedUnits } from "@/server/actions/itemUnits";
 import type { RefOption, SpecAnswer } from "@/lib/spec/types";
 import { MASTER_DATA_DOMAINS, MASTER_DATA_DOMAIN_LABELS, type MasterDataDomainId } from "@/lib/master-data/domains";
 import { createFieldEntry } from "@/server/actions/fieldEntries";
+import { type BomModeValue, resolveBomModeFromTree } from "@/lib/master-data/bom-mode";
 
 /**
  * Deliberately carries the alias column's configuration, not just the tree.
@@ -42,8 +43,12 @@ type Group = {
   aliasHidden: boolean;
   /** Attribute categories (Vehicles, Designs, Colours) are never stocked. */
   hasInventoryUnits?: boolean;
-  /** Set in Configure. Decides whether the BOM button appears, and what it writes. */
-  bomMode?: "OFF" | "RECIPE" | "INGREDIENTS";
+  /**
+   * Set in Configure. Decides whether the BOM button appears, and what it
+   * writes. Null means "inherit from the parent" — resolve it with
+   * `resolveBomModeFromTree`, never read it directly.
+   */
+  bomMode?: BomModeValue | null;
 };
 
 function WizardSection({
@@ -655,7 +660,10 @@ export function AddMasterDataClient({
   // edits override this SKU's own recipe; Ingredients means they are what the
   // item hands to whatever picks it. Off means there is nothing to edit, so the
   // button does not appear at all.
-  const bomMode = activeGroup?.bomMode ?? "OFF";
+  // Resolved up the tree: a subcategory left on "Inherit" takes its parent's
+  // mode, so reading the row directly hid the BOM button on every child of a
+  // recipe category.
+  const bomMode = resolveBomModeFromTree(activeGroup?.id, groups);
   const bomEnabled = bomMode !== "OFF";
   const contributesBom = bomMode === "INGREDIENTS";
 

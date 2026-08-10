@@ -7,6 +7,11 @@ import { ITEM_TYPE_LABELS, ITEM_TYPE_ORDER } from "@/lib/item-constants";
 import { updateGroupSettings, deleteItemGroup } from "@/server/actions/itemGroups";
 import { toast } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/dialog-service";
+import {
+  type BomModeNode,
+  type BomModeValue,
+  resolveBomModeFromTree,
+} from "@/lib/master-data/bom-mode";
 
 /**
  * Kind in plain language.
@@ -30,7 +35,14 @@ const KIND_HINTS: Record<string, string> = {
 
 export function CategorySettings({
   group,
+  groups = [],
 }: {
+  /**
+   * Every category in the factory, so an inherited BOM mode can be shown as the
+   * value it actually resolves to. Without it "Inherit" is a setting whose
+   * effect the owner cannot see.
+   */
+  groups?: BomModeNode[];
   group: {
     id: string;
     name: string;
@@ -45,7 +57,8 @@ export function CategorySettings({
     isBuiltIn: boolean;
     /** Off for attribute categories that are never stocked or bought. */
     hasInventoryUnits?: boolean;
-    bomMode?: "OFF" | "RECIPE" | "INGREDIENTS";
+    /** Null means "inherit from my parent" — not OFF. */
+    bomMode?: BomModeValue | null;
   };
 }) {
   const router = useRouter();
@@ -55,6 +68,10 @@ export function CategorySettings({
 
   const control =
     "h-9 rounded-xl border border-border bg-surface px-3 text-sm text-text-primary outline-none focus:ring-1 focus:ring-[var(--brand)]";
+
+  // What this category actually operates under once inheritance is applied.
+  // The stored value can be null; this never is.
+  const effectiveBomMode = resolveBomModeFromTree(group.id, groups);
 
   function save(patch: Parameters<typeof updateGroupSettings>[1]) {
     start(async () => {
@@ -156,33 +173,43 @@ export function CategorySettings({
         </span>
         <div className="flex flex-wrap gap-1.5">
           {([
+            [null, "Inherit", "Follow the parent category. Change it there and this follows."],
             ["OFF", "None", "Bought and consumed — no recipe of its own."],
             ["RECIPE", "Recipe", "Assembled from other items. Each SKU can override the quantities."],
             ["INGREDIENTS", "Ingredients", "Other items pick this one and inherit the materials it names."],
-          ] as const).map(([mode, label, hint]) => {
-            const on = (group.bomMode ?? "OFF") === mode;
-            return (
-              <button
-                key={mode}
-                type="button"
-                title={hint}
-                disabled={pending}
-                onClick={() => save({ bomMode: mode })}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
-                  on
-                    ? "border-[var(--brand)] bg-[var(--brand)] text-white"
-                    : "border-border bg-surface text-text-secondary hover:border-[var(--brand)]/50"
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
+          ] as const)
+            // A root has nothing to inherit from, so offering it would be a
+            // button that silently means OFF.
+            .filter(([mode]) => !(mode === null && group.isRoot))
+            .map(([mode, label, hint]) => {
+              const on = (group.bomMode ?? null) === mode;
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  title={hint}
+                  disabled={pending}
+                  onClick={() => save({ bomMode: mode })}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
+                    on
+                      ? "border-[var(--brand)] bg-[var(--brand)] text-white"
+                      : "border-border bg-surface text-text-secondary hover:border-[var(--brand)]/50"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
         </div>
         <span className="mt-1.5 block text-[11px] text-text-tertiary">
-          {(group.bomMode ?? "OFF") === "RECIPE"
+          {/* Describe the mode in force, not the one stored: under "Inherit"
+              those differ, and the stored value is the less useful of the two. */}
+          {group.bomMode === null || group.bomMode === undefined
+            ? `Inherited${effectiveBomMode === "OFF" ? "" : ` — ${effectiveBomMode.toLowerCase()}`}. `
+            : ""}
+          {effectiveBomMode === "RECIPE"
             ? "Items get a Bill of materials editor, and the Add form's BOM button writes per-item overrides."
-            : (group.bomMode ?? "OFF") === "INGREDIENTS"
+            : effectiveBomMode === "INGREDIENTS"
               ? "Items get a Contributes editor, and the Add form's BOM button writes contributions."
               : "Items get no BOM editor, and the Add form hides its BOM button."}
         </span>

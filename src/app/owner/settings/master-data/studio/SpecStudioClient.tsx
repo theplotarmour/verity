@@ -30,7 +30,8 @@ type Group = {
   aliasLabel: string | null;
   aliasHidden: boolean;
   hasInventoryUnits?: boolean;
-  bomMode?: "OFF" | "RECIPE" | "INGREDIENTS";
+  /** Null means "inherit from the parent" — resolve, never read directly. */
+  bomMode?: "OFF" | "RECIPE" | "INGREDIENTS" | null;
   isSystem?: boolean;
 };
 
@@ -342,12 +343,20 @@ export function SpecStudioClient({
                   isRoot: !active.parentId,
                   aliasHidden: active.aliasHidden,
                   hasInventoryUnits: (active as any).hasInventoryUnits !== false,
-                  bomMode: (active as any).bomMode ?? "OFF",
+                  // Passed through as stored — including null, which means
+                  // "inherit". Coercing it to OFF here made every inheriting
+                  // category read as explicitly switched off.
+                  bomMode: (active as any).bomMode ?? null,
                   // Seeded roots (Finished Good, Raw Material, ...) drive order
                   // booking, stock and production, so they are not deletable or
                   // retypeable — only renameable.
                   isBuiltIn: !!(active as any).isSystem,
                 }}
+                groups={groups.map((g) => ({
+                  id: g.id,
+                  parentId: g.parentId,
+                  bomMode: (g as any).bomMode ?? null,
+                }))}
               />
               <ColumnStrip
                 group={active}
