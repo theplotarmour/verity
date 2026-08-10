@@ -1,6 +1,6 @@
 "use server";
 
-import { randomInt } from "node:crypto";
+import { randomBytes, randomInt } from "node:crypto";
 
 import prisma from "@/lib/prisma";
 import { phoneKey } from "@/lib/phone";
@@ -23,6 +23,9 @@ import {
   withDependencies,
 } from "@/platform/modules/registry";
 import { entitledModules } from "@/platform/modules/entitlements";
+import { issueKeyMaterial } from "@/lib/server/api-keys";
+import { WEBHOOK_EVENTS } from "@/lib/webhooks/outbox";
+import { assertDeliverable } from "@/lib/webhooks/url-guard";
 
 // ==========================================
 // Verity HQ Agreements Actions
@@ -617,4 +620,198 @@ export async function getClientDetail(factoryId: string) {
     })),
     modules,
   };
+}
+
+// ==========================================
+// Headless integration credentials
+//
+// An API key is what lets a tenant's storefront POST orders in, and a webhook
+// endpoint is where their milestones go out. Both are managed here rather than
+// by the tenant: they are integration plumbing an operator sets up during
+// onboarding, and a key that can write production work is not a self-service
+// control.
+// ==========================================
+
+/** Keys for one tenant. The token itself is never returned — only its prefix. */
+export async function listApiKeys(factoryId: string) {
+  await requireHqAction();
+
+  const keys = await prisma.apiKey.findMany({
+    where: { factoryId },
+    select: {
+      id: true,
+      name: true,
+      prefix: true,
+      revokedAt: true,
+      lastUsedAt: true,
+      createdAt: true,
+      // The signing secret is shown so an operator can hand it to whoever is
+      // building the integration. It is a shared secret by design — unlike the
+      // token, the receiver needs the original bytes to compute an HMAC.
+      signingSecret: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return keys.map((key) => ({
+    ...key,
+    revokedAt: key.revokedAt?.toISOString() ?? null,
+    lastUsedAt: key.lastUsedAt?.toISOString() ?? null,
+    createdAt: key.createdAt.toISOString(),
+  }));
+}
+
+/**
+ * Issue a key. The token is returned exactly once and is unrecoverable
+ * afterwards, because only its hash is stored.
+ */
+export async function issueApiKey(factoryId: string, name: string) {
+  const operator = await requireHqAction();
+
+  const label = name?.trim();
+  if (!label) return { error: "Give the key a name so it can be told apart later." };
+
+  const factory = await prisma.factory.findUnique({
+    where: { id: factoryId },
+    select: { id: true },
+  });
+  if (!factory) return { error: "Workspace not found." };
+
+  const material = issueKeyMaterial();
+
+  await prisma.apiKey.create({
+    data: {
+      factoryId,
+      name: label,
+      prefix: material.prefix,
+      tokenHash: material.tokenHash,
+      signingSecret: material.signingSecret,
+      createdById: operator.userId,
+    },
+  });
+
+  revalidatePath(`/verity/clients/${factoryId}`);
+  return {
+    success: true,
+    // Shown once. There is no way to read the token back — only to revoke it
+    // and issue another.
+    credentials: {
+      token: material.token,
+      signingSecret: material.signingSecret,
+      prefix: material.prefix,
+    },
+  };
+}
+
+/**
+ * Revoke, rather than delete. A deleted key takes its ingest history with it —
+ * and "which key booked this order" is exactly the question asked after
+ * something goes wrong.
+ */
+export async function revokeApiKey(keyId: string) {
+  await requireHqAction();
+
+  const key = await prisma.apiKey.findUnique({
+    where: { id: keyId },
+    select: { id: true, factoryId: true, revokedAt: true },
+  });
+  if (!key) return { error: "Key not found." };
+  if (key.revokedAt) return { success: true };
+
+  await prisma.apiKey.update({ where: { id: keyId }, data: { revokedAt: new Date() } });
+
+  revalidatePath(`/verity/clients/${key.factoryId}`);
+  return { success: true };
+}
+
+/** Webhook endpoints for one tenant, with their recent delivery health. */
+export async function listWebhookEndpoints(factoryId: string) {
+  await requireHqAction();
+
+  const endpoints = await prisma.webhookEndpoint.findMany({
+    where: { factoryId },
+    select: {
+      id: true,
+      name: true,
+      url: true,
+      secret: true,
+      events: true,
+      isActive: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  // Failed deliveries per endpoint — the number that says whether the
+  // integration is actually working, rather than merely configured.
+  const failures = await prisma.webhookDelivery.groupBy({
+    by: ["endpointId"],
+    where: { factoryId, status: "FAILED" },
+    _count: { endpointId: true },
+  });
+  const failureCount = new Map(failures.map((f) => [f.endpointId, f._count.endpointId]));
+
+  return endpoints.map((endpoint) => ({
+    ...endpoint,
+    createdAt: endpoint.createdAt.toISOString(),
+    failedDeliveries: failureCount.get(endpoint.id) ?? 0,
+  }));
+}
+
+/**
+ * Add a webhook endpoint.
+ *
+ * The URL is checked before it is stored: this is an address we will make
+ * authenticated outbound requests to, so a private or link-local target is an
+ * SSRF vector, not a configuration mistake. It is checked again before every
+ * delivery, because DNS can be repointed after the fact.
+ */
+export async function addWebhookEndpoint(input: {
+  factoryId: string;
+  name: string;
+  url: string;
+  events?: string[];
+}) {
+  const operator = await requireHqAction();
+
+  const name = input.name?.trim();
+  if (!name) return { error: "Give the endpoint a name." };
+
+  const verdict = await assertDeliverable(input.url ?? "");
+  if (!verdict.ok) return { error: verdict.reason };
+
+  const unknown = (input.events ?? []).filter(
+    (event) => !WEBHOOK_EVENTS.includes(event as (typeof WEBHOOK_EVENTS)[number]),
+  );
+  if (unknown.length > 0) return { error: `Unknown event(s): ${unknown.join(", ")}` };
+
+  await prisma.webhookEndpoint.create({
+    data: {
+      factoryId: input.factoryId,
+      name,
+      url: verdict.url.toString(),
+      secret: randomBytes(32).toString("hex"),
+      events: input.events ?? [],
+      createdById: operator.userId,
+    },
+  });
+
+  revalidatePath(`/verity/clients/${input.factoryId}`);
+  return { success: true };
+}
+
+/** Turn an endpoint off without losing its delivery history. */
+export async function setWebhookEndpointActive(endpointId: string, isActive: boolean) {
+  await requireHqAction();
+
+  const endpoint = await prisma.webhookEndpoint.findUnique({
+    where: { id: endpointId },
+    select: { id: true, factoryId: true },
+  });
+  if (!endpoint) return { error: "Endpoint not found." };
+
+  await prisma.webhookEndpoint.update({ where: { id: endpointId }, data: { isActive } });
+
+  revalidatePath(`/verity/clients/${endpoint.factoryId}`);
+  return { success: true };
 }

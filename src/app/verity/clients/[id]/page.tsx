@@ -1,7 +1,13 @@
 import { notFound } from "next/navigation";
 
-import { getClientDetail, listVerticalPacks } from "@/server/actions/hq";
+import {
+  getClientDetail,
+  listApiKeys,
+  listVerticalPacks,
+  listWebhookEndpoints,
+} from "@/server/actions/hq";
 import { ClientDetailClient } from "./ClientDetailClient";
+import { IntegrationsPanel } from "./IntegrationsPanel";
 
 export default async function HqClientDetailPage({
   params,
@@ -9,15 +15,23 @@ export default async function HqClientDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [detail, packs] = await Promise.all([getClientDetail(id), listVerticalPacks()]);
+  const [detail, packs, apiKeys, webhooks] = await Promise.all([
+    getClientDetail(id),
+    listVerticalPacks(),
+    listApiKeys(id),
+    listWebhookEndpoints(id),
+  ]);
   if (!detail) notFound();
 
   return (
-    <ClientDetailClient
-      factory={detail.factory}
-      users={detail.users}
-      modules={detail.modules}
-      packs={packs}
-    />
+    <div className="space-y-5">
+      <ClientDetailClient
+        factory={detail.factory}
+        users={detail.users}
+        modules={detail.modules}
+        packs={packs}
+      />
+      <IntegrationsPanel factoryId={id} apiKeys={apiKeys} webhooks={webhooks} />
+    </div>
   );
 }
