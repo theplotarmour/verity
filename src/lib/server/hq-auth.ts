@@ -79,14 +79,47 @@ export async function hqOperator(): Promise<HqOperator | null> {
   return { userId: user.id, name: user.name, phone: user.phone };
 }
 
+/** Why access was refused, for the page to explain. */
+export interface HqRefusal {
+  reason: Denial;
+  /** The number on the signed-in account, so "wrong account" is obvious. */
+  signedInAs: string | null;
+  allowlistConfigured: boolean;
+}
+
 /**
- * Page guard. Sends anyone who is not an operator back to their own workspace
- * rather than to an error, so a mistyped URL is not a disclosure that HQ exists.
+ * Page guard.
+ *
+ * An unauthenticated request is bounced to the login screen — nothing is
+ * disclosed to a stranger. A *signed-in* user gets an explanation instead,
+ * because silently returning them to their dashboard made three different
+ * causes look identical and left no way to tell "the variable is not set on
+ * this deployment" from "you are signed in as the wrong account".
+ *
+ * The explanation names the account and whether the allowlist exists. It never
+ * names who is on it.
  */
-export async function requireHqPage(): Promise<HqOperator> {
+export async function requireHqPage(): Promise<HqOperator | HqRefusal> {
+  const session = await getUserSession();
+  if (!session) redirect("/");
+
   const operator = await hqOperator();
-  if (!operator) redirect("/");
-  return operator;
+  if (operator) return operator;
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { phone: true },
+  });
+
+  return {
+    reason: allowlist().length === 0 ? "no-allowlist" : "not-listed",
+    signedInAs: user?.phone ?? null,
+    allowlistConfigured: allowlist().length > 0,
+  };
+}
+
+export function isOperator(result: HqOperator | HqRefusal): result is HqOperator {
+  return "userId" in result;
 }
 
 /**
