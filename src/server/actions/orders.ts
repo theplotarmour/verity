@@ -175,6 +175,17 @@ export async function getMasterData() {
 }
 
 export async function createOrder(data: {
+  /**
+   * The customer chosen from the master list. When present the order is booked
+   * against exactly that account and no name matching happens at all — which is
+   * the point: matching on an exact, case-insensitive name meant "Sharma Motors"
+   * and "Sharma Motor" were two customers and neither could be invoiced together.
+   *
+   * Verified against the caller's factory before use. An id from the client
+   * chooses which row an order attaches to, so an unscoped one would let a
+   * caller book against another tenant's customer.
+   */
+  customerId?: string;
   customerName: string;
   customerPhone?: string;
   vehicleBrandId?: string;
@@ -276,9 +287,23 @@ export async function createOrder(data: {
     const brandId = data.vehicleBrandId || null;
     const modelId = data.vehicleModelId || null;
 
-    let customer = await tx.customer.findFirst({
-      where: { factoryId, name: { equals: data.customerName, mode: 'insensitive' } }
-    });
+    // A chosen customer is looked up by id and scoped to this factory. findFirst
+    // with factoryId rather than findUnique plus a check: an id belonging to
+    // another tenant must read as "not found" here, not as a row to reject after
+    // it has already been loaded.
+    let customer = data.customerId
+      ? await tx.customer.findFirst({ where: { id: data.customerId, factoryId } })
+      : null;
+
+    // Falls back to the name path when nothing was chosen — a walk-in whose
+    // name is not yet on the list must not be a dead end. An id that resolves to
+    // nothing falls back too: the alternative is failing an order because a
+    // customer was deleted in another tab.
+    if (!customer) {
+      customer = await tx.customer.findFirst({
+        where: { factoryId, name: { equals: data.customerName, mode: 'insensitive' } }
+      });
+    }
 
     if (!customer) {
       customer = await tx.customer.create({
