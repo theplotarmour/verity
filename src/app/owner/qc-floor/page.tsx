@@ -14,6 +14,7 @@ export default async function QCFloorPage() {
 
   const [inspections, template, workers, inspectors, passports] = await Promise.all([
     prisma.inspection.findMany({
+      relationLoadStrategy: "join",
       where: { factoryId },
       include: {
         jobCard: { include: jobCardInclude },

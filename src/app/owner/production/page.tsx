@@ -15,6 +15,7 @@ export default async function OwnerOrdersPage() {
     getMasterData(),
     getRunningOrders(),
     prisma.inspection.findMany({
+      relationLoadStrategy: "join",
       where: { factoryId },
       include: {
         jobCard: { include: jobCardInclude },

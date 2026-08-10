@@ -14,7 +14,8 @@ export default async function InspectorRejectedPage() {
       factoryId: session.factoryId,
       status: "REWORK_REQUIRED"
     },
-    include: jobCardInclude,
+    relationLoadStrategy: "join",
+      include: jobCardInclude,
     orderBy: { createdAt: 'desc' }
   })
   const reworkItems = jobCards.map((jobCard) => toWorkerJob(jobCard))

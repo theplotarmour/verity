@@ -3,6 +3,7 @@ import "server-only";
 import { cache } from "react";
 
 import prisma from "@/lib/prisma";
+import { cached, invalidate } from "@/lib/server/ttl-cache";
 import { type ModuleKey, allPermissions, moduleForPermission } from "@/platform/modules/registry";
 import { entitledModules } from "@/platform/modules/entitlements";
 
@@ -30,14 +31,16 @@ export interface ResolvedAccess {
 export const resolveAccess = cache(async function resolveAccess(
   userId: string,
 ): Promise<ResolvedAccess | null> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      roleId: true,
-      factory: { select: { organizationId: true } },
-      customRole: { select: { permissions: { select: { key: true } } } },
-    },
-  });
+  const user = await cached(`access-user:${userId}`, 30_000, () =>
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        roleId: true,
+        factory: { select: { organizationId: true } },
+        customRole: { select: { permissions: { select: { key: true } } } },
+      },
+    }),
+  );
   if (!user) return null;
 
   const organizationId = user.factory.organizationId;
@@ -83,4 +86,10 @@ export async function selectablePermissions(organizationId: string) {
     const owner = moduleForPermission(p.key);
     return owner !== undefined && modules.has(owner.key);
   });
+}
+
+
+/** Drop a user's cached grants — call after changing their role or its keys. */
+export function invalidateAccess(userId: string): void {
+  invalidate(`access-user:${userId}`);
 }

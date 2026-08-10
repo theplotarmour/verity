@@ -53,24 +53,14 @@ export function VerityLogo({
       {/* Graphite blade — drawn first so the scarlet crosses in front, as on
           the brand sheet. */}
       <path
-        d="M 1236,258
-           L 859,258
-           C 734,268 666,430 654,558
-           C 754,470 859,412 939,405
-           C 880,646 800,822 700,978
-           Z"
+        d="M 1236,258 L 1018,258 C 834,290 688,420 654,560 C 742,462 852,414 932,406 L 606,996 Z"
         fill={mono ? "currentColor" : `url(#${id}-steel)`}
         opacity={mono ? 0.5 : 1}
       />
 
       {/* Scarlet blade. */}
       <path
-        d="M 18,258
-           L 395,258
-           C 520,268 588,430 600,558
-           C 500,470 395,412 315,405
-           C 374,646 454,822 554,978
-           Z"
+        d="M 18,258 L 236,258 C 420,290 566,420 600,560 C 512,462 402,414 322,406 L 648,968 Z"
         fill={mono ? "currentColor" : `url(#${id}-red)`}
       />
     </svg>

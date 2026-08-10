@@ -11,6 +11,7 @@ export default async function OwnerReportsPage() {
 
   const [passports, reportsData] = await Promise.all([
     prisma.qualityReport.findMany({
+      relationLoadStrategy: "join",
       where: { factoryId: owner.factoryId },
       include: {
         inspection: {

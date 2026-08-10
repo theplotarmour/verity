@@ -2,6 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 import { redirect } from "next/navigation";
+import { cached } from "@/lib/server/ttl-cache";
 
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/server/auth";
@@ -20,11 +21,16 @@ import { hasModule } from "./entitlements";
 const organizationIdForSession = cache(async function organizationIdForSession(): Promise<string | null> {
   const session = await getUserSession();
   if (!session) return null;
-  const factory = await prisma.factory.findUnique({
-    where: { id: session.factoryId },
-    select: { organizationId: true },
+  // A factory never changes organisation, so this mapping is immutable for the
+  // life of the row — held for five minutes rather than re-fetched on every
+  // guard call, which is once or twice per page.
+  return cached(`factory-org:${session.factoryId}`, 300_000, async () => {
+    const factory = await prisma.factory.findUnique({
+      where: { id: session.factoryId },
+      select: { organizationId: true },
+    });
+    return factory?.organizationId ?? null;
   });
-  return factory?.organizationId ?? null;
 });
 
 /**

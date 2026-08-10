@@ -6,8 +6,12 @@ export const contentType = "image/png";
 
 /**
  * The Verity mark on a near-black plate. Generated rather than shipped as a PNG
- * so the icon can never drift from `VerityLogo` — the two used to draw
- * different shapes entirely.
+ * so the icon can never drift from `VerityLogo` — the two used to draw entirely
+ * different shapes.
+ *
+ * Flat fills rather than the logo's gradients: Satori's SVG support does not
+ * cover gradient defs reliably, and a favicon that renders as a black square on
+ * one platform is worse than one without the sheen.
  */
 export default function Icon() {
   return new ImageResponse(
@@ -22,9 +26,15 @@ export default function Icon() {
           background: "#0A0A0B",
         }}
       >
-        <svg width="340" height="282" viewBox="0 0 120 100" fill="none">
-          <path d="M 6,6 L 30,6 L 60,94 Z" fill={BRAND_ACCENT} />
-          <path d="M 116,4 L 60,94 L 88,4 Z" fill="#9CA3AF" />
+        <svg width="360" height="259" viewBox="240 230 780 780" fill="none">
+          <path
+            d="M 1236,258 L 1018,258 C 834,290 688,420 654,560 C 742,462 852,414 932,406 L 606,996 Z"
+            fill="#3A3F47"
+          />
+          <path
+            d="M 18,258 L 236,258 C 420,290 566,420 600,560 C 512,462 402,414 322,406 L 648,968 Z"
+            fill={BRAND_ACCENT}
+          />
         </svg>
       </div>
     ),

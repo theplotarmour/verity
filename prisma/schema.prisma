@@ -1,5 +1,9 @@
 generator client {
   provider = "prisma-client-js"
+  // `relationJoins` lets a query opt into a single SQL LATERAL JOIN instead of
+  // one round trip per nested relation. The deep salesOrder include is seven
+  // levels deep and cost ~11 round trips — 2.4s against a database 220ms away.
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {

@@ -3,6 +3,7 @@ import "server-only";
 import { cache } from "react";
 
 import prisma from "@/lib/prisma";
+import { cached, invalidate } from "@/lib/server/ttl-cache";
 import {
   type ModuleKey,
   alwaysOnModules,
@@ -27,9 +28,12 @@ import {
  * the page's own data loader. Each was a round trip, and against a
  * one-connection pool they queued behind each other.
  */
+const ENTITLEMENT_TTL_MS = 60_000;
+
 export const entitledModules = cache(async function entitledModules(
   organizationId: string,
 ): Promise<ModuleKey[]> {
+  return cached(`entitlements:${organizationId}`, ENTITLEMENT_TTL_MS, async () => {
   const rows = await prisma.moduleEntitlement.findMany({
     where: {
       organizationId,
@@ -46,6 +50,7 @@ export const entitledModules = cache(async function entitledModules(
     .filter((k) => getModule(k) !== undefined);
 
   return withDependencies(known);
+  });
 });
 
 export async function hasModule(
@@ -76,6 +81,7 @@ export async function enableModules(
   keys: ModuleKey[],
 ): Promise<void> {
   const resolved = withDependencies(keys);
+  invalidate(`entitlements:${organizationId}`);
   await prisma.$transaction(
     resolved.map((moduleKey) =>
       prisma.moduleEntitlement.upsert({
@@ -85,6 +91,7 @@ export async function enableModules(
       }),
     ),
   );
+  invalidate(`entitlements:${organizationId}`);
 }
 
 /**
@@ -115,4 +122,5 @@ export async function disableModule(
     where: { organizationId, moduleKey },
     data: { enabled: false },
   });
+  invalidate(`entitlements:${organizationId}`);
 }

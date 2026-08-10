@@ -64,6 +64,7 @@ export default async function OwnerDashboard() {
     }),
     prisma.salesOrder.findMany({
       where: { factoryId },
+      relationLoadStrategy: "join",
       include: salesOrderInclude,
       orderBy: { orderDate: "desc" },
       take: 5,
