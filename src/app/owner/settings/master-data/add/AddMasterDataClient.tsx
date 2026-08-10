@@ -22,6 +22,7 @@ import { normaliseUnits } from "@/lib/item-units";
 import { resolveColumnLabels } from "@/lib/spec/columns";
 import { listUsedUnits } from "@/server/actions/itemUnits";
 import type { RefOption, SpecAnswer } from "@/lib/spec/types";
+import { bomModeOf } from "@/lib/master-data/bomMode";
 import { MASTER_DATA_DOMAINS, MASTER_DATA_DOMAIN_LABELS, type MasterDataDomainId } from "@/lib/master-data/domains";
 import { createFieldEntry } from "@/server/actions/fieldEntries";
 
@@ -42,8 +43,12 @@ type Group = {
   aliasHidden: boolean;
   /** Attribute categories (Vehicles, Designs, Colours) are never stocked. */
   hasInventoryUnits?: boolean;
-  /** Set in Configure. Decides whether the BOM button appears, and what it writes. */
-  bomMode?: "OFF" | "RECIPE" | "INGREDIENTS";
+  /**
+   * Set in Configure. Decides whether the BOM button appears, and what it
+   * writes. Null means the category states nothing and follows its parent —
+   * resolved against the whole list, never read off this row alone.
+   */
+  bomMode?: "OFF" | "RECIPE" | "INGREDIENTS" | null;
 };
 
 function WizardSection({
@@ -655,7 +660,11 @@ export function AddMasterDataClient({
   // edits override this SKU's own recipe; Ingredients means they are what the
   // item hands to whatever picks it. Off means there is nothing to edit, so the
   // button does not appear at all.
-  const bomMode = activeGroup?.bomMode ?? "OFF";
+  //
+  // Resolved through the tree rather than read off the row: a subcategory that
+  // states no mode follows its parent, and reading the row alone made every one
+  // of them look Off — the BOM button silently vanished a level down.
+  const bomMode = groupId ? bomModeOf(groupId, groups) : "OFF";
   const bomEnabled = bomMode !== "OFF";
   const contributesBom = bomMode === "INGREDIENTS";
 

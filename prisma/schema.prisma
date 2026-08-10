@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   // `relationJoins` lets a query opt into a single SQL LATERAL JOIN instead of
   // one round trip per nested relation. The deep salesOrder include is seven
   // levels deep and cost ~11 round trips — 2.4s against a database 220ms away.
@@ -85,7 +85,18 @@ model ItemGroup {
   /// OFF          no BOM editor at all
   /// RECIPE       an assembly recipe of its own, plus per-SKU overrides
   /// INGREDIENTS  components it hands to whatever picks it
-  bomMode           BomMode             @default(OFF)
+  ///
+  /// Null means "whatever my parent says", resolved by `resolveBomMode` up the
+  /// tree to the nearest ancestor that states one, and OFF if none does. A
+  /// subcategory of Finished Good is a finished good; making the owner restate
+  /// the mode on each of forty children is how the two drift apart.
+  ///
+  /// This is deliberately inheritance and not a default. A default would give a
+  /// new category a BOM behaviour nobody chose and no way to see that it was
+  /// chosen for them — the exact problem stating the mode was meant to remove.
+  /// Inheritance is visible: the setting reads "inherited from Finished Good",
+  /// and following the parent is a decision the owner can see and override.
+  bomMode           BomMode?
   /// A checklist any category can carry, not only producible ones — and not
   /// only for QC. Cutting and Packing run one too.
   /// Many-to-many: a category runs one checklist per department, so "Seat Cover"
@@ -357,6 +368,7 @@ model User {
   notifications   Notification[]
   jobCards        JobCard[]
   inspectedOrders SalesOrder[]     @relation("OrderInspector")
+  orderDrafts     OrderDraft[]
 
   // A worker/inspector belongs to one department (the stage they staff). Role
   // distinguishes worker vs inspector within that department.
@@ -483,6 +495,42 @@ model Notification {
 
   @@index([factoryId])
   @@index([userId, read])
+}
+
+/// An in-progress form, kept so a shift change does not cost the work.
+///
+/// Order taking is a long form filled between interruptions — a call, a walk-in,
+/// the end of a shift. Until now a refresh emptied it, so the habit was to enter
+/// orders from paper in one sitting and keep the paper as the real record.
+///
+/// Deliberately *not* a partial SalesOrder. A draft has no order number, fails
+/// no validation, and must never appear in a list of orders or a count of work;
+/// modelling it as a nullable-everything SalesOrder is how a half-typed quote
+/// ends up on a production floor. This holds opaque form state and nothing else.
+///
+/// One draft per user per form kind: a second tab should resume the same draft,
+/// not open a rival copy that silently wins on whichever saves last.
+model OrderDraft {
+  id        String   @id @default(cuid())
+  factoryId String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Which form this belongs to — "ORDER_TAKING", "PRODUCTION_STUDIO". A plain
+  /// string rather than an enum: a new form should not need a migration, and
+  /// nothing branches on the value beyond matching it back to its own screen.
+  kind      String
+  /// The form's own shape, written and read only by that form. Nothing server
+  /// side interprets it, so a form can change its fields without a migration
+  /// and without stranding drafts it can no longer read.
+  payload   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The pair is unique so a save is an upsert rather than a race between tabs.
+  @@unique([userId, kind])
+  /// Tenant-scoped reads. factoryId is on the row rather than reached through
+  /// the user because every other query in this codebase filters on it directly.
+  @@index([factoryId, updatedAt])
 }
 
 model AuditLog {

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { canUser } from "@/lib/server/permissions";
+import { resolveGroupBomMode } from "@/lib/server/bomEdits";
 import { getItemUsedIn, loadRefLabels } from "@/server/queries/spec";
 import { DeleteItemButton } from "@/components/spec/DeleteItemButton";
 import { ItemBomEditor } from "@/components/spec/ItemBomEditor";
@@ -34,11 +35,14 @@ export default async function ItemDetailPage({
 
   // The BOM itself is loaded by ItemBomEditor, which also has to refetch after
   // every edit — fetching it here too would just be a wasted round trip.
-  const [usedIn, refLabels] = await Promise.all([
+  const [usedIn, refLabels, bomMode] = await Promise.all([
     getItemUsedIn(id),
     loadRefLabels(
       item.specValues.map((v) => v.valueRefId).filter((x): x is string => Boolean(x))
     ),
+    item.groupId
+      ? resolveGroupBomMode(dbUser.factoryId, item.groupId)
+      : Promise.resolve("OFF" as const),
   ]);
 
   const specs = [...item.specValues].sort((a, b) => a.field.sortOrder - b.field.sortOrder);
@@ -50,7 +54,9 @@ export default async function ItemDetailPage({
   // The inference was defensible but it was still the code deciding what the
   // factory meant, and there was no way to disagree with it — a raw material
   // that genuinely has a recipe could not be given one.
-  const bomMode = item.group?.bomMode ?? "OFF";
+  //
+  // Resolved above through the category tree, not read off this item's own
+  // group: a subcategory that states no mode follows its parent.
   const showRecipe = bomMode === "RECIPE";
   const showContributions = bomMode === "INGREDIENTS";
 

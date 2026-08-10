@@ -254,7 +254,12 @@ export async function updateGroupSettings(
     aliasLabel?: string | null;
     aliasHidden?: boolean;
     hasInventoryUnits?: boolean;
-    bomMode?: "OFF" | "RECIPE" | "INGREDIENTS";
+    /**
+     * Undefined leaves the mode alone; null clears it so the category inherits
+     * from its parent. The two are deliberately different — a patch that cannot
+     * express "clear this" makes Inherit unreachable once anything else is set.
+     */
+    bomMode?: "OFF" | "RECIPE" | "INGREDIENTS" | null;
   }
 ) {
   const user = await getOwnerUser();

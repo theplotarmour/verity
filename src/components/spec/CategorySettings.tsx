@@ -4,9 +4,17 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Select } from "@/components/ui/primitives";
 import { ITEM_TYPE_LABELS, ITEM_TYPE_ORDER } from "@/lib/item-constants";
+import type { BomModeValue, ResolvedBomMode } from "@/lib/master-data/bomMode";
 import { updateGroupSettings, deleteItemGroup } from "@/server/actions/itemGroups";
 import { toast } from "@/components/ui/toast";
 import { confirmDialog } from "@/components/ui/dialog-service";
+
+/** The word each mode goes by on screen, so the two sentences cannot drift. */
+const BOM_MODE_WORD: Record<BomModeValue, string> = {
+  OFF: "None",
+  RECIPE: "Recipe",
+  INGREDIENTS: "Ingredients",
+};
 
 /**
  * Kind in plain language.
@@ -45,7 +53,16 @@ export function CategorySettings({
     isBuiltIn: boolean;
     /** Off for attribute categories that are never stocked or bought. */
     hasInventoryUnits?: boolean;
-    bomMode?: "OFF" | "RECIPE" | "INGREDIENTS";
+    /** What this category itself states. Null means it follows its parent. */
+    bomMode?: "OFF" | "RECIPE" | "INGREDIENTS" | null;
+    /** What that resolves to, and where from — computed against the whole tree. */
+    inheritedBomMode?: ResolvedBomMode;
+    /**
+     * The name of the ancestor the mode actually came from. Not the parent:
+     * the mode can come from several levels up, and naming the immediate parent
+     * would point the owner at a category that states nothing.
+     */
+    inheritedFromName?: string | null;
   };
 }) {
   const router = useRouter();
@@ -55,6 +72,14 @@ export function CategorySettings({
 
   const control =
     "h-9 rounded-xl border border-border bg-surface px-3 text-sm text-text-primary outline-none focus:ring-1 focus:ring-[var(--brand)]";
+
+  // What the category actually behaves as. Falls back to its own stated value
+  // when the caller did not resolve the tree, so a screen that has no group list
+  // still shows something truthful rather than nothing.
+  const effectiveBomMode = group.inheritedBomMode?.mode ?? group.bomMode ?? "OFF";
+  const inheritedFrom = group.inheritedBomMode?.inheritedFromId
+    ? group.inheritedFromName
+    : null;
 
   function save(patch: Parameters<typeof updateGroupSettings>[1]) {
     start(async () => {
@@ -155,12 +180,31 @@ export function CategorySettings({
           What items in this category do about their materials.
         </span>
         <div className="flex flex-wrap gap-1.5">
+          {/* Inherit is offered first, and only on a child: a root has nothing
+              to follow, so the button would be a setting that does nothing.
+              It is a real stored state (null), not the absence of a choice —
+              which is why a stated None still reads as None and not as this. */}
+          {!group.isRoot && (
+            <button
+              type="button"
+              title="Follow whatever the parent category says."
+              disabled={pending}
+              onClick={() => save({ bomMode: null })}
+              className={`min-h-11 rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
+                group.bomMode == null
+                  ? "border-[var(--brand)] bg-[var(--brand)] text-white"
+                  : "border-border bg-surface text-text-secondary hover:border-[var(--brand)]/50"
+              }`}
+            >
+              Inherit
+            </button>
+          )}
           {([
             ["OFF", "None", "Bought and consumed — no recipe of its own."],
             ["RECIPE", "Recipe", "Assembled from other items. Each SKU can override the quantities."],
             ["INGREDIENTS", "Ingredients", "Other items pick this one and inherit the materials it names."],
           ] as const).map(([mode, label, hint]) => {
-            const on = (group.bomMode ?? "OFF") === mode;
+            const on = group.bomMode === mode;
             return (
               <button
                 key={mode}
@@ -168,7 +212,7 @@ export function CategorySettings({
                 title={hint}
                 disabled={pending}
                 onClick={() => save({ bomMode: mode })}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
+                className={`min-h-11 rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
                   on
                     ? "border-[var(--brand)] bg-[var(--brand)] text-white"
                     : "border-border bg-surface text-text-secondary hover:border-[var(--brand)]/50"
@@ -180,9 +224,16 @@ export function CategorySettings({
           })}
         </div>
         <span className="mt-1.5 block text-[11px] text-text-tertiary">
-          {(group.bomMode ?? "OFF") === "RECIPE"
+          {group.bomMode == null && effectiveBomMode !== null && (
+            <span className="mb-0.5 block text-text-secondary">
+              {inheritedFrom
+                ? `Following ${inheritedFrom} — currently ${BOM_MODE_WORD[effectiveBomMode]}.`
+                : `Nothing above states a mode, so this reads as ${BOM_MODE_WORD.OFF}.`}
+            </span>
+          )}
+          {effectiveBomMode === "RECIPE"
             ? "Items get a Bill of materials editor, and the Add form's BOM button writes per-item overrides."
-            : (group.bomMode ?? "OFF") === "INGREDIENTS"
+            : effectiveBomMode === "INGREDIENTS"
               ? "Items get a Contributes editor, and the Add form's BOM button writes contributions."
               : "Items get no BOM editor, and the Add form hides its BOM button."}
         </span>

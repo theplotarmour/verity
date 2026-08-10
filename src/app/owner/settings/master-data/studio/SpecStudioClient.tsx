@@ -11,6 +11,7 @@ import { createItemGroup, updateGroupTemplates, createRootGroup } from "@/server
 import { toast } from "@/components/ui/toast";
 import { ColumnStrip } from "@/components/spec/ColumnStrip";
 import { CategorySettings } from "@/components/spec/CategorySettings";
+import { resolveBomMode } from "@/lib/master-data/bomMode";
 import { resolveColumnLabels } from "@/lib/spec/columns";
 import { AddMasterDataClient } from "../add/AddMasterDataClient";
 import { TemplatesStudioTab } from "@/components/spec/TemplatesStudioTab";
@@ -30,7 +31,8 @@ type Group = {
   aliasLabel: string | null;
   aliasHidden: boolean;
   hasInventoryUnits?: boolean;
-  bomMode?: "OFF" | "RECIPE" | "INGREDIENTS";
+  /** Null means the category states nothing and follows its parent. */
+  bomMode?: "OFF" | "RECIPE" | "INGREDIENTS" | null;
   isSystem?: boolean;
 };
 
@@ -61,6 +63,10 @@ export function SpecStudioClient({
 
   const active = groups.find((g) => g.id === activeGroupId) ?? groups.find((g) => !g.parentId) ?? groups[0];
   const roots = groups.filter((g) => !g.parentId);
+
+  // Resolved once here rather than inside CategorySettings, which is given one
+  // category and cannot see the tree the answer depends on.
+  const activeBomMode = resolveBomMode(active.id, groups);
 
   // The root this group belongs to, so the subgroup rail stays visible while
   // drilled in.
@@ -342,7 +348,16 @@ export function SpecStudioClient({
                   isRoot: !active.parentId,
                   aliasHidden: active.aliasHidden,
                   hasInventoryUnits: (active as any).hasInventoryUnits !== false,
-                  bomMode: (active as any).bomMode ?? "OFF",
+                  // Passed as-is, null and all: CategorySettings must be able to
+                  // show "inherited" as distinct from a stated Off, and coercing
+                  // it here would make the two look identical in Configure.
+                  bomMode: (active as any).bomMode ?? null,
+                  inheritedBomMode: activeBomMode,
+                  // The ancestor the mode actually came from, which may be
+                  // several levels up — not `active.parentId`, which would name
+                  // a category that states nothing.
+                  inheritedFromName:
+                    groups.find((g) => g.id === activeBomMode.inheritedFromId)?.name ?? null,
                   // Seeded roots (Finished Good, Raw Material, ...) drive order
                   // booking, stock and production, so they are not deletable or
                   // retypeable — only renameable.
