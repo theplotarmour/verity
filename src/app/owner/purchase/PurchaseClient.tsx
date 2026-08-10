@@ -587,7 +587,7 @@ export default function PurchaseClient({ orders, suppliers, materials, reorderSu
                             {/* Only where the item carries a second unit. A lone
                                 stock unit needs no choice. */}
                             {line.unitOptions.length > 1 ? (
-                              <select
+                              <Select
                                 value={line.unit}
                                 onChange={(e) => {
                                   const nextUnit = e.target.value;
@@ -624,11 +624,11 @@ export default function PurchaseClient({ orders, suppliers, materials, reorderSu
                                   currentLine.unit = nextUnit;
                                   setReceiveLines(n);
                                 }}
-                                className="h-10 shrink-0 rounded-[12px] border border-border bg-background px-2 text-sm text-text-primary"
+                                className="shrink-0"
                                 aria-label={"Unit for " + line.name}
                               >
                                 {line.unitOptions.map((u) => <option key={u} value={u}>{u}</option>)}
-                              </select>
+                              </Select>
                             ) : (
                               <span className="flex h-10 shrink-0 items-center px-2 text-xs text-text-tertiary">{line.stockUnit}</span>
                             )}

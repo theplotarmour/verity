@@ -200,7 +200,8 @@ Numbers are allocated at creation and never reused.
 
 Every user signs in with a **phone number and a 4-digit PIN**. There is no password and no email login.
 
-- Add people under **Team**. New accounts start with a default PIN that should be changed on first sign-in.
+- Add people under **Team**. Every new account gets a **randomly generated PIN, shown once** at creation — copy it then, because it cannot be read back afterwards. If it is lost, reset it; there is no default PIN and no way to recover the old one.
+- Phone numbers are stored as the last 10 digits. You may type `+91 98765 43210` or `09876543210`; all forms reach the same account.
 - Deactivating a user (rather than deleting them) keeps their history intact — their logged hours, inspections and comments stay attributed.
 - After repeated failed attempts an account locks itself. An owner or administrator can clear the lock from the user's record.
 - **Roles** decide what someone sees. Owner and Co-Owner see everything; Manager runs the operation; Supervisor works the queue and posts staff but does not sign contracts or raise invoices; Worker sees their own jobs, their schedule and their timesheet.
@@ -230,3 +231,94 @@ Un-approve it first. This is a guard, not a bug — approved hours may already b
 
 **"The site won't delete."**
 Sites with tickets, work orders or invoices against them cannot be deleted, because that history has to keep pointing somewhere real. Set the site to `Terminated` instead.
+
+---
+
+## Part Four — Your Industry
+
+Verity ships as four operating packs. The pack decides which modules your workspace is entitled to and which dashboard you land on, so two Verity workspaces can look quite different from each other. Your pack was chosen at onboarding; ask your administrator to change it if it is wrong.
+
+### 4.1 Auto Components
+
+**Modules:** core, inventory, manufacturing, quality, procurement, sales, hr, automotive
+
+A production floor. Work is a physical thing moving through stages — Queue → Cutting → Stitching → QC → Dispatch — and every order resolves to a finished-good item that production is planned against.
+
+**Your dashboard** shows floor progress, live operators, and a **defect Pareto**: the checkpoints that failed most often in the last seven days, ranked. Use it the way it is meant to be used — the top two bars are usually most of your rework, and fixing those two is worth more than a general instruction to be careful.
+
+**Daily rhythm:** book orders (or receive them from your storefront — see 4.5), release drafts to the floor, work the QC queue, dispatch with a passport.
+
+### 4.2 Facility Management
+
+**Modules:** core, hr, sites, scheduling, helpdesk, assets, quality, procurement, billing
+
+A field-service operation. Work is a person being somewhere they are supposed to be, and a promise about how fast you respond.
+
+**Your dashboard** is deliberately time-relative rather than cumulative. "Shift coverage" is today's attended shifts over today's scheduled shifts. "SLA breached" counts tickets already past their deadline; alongside it sits the count due within four hours, because that is the list you can still do something about.
+
+**Daily rhythm:** check coverage, work the SLA list worst-first, close work orders with their inspection attached, build invoices from completed work at month end.
+
+**Note on SLA:** a ticket's deadline is stamped when it is raised, from the site's SLA at that moment. Changing a site's SLA affects new tickets only — existing promises are not silently rewritten.
+
+### 4.3 Verity Franchise — QSR
+
+**Modules:** core, hr, inventory, quality, procurement, billing
+
+An outlet network. See 4.6 for the Franchise OS in depth.
+
+**Your dashboard** ranks rather than totals, because with a network the useful question is which outlet is the outlier, not what the average is. Outlets are listed **worst first**.
+
+- **Outlet health scorecard** — passed audits over completed audits per outlet, last 30 days. An outlet with no audit in the window is listed but *not scored*: showing it as 0% would read as a failing outlet rather than an unvisited one, and those need different responses.
+- **Price audit** — see 4.6.
+- **Kitchen SOP** — recent opening/hygiene audits across the network.
+
+### 4.4 Verity Franchise — Retail
+
+**Modules:** core, hr, inventory, quality, procurement, sales, billing
+
+A store network. Same shape as QSR, different question: stock in the right place, and a shop floor that looks the way the brand says it should.
+
+**Your dashboard** pairs **sales against compliance** side by side rather than showing either alone. A store selling well while failing its standards audit is a different problem from one doing neither, and a single blended score hides exactly that.
+
+**Reorder alerts** compare each item's stock balance against *its own* reorder level, not a flat number. Items with no reorder level set are not tracked — set one on the item for it to appear.
+
+### 4.5 Integrations — the headless layer
+
+Verity is the operations engine, not your storefront and not your ledger. Orders come in from outside; milestones go out.
+
+**Orders in.** Your storefront or dealer portal POSTs to `/api/orders/receive`. Every request needs:
+
+| Header | What it is |
+|---|---|
+| `Authorization: Bearer …` | Your API key. Issued once, stored hashed — if you lose it, issue a new one. |
+| `X-Verity-Timestamp` | Unix seconds. Requests more than 5 minutes out are refused. |
+| `X-Verity-Signature` | HMAC-SHA256 of `timestamp + "." + rawBody`, using your signing secret. |
+| `Idempotency-Key` | Optional but strongly recommended. |
+
+Three things worth knowing:
+
+1. **Orders arrive as drafts.** An external system proposes work; somebody here releases it to the floor. This is deliberate — your storefront should not be able to start production unattended.
+2. **The workspace comes from the key, never the payload.** A key belongs to one workspace and can only write into it.
+3. **Retries are safe.** Send the same `Idempotency-Key` and you get the original response back rather than a second order. If you send no key, an identical body is treated as the same request — weaker, but it stops a timeout from duplicating production work.
+
+Anything Verity could not match — a fabric name that does not exist in your item master — comes back in `warnings` rather than being silently dropped. Read them.
+
+**Events out.** Configure a webhook endpoint and Verity POSTs order milestones (`ORDER_RECEIVED`, `ORDER_COMMITTED`, `ORDER_QC_PASSED`, `ORDER_DISPATCHED`) to it, signed the same way so you can verify they came from us. Deliveries are queued and retried with backoff, so a receiver that is briefly down does not lose events. Endpoints must be public `https` addresses — private and internal addresses are refused.
+
+### 4.6 Franchise OS in depth
+
+The franchise packs treat an **outlet or store as a Site**. A franchise outlet and a serviced site are the same shape — a place with a manager, a roster and a checklist — so they share one table and one set of screens rather than a near-identical copy that drifts.
+
+**Launching a new outlet.** Add the site, assign a manager, attach the standard checklists, and roster staff to it. Everything network-wide — audits, scorecards, price benchmarks — starts including it immediately.
+
+**SOP and audit tracking.** Build a checklist per routine: opening SOP, hygiene, visual standards. Attach photo checkpoints where "it was done" needs evidence. Outlet managers complete them on their phone; area managers review. Every completed audit feeds the scorecard.
+
+**The price audit, and why it uses the median.** For each item bought at least three times in the last 30 days, Verity compares the highest price paid against the **median** across the network, and flags anything more than 15% above it.
+
+The median matters. One outlet paying far over the going rate is precisely what this is for — and an *average* would let that outlier drag the benchmark up toward itself and hide the thing you were looking for. Three purchases is the floor because two data points are not a benchmark, only a disagreement.
+
+An alert is a question, not an accusation. Legitimate reasons exist: an emergency purchase, a different pack size, a genuinely remote outlet. The point is that you get to ask.
+
+**Scorecards.** Compliance is passed audits over completed audits. It is deliberately not blended with sales into one number — see 4.4 for why.
+
+**What a franchise pack does not do.** No POS, no accounting. Sales come in through the integration layer; ledgers stay in Tally or Busy. Verity holds the operation.

@@ -13,7 +13,7 @@ import { importMasterCsvExtra } from "@/server/actions/masterData";
 import { getDepartments } from "@/server/actions/production";
 import { uploadStorageImage } from "@/server/actions/storage";
 import { toast } from "@/components/ui/toast";
-import { Button, Input } from "@/components/ui/primitives";
+import { Button, Input, Select } from "@/components/ui/primitives";
 import { components } from "@/design-system/components";
 
 // Built outside the component: a timestamped upload path has nothing to do with
@@ -381,16 +381,16 @@ export function ChecklistBuilder() {
               />
               {/* A checklist belongs to exactly one stage; which products it
                   covers is the separate question answered under Applies to. */}
-              <select
+              <Select
                 value={editingTemplate.ownerDepartmentId ?? ""}
                 onChange={(e) => setEditingTemplate({ ...editingTemplate, ownerDepartmentId: e.target.value || null })}
-                className="mt-1 w-44 rounded-lg border border-border bg-white dark:bg-neutral-950 px-2 py-1 text-xs font-semibold text-text-primary"
+                className="mt-1 w-44"
               >
                 <option value="">Select department…</option>
                 {departments.map((d) => (
                   <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
-              </select>
+              </Select>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -499,16 +499,15 @@ export function ChecklistBuilder() {
                       <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
                         <label className="flex items-center gap-2 font-medium text-text-secondary">
                           <span>Answer</span>
-                          <select
+                          <Select
                             value={cp.inputType ?? "PASS_FAIL"}
                             onChange={(e) => updateCheckpoint(secIdx, cpIdx, { inputType: e.target.value })}
-                            className="rounded-lg border border-border bg-white dark:bg-neutral-950 px-2 py-1 text-xs text-text-primary"
                           >
                             <option value="PASS_FAIL">Pass / Fail</option>
                             <option value="TEXT">Text</option>
                             <option value="NUMBER">Number</option>
                             <option value="MEASUREMENT">Measurement</option>
-                          </select>
+                          </Select>
                         </label>
                         {(cp.inputType ?? "PASS_FAIL") !== "PASS_FAIL" && (
                           <input

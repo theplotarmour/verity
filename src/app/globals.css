@@ -10,14 +10,20 @@
   --surface-secondary: #E5E5EA;
   --border: rgba(0, 0, 0, 0.08);
   /* Brand scarlet, not system blue. On white the deeper #E11D2A clears 4.5:1
-     where the dark-mode #FF1D2A does not. */
+     where the sheet's #FF102A does not — the bright scarlet is specified for
+     dark surfaces, which is where it lives below. */
   --accent: #E11D2A;
   --accent-soft: rgba(225, 29, 42, 0.10);
   --accent-foreground: #FFFFFF;
+  /* Deep red, for glows, pressed states and hover indicators. */
+  --accent-deep: #89001E;
 
   /* legacy compatibility aliases */
   --brand: var(--accent);
-  --brand-strong: var(--accent);
+  /* `brand-strong` is used as *text on a brand-soft tint* (16 call sites), so
+     it has to contrast with that fill rather than merely be a darker red. On
+     the pale light-mode tint the deep red is the stronger choice. */
+  --brand-strong: var(--accent-deep);
   --brand-soft: var(--accent-soft);
 
   --success: #17A34A;
@@ -52,6 +58,7 @@
   
   --color-accent: var(--accent);
   --color-accent-soft: var(--accent-soft);
+  --color-accent-deep: var(--accent-deep);
   --color-accent-foreground: var(--accent-foreground);
 
   --color-brand: var(--brand);
@@ -86,11 +93,17 @@
   --surface: #141416;
   --surface-secondary: #1F2328;
   --border: rgba(255, 255, 255, 0.09);
-  --accent: #FF1D2A;
-  --accent-soft: rgba(255, 29, 42, 0.14);
+  /* The brand sheet's scarlet, exactly. It is specified against black, which is
+     what this theme is. */
+  --accent: #FF102A;
+  --accent-soft: rgba(255, 16, 42, 0.14);
   --accent-foreground: #FFFFFF;
+  --accent-deep: #89001E;
 
   --brand: var(--accent);
+  /* Deliberately NOT --accent-deep here. `brand-strong` is text on a 14% red
+     fill over near-black; #89001E against that is unreadable. Depth belongs on
+     glows and pressed states in this theme, not on type. */
   --brand-strong: var(--accent);
   --brand-soft: var(--accent-soft);
 
@@ -141,6 +154,17 @@ body {
      label sheets) scrolls inside its own container instead. */
   overflow-x: hidden;
   max-width: 100%;
+
+  /* Stops the installed PWA from feeling like a web page: no pull-to-refresh
+     reload when a list is already at the top, and no scroll chaining out of an
+     inner scroller into the document.
+
+     Deliberately NOT `overflow: hidden` here. The app shell already pins itself
+     to 100dvh with its own internal scroller, so it needs nothing from the
+     document — but the landing page, the guide and sign-in do scroll it, and
+     hiding overflow globally would make everything below their fold
+     unreachable. The rule that fixes the PWA is this one. */
+  overscroll-behavior-y: contain;
 }
 
 /* Media never forces the layout wider than the viewport. */

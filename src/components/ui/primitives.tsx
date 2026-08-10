@@ -106,11 +106,18 @@ export function Button({
     danger: "bg-danger text-white border-transparent hover:brightness-110 active:brightness-95",
   } as const;
 
+  /**
+   * `sm` and `icon` are 36px, which is under the 44px a finger needs. They are
+   * bumped below the shell's own `md` breakpoint and restored above it: a
+   * 44px-tall "sm" button on a dense desktop toolbar is not small any more, and
+   * the size exists for that density. Mobile-first, so the base value is the
+   * touch value.
+   */
   const sizes = {
-    sm: "h-9 gap-1.5 rounded-[10px] px-3 text-xs",
+    sm: "h-11 md:h-9 gap-1.5 rounded-[10px] px-3 text-xs",
     md: "h-11 gap-2 rounded-[12px] px-4 text-sm",
     lg: "h-12 gap-2 rounded-[14px] px-5 text-[15px]",
-    icon: "h-9 w-9 shrink-0 rounded-[10px] p-0",
+    icon: "h-11 w-11 md:h-9 md:w-9 shrink-0 rounded-[10px] p-0",
   } as const;
 
   return (
