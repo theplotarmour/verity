@@ -53,6 +53,8 @@ export function CategorySettings({
     isBuiltIn: boolean;
     /** Off for attribute categories that are never stocked or bought. */
     hasInventoryUnits?: boolean;
+    /** Whether items here may appear on a customer order or invoice. */
+    isSalable?: boolean;
     /** What this category itself states. Null means it follows its parent. */
     bomMode?: "OFF" | "RECIPE" | "INGREDIENTS" | null;
     /** What that resolves to, and where from — computed against the whole tree. */
@@ -164,6 +166,27 @@ export function CategorySettings({
           <span className="block text-xs font-medium text-text-secondary">Track inventory &amp; units</span>
           <span className="block text-[11px] text-text-tertiary">
             Off for attributes like vehicles or designs — they are referenced by items, never stocked.
+          </span>
+        </span>
+      </label>
+
+      {/* isSalable has existed on the schema since the baseline and was set by
+          the seed, but no screen ever showed it and nothing could change it —
+          a stored fact about the factory that the factory could not read. */}
+      <label className="flex items-start gap-2">
+        <input
+          type="checkbox"
+          checked={group.isSalable === true}
+          disabled={pending}
+          onChange={(e) => save({ isSalable: e.target.checked })}
+          className="mt-0.5 rounded accent-[var(--brand)]"
+        />
+        <span>
+          <span className="block text-xs font-medium text-text-secondary">Can be sold</span>
+          <span className="block text-[11px] text-text-tertiary">
+            {group.isSalable
+              ? "Items here can be put on a customer order or an invoice."
+              : "Items here are used internally — they will not be offered when booking an order."}
           </span>
         </span>
       </label>

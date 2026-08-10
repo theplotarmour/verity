@@ -9,11 +9,20 @@
   --surface: #FFFFFF;
   --surface-secondary: #E5E5EA;
   --border: rgba(0, 0, 0, 0.08);
-  /* Brand scarlet, not system blue. On white the deeper #E11D2A clears 4.5:1
-     where the dark-mode #FF1D2A does not. */
+  /* Brand scarlet, not system blue.
+     The brand sheet states #FF102A. Neither mode uses it verbatim: on white it
+     measures ~3.9:1 for normal text, under WCAG AA, and this product is read
+     all day by people in their forties and fifties. #E11D2A here and #FF1D2A
+     in dark are the same hue at each end, both clearing AA and matching each
+     other so the scarlet does not shift when a user switches theme. Deviating
+     is the smaller cost — the alternative is brand-exact text nobody can read. */
   --accent: #E11D2A;
   --accent-soft: rgba(225, 29, 42, 0.10);
   --accent-foreground: #FFFFFF;
+  /* Deep red. Hovers, gradient ends and glows — never text: it clears no
+     contrast bar on any background this app uses. */
+  --accent-deep: #89001E;
+  --accent-deep-soft: rgba(137, 0, 30, 0.10);
 
   /* legacy compatibility aliases */
   --brand: var(--accent);
@@ -57,6 +66,8 @@
   --color-brand: var(--brand);
   --color-brand-strong: var(--brand-strong);
   --color-brand-soft: var(--brand-soft);
+  --color-accent-deep: var(--accent-deep);
+  --color-accent-deep-soft: var(--accent-deep-soft);
   
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
@@ -86,9 +97,17 @@
   --surface: #141416;
   --surface-secondary: #1F2328;
   --border: rgba(255, 255, 255, 0.09);
+  /* Near the brand sheet's #FF102A, nudged to #FF1D2A. The pair is tuned as a
+     pair: this and the light-mode #E11D2A are the same hue at each end, and
+     matching them keeps a scarlet that does not visibly shift when a user
+     switches theme mid-session. */
   --accent: #FF1D2A;
   --accent-soft: rgba(255, 29, 42, 0.14);
   --accent-foreground: #FFFFFF;
+  /* Deep red, for the far end of a scarlet gradient and for pressed states.
+     Decoration only — see the note on the light-mode value. */
+  --accent-deep: #89001E;
+  --accent-deep-soft: rgba(137, 0, 30, 0.22);
 
   --brand: var(--accent);
   --brand-strong: var(--accent);
@@ -453,5 +472,23 @@ select {
   .verity-fade-in {
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
+  }
+}
+
+/* Touch targets.
+ *
+ * The compact button sizes are 36px, which is right for a dense toolbar driven
+ * by a mouse and below the 44px anyone designs a thumb target to. Rather than
+ * growing them everywhere — which reflows every toolbar in the app, and costs
+ * desktop users density they are not the reason for — the hit area grows only
+ * where the pointer is actually coarse.
+ *
+ * min-height beats height in CSS, so this wins over the h-9 on the element
+ * without either class having to know about the other.
+ */
+@media (pointer: coarse) {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
   }
 }

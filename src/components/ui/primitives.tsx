@@ -106,11 +106,16 @@ export function Button({
     danger: "bg-danger text-white border-transparent hover:brightness-110 active:brightness-95",
   } as const;
 
+  // md and lg already clear the 44px touch floor. sm and icon are 36px, which
+  // is correct for a dense toolbar under a mouse and too small under a thumb,
+  // so they carry `touch-target`: a coarse-pointer-only rule in globals.css
+  // grows the hit area to 44px without changing how they look on a desktop.
+  // Growing them outright would reflow every toolbar in the app.
   const sizes = {
-    sm: "h-9 gap-1.5 rounded-[10px] px-3 text-xs",
+    sm: "touch-target h-9 gap-1.5 rounded-[10px] px-3 text-xs",
     md: "h-11 gap-2 rounded-[12px] px-4 text-sm",
     lg: "h-12 gap-2 rounded-[14px] px-5 text-[15px]",
-    icon: "h-9 w-9 shrink-0 rounded-[10px] p-0",
+    icon: "touch-target h-9 w-9 shrink-0 rounded-[10px] p-0",
   } as const;
 
   return (

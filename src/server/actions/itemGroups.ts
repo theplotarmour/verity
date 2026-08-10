@@ -254,6 +254,7 @@ export async function updateGroupSettings(
     aliasLabel?: string | null;
     aliasHidden?: boolean;
     hasInventoryUnits?: boolean;
+    isSalable?: boolean;
     /**
      * Undefined leaves the mode alone; null clears it so the category inherits
      * from its parent. The two are deliberately different — a patch that cannot
@@ -304,6 +305,7 @@ export async function updateGroupSettings(
       ...(patch.aliasLabel !== undefined ? { aliasLabel: patch.aliasLabel?.trim() || null } : {}),
       ...(patch.aliasHidden !== undefined ? { aliasHidden: patch.aliasHidden } : {}),
       ...(patch.hasInventoryUnits !== undefined ? { hasInventoryUnits: patch.hasInventoryUnits } : {}),
+      ...(patch.isSalable !== undefined ? { isSalable: patch.isSalable } : {}),
       ...(patch.bomMode !== undefined ? { bomMode: patch.bomMode } : {}),
     },
   });

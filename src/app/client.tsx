@@ -175,7 +175,11 @@ export function HomeClient({
               <br />
               for the whole
               <br />
-              <span className="bg-gradient-to-br from-[#FF1D2A] via-[#FF4C57] to-[#B80D1E] bg-clip-text text-transparent">
+              {/* Ends on the brand deep red rather than a one-off #B80D1E.
+                  Deep red is a decorative token precisely because it fails
+                  contrast as text — inside a gradient, where the light end
+                  carries legibility, is where it belongs. */}
+              <span className="bg-gradient-to-br from-[var(--accent)] via-[#FF4C57] to-[var(--accent-deep)] bg-clip-text text-transparent">
                 operation.
               </span>
             </h1>

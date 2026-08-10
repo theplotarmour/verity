@@ -31,6 +31,7 @@ type Group = {
   aliasLabel: string | null;
   aliasHidden: boolean;
   hasInventoryUnits?: boolean;
+  isSalable?: boolean;
   /** Null means the category states nothing and follows its parent. */
   bomMode?: "OFF" | "RECIPE" | "INGREDIENTS" | null;
   isSystem?: boolean;
@@ -348,6 +349,7 @@ export function SpecStudioClient({
                   isRoot: !active.parentId,
                   aliasHidden: active.aliasHidden,
                   hasInventoryUnits: (active as any).hasInventoryUnits !== false,
+                  isSalable: (active as any).isSalable === true,
                   // Passed as-is, null and all: CategorySettings must be able to
                   // show "inherited" as distinct from a stated Off, and coercing
                   // it here would make the two look identical in Configure.

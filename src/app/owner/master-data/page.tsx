@@ -48,6 +48,7 @@ export default async function MasterDataWorkspacePage({
         aliasLabel: g.aliasLabel,
         aliasHidden: g.aliasHidden,
         hasInventoryUnits: g.hasInventoryUnits,
+        isSalable: g.isSalable,
         // Whitelisted like the rest. Left out, the studio read undefined and
         // showed every category as OFF — the click saved, the buttons never
         // moved, and the setting looked broken.
