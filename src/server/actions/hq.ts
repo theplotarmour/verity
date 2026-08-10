@@ -10,6 +10,7 @@ import {
   DEFAULT_MODULES,
   VERTICAL_PACKS,
   modulesForPack,
+  packLabel,
   provisionTenant,
   systemRoleId,
   verticalPackOptions,
@@ -214,7 +215,7 @@ export async function getClientsList() {
       organizationId: c.organizationId,
       name: c.name,
       slug: c.slug,
-      industry: c.industry,
+      industry: packLabel(c.industry),
       onboardingStatus: c.onboardingStatus,
       userCount: c.users.length,
       orderCount: orderCountMap.get(c.id) ?? 0,
@@ -369,7 +370,9 @@ export async function createAndSignAgreementDirect(data: {
     const { factoryId: newFactoryId, organizationId } = await provisionTenant({
       name: data.factoryName,
       slug: finalSlug,
-      industry: pack?.label ?? "Automotive Seat Covers",
+      // The pack *key*, not its label: this field routes the tenant to its
+      // dashboard, so it has to be exact. `packLabel()` renders it for humans.
+      industry: pack ? data.verticalPack! : "auto_components",
       onboardingStatus: "LIVE",
       setupFee: 150000,
       monthlyFee: 18000,
@@ -473,13 +476,12 @@ export async function provisionClient(input: {
     slug = `${base}-${n}`;
   }
 
-  const pack = VERTICAL_PACKS[input.verticalPack];
-
   try {
     const { factoryId, organizationId } = await provisionTenant({
       name,
       slug,
-      industry: pack.label,
+      // Store the key, not the label — see the note in createAndSignAgreementDirect.
+      industry: input.verticalPack,
       onboardingStatus: "SETUP",
       setupFee: input.setupFee ?? 0,
       monthlyFee: input.monthlyFee ?? 0,
@@ -584,6 +586,7 @@ export async function getClientDetail(factoryId: string) {
   return {
     factory: {
       ...factory,
+      industry: packLabel(factory.industry),
       createdAt: factory.createdAt.toISOString(),
     },
     users: users.map((u) => ({
