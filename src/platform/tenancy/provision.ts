@@ -2,8 +2,8 @@ import "server-only";
 
 import type { Prisma, SystemRole } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { type ModuleKey, allModules, withDependencies } from "@/platform/modules/registry";
-import { DEFAULT_GRANTS } from "./default-grants";
+import { type ModuleKey, withDependencies } from "@/platform/modules/registry";
+import { provisionCore } from "./provision-core";
 
 /**
  * Tenant provisioning.
@@ -183,74 +183,11 @@ export async function provisionTenant(
   input: ProvisionInput,
   tx: Prisma.TransactionClient = prisma,
 ): Promise<ProvisionResult> {
-  const requested = input.modules ?? DEFAULT_MODULES;
-  const modules = withDependencies(requested);
-
-  // Only grant permissions whose module is actually entitled, so a tenant
-  // without `quality` has no role holding quality permissions.
-  const entitled = new Set<string>(modules);
-  const permissionOwner = new Map<string, string>();
-  for (const mod of allModules()) {
-    for (const p of mod.permissions) permissionOwner.set(p.key, mod.key);
-  }
-
-  const org = await tx.organization.create({
-    data: {
-      ...(input.organizationId ? { id: input.organizationId } : {}),
-      name: input.name,
-      slug: input.slug,
-      logoUrl: input.logoUrl ?? null,
-      ...(input.currency ? { currency: input.currency } : {}),
-      ...(input.timezone ? { timezone: input.timezone } : {}),
-    },
+  const { organizationId, factoryId, roleIdByArchetype } = await provisionCore(tx, {
+    ...input,
+    modules: input.modules ?? DEFAULT_MODULES,
   });
-
-  const factory = await tx.factory.create({
-    data: {
-      ...(input.factoryId ? { id: input.factoryId } : {}),
-      organizationId: org.id,
-      name: input.name,
-      slug: input.slug,
-      logoUrl: input.logoUrl ?? null,
-      industry: input.industry ?? null,
-      onboardingStatus: input.onboardingStatus ?? "SETUP",
-      setupFee: input.setupFee ?? 0,
-      monthlyFee: input.monthlyFee ?? 0,
-    },
-  });
-
-  await tx.moduleEntitlement.createMany({
-    data: modules.map((moduleKey) => ({
-      organizationId: org.id,
-      moduleKey,
-      enabled: true,
-    })),
-    skipDuplicates: true,
-  });
-
-  const archetypes = Object.keys(DEFAULT_GRANTS) as SystemRole[];
-  const roleIdByArchetype = {} as Record<SystemRole, string>;
-
-  for (const archetype of archetypes) {
-    const grants = DEFAULT_GRANTS[archetype].filter((key) => {
-      const owner = permissionOwner.get(key);
-      return owner !== undefined && entitled.has(owner);
-    });
-
-    const role = await tx.role.create({
-      data: {
-        organizationId: org.id,
-        name: ROLE_LABELS[archetype],
-        description: "Built-in role. Rename or copy it; it cannot be deleted.",
-        systemRole: archetype,
-        isSystem: true,
-        permissions: { create: grants.map((key) => ({ key })) },
-      },
-    });
-    roleIdByArchetype[archetype] = role.id;
-  }
-
-  return { organizationId: org.id, factoryId: factory.id, roleIdByArchetype };
+  return { organizationId, factoryId, roleIdByArchetype };
 }
 
 /**
