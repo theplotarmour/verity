@@ -2,6 +2,7 @@ import "server-only";
 
 import { redirect } from "next/navigation";
 
+import { parsePhoneList, phoneKey } from "@/lib/phone";
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/server/auth";
 
@@ -22,11 +23,13 @@ import { getUserSession } from "@/lib/server/auth";
  * environment — a dev-only bypass here is how one ships to production.
  */
 
+/**
+ * Entries are compared by `phoneKey`, not by their raw digits: an operator
+ * writing `+91 7011440350` means the same account as the stored `7011440350`,
+ * and matching those two on stripped digits alone would refuse it.
+ */
 function allowlist(): string[] {
-  return (process.env.VERITY_HQ_PHONES ?? "")
-    .split(",")
-    .map((entry) => entry.replace(/\D/g, ""))
-    .filter((entry) => entry.length > 0);
+  return parsePhoneList(process.env.VERITY_HQ_PHONES);
 }
 
 export interface HqOperator {
@@ -71,9 +74,12 @@ export async function hqOperator(): Promise<HqOperator | null> {
   });
   if (!user?.isActive || !user.phone) return deny("no-user", session.userId);
 
-  const digits = user.phone.replace(/\D/g, "");
+  const digits = phoneKey(user.phone);
   if (!permitted.includes(digits)) {
-    return deny("not-listed", `${digits} is not in VERITY_HQ_PHONES`);
+    return deny(
+      "not-listed",
+      `${digits} is not in VERITY_HQ_PHONES, which parsed to [${permitted.join(", ")}]`,
+    );
   }
 
   return { userId: user.id, name: user.name, phone: user.phone };

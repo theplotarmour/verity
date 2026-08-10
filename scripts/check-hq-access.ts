@@ -10,14 +10,14 @@
 
 import { PrismaClient } from "@prisma/client";
 
+import { parsePhoneList, phoneKey } from "../src/lib/phone";
+
 const prisma = new PrismaClient();
 
 async function main() {
   const raw = process.env.VERITY_HQ_PHONES;
-  const permitted = (raw ?? "")
-    .split(",")
-    .map((e) => e.replace(/\D/g, ""))
-    .filter(Boolean);
+  // Same parse the guard uses, so this script cannot disagree with it.
+  const permitted = parsePhoneList(raw);
 
   console.log("VERITY_HQ_PHONES:", raw === undefined ? "NOT SET" : JSON.stringify(raw));
   console.log("parsed allowlist:", permitted.length ? permitted.join(", ") : "(empty — admits nobody)");
@@ -40,7 +40,7 @@ async function main() {
 
   console.log("Active accounts and whether each may enter HQ:");
   for (const u of users) {
-    const digits = (u.phone ?? "").replace(/\D/g, "");
+    const digits = phoneKey(u.phone);
     const ok = digits && permitted.includes(digits);
     console.log(
       `  ${ok ? "YES" : " no"}  ${String(u.phone ?? "(no phone)").padEnd(12)} ${u.role.padEnd(11)} ${u.name} — ${u.factory.name}`,
@@ -48,7 +48,7 @@ async function main() {
   }
 
   const listedButMissing = permitted.filter(
-    (p) => !users.some((u) => (u.phone ?? "").replace(/\D/g, "") === p),
+    (p) => !users.some((u) => phoneKey(u.phone) === p),
   );
   if (listedButMissing.length) {
     console.log("");

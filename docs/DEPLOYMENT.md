@@ -50,6 +50,23 @@ most common reason `/verity` appears broken after a deploy.
 VERITY_HQ_PHONES=7011440350
 ```
 
+Entries are compared on their last ten digits, so a country code or any
+formatting is fine — `+91 70114 40350`, `917011440350` and `7011440350` all
+mean the same account. Accounts themselves are always stored as ten digits.
+
+If `/verity` says *"signed in as N, which is not on the operator list"* while
+you believe N is listed, the variable **is** set on that deployment but does not
+contain N. The server log records the parsed list next to the refused number:
+
+```
+[verity-hq] access denied: not-listed (7011440350 is not in VERITY_HQ_PHONES,
+which parsed to [9876543210]). VERITY_HQ_PHONES is set.
+```
+
+The usual causes are a value set on the wrong Vercel environment (Preview vs
+Production), or a deploy that predates the change — environment is read at boot,
+so an edited variable needs a redeploy, not just a save.
+
 ### `DATABASE_URL` on serverless
 
 Keep `?pgbouncer=true&connection_limit=1` on the deployed value. One connection
