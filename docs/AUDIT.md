@@ -217,10 +217,31 @@ with the exact file and line. A guard that has never failed proves nothing.
 
 Suite: 223 tests in 18 files.
 
-**Still open:** no behavioural tests of the actions themselves — nothing
+Since extended with four more guards, each verified by deliberately breaking it:
+
+- **`packs.test.ts`** — the pack list narrowed from 22 to 4, and every value a
+  live `Factory.industry` holds must still resolve. Verified by deleting the
+  `security_services` mapping: three tests failed naming Asian Security's exact
+  stored value.
+- **`dashboard-routing.test.ts`** — every vertical pack must have a dashboard
+  case. Verified by deleting the `franchise_qsr` case.
+- **`credentials.test.ts`** — no hardcoded PINs, and the four identity paths must
+  canonicalise phone numbers. Verified by reinstating `"1234"`.
+- **`no-native-select.test.ts`** — walks every `.tsx` and allows exactly two
+  native `<select>` elements.
+
+Plus behavioural tests against the real database: `orderIngest.test.ts` (7) and
+`route.test.ts` (9). The cross-tenant case in the first was **initially
+vacuous** — it looked up a foreign item, and the only other seeded factory has
+none, so it returned early and passed without exercising anything. It now
+creates its own.
+
+Suite: 347 tests in 28 files.
+
+**Still open:** no behavioural tests of the service actions themselves — nothing
 exercises a ticket through its lifecycle, or an invoice through draft → sent →
-paid. The structural guard prevents the catastrophic failure; it does not prove
-the features work.
+paid. The structural guards prevent the catastrophic failures; they do not prove
+those features work.
 
 ---
 
@@ -262,7 +283,57 @@ adopting: **if it must be identical in two places, it must be one export.**
 | 1 | §1.1 authenticate `uploadStorageImage` | **fixed** — session + tenant-anchored key |
 | 2 | §2.1 co-locate functions with the database | **fixed** — `bom1` applied on the deployment |
 | 3 | §1.2 scope the three `spec.ts` reads | **fixed** — session + ownership check |
-| 4 | §4 one tenant-isolation test across the new actions | **open** — largest remaining gap |
-| 5 | §3.3 delete the RBAC carve-out (backfill has run) | open |
+| 4 | §4 one tenant-isolation test across the new actions | **fixed** — structural, verified by breaking it |
+| 5 | §3.3 delete the RBAC carve-out (backfill has run) | **fixed** |
 | 6 | §2.5 profile `/owner/production` | open |
 | 7 | §5 verify the UI visually | open — never done in any session |
+
+---
+
+## 7. The headless layer (added after this audit)
+
+`/api/orders/receive` writes production work with no signed-in human, which
+makes it the highest-value target in the application. What stands in front of it:
+
+- a bearer token, stored as a SHA-256 hash and compared in constant time;
+- an HMAC over the **raw request bytes** with a separate secret, so a leaked
+  token alone is insufficient and a captured request cannot be replayed with
+  edits. Re-serialising parsed JSON would produce different bytes and break
+  every signature for reasons nobody could debug;
+- a ±5 minute timestamp window, signed as part of the material so it cannot be
+  widened by editing a header;
+- the tenant read from the key row — **never** from the payload;
+- an idempotency record, because every sane sender retries on timeout and a
+  timeout is when the write most likely did land.
+
+Orders arrive as `DRAFT`. An external storefront may propose work; a person
+here releases it.
+
+**Outbound is the other half.** Webhook URLs are tenant-supplied, so every
+delivery is an authenticated outbound request to an address we do not control.
+`lib/webhooks/url-guard.ts` refuses private, loopback, link-local, CGNAT and
+multicast ranges — including IPv4-mapped IPv6 forms like
+`::ffff:169.254.169.254`, which walk straight past a naive check. Checked when
+the endpoint is saved *and* again immediately before each delivery, because DNS
+can be repointed in between, and `redirect: "manual"` so a 302 cannot land
+somewhere the checks already rejected.
+
+**Residual risk, stated plainly:** a TOCTOU gap remains between the DNS lookup
+and the socket connect. Closing it means pinning the resolved address into the
+request, which Node's `fetch` does not expose. Deliveries are outbound-only and
+the response body is discarded, so the exposure is a blind request rather than a
+data read.
+
+### Delivery durability
+
+There is no worker process on Vercel — a fire-and-forget `fetch` after the
+response is killed with the invocation, silently. The outbox row is written
+inside the same transaction as the event that caused it, delivered by `after()`
+on the same request, and retried by a cron drain with exponential backoff.
+Claiming is a compare-and-set on `status`, so two overlapping drains cannot both
+send the same delivery, and a row stuck in `DELIVERING` past two minutes is
+reclaimed.
+
+`CRON_SECRET` must be set on the deployment. The drain endpoint **fails closed**
+without it: an unset secret would leave an unauthenticated endpoint that fires
+outbound requests on demand.
