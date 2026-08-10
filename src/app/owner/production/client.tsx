@@ -37,6 +37,7 @@ import { OrderTypeBadge } from "@/components/factory/OrderTypeBadge";
 import { ProductionCard } from "@/components/factory/ProductionCard";
 import { DesignReference } from "@/components/factory/DesignReference";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/design/Table";
+import { CustomerPicker } from "@/components/factory/CustomerPicker";
 import { useOrderDraft } from "@/lib/hooks/useOrderDraft";
 
 /**
@@ -148,6 +149,11 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
   const [draft, setDraft] = useState(() => ({
     customerName: "",
     customerPhone: "",
+    // Set when the customer was chosen from the master list. An id books the
+    // order against that exact account; empty means the name is new and the
+    // server creates one. Free text alone matched on an exact, case-insensitive
+    // name, so one stray character silently opened a second account.
+    customerId: "",
     // No vehicle is pre-selected: the studio is search-driven now, and defaulting
     // to the first brand/model made the variant box read as a vehicle the user
     // never chose. Submit already requires a vehicle, so empty is safe.
@@ -925,6 +931,11 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
       ...draft,
       customerName: isOnOrdered ? draft.customerName.trim() : "Stock Production",
       customerPhone: isOnOrdered ? draft.customerPhone.trim() : "",
+      // Cleared with the name. Stock production is booked against the synthetic
+      // "Stock Production" account; leaving a picked id attached would file it
+      // under a real customer who never ordered it — and the id wins over the
+      // name server-side, so the wrong account would be the one that stuck.
+      customerId: isOnOrdered ? draft.customerId : "",
       vehicleModelId: resolvedModelId,
       quantity: Number(draft.quantity) || 1,
       headrestCount: Number(draft.headrestCount) || 0,
@@ -1596,11 +1607,20 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
                     <div className="grid gap-4 md:grid-cols-2">
                       <div className="space-y-1">
                         <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">Customer Name</label>
-                        <Input
+                        <CustomerPicker
+                          customers={customers}
                           error={!!errors.customerName}
-                          placeholder="Customer name"
-                          value={draft.customerName}
-                          onChange={(event) => updateDraft({ customerName: event.target.value })}
+                          value={{ id: draft.customerId || null, name: draft.customerName }}
+                          onChange={(next) =>
+                            updateDraft({
+                              customerId: next.id ?? "",
+                              customerName: next.name,
+                              // A known customer brings their number with them.
+                              // Only filled when the account has one, so picking
+                              // a customer never blanks a number just typed.
+                              ...(next.phone ? { customerPhone: next.phone } : {}),
+                            })
+                          }
                         />
                       </div>
                       <div className="space-y-1">
