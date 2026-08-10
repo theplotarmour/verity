@@ -37,6 +37,28 @@ import { OrderTypeBadge } from "@/components/factory/OrderTypeBadge";
 import { ProductionCard } from "@/components/factory/ProductionCard";
 import { DesignReference } from "@/components/factory/DesignReference";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/design/Table";
+import { useOrderDraft } from "@/lib/hooks/useOrderDraft";
+
+/**
+ * Whether a restored draft is worth offering back.
+ *
+ * The form starts with defaults already filled — the first material, the first
+ * worker — so "not equal to empty" would offer a resume on a form nobody typed
+ * into. Only the fields a person actually enters count.
+ */
+function isDraftEmpty(d: Record<string, unknown>): boolean {
+  const typed = [
+    d.customerName,
+    d.customerPhone,
+    d.vehicleBrandId,
+    d.vehicleModelId,
+    d.vehicleYear,
+    d.remarks,
+    d.photoReference,
+    d.itemId,
+  ];
+  return typed.every((v) => !v || String(v).trim() === "");
+}
 
 type OrdersClientProps = {
   mode?: "production" | "orderTaking";
@@ -148,6 +170,10 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
     // a label that formats differently here than it does there.
     itemId: "",
   }));
+
+  type OrderDraftShape = typeof draft;
+  const orderDraft = useOrderDraft<OrderDraftShape>("PRODUCTION_STUDIO");
+  const [draftResumed, setDraftResumed] = useState(false);
   const [batchLines, setBatchLines] = useState<Array<{
     id: string;
     quantity: number;
@@ -351,8 +377,22 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
   );
 
   function updateDraft(patch: Partial<typeof draft>) {
-    setDraft((current) => ({ ...current, ...patch }));
+    setDraft((current) => {
+      const next = { ...current, ...patch };
+      // Autosaved so a shift change, a refresh or a dead battery does not cost
+      // the form. Debounced inside the hook — this fires on every keystroke.
+      orderDraft.save(next);
+      return next;
+    });
   }
+
+  // Offer the saved form back rather than restoring it silently. A form that
+  // fills itself in on load is indistinguishable from one that kept stale data,
+  // and the owner cannot tell which fields they typed and which arrived.
+  const resumable =
+    orderDraft.restored && !draftResumed && !isDraftEmpty(orderDraft.restored)
+      ? orderDraft.restored
+      : null;
 
   // Options at each tier are filtered by the tiers already chosen, so invalid
   // combinations can't be assembled and each dropdown only offers what leads to
@@ -1001,6 +1041,9 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
         customerPhone: "",
         quantity: 1,
       }));
+      // The draft became this order, so it must not be offered back tomorrow.
+      void orderDraft.discard();
+      setDraftResumed(false);
       setBatchLines([]);
       setIsStudioOpen(false);
       router.refresh();
@@ -1420,6 +1463,48 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
                   <X className="h-4 w-4" />
                 </button>
               </div>
+
+              {/* Offered, never applied silently. A form that fills itself in on
+                  open reads exactly like one showing stale data, and the owner
+                  cannot tell which fields they typed and which arrived. */}
+              {resumable && (
+                <div className="flex flex-wrap items-center gap-3 border-b border-border bg-[var(--brand-soft)] px-6 py-3">
+                  <span className="text-[13px] text-text-primary">
+                    You have an unfinished order from{" "}
+                    {orderDraft.restoredAt
+                      ? orderDraft.restoredAt.toLocaleString(undefined, {
+                          day: "numeric",
+                          month: "short",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })
+                      : "earlier"}
+                    .
+                  </span>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDraft((current) => ({ ...current, ...resumable }));
+                        setDraftResumed(true);
+                      }}
+                      className="inline-flex min-h-11 items-center rounded-xl bg-[var(--brand)] px-4 text-[13px] font-semibold text-white transition hover:opacity-90"
+                    >
+                      Resume it
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void orderDraft.discard();
+                        setDraftResumed(true);
+                      }}
+                      className="inline-flex min-h-11 items-center rounded-xl border border-border px-4 text-[13px] font-semibold text-text-secondary transition hover:text-text-primary"
+                    >
+                      Start fresh
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="grid flex-1 min-h-0 gap-0 overflow-y-auto lg:overflow-hidden bg-[radial-gradient(circle_at_top,var(--brand-soft),transparent_40%)] lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.8fr)]">
                 <div className="space-y-6 p-6 lg:overflow-y-auto">
