@@ -1,0 +1,1 @@
+{"nodes": [{"id": "asset:src/app/apple-icon.png", "label": "apple-icon.png", "type": "asset", "confidence": "EXTRACTED", "source_file": "src/app/apple-icon.png", "source_location": "src/app/apple-icon.png:1", "description": "Next.js app-router Apple touch icon convention file."}], "edges": [], "hyperedges": []}

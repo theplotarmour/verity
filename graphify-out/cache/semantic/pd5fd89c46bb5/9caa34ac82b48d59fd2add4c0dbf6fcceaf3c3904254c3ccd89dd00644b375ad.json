@@ -1,0 +1,1 @@
+{"nodes": [{"id": "asset:public/next.svg", "label": "next.svg", "type": "asset", "confidence": "EXTRACTED", "source_file": "public/next.svg", "source_location": "public/next.svg:1", "description": "Default Next.js wordmark asset."}], "edges": [], "hyperedges": []}
