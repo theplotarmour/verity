@@ -38,8 +38,11 @@ const OPERATOR = {
   modules: ["core", "hr", "projects", "crm", "sales", "billing"] as ModuleKey[],
 };
 
-// Carxen is a demo client and needs to keep an owner of its own.
-const CLIENT_OWNER = { name: "Yashu Malik", phone: "9971907190", pin: "7190" };
+// If the operator's number is found inside a client workspace, that account is
+// handed back to the client under its own staff identity rather than deleted —
+// a workspace with no owner cannot reach its own settings or transfer
+// ownership.
+const CLIENT_OWNER = { name: "Rohit Verma", phone: "8800000001", pin: "1234" };
 
 const ROLE_LABELS: Record<SystemRole, string> = {
   OWNER: "Owner",

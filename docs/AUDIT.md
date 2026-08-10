@@ -185,29 +185,42 @@ The HQ operator was a user inside Carxen, a client. Renaming the operator left
 that tenant without an owner. PlotArmour is now its own organisation with
 Divyom Sharma as owner; Carxen keeps Yashu Malik.
 
-### 3.3 Nav permissions carry a transitional carve-out — **OPEN**
+### 3.3 Nav permissions carried a transitional carve-out — **FIXED**
 
-Owners, co-owners and managers pass the registry permission check without
+Owners, co-owners and managers passed the registry permission check without
 holding the key, because those keys entered `DEFAULT_GRANTS` after some tenants
-were provisioned. `scripts/backfill-role-grants.ts --apply` has now been run, so
-**the carve-out in `owner-shell.tsx` can be deleted** — it is dead weight that
-weakens the gate.
+were provisioned. The backfill has run and reports nothing left to do, so the
+carve-out is deleted and every role is now checked the same way.
 
 ---
 
 ## 4. Test coverage — **the largest structural gap**
 
-217 tests, all pre-existing. **Zero cover the ~40 new server actions** across
-sites, helpdesk, projects, assets, scheduling, billing and service quality.
+**Partly closed.** `tenant-isolation.test.ts` now enforces the property that
+actually matters, structurally rather than by example:
 
-The specific thing that should be tested and is not: **tenant isolation**. Every
-action claims to filter on `factoryId`; nothing asserts it. A single missed
-filter is a cross-tenant data leak, and it would pass review because the code
-looks like every other action.
+- every scope-opening query (`findMany`, `count`, `updateMany`, `groupBy`, …)
+  on a model that owns a `factoryId` must name it;
+- detail lookups must use `findFirst({ id, factoryId })`, never `findUnique` by
+  bare id — the latter returns another tenant's row and leaves the check to
+  whatever comes next, which is the check people forget;
+- every export in `hq.ts` must call `requireHqAction()`;
+- `storage.ts` must resolve a session and anchor the path to the caller.
 
-**Recommendation:** one table-driven test that, for each action, seeds two
-tenants and asserts tenant A cannot read or write tenant B's row. That single
-test is worth more than unit tests of each action's happy path.
+Models without their own `factoryId` are read from the schema and exempted
+automatically, so the rule does not need a hand-maintained list. A tripwire
+asserts it inspects 40+ queries, so a regex that stops matching cannot make the
+suite vacuously green.
+
+**Verified by deliberately removing a `factoryId` filter**: the suite failed
+with the exact file and line. A guard that has never failed proves nothing.
+
+Suite: 223 tests in 18 files.
+
+**Still open:** no behavioural tests of the actions themselves — nothing
+exercises a ticket through its lifecycle, or an invoice through draft → sent →
+paid. The structural guard prevents the catastrophic failure; it does not prove
+the features work.
 
 ---
 

@@ -488,19 +488,12 @@ async function main() {
 
   // 10. Seed Users
   //
-  // This is Carxen's own owner — a demo *client*. The HQ operator is a separate
-  // person in a separate organisation (PlotArmour); see
-  // scripts/setup-operator-org.ts. Putting the operator inside a client
-  // workspace is what this seed used to do, and it meant renaming the operator
-  // left that tenant without an owner.
-  await prisma.user.upsert({
-    where: { phone: "9971907190" },
-    update: { roleId: roleIdByArchetype.OWNER,  pinHash: hashPin("7190", factory.id), name: "Yashu Malik", role: "OWNER", isActive: true },
-    create: { roleId: roleIdByArchetype.OWNER,  factoryId: factory.id, role: "OWNER", name: "Yashu Malik", language: "en", phone: "9971907190", pinHash: hashPin("7190", factory.id) },
-  });
-
+  // Carxen is a demo *client*, so its owner is one of its own staff. The HQ
+  // operator is a separate person in a separate organisation (PlotArmour) —
+  // see scripts/setup-operator-org.ts. This seed used to create the operator
+  // inside Carxen, which meant renaming them left the tenant without an owner.
   const staff: Array<[string, string, string, string | null]> = [
-    ["Rohit Verma", "8800000001", "MANAGER", null],
+    ["Rohit Verma", "8800000001", "OWNER", null],
     ["Anil Sharma", "8800000005", "WORKER", "CAD"],
     ["Amit Kumar", "8800000002", "WORKER", "Cutting"],
     ["Salim Khan", "8800000003", "WORKER", "Stitching"],

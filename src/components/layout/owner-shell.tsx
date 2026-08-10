@@ -233,25 +233,23 @@ export function OwnerShell({
   /**
    * Permission gate for items carrying a registry key.
    *
-   * Transitional rule: the tenant administrators (owner, co-owner, manager) are
-   * allowed through without holding the key. Those keys were added to
-   * DEFAULT_GRANTS after some tenants were provisioned, so their existing Role
-   * rows do not have them — requiring the key outright would silently remove
-   * the nav from the very people who administer it. Supervisors and workers get
-   * the exact check, which is the point: a store manager who can book an order
-   * no longer sees Billing.
+   * Every role now holds its entitled grants — scripts/backfill-role-grants.ts
+   * topped up the roles that predated these keys, so the transitional carve-out
+   * that let administrators through without the key is gone. Everyone is
+   * checked the same way.
    *
-   * Remove this carve-out once existing roles have been backfilled.
+   * `undefined` still means "unknown" rather than "denied": a caller that has
+   * not been updated to pass the prop degrades to the old nav rather than an
+   * empty one. Undefined is not the same as an empty array.
    */
   const grantAllows = useMemo(() => {
     const held = grantedPermissions ? new Set(grantedPermissions) : null;
-    const isAdmin = userRole === "OWNER" || userRole === "CO_OWNER" || userRole === "MANAGER";
     return (item: NavItem) => {
       if (!item.requires) return true;
-      if (held === null || isAdmin) return true;
+      if (held === null) return true;
       return held.has(item.requires);
     };
-  }, [grantedPermissions, userRole]);
+  }, [grantedPermissions]);
 
   const visibleNavItems = useMemo(
     () => navItems.filter((item) => moduleAllows(item) && grantAllows(item)),

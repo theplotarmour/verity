@@ -23,18 +23,22 @@ export async function GET(request: NextRequest) {
       factory = await prisma.factory.findUniqueOrThrow({ where: { id: factoryId } });
     }
 
-    const pinHash = hashPin("7190", factory.id);
+    // Carxen's own owner. Deliberately one of its staff numbers, not the HQ
+    // operator's — the operator belongs to PlotArmour, a different
+    // organisation, and seeding them inside a client workspace is what once
+    // left that tenant ownerless when the operator was renamed.
+    const pinHash = hashPin("1234", factory.id);
 
     let owner = await prisma.user.findUnique({
-      where: { phone: "9971907190" }
+      where: { phone: "8800000001" }
     });
 
     if (!owner) {
       owner = await prisma.user.create({
         data: {
           factoryId: factory.id,
-          name: "Carxen Owner",
-          phone: "9971907190",
+          name: "Rohit Verma",
+          phone: "8800000001",
           role: "OWNER",
           roleId: await systemRoleId(factory.organizationId, "OWNER"),
           pinHash,
