@@ -8,7 +8,7 @@ import {
   Factory, ImagePlus, Loader2, Upload, Car, Layers, Palette, Plus, ChevronRight, 
   ChevronDown, Check, X, ShieldAlert, Search, FileSpreadsheet, Smartphone, 
   Download, CheckCircle2, Info, Edit, Settings, Database, Activity, HardDrive, 
-  Cpu, FileCode, Trash2, ArrowRight, UserCheck, ShieldCheck, Plug
+  Cpu, FileCode, Trash2, ArrowRight, UserCheck, ShieldCheck, Plug, CreditCard
 } from "lucide-react";
 import { Surface } from "@/components/design/Surface";
 import { NotificationPrefsCard } from "@/components/settings/NotificationPrefsCard";
@@ -573,13 +573,22 @@ export function SettingsClient({
                     </p>
                   </div>
                 </div>
-                <Link
-                  href="/owner/settings/integrations"
-                  className="flex h-8 cursor-pointer items-center gap-1.5 rounded-xl bg-[var(--brand)] px-3.5 text-[10px] font-bold text-white shadow-sm transition hover:opacity-90"
-                >
-                  <Plug className="h-3.5 w-3.5" />
-                  Manage
-                </Link>
+                <div className="flex items-center gap-2">
+                  <Link
+                    href="/owner/settings/billing"
+                    className="flex h-8 cursor-pointer items-center gap-1.5 rounded-xl border border-border px-3.5 text-[10px] font-bold text-text-primary transition hover:border-[var(--brand)]/50"
+                  >
+                    <CreditCard className="h-3.5 w-3.5" />
+                    Billing
+                  </Link>
+                  <Link
+                    href="/owner/settings/integrations"
+                    className="flex h-8 cursor-pointer items-center gap-1.5 rounded-xl bg-[var(--brand)] px-3.5 text-[10px] font-bold text-white shadow-sm transition hover:opacity-90"
+                  >
+                    <Plug className="h-3.5 w-3.5" />
+                    Integrations
+                  </Link>
+                </div>
               </div>
               <p className="text-[12px] text-text-secondary">
                 Let an external storefront post orders straight into Verity, and send order

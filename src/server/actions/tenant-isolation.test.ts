@@ -34,6 +34,7 @@ const GUARDED_FILES = [
   "billing.ts",
   "serviceQuality.ts",
   "integrations.ts",
+  "billing-account.ts",
 ];
 
 /**

@@ -18,6 +18,7 @@ ignores that produces a rewrite estimate instead of a plan.
 | [03](./03-module-contract.md) | Module contract & developer platform | D | External developers |
 | [04](./04-franchise-modules.md) | Kitchen Ops, Field Compliance, Franchise Ops | B | Franchise pack completeness |
 | [05](./05-master-data-refinements.md) | Master Data edit & delete options | A | UI/UX and database consistency |
+| [06](./06-veda-backports.md) | Veda platform backports & optimizations | B | Alignment with Veda updates |
 
 Read 00 first. The other documents assume the manifest exists.
 
