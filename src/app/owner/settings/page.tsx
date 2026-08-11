@@ -4,6 +4,7 @@ import { SettingsClient } from "./client";
 import { PageHeader } from "@/components/design/PageHeader";
 import { canUser, sanitizeMatrix } from "@/lib/server/permissions";
 import { PermissionMatrixCard } from "./PermissionMatrixCard";
+import { entitledModules } from "@/platform/modules/entitlements";
 
 import prisma from "@/lib/prisma";
 import { itemsInRootCategory } from "@/lib/server/categoryItems";
@@ -15,6 +16,13 @@ export default async function OwnerSettingsPage() {
   if (!(await canUser(dbUser, "ACCESS_SETTINGS"))) redirect("/unauthorized");
 
   const settings = (dbUser.factory?.settings as any) || {};
+
+  // The permission matrix only offers grants for modules this tenant actually
+  // has. Resolved here rather than in the client component, which cannot read
+  // entitlements.
+  const activeModules = dbUser.factory?.organizationId
+    ? await entitledModules(dbUser.factory.organizationId)
+    : undefined;
 
   const [brands, models, productCategories, products, productVariants, coOwners, templates, suppliers, warehouses, materialCategories, materials, designs, colors, productTypes] = await Promise.all([
     Promise.resolve([]),
@@ -71,7 +79,12 @@ export default async function OwnerSettingsPage() {
         productTypes
       }}
     />
-    {canAssignRoles && <PermissionMatrixCard saved={sanitizeMatrix(settings.permissions)} />}
+    {canAssignRoles && (
+      <PermissionMatrixCard
+        saved={sanitizeMatrix(settings.permissions)}
+        enabledModules={activeModules}
+      />
+    )}
     </div>
   );
 }

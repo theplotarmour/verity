@@ -17,8 +17,9 @@ ignores that produces a rewrite estimate instead of a plan.
 | [02](./02-ai-assistant.md) | AI assistant (Groq) | A | The implementation-cost wedge |
 | [03](./03-module-contract.md) | Module contract & developer platform | D | External developers |
 | [04](./04-franchise-modules.md) | Kitchen Ops, Field Compliance, Franchise Ops | B | Franchise pack completeness |
+| [05](./05-master-data-refinements.md) | Master Data edit & delete options | A | UI/UX and database consistency |
 
-Read 00 first. The other four assume the manifest exists.
+Read 00 first. The other documents assume the manifest exists.
 
 ## Status of the architecture's claims
 

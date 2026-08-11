@@ -23,6 +23,8 @@ import {
   withDependencies,
 } from "@/platform/modules/registry";
 import { entitledModules } from "@/platform/modules/entitlements";
+import { invalidate } from "@/lib/server/ttl-cache";
+import { syncSubscriptionLines } from "@/platform/billing/invoices";
 import { issueKeyMaterial } from "@/lib/server/api-keys";
 import { WEBHOOK_EVENTS } from "@/lib/webhooks/outbox";
 import { assertDeliverable } from "@/lib/webhooks/url-guard";
@@ -310,6 +312,13 @@ export async function updateTenantModules(organizationId: string, moduleKeys: st
         });
       }),
     );
+
+    // `entitledModules` is held for 60 seconds, so a write that only calls
+    // revalidatePath leaves the toggle looking broken for up to a minute. This
+    // was missing, and it is why the HQ module switch appeared not to take.
+    invalidate(`entitlements:${organizationId}`);
+    // Billing follows entitlement, or a module works and is never charged for.
+    await syncSubscriptionLines(organizationId).catch(() => undefined);
 
     revalidatePath("/verity/clients");
     revalidatePath("/owner", "layout");
