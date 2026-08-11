@@ -8,7 +8,7 @@ import {
   Factory, ImagePlus, Loader2, Upload, Car, Layers, Palette, Plus, ChevronRight, 
   ChevronDown, Check, X, ShieldAlert, Search, FileSpreadsheet, Smartphone, 
   Download, CheckCircle2, Info, Edit, Settings, Database, Activity, HardDrive, 
-  Cpu, FileCode, Trash2, ArrowRight, UserCheck, ShieldCheck
+  Cpu, FileCode, Trash2, ArrowRight, UserCheck, ShieldCheck, Plug
 } from "lucide-react";
 import { Surface } from "@/components/design/Surface";
 import { NotificationPrefsCard } from "@/components/settings/NotificationPrefsCard";
@@ -557,6 +557,37 @@ export function SettingsClient({
           {/* ──────────────── RIGHT COLUMN: Catalog Explorer & Database Gateway (Span 5) ──────────────── */}
           <div className="lg:col-span-5 flex flex-col gap-8 w-full min-w-0">
             
+            {/* Integrations. Sits beside Master Data because both are "things
+                you set up once and come back to rarely" — and because a key
+                that can inject production work belongs behind Settings. */}
+            <Surface className={components.card.gateway}>
+              <div className="mb-4 flex flex-col justify-between gap-3 border-b border-border/40 pb-4 sm:flex-row sm:items-center">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-xl bg-brand-soft p-2 text-[var(--brand)]">
+                    <Plug className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className={typography.headingL}>Integrations</h2>
+                    <p className={typography.caption}>
+                      API keys and webhooks for your storefront.
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href="/owner/settings/integrations"
+                  className="flex h-8 cursor-pointer items-center gap-1.5 rounded-xl bg-[var(--brand)] px-3.5 text-[10px] font-bold text-white shadow-sm transition hover:opacity-90"
+                >
+                  <Plug className="h-3.5 w-3.5" />
+                  Manage
+                </Link>
+              </div>
+              <p className="text-[12px] text-text-secondary">
+                Let an external storefront post orders straight into Verity, and send order
+                milestones onward to your own systems. Orders arrive as drafts — nothing reaches
+                the floor until someone here releases it.
+              </p>
+            </Surface>
+
             {/* Master Data Gateway Card */}
             <Surface className={components.card.gateway}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/40 pb-4 mb-4">

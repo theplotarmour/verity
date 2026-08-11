@@ -33,6 +33,7 @@ const GUARDED_FILES = [
   "scheduling.ts",
   "billing.ts",
   "serviceQuality.ts",
+  "integrations.ts",
 ];
 
 /**
@@ -198,6 +199,30 @@ describe("cross-tenant surface", () => {
       unguarded,
       `Unguarded cross-tenant actions: ${unguarded.join(", ")}`,
     ).toEqual([]);
+  });
+
+  it("owner-facing integration actions never take a factoryId argument", () => {
+    // `hq.ts` legitimately takes one — an operator acts across tenants and is
+    // gated by requireHqAction(). `integrations.ts` is the same capability
+    // exposed to owners, where a factoryId parameter would be a field naming
+    // somebody else's workspace. It must come from the session, always.
+    const source = readFileSync(path.join(ACTIONS_DIR, "integrations.ts"), "utf8");
+
+    const signatures = [...source.matchAll(/export async function (\w+)\(([^)]*)\)/g)];
+    expect(signatures.length).toBeGreaterThan(3);
+
+    const offenders = signatures
+      .filter(([, , params]) => /factoryId/.test(params))
+      .map(([, name]) => name);
+
+    expect(
+      offenders,
+      `These accept a factoryId from the caller: ${offenders.join(", ")}. ` +
+        "Read it from getOwnerUser() instead.",
+    ).toEqual([]);
+
+    // And it must actually resolve one.
+    expect(source).toMatch(/user\.factoryId/);
   });
 
   it("storage upload requires a session and anchors the path to the caller", () => {
