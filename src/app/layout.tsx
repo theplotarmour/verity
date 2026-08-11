@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Noto_Sans_Devanagari, Sora } from "next/font/google";
 import { RootProviders } from "@/components/providers/root-providers";
+import { CursorGlow } from "@/components/ui/cursor-glow";
 import "./globals.css";
 
 const inter = Inter({
@@ -70,8 +71,13 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${inter.variable} ${sora.variable} ${notoSansDevanagari.variable} min-h-screen overflow-x-hidden scroll-smooth`}
     >
-      <body className="min-h-screen overflow-x-hidden bg-background text-text-primary font-sans antialiased">
+      {/* `verity-canvas` paints the fixed backdrop gradients behind everything
+          via ::after at z-index -1 — no extra element, and it cannot intercept
+          a click. */}
+      <body className="verity-canvas min-h-screen overflow-x-hidden bg-background text-text-primary font-sans antialiased">
         <RootProviders>{children}</RootProviders>
+        {/* One delegated pointer listener for every glass card on the page. */}
+        <CursorGlow />
       </body>
     </html>
   );

@@ -13,11 +13,8 @@ import {
   LogOut,
   Menu,
   Search,
-  Sparkles,
   Users,
   CircleCheckBig,
-  PanelLeftClose,
-  PanelLeftOpen,
   LifeBuoy,
   Hammer,
   FolderKanban,
@@ -37,6 +34,7 @@ import { can, Permission, type PermissionMatrix } from "@/lib/permissions";
 import type { ModuleKey } from "@/platform/modules/registry";
 import { VerityLogo } from "@/components/ui/VerityLogo";
 import { InstallPromptBanner } from "./InstallPromptBanner";
+import { NavMenu } from "./NavMenu";
 import { BRAND_ACCENT } from "@/lib/brand";
 
 type NavItem = {
@@ -168,19 +166,6 @@ export function OwnerShell({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [menuOpen, setMenuOpen] = useState(false);
-  // Collapsing is the owner's call, remembered between visits. Below xl the
-  // sidebar is icon-only anyway; this is about reclaiming the 260px on a wide
-  // screen when the sheet in the middle is what matters.
-  const [collapsed, setCollapsed] = useState(false);
-  useEffect(() => {
-    setCollapsed(window.localStorage.getItem("verity.sidebarCollapsed") === "1");
-  }, []);
-  const toggleCollapsed = () =>
-    setCollapsed((was) => {
-      const next = !was;
-      window.localStorage.setItem("verity.sidebarCollapsed", next ? "1" : "0");
-      return next;
-    });
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   // The mobile Operations sheet. Closed on navigation, below.
@@ -301,10 +286,6 @@ export function OwnerShell({
   }, [reachable]);
   const globalSearchPath = pathname.startsWith("/owner/search") ? "/owner/search" : "/owner/search";
   const unreadCount = notifications.filter((item) => !item.read).length;
-  const breadcrumb = [
-    "Factory",
-    activeItem?.label ?? "Overview",
-  ].join(" > ");
 
   async function handleLogout() {
     await fetch("/api/logout", { method: "POST" });
@@ -336,110 +317,67 @@ export function OwnerShell({
       {/* ==================================================
           DESKTOP & TABLET SHELL (md and up)
           ================================================== */}
-      <div className="hidden md:flex h-screen w-full overflow-hidden bg-background text-text-primary">
-        <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,87,255,0.08),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(0,182,122,0.06),transparent_24%)] dark:opacity-40" />
-        
-        {/* Sidebar */}
-        <aside className={cn(
-          "w-[80px] shrink-0 border-r border-border bg-[rgba(255,255,255,0.84)] dark:bg-[rgba(10,10,10,0.84)] backdrop-blur-xl flex flex-col min-w-0 transition-[width] duration-200",
-          !collapsed && "xl:w-[260px]"
-        )}>
-          <div className={cn(
-            "flex h-16 items-center gap-3 border-b border-border px-5 shrink-0",
-            collapsed ? "justify-center" : "justify-center xl:justify-start"
-          )}>
-            <Link href="/owner/dashboard" className="flex items-center gap-3 min-w-0">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface-2">
+      {/*
+        Desktop: a floating header over the canvas, not a sidebar.
+
+        The nav groups that were sidebar sections are dropdowns now. That trades
+        some wayfinding for the width it gives back — so the trigger stays lit
+        while any page inside its group is open, which is what keeps "where am
+        I" answerable without opening a menu. The backdrop gradients come from
+        `verity-canvas` on <body>; the old per-shell gradient div is gone with
+        the sidebar.
+      */}
+      <div className="hidden md:flex h-screen w-full flex-col overflow-hidden text-text-primary">
+          <header className="verity-glass z-40 mx-4 mt-3 flex shrink-0 items-center gap-3 rounded-full px-3 py-2">
+            {/* Identity, then the nav groups that used to be sidebar sections. */}
+            <Link href="/owner/dashboard" className="flex min-w-0 shrink-0 items-center gap-2.5 pl-1 pr-2">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-surface-2">
                 {factoryLogo ? (
                   <img src={factoryLogo} alt="" className="h-full w-full object-cover" />
                 ) : (
-                  <VerityLogo size={22} />
+                  <VerityLogo size={19} />
                 )}
-              </div>
-              <div className={cn("min-w-0", collapsed ? "hidden" : "hidden xl:block")}>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-text-tertiary truncate">
+              </span>
+              <span className="hidden min-w-0 lg:block">
+                <span className="block truncate text-[12px] font-semibold leading-tight text-text-primary">
+                  {factoryName}
+                </span>
+                <span className="block text-[9px] font-semibold uppercase tracking-[0.22em] text-text-tertiary">
                   Verity
-                </p>
-                <p className="text-xs font-semibold text-text-primary truncate">{factoryName}</p>
-              </div>
+                </span>
+              </span>
             </Link>
-          </div>
 
-          {/* Only offered where it changes anything: under xl the sidebar is
-              already icon-only, so a toggle there would appear to do nothing. */}
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className={cn(
-              "hidden xl:flex items-center gap-2 border-b border-border px-3 py-2 text-[11px] font-semibold text-text-tertiary transition hover:bg-surface-2/80 hover:text-text-primary",
-              collapsed ? "justify-center" : "justify-start"
-            )}
-          >
-            {collapsed ? (
-              <PanelLeftOpen className="h-4 w-4 shrink-0" />
-            ) : (
-              <>
-                <PanelLeftClose className="h-4 w-4 shrink-0" />
-                <span>Collapse</span>
-              </>
-            )}
-          </button>
+            <nav className="flex min-w-0 flex-1 items-center gap-0.5">
+              {navGroups.map((group) => {
+                // Same filtering the sidebar applied — module entitlement,
+                // registry grant, legacy permission, and the store-manager
+                // carve-out. Moving the nav must not move who can see what.
+                const storeManagerAllowed = ["/owner/order-taking", "/owner/dashboard", "/owner/inventory"];
+                const visible = group.items.filter((item) =>
+                  moduleAllows(item) &&
+                  grantAllows(item) &&
+                  can(userRole, item.permission, permissionMatrix) &&
+                  (userRole === "STORE_MANAGER"
+                    ? storeManagerAllowed.includes(item.href)
+                    : item.href !== "/owner/order-taking"));
+                if (visible.length === 0) return null;
+                return (
+                  <NavMenu
+                    key={group.title}
+                    title={group.title}
+                    pathname={pathname}
+                    items={visible.map((item) => ({
+                      href: item.href,
+                      label: item.label,
+                      icon: item.icon,
+                    }))}
+                  />
+                );
+              })}
+            </nav>
 
-          <div className="flex-1 overflow-y-auto px-3 xl:px-4 py-4 space-y-4">
-            {navGroups.map((group) => {
-              // Store managers only take orders: their sidebar is Order Taking +
-              // Dashboard. Everyone else uses Production; Order Taking is the
-              // store-manager surface, so it's hidden for other roles.
-              const storeManagerAllowed = ["/owner/order-taking", "/owner/dashboard", "/owner/inventory"];
-              const visible = group.items.filter(item =>
-                moduleAllows(item) &&
-                grantAllows(item) &&
-                can(userRole, item.permission, permissionMatrix) &&
-                (userRole === "STORE_MANAGER" ? storeManagerAllowed.includes(item.href) : item.href !== "/owner/order-taking"));
-              if (visible.length === 0) return null;
-              return (
-                <SidebarGroup key={group.title} title={group.title} collapsed={collapsed}>
-                  {visible.map((item) => (
-                    <SidebarLink key={item.href} item={item} collapsed={collapsed} active={pathname === item.href || pathname.startsWith(`${item.href}/`)} />
-                  ))}
-                </SidebarGroup>
-              );
-            })}
-          </div>
-
-          <div className="border-t border-border p-3 xl:p-4 shrink-0 mt-auto">
-            <div className={cn("text-center mb-4", collapsed ? "hidden" : "hidden xl:block")}>
-              <p className="text-[10px] font-semibold text-text-tertiary tracking-[0.05em]">Powered by</p>
-              <p className="text-xs font-bold tracking-widest text-[var(--brand)] mt-0.5">Verity</p>
-            </div>
-            <div className="rounded-[16px] border border-border bg-surface-2 p-3 xl:p-4 min-w-0">
-              <p className={cn("text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary truncate", collapsed ? "hidden" : "hidden xl:block")}>Session</p>
-              <p className="mt-1 text-xs font-semibold text-text-primary truncate text-center xl:text-left">{userName}</p>
-              <div className="mt-3 flex items-center justify-center xl:justify-between gap-2">
-                <Badge className={cn("bg-success-soft text-success", collapsed ? "hidden" : "hidden xl:inline-flex")}>LIVE</Badge>
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="flex h-8 w-8 xl:w-auto items-center justify-center gap-2 rounded-lg border border-[var(--brand)]/30 bg-transparent xl:px-2.5 text-xs font-semibold text-[var(--brand)] transition-all hover:bg-[var(--brand)]/5 hover:border-[var(--brand)]/50"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                  <span className={cn(collapsed ? "hidden" : "hidden xl:inline")}>Logout</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </aside>
-
-        {/* Main Content Area */}
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          {/* Topbar */}
-          <header className="h-16 shrink-0 border-b border-border bg-[rgba(247,250,252,0.88)] dark:bg-[rgba(10,10,10,0.88)] backdrop-blur-xl flex items-center justify-between px-6 z-40">
-            <div className="min-w-0 flex-1 flex items-center gap-4">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-text-tertiary truncate">
-                {breadcrumb}
-              </p>
+            <div className="min-w-0 flex items-center gap-4">
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -553,11 +491,11 @@ export function OwnerShell({
             </div>
           </header>
 
-          {/* Content */}
-          <main className="flex-1 overflow-y-auto p-6 min-w-0 flex flex-col scrollbar-none">
-            <div className="w-full min-w-0 flex flex-col flex-1">{children}</div>
+          {/* Content. min-h-0 so a Workspace child can own its own scrolling
+              rather than growing the page. */}
+          <main className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 min-w-0 scrollbar-none">
+            <div className="flex w-full min-w-0 flex-1 flex-col">{children}</div>
           </main>
-        </div>
       </div>
 
       {/* ==================================================
@@ -602,7 +540,9 @@ export function OwnerShell({
         <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 min-w-0">
           {/* Clears the fixed tab bar plus the home indicator, so the last row
               of a list is reachable rather than sitting under the chrome. */}
-          <div className="flex w-full min-w-0 flex-col space-y-4 pb-[calc(4rem+env(safe-area-inset-bottom)+1rem)]">
+          {/* Clearance for the dock: its 4rem height, the safe-area inset it
+              floats above, and the 0.5rem gap between the two. */}
+          <div className="flex w-full min-w-0 flex-col space-y-4 pb-[calc(4rem+max(0.5rem,env(safe-area-inset-bottom))+1rem)]">
             {children}
           </div>
         </main>
@@ -614,17 +554,25 @@ export function OwnerShell({
             <Link
               href="/owner/production?new=true"
               aria-label="New production order"
-              className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand)] text-white shadow-[0_8px_24px_-6px_var(--brand)] transition active:scale-95"
+              // Sits above the dock, using the same max() the dock does — with
+              // the bare env() it would tuck under the pill on a notched phone.
+              className="fixed bottom-[calc(4rem+max(0.5rem,env(safe-area-inset-bottom))+0.75rem)] right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand)] text-white shadow-[0_8px_24px_-6px_var(--brand)] transition active:scale-95"
             >
               <Plus className="h-6 w-6" />
             </Link>
           )}
 
-        {/* Bottom tab bar. Fixed, not absolute: on iOS the URL bar collapsing
-            changes the container height mid-scroll, and an absolutely
-            positioned bar visibly slides with it. */}
-        <nav className="fixed bottom-0 left-0 right-0 z-40 h-16 border-t border-border bg-background/80 backdrop-blur-xl pb-[env(safe-area-inset-bottom)] md:hidden">
-          <div className="flex h-16 items-stretch justify-around px-1">
+        {/* The dock. Fixed, not absolute: on iOS the URL bar collapsing changes
+            the container height mid-scroll, and an absolutely positioned bar
+            visibly slides with it.
+
+            Floating rather than edge-to-edge, but the safe-area inset is still
+            *outside* the pill — the gap belongs between the dock and the home
+            indicator, not inside the dock where it would push the icons off
+            centre. Tap targets stay 44px; the pill is chrome around them, not
+            a reason to shrink them. */}
+        <nav className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:hidden">
+          <div className="verity-glass flex h-16 items-stretch justify-around rounded-[22px] px-1">
             {mobileNav.dashboard ? (
               <MobileTab item={mobileNav.dashboard} pathname={pathname} />
             ) : null}
@@ -771,69 +719,4 @@ function MobileTab({ item, pathname }: { item: NavItem; pathname: string }) {
       </span>
     </Link>
   );
-}
-
-function SidebarGroup({
-  title,
-  children,
-  collapsed = false,
-}: {
-  title: string;
-  children: React.ReactNode;
-  collapsed?: boolean;
-}) {
-  return (
-    <div>
-      <p className={cn(
-        "px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-text-tertiary",
-        collapsed ? "hidden" : "hidden xl:block"
-      )}>
-        {title}
-      </p>
-      <div className="space-y-1">{children}</div>
-    </div>
-  );
-}
-
-function SidebarLink({
-  item,
-  active,
-  onClick,
-  collapsed = false,
-}: {
-  item: NavItem;
-  active: boolean;
-  onClick?: () => void;
-  collapsed?: boolean;
-}) {
-  return (
-    <Link
-      href={item.href}
-      onClick={onClick}
-      // The label is the only thing that goes; the icon keeps its hit area, and
-      // the title attribute carries the name for a collapsed rail.
-      title={collapsed ? item.label : undefined}
-      className={cn(
-        "flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
-        collapsed ? "justify-center" : "justify-center xl:justify-start",
-        active
-          ? "bg-[var(--brand)]/10 dark:bg-[var(--brand)]/15 text-[var(--brand)]"
-          : "text-text-secondary hover:bg-surface-2/80 hover:text-text-primary dark:hover:bg-white/5",
-      )}
-    >
-      <span className={cn(
-        "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-all duration-200",
-        active
-          ? "border-[var(--brand)]/30 bg-[var(--brand)]/15 text-[var(--brand)] shadow-[0_0_12px_-2px_var(--brand)]/30"
-          : "border-border/60 bg-white/50 dark:bg-white/6 dark:border-white/10 text-text-secondary group-hover:text-text-primary"
-      )}>
-        {item.icon}
-      </span>
-      <span className={cn(collapsed ? "hidden" : "hidden xl:inline")}>{item.label}</span>
-    </Link>
-  );
-}
-
-function ChevronRight() {
-  return <Sparkles className="h-4 w-4 text-text-tertiary" />;
 }
