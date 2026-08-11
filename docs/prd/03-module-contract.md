@@ -82,7 +82,7 @@ A PR touching `src/modules/<key>/` must pass:
 
 | Check | Fails when |
 |---|---|
-| Manifest validity | key collides, dependency missing, price outside its tier band |
+| Manifest validity | key collides, dependency missing, `pricingTier` absent or not 1–3 |
 | Isolation | any unscoped query |
 | Import boundary | reaching past another module's `index.ts` |
 | Version | public surface changed without a bump |
@@ -103,7 +103,13 @@ activate per tenant. Reads the same manifests as everything else.
 
 Activation shows what will be pulled in as dependencies *before* confirming —
 an operator enabling Manufacturing should know Inventory arrives with it and
-what that adds to the bill.
+what that adds to the bill. The figure comes from `modulePrice()`, including
+dependencies, so the number shown is the number charged.
+
+Where the modules a tenant is accumulating would cost less as a pack, the store
+says so. That is the upsell the 20–25% gap exists to create, and it only works
+if something surfaces it at the moment of decision rather than on a price page
+nobody revisits.
 
 ### R5 — Developer documentation
 The contract above, the manifest reference, a worked example building a small

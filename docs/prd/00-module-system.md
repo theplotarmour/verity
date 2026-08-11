@@ -78,11 +78,19 @@ export interface ModuleManifest extends ModuleDefinition {
   /** Settings pages this module contributes. */
   settingsRoutes?: { href: string; label: string; requires?: string }[];
 
-  /** 1 = universal, 2 = operations, 3 = vertical. Drives the price band. */
+  /**
+   * 1 = universal, 2 = operations, 3 = vertical.
+   *
+   * The tier *is* the price — `TIER_PRICE` in `src/platform/pricing.ts` maps it
+   * to one published number. There is deliberately no `monthlyPrice` field: a
+   * per-module price alongside a tier is two sources for one number, and the
+   * original price list broke precisely because a band and a pack total
+   * disagreed with nobody noticing.
+   *
+   * A module needing a bespoke price is a signal the tiers are wrong, and that
+   * is a pricing decision, not a manifest field.
+   */
   pricingTier: 1 | 2 | 3;
-
-  /** INR per month. Read by billing; see PRD 01. */
-  monthlyPrice: number;
 }
 ```
 
@@ -99,6 +107,11 @@ resolve a manifest whose `requires` names a module that does not exist.
 
 **Acceptance:** a test asserts every `ModuleKey` has a manifest, every
 `requires` and `optional` entry resolves, and no two manifests share a key.
+
+When manifests land, `pricingTier()` in `pricing.ts` — which currently *derives*
+the tier from `vertical` and a hardcoded Tier 1 list — reads it from the
+manifest instead. `pricing.test.ts` already asserts every vertical module is
+Tier 3, so the migration is covered before it starts.
 
 ### R2 — Navigation from manifests
 The shell builds its nav from active modules' `navItems` instead of a hardcoded

@@ -116,10 +116,44 @@ anomalies in a table will find them whether or not they exist.
 
 ### R7 — Cost and abuse control
 Per-tenant monthly token budget, enforced server-side, surfaced in HQ. Without
-it a single tenant's chat loop is an unbounded bill against a ₹3,000/month
-platform fee.
+it a single tenant's chat loop is an unbounded cost against a ₹2,500/month
+platform fee — and on a trial, against ₹0.
+
+Trials get a tighter budget than paying tenants for exactly that reason: a
+7-day no-card signup is an unauthenticated stranger with an inference budget.
 
 **Acceptance:** a tenant at their cap gets a clear message, not a failure.
+
+### R8 — Trial conversion nudge
+On day 5 of a 7-day trial the assistant raises activating billing, in the
+conversation rather than as a banner.
+
+It must be **specific and true**: what the tenant has actually configured, what
+their pack would cost including their team bracket, and what happens on day 8.
+A generic "your trial is ending" is a banner with extra steps; "you have 14
+outlets and 3 users, Franchise QSR OS is ₹19,999 plus nothing for team size at
+your headcount, and on Sunday this becomes read-only" is a decision.
+
+Day 5 rather than day 7 is deliberate — see PRD 01. A trial ending tomorrow
+forces a decision under pressure, and that decision is usually "not now".
+
+**Acceptance:** the nudge quotes a price computed by `monthlyTotal()`, not a
+hardcoded figure; a test asserts the quoted number equals the function's output
+for that tenant's pack and bracket.
+
+### R9 — Read-only awareness
+On a `TRIAL_EXPIRED` or `READ_ONLY` subscription, the assistant stays available
+for questions and explicitly cannot propose writes. Asked to do something that
+writes, it says why and how to restore access.
+
+An assistant that offers to fix something it cannot fix is worse than one that
+declines — the user follows the suggestion, it fails, and now they distrust both
+the assistant and the product. The proposal path in R4 executes real actions
+with the user's session, so it inherits the server-side write guard
+automatically; this requirement is about not *offering*.
+
+**Acceptance:** with a read-only subscription, a proposal that writes is refused
+before execution with a message naming the subscription state.
 
 ## Risks
 
@@ -128,8 +162,11 @@ platform fee.
 | Hallucinated fields or screens | R1 grounding; never ask the model to recall structure |
 | Prompt injection into tool calls | R3: tools cannot express another tenant |
 | Assistant becomes a privilege-escalation path | R4: user's own session and permissions |
-| Runaway inference cost | R7 budget per tenant |
+| Runaway inference cost | R7 budget per tenant, tighter on trials |
+| Free trials farmed for inference | R7 trial budget; a no-card signup is a stranger with a token allowance |
 | Deprecated model IDs | Pinned in one constant, treated as config |
+| The nudge quotes a stale price | R8 computes it with `monthlyTotal()`; never hardcoded |
+| Assistant offers what a read-only tenant cannot do | R9 refuses before proposing, naming the state |
 | Users trust a confident wrong answer | Cite the guide section; link rather than paraphrase |
 
 ## Success criteria

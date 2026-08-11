@@ -31,28 +31,54 @@ roadmap's Phase A is short because most of the substrate is already there.
 | "Modules are independently installable units" | **Partly.** `ModuleEntitlement` already turns modules on and off per tenant, and `guardModuleAction` / `guardModulePage` enforce it. But a module is an entry in one registry file, not a folder that owns anything. See [00](./00-module-system.md). |
 | "Each module owns its DB tables, permissions, nav items" | **Permissions yes, the rest no.** Permissions are declared per module in the registry. DB tables live in one 2,500-line `schema.prisma`. Nav items are a hardcoded array in `owner-shell.tsx` that *filters* on `requiredModule` — module-aware, but not module-owned. |
 | "Modules declare versioned contracts; core never breaks them" | **Not built.** `ModuleDefinition` has no `version` field. Nothing to break yet, which makes now the cheap time to add it. |
-| "Pay only for active modules, per month" | **Not built.** Billing is a flat `Factory.monthlyFee` integer. There is no per-module price, no metering, and no platform→tenant invoice. See [01](./01-metering-and-billing.md). |
+| "Pay only for active modules, per month" | **Priced, not yet billed.** `pricing.ts` and `TenantSubscription` exist, with the pack discount under test. Still missing: charge lines, invoice generation, and the read-only enforcement a lapsed trial needs. See [01](./01-metering-and-billing.md). |
 | "Vertical packs compose a tailored UI from the same modules" | **True.** Four packs, each resolving to a dashboard through `resolvePackKey`, guarded by a test that fails if a pack has no dashboard case. |
 | "AI assistant configures 80% on first setup" | **Not built.** No Groq integration, no assistant surface. See [02](./02-ai-assistant.md). |
 
-## Open questions for the business
+## Commercial ground truth — settled
 
-These are decisions the PRDs cannot make on your behalf, flagged where they
-appear. Collected here because each one blocks a section.
+Three decisions are locked and implemented. They apply across all six PRDs.
+Prices live in `src/platform/pricing.ts`; `src/platform/pricing.test.ts`
+recomputes every pack discount from the pack definitions on each run, so the
+price list cannot drift from the claim the way it did before.
 
-1. **The pack pricing does not produce the stated discount.** Priced at the
-   midpoint of the published tier bands, the Auto Components pack costs
-   ₹24,750 à la carte and ₹24,999 as a pack — the bundle is *more expensive*.
-   The advertised 25–30% only appears if every module is priced at the top of
-   its band. Detail and worked numbers in [01](./01-metering-and-billing.md).
-2. **Per-user overage contradicts the competitive thesis.** Section 2 of the
-   architecture praises Frappe for charging per site rather than per user, and
-   calls that "the pricing model SMBs want". Section 5 then adds ₹500/user
-   beyond five. Both can be defended; they cannot both be the pitch.
-3. **There is no free tier.** Odoo's "One App Free" is its acquisition funnel,
-   and the table treats it as a trap rather than as competition. Verity's
-   cheapest entry is ₹7,500/month. That is a deliberate choice or an oversight,
-   and it decides whether self-serve signup is worth building.
-4. **Which pack does a new tenant get by default?** Today an unrecognised
-   `industry` falls back to the auto-components dashboard. That is right for
-   the current client mix and wrong once retail outnumbers factories.
+**Module prices — one number per tier, not a band.** Platform ₹2,500 · Tier 1
+₹2,500 · Tier 2 ₹4,500 · Tier 3 ₹7,000. Platform plus one Tier 1 module is
+exactly ₹5,000/month, which is the "no client too small" entry price, asserted
+by test.
+
+**Packs are 20–25% cheaper than their parts**, enforced rather than asserted.
+
+| Pack | À la carte | Pack | Discount |
+|---|---|---|---|
+| Auto Components OS | ₹32,500 | ₹24,999 | 23.1% |
+| Facility Management OS | ₹32,500 | ₹25,499 | 21.5% |
+| Franchise QSR OS | ₹26,000 | ₹19,999 | 23.1% |
+| Franchise Retail OS | ₹28,000 | ₹21,999 | 21.4% |
+
+That gap is the upsell — a client who came for Inventory can see the whole
+vertical costs less than assembling it.
+
+**Team size is three flat brackets, not per-seat.** Small (≤10) included ·
+Medium (11–50) +₹3,000 · Large (51+) +₹8,000. A factory with eighty floor
+workers is one flat Large; nobody audits a headcount to bill.
+
+**Trial is 7 days, no card.** Day 5 the assistant nudges, day 8 the workspace
+goes read-only, 30 days of retention from that point before a deletion warning.
+`SubscriptionStatus` carries `TRIAL_EXPIRED` and `READ_ONLY` as distinct states —
+same access, different story, different recovery path.
+
+### Still open
+
+1. **No free tier.** Odoo's "One App Free" is its acquisition funnel, and the
+   architecture treats it as a trap rather than as competition. The 7-day trial
+   is now the self-serve door, which may be sufficient — but a trial expires and
+   a free tier does not, and only one of those keeps a dormant prospect
+   reachable.
+2. **Which pack does a new tenant get by default?** An unrecognised `industry`
+   falls back to the auto-components dashboard. Right for the current client
+   mix, wrong once retail outnumbers factories.
+3. **Franchise pack prices will need raising.** PRD 04 adds three Tier 3 modules
+   to the franchise packs, taking QSR's à la carte total from ₹26,000 to
+   ₹40,000. The pack price has to move with it. `pricing.test.ts` will fail when
+   those modules land, which is the intended reminder.

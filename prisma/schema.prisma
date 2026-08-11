@@ -1734,6 +1734,7 @@ model Organization {
   roles        Role[]
   entitlements ModuleEntitlement[]
   productTypes ProductType[]
+  subscription TenantSubscription?
 }
 
 model ModuleEntitlement {
@@ -2676,4 +2677,89 @@ model WebhookDelivery {
   @@index([status, nextAttemptAt])
   @@index([factoryId])
   @@index([endpointId])
+}
+
+// ==========================================
+// PLATFORM BILLING
+//
+// Verity charging the tenant. Deliberately separate from ServiceInvoice, which
+// is the tenant charging *their* customer — a facility-management company
+// billing a client for a month of guarding. Sharing one table would put
+// Verity's revenue inside the tenant's own books, visible on their screens and
+// included in their Tally export.
+//
+// See docs/prd/01-metering-and-billing.md. Prices live in
+// src/platform/pricing.ts, with a test that recomputes every pack discount.
+// ==========================================
+
+/// Team size as three flat brackets, not a per-seat count.
+///
+/// Per-user pricing was dropped on purpose: it contradicted the competitive
+/// position (which argues against per-seat), and at fifty users it nearly
+/// doubled the bill — recreating the economics the whole product attacks. A
+/// factory with eighty floor workers is one flat LARGE, and nobody has to audit
+/// a headcount to produce an invoice.
+enum TeamSizeBracket {
+  SMALL // up to 10 — included in the base
+  MEDIUM // 11–50
+  LARGE // 51+
+}
+
+enum SubscriptionStatus {
+  /// 7 days, no card. Full access.
+  TRIAL
+  /// Paying.
+  ACTIVE
+  /// The trial lapsed without converting. Workspace is readable, not writable.
+  TRIAL_EXPIRED
+  /// A paying tenant who lapsed. Same access as TRIAL_EXPIRED, different story
+  /// and a different recovery path — which is why it is not one state.
+  READ_ONLY
+  /// Deliberately ended.
+  CANCELLED
+}
+
+model TenantSubscription {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  status SubscriptionStatus @default(TRIAL)
+
+  /// Set when the tenant is on a vertical pack; null when à la carte. Modules
+  /// are still the source of truth for *access* — this only decides the price.
+  packKey String?
+
+  teamSizeBracket TeamSizeBracket @default(SMALL)
+
+  /// All amounts are **paise**, as integers. Never a Float: a rounding error in
+  /// a price is a support conversation nobody can win.
+  ///
+  /// Snapshotted at signup rather than read live from the price list. A tenant
+  /// who signed at ₹19,999 keeps paying it when the list moves, until someone
+  /// deliberately re-prices them — the alternative silently raises every
+  /// existing customer's bill the moment marketing edits a number.
+  basePrice    Int
+  bracketPrice Int @default(0)
+
+  /// When the free trial ends. Day 5 triggers the assistant's nudge, day 8 the
+  /// workspace goes read-only.
+  trialEndsAt DateTime?
+
+  /// When the workspace became read-only, whether from a lapsed trial or a
+  /// lapsed subscription. Retention counts from here, not from trialEndsAt —
+  /// a tenant who paid for six months and then lapsed gets the same 30 days as
+  /// one who never paid, counted from when they actually lost write access.
+  readOnlySince DateTime?
+
+  currentPeriodStart DateTime @default(now())
+  currentPeriodEnd   DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The drain that expires trials and lapses subscriptions claims work with
+  /// these two together.
+  @@index([status, trialEndsAt])
+  @@index([status, readOnlySince])
 }

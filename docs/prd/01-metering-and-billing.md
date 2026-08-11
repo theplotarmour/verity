@@ -20,87 +20,96 @@ different lifecycle. Reusing `ServiceInvoice` for both would put Verity's
 revenue inside the tenant's own books, visible to them and included in their
 Tally export.
 
-## Pricing problems to resolve before building
+## The price list — settled
 
-The architecture's pricing section is internally inconsistent. These are not
-implementation details — they change the schema — so they are here rather than
-buried.
+Three commercial decisions are locked. They are implemented in
+`src/platform/pricing.ts` and enforced by `src/platform/pricing.test.ts`, which
+recomputes every pack discount from the pack definitions on each run.
 
-### The packs are not cheaper than à la carte
+That test exists because the previous price list was prose, and prose drifted:
+it advertised a 25–30% pack discount while, at the midpoint of its own published
+bands, every pack cost **more** than buying the same modules individually.
+Nothing failed. The claim simply stopped being true in a table nobody
+recomputed.
 
-Taking the published tier bands (Tier 1 ₹1,500–3,000, Tier 2 ₹2,000–5,000,
-Tier 3 ₹3,000–8,000, platform ₹3,000) and pricing each module at the **midpoint**
-of its band:
+### 1. Module prices — one number per tier
 
-| Pack | À la carte at midpoint | Pack price | Actual discount |
+The band was the defect. "Tier 2 costs ₹2,000–₹5,000" gives two answers to
+"what does Quality cost", and the discount was computed against one while the
+price list showed the other. A tier is now a taxonomy; the price is a number.
+
+| | Price/month | Modules |
+|---|---|---|
+| Platform base | ₹2,500 | Core + Small team bracket |
+| Tier 1 — universal | ₹2,500 each | Inventory, People, Helpdesk, Billing |
+| Tier 2 — operations | ₹4,500 each | Procurement, Sales, Manufacturing, Quality, Assets, Projects, Scheduling, Sites, Reporting |
+| Tier 3 — vertical | ₹7,000 each | Automotive, Franchise Ops, Kitchen Ops, Field Compliance, … |
+
+Platform + one Tier 1 module is **exactly ₹5,000/month**, which is the "no
+client too small" entry price the strategy commits to. That is a number with a
+promise attached, so a test asserts it rather than trusting the arithmetic to
+stay true.
+
+### 2. Pack prices — a real 20–25% discount
+
+The gap is deliberate. It is the upsell: a client who came for Inventory must be
+able to see that the whole vertical costs less than assembling it piece by
+piece.
+
+| Pack | À la carte | Pack price | Discount |
 |---|---|---|---|
-| Auto Components OS | ₹24,750 | ₹24,999 | **−1%** (pack costs more) |
-| Facility Management OS | ₹20,250 | ₹22,999 | **−14%** (pack costs more) |
-| Franchise QSR OS | ₹25,500 | ₹28,999 | **−14%** (pack costs more) |
-| Franchise Retail OS | ₹25,500 | ₹26,999 | **−6%** (pack costs more) |
+| Auto Components OS | ₹32,500 | **₹24,999** | 23.1% |
+| Facility Management OS | ₹32,500 | **₹25,499** | 21.5% |
+| Franchise QSR OS | ₹26,000 | **₹19,999** | 23.1% |
+| Franchise Retail OS | ₹28,000 | **₹21,999** | 21.4% |
 
-<details>
-<summary>Working, so the numbers can be checked rather than trusted</summary>
+These totals come from the **actual pack definitions in `packs.ts`**, not from
+the architecture document's module lists — the two differ, because the franchise
+packs gained `sites` and `helpdesk` when the dashboards were found to be reading
+data the packs did not entitle. Pricing against the document rather than the code
+was the first thing the test caught.
 
-Midpoints: Tier 1 ₹2,250 · Tier 2 ₹3,500 · Tier 3 ₹5,500 · platform ₹3,000.
-Core is ₹0 (bundled into the platform fee).
+**Consequence to expect:** PRD 04 adds Franchise Ops, Kitchen Ops and Field
+Compliance to the franchise packs. Three Tier 3 modules at ₹7,000 raise the QSR
+à la carte total from ₹26,000 to ₹40,000, and the pack price must rise with it
+or the discount leaves the band. The test will fail the moment those modules are
+added — which is the intended way to be reminded.
 
-- **Auto Components** = platform 3,000 + Inventory 2,250 + Manufacturing 3,500 +
-  Quality 3,500 + Procurement 3,500 + Sales 3,500 + Automotive 5,500 = **24,750**
-- **Facility Management** = 3,000 + People 2,250 + Sites 3,500 + Scheduling 3,500 +
-  Helpdesk 2,250 + Assets 3,500 + Billing 2,250 = **20,250**
-- **Franchise QSR** = 3,000 + Inventory 2,250 + Quality 3,500 + Procurement 3,500 +
-  People 2,250 + Franchise Ops 5,500 + Kitchen Ops 5,500 = **25,500**
-- **Franchise Retail** = 3,000 + Inventory 2,250 + Sales 3,500 + People 2,250 +
-  Sites 3,500 + Franchise Ops 5,500 + Field Compliance 5,500 = **25,500**
+### 3. Team size — three flat brackets, no per-seat
 
-</details>
+Per-user pricing is gone. It contradicted the competitive position, and at fifty
+users it nearly doubled the bill — recreating exactly the per-seat economics the
+product attacks.
 
-The advertised "25–30% discount" only appears if every module is priced at the
-**top** of its band:
+| Bracket | Users | Add-on |
+|---|---|---|
+| Small | up to 10 | included |
+| Medium | 11–50 | +₹3,000/mo |
+| Large | 51+ | +₹8,000/mo |
 
-| Pack | À la carte at band maximum | Pack price | Discount |
-|---|---|---|---|
-| Auto Components OS | ₹34,000 | ₹24,999 | 26% |
-| Facility Management OS | ₹27,000 | ₹22,999 | 15% |
-| Franchise QSR OS | ₹35,000 | ₹28,999 | 17% |
+A factory with eighty floor workers is one flat Large. Nobody audits a headcount
+to produce an invoice, and a tenant hiring their fifty-second employee does not
+get a surprise. Worked example, pinned in the test: Auto Components OS at Large
+is ₹24,999 + ₹8,000 = **₹32,999/month**.
 
-So even at maxima only one pack hits the claim. A prospect who prices the
-modules individually will find the bundle worse value in every case — and
-prospects do that arithmetic.
+`bracketForUsers()` maps a headcount to a bracket, but it **suggests** — it does
+not auto-charge. Silently promoting a tenant's bracket because they added a
+seasonal worker is the surprise this model exists to remove.
 
-**Decision needed.** Either publish exact per-module prices chosen so the packs
-genuinely discount, or drop the "25–30%" claim and sell packs on configuration
-rather than price. The schema is the same either way; the marketing is not.
+### 4. Trial — 7 days, no card
 
-### Per-user overage contradicts the thesis
+Self-serve, zero friction, full access.
 
-The competitive section praises Frappe for charging per site and calls
-per-seat "the pricing model SMBs want". The pricing section then charges
-₹500/user beyond five.
+| Day | What happens |
+|---|---|
+| 0 | Workspace created, `status = TRIAL`, `trialEndsAt = +7d` |
+| 5 | Assistant raises activating billing (PRD 02, R8) |
+| 8 | `status = TRIAL_EXPIRED`, workspace read-only, `readOnlySince` set |
+| 38 | Deletion warning — 30 days after read-only began |
 
-At a 50-person facility-management company that is ₹22,500/month of overage on
-top of a ₹22,999 pack — seats nearly double the bill and grow without limit,
-which is the Odoo shape the wedge is supposed to attack. Verity is still much
-cheaper than Odoo at that size (₹45,499 against roughly ₹3.2L), so the pricing
-works; it is the *story* that stops working, because the objection "you charge
-per seat too" becomes true.
-
-**Decision needed.** Recommendation: keep per-user but cap it, or band it
-(5 / 25 / 100 / unlimited). A cap preserves the "no client too small" entry
-price without recreating per-seat economics at the top.
-
-### No free tier
-
-Odoo's "One App Free" is listed as a catch. It is also their funnel. Verity's
-cheapest door is ₹7,500/month, which means every customer arrives through a
-sales conversation.
-
-**Decision needed.** A single-module free tier capped at, say, two users would
-cost little (the module is already built) and is the only thing here that
-creates self-serve acquisition. It is out of scope for this PRD but it changes
-whether `TenantSubscription` needs a `plan: FREE` state, so it should be decided
-before the schema lands.
+The nudge is on day 5, not day 7, because a trial ending tomorrow forces a
+decision under pressure, and a decision made under pressure is usually
+"not now".
 
 ## Goals
 
@@ -119,34 +128,54 @@ before the schema lands.
 
 ## Requirements
 
-### R1 — Subscription model
+### R1 — Subscription model — **built**
+
+`TenantSubscription` is in `schema.prisma` and pushed. There is no user-count
+column by design; the bracket is the charge.
 
 ```prisma
+enum TeamSizeBracket { SMALL MEDIUM LARGE }
+
+enum SubscriptionStatus {
+  TRIAL          // 7 days, no card, full access
+  ACTIVE         // paying
+  TRIAL_EXPIRED  // trial lapsed without converting → read-only
+  READ_ONLY      // a paying tenant who lapsed → read-only
+  CANCELLED
+}
+
 model TenantSubscription {
-  id             String   @id @default(cuid())
-  organizationId String   @unique
-  /// Pack key when on a bundle, null when à la carte.
-  packKey        String?
-  /// Base platform fee in paise, snapshotted at signup.
-  platformFee    Int
-  includedUsers  Int      @default(5)
-  perUserFee     Int
-  status         String   // TRIAL, ACTIVE, PAST_DUE, CANCELLED
-  trialEndsAt    DateTime?
+  organizationId  String             @unique
+  status          SubscriptionStatus @default(TRIAL)
+  packKey         String?
+  teamSizeBracket TeamSizeBracket    @default(SMALL)
+  basePrice       Int                // paise, snapshotted
+  bracketPrice    Int                @default(0)
+  trialEndsAt     DateTime?
+  readOnlySince   DateTime?
   currentPeriodStart DateTime
   currentPeriodEnd   DateTime
 }
 ```
 
-**Money is stored in paise, as integers.** Not rupees, not floats. A float
-rounding error in a price is a support ticket that takes an hour to explain.
+**`TRIAL_EXPIRED` and `READ_ONLY` are both read-only, and are deliberately not
+one state.** The access is identical; the story is not. One never paid and needs
+a first-run activation flow; the other paid for months and needs a billing fix
+and an apology. Collapsing them loses the only information that decides which
+message to send.
 
-**Prices are snapshotted onto the subscription**, not read live from the
-manifest. A tenant who signed at ₹1,500 for Inventory keeps paying ₹1,500 when
-the list price moves to ₹2,000, until someone deliberately re-prices them. The
-alternative — reading `manifest.monthlyPrice` at invoice time — silently
-raises every existing customer's bill the moment a price changes, which is the
-kind of thing that ends up on Twitter.
+**`readOnlySince` counts retention, not `trialEndsAt`.** A tenant who paid for
+six months and then lapsed gets the same 30 days as one who never paid, counted
+from when they actually lost write access — otherwise a long-standing customer's
+data clock starts at a trial that ended a year ago.
+
+**Money is paise, as integers.** Not rupees, not floats. A rounding error in a
+price is a support conversation nobody can win.
+
+**Prices are snapshotted onto the subscription**, not read live. A tenant who
+signed at ₹19,999 keeps paying it when the list moves, until someone
+deliberately re-prices them. Reading the live price at invoice time silently
+raises every existing customer's bill the moment marketing edits a number.
 
 ### R2 — Charge lines
 
@@ -203,12 +232,33 @@ active `ModuleEntitlement` rows equals the set of open `SubscriptionLine` module
 rows. This is the check that catches drift, and drift here is either lost
 revenue or an overcharge.
 
-### R7 — Trials
-`ModuleEntitlement.expiresAt` already exists and is unused. A trial is an
-entitlement with an expiry and a line priced at zero. On expiry the module
-deactivates and the tenant is told beforehand.
+### R7 — Trial lifecycle
 
-**Acceptance:** an expired trial entitlement stops passing `guardModuleAction`.
+A scheduled job — the same cron shape as the webhook drain — moves subscriptions
+through the states:
+
+| Transition | Trigger | Effect |
+|---|---|---|
+| `TRIAL` → nudge | day 5 | Assistant raises billing (PRD 02 R8). Status unchanged. |
+| `TRIAL` → `TRIAL_EXPIRED` | `trialEndsAt` passed | `readOnlySince = now`. Workspace read-only. |
+| `ACTIVE` → `READ_ONLY` | payment lapsed | `readOnlySince = now`. |
+| any → `ACTIVE` | billing activated | `readOnlySince = null`. Full access returns. |
+| read-only → deletion warning | `readOnlySince` + 30d | Notify. **Nothing is deleted by this job.** |
+
+**Read-only means read-only, enforced server-side.** Hiding the buttons is not
+enforcement — a `"use server"` export is a public POST endpoint, which is the
+lesson `storage.ts` already taught this codebase. The write guard belongs beside
+`guardModuleAction`, so every action inherits it rather than each remembering.
+
+**Acceptance:**
+- a subscription past `trialEndsAt` refuses a write action and permits a read;
+- reactivating clears `readOnlySince` and restores writes in the same request;
+- the deletion-warning transition sends a notification and deletes nothing —
+  asserted by a row count before and after.
+
+**Data is never deleted by a scheduled job.** The warning is automatic;
+the deletion is a human with a reason. A cron that drops a tenant's workspace is
+one bad date comparison away from dropping a paying one.
 
 ## Risks
 
@@ -216,11 +266,19 @@ deactivates and the tenant is told beforehand.
 |---|---|
 | Billing drifts from entitlement | R6 reconciliation test, run in CI against seed data |
 | A price change silently re-bills existing tenants | Snapshotted prices on the line, never read live |
-| Float rounding in money | Integer paise everywhere; a lint rule against `Float` on money columns |
+| Float rounding in money | Integer paise everywhere; `pricing.test.ts` asserts every published amount is a whole number of paise |
 | Platform invoices leak into tenant books | Separate model from `ServiceInvoice`; a test asserts the Tally export contains no `PlatformInvoice` rows |
+| A pack quietly stops being a discount | `pricing.test.ts` recomputes every pack from `packs.ts` and fails outside the 20–25% band — verified by pushing a pack price out of band and watching it fail with both numbers |
+| Bracket auto-promotion surprises a tenant | `bracketForUsers()` suggests; only a human changes the charged bracket |
+| Read-only enforced in the UI only | Server-side write guard beside `guardModuleAction`; hiding buttons is not enforcement |
+| A cron deletes a paying tenant's data | Scheduled jobs warn; they never delete |
 
 ## Success criteria
 
-- An operator can answer "why is this tenant's bill ₹24,999?" from one screen.
+- An operator can answer "why is this tenant's bill ₹32,999?" from one screen —
+  and the answer is "₹24,999 pack, ₹8,000 Large bracket", not a headcount.
 - Deactivating a module lowers the next invoice, with the line closed and dated.
 - Entitlements and charge lines reconcile exactly, verified in CI.
+- Every pack is visibly cheaper than its parts, verified on every test run
+  rather than the day the price list was written.
+- A trial converts, lapses, and recovers without anyone touching the database.

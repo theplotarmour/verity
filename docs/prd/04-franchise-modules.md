@@ -125,7 +125,7 @@ emailable.
 visual standards — so a new tenant starts with checklists rather than an empty
 Quality screen. Referenced by `PACKS[].seedTemplates`.
 
-## Pack changes
+## Pack changes, and what they cost
 
 | Pack | Add |
 |---|---|
@@ -136,6 +136,26 @@ Both packs already carry `sites`, `quality` and `helpdesk` — added when the
 dashboards were found to be reading data the packs did not entitle. The
 `pack-entitlements.test.ts` guard will fail if a new module's queries are not
 covered, which is the intended way to find out.
+
+### The pack prices must move with them
+
+All three are Tier 3 at ₹7,000. Adding them changes the à la carte totals, and
+the published pack price has to follow or the 20–25% discount band breaks:
+
+| Pack | À la carte now | After | Pack price now | Must become |
+|---|---|---|---|---|
+| Franchise QSR OS | ₹26,000 | ₹40,000 | ₹19,999 | ₹30,000–₹32,000 |
+| Franchise Retail OS | ₹28,000 | ₹42,000 | ₹21,999 | ₹31,500–₹33,600 |
+
+`pricing.test.ts` fails the moment the modules are added to `packs.ts` and the
+price is not updated — which is the point. It reports both the à la carte total
+and the actual discount, so the correction is arithmetic rather than
+archaeology.
+
+**This is a real price rise for existing franchise tenants**, roughly ₹10,000/month.
+Existing subscriptions snapshot their price (PRD 01 R1), so nobody is
+auto-charged more; moving them is a deliberate commercial conversation. Worth
+knowing before the modules ship rather than after.
 
 ## Risks
 
