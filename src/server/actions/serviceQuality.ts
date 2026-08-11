@@ -5,7 +5,7 @@ import type { QCStatus } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
-import { guardModuleAction } from "@/platform/modules/guard";
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 
 /**
  * Running a checklist against a completed site visit.
@@ -121,7 +121,7 @@ export async function recordServiceCheckpoint(input: {
    */
   photoUrl?: string | null;
 }) {
-  await guardModuleAction("quality");
+  await guardModuleWrite("quality");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -184,7 +184,7 @@ export async function recordServiceCheckpoint(input: {
  * that is plainly still open.
  */
 export async function submitServiceInspection(inspectionId: string, notes?: string | null) {
-  await guardModuleAction("quality");
+  await guardModuleWrite("quality");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -249,7 +249,10 @@ export async function resolveServiceInspection(
   inspectionId: string,
   decision: Extract<QCStatus, "APPROVED" | "REJECTED" | "REWORK_REQUIRED">,
 ) {
-  await guardModuleAction("quality");
+  // A write, despite the `resolve` prefix — this approves or rejects an
+  // inspection. Name-based classification is auditable by eye, which is how this
+  // one and `resolveSwap` were caught.
+  await guardModuleWrite("quality");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 

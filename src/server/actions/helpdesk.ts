@@ -6,7 +6,7 @@ import type { ServiceWOStatus, TicketPriority, TicketStatus } from "@prisma/clie
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { createWithDocNumber, formatDocNumber } from "@/lib/server/numbering";
-import { guardModuleAction } from "@/platform/modules/guard";
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import { hasModule } from "@/platform/modules/entitlements";
 
 /**
@@ -226,7 +226,7 @@ export interface TicketInput {
 }
 
 export async function createTicket(input: TicketInput) {
-  await guardModuleAction("helpdesk");
+  await guardModuleWrite("helpdesk");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   if (!input.subject?.trim()) return { error: "A subject is required." };
@@ -266,7 +266,7 @@ export async function createTicket(input: TicketInput) {
 }
 
 export async function updateTicket(ticketId: string, input: TicketInput) {
-  await guardModuleAction("helpdesk");
+  await guardModuleWrite("helpdesk");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   if (!input.subject?.trim()) return { error: "A subject is required." };
@@ -290,7 +290,7 @@ export async function updateTicket(ticketId: string, input: TicketInput) {
 }
 
 export async function setTicketStatus(ticketId: string, status: TicketStatus) {
-  await guardModuleAction("helpdesk");
+  await guardModuleWrite("helpdesk");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -312,7 +312,7 @@ export async function setTicketStatus(ticketId: string, status: TicketStatus) {
 }
 
 export async function assignTicket(ticketId: string, assignedToId: string | null) {
-  await guardModuleAction("helpdesk");
+  await guardModuleWrite("helpdesk");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -349,7 +349,7 @@ export async function addTicketComment(input: {
   body: string;
   isInternal?: boolean;
 }) {
-  await guardModuleAction("helpdesk");
+  await guardModuleWrite("helpdesk");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   if (!input.body?.trim()) return { error: "Write something first." };
@@ -375,7 +375,7 @@ export async function addTicketComment(input: {
 }
 
 export async function deleteTicket(ticketId: string) {
-  await guardModuleAction("helpdesk");
+  await guardModuleWrite("helpdesk");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -503,7 +503,7 @@ export async function getServiceWorkOrdersData() {
 }
 
 export async function createServiceWorkOrder(input: ServiceWorkOrderInput) {
-  await guardModuleAction("helpdesk");
+  await guardModuleWrite("helpdesk");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   if (!input.title?.trim()) return { error: "A title is required." };
@@ -546,7 +546,7 @@ export async function createServiceWorkOrder(input: ServiceWorkOrderInput) {
 }
 
 export async function updateServiceWorkOrder(woId: string, input: ServiceWorkOrderInput) {
-  await guardModuleAction("helpdesk");
+  await guardModuleWrite("helpdesk");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   if (!input.title?.trim()) return { error: "A title is required." };
@@ -573,7 +573,7 @@ export async function updateServiceWorkOrder(woId: string, input: ServiceWorkOrd
 }
 
 export async function setServiceWorkOrderStatus(woId: string, status: ServiceWOStatus) {
-  await guardModuleAction("helpdesk");
+  await guardModuleWrite("helpdesk");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -625,7 +625,7 @@ export async function setServiceWorkOrderStatus(woId: string, status: ServiceWOS
 }
 
 export async function assignServiceWorkOrder(woId: string, assignedToId: string | null) {
-  await guardModuleAction("helpdesk");
+  await guardModuleWrite("helpdesk");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -656,7 +656,7 @@ export async function assignServiceWorkOrder(woId: string, assignedToId: string 
 }
 
 export async function deleteServiceWorkOrder(woId: string) {
-  await guardModuleAction("helpdesk");
+  await guardModuleWrite("helpdesk");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 

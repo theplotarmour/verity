@@ -6,7 +6,7 @@ import type { SiteStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { createWithDocNumber, formatDocNumber } from "@/lib/server/numbering";
-import { guardModuleAction } from "@/platform/modules/guard";
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 
 /**
  * Sites — the link between a client and the work done for them.
@@ -265,7 +265,7 @@ export async function getSiteDetail(siteId: string) {
 }
 
 export async function createSite(input: SiteInput) {
-  await guardModuleAction("sites");
+  await guardModuleWrite("sites");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   if (!input.name?.trim()) return { error: "Site name is required." };
@@ -304,7 +304,7 @@ export async function createSite(input: SiteInput) {
 }
 
 export async function updateSite(siteId: string, input: SiteInput) {
-  await guardModuleAction("sites");
+  await guardModuleWrite("sites");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   if (!input.name?.trim()) return { error: "Site name is required." };
@@ -332,7 +332,7 @@ export async function updateSite(siteId: string, input: SiteInput) {
 }
 
 export async function setSiteStatus(siteId: string, status: SiteStatus) {
-  await guardModuleAction("sites");
+  await guardModuleWrite("sites");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -356,7 +356,7 @@ export async function setSiteStatus(siteId: string, status: SiteStatus) {
 }
 
 export async function deleteSite(siteId: string) {
-  await guardModuleAction("sites");
+  await guardModuleWrite("sites");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -389,7 +389,7 @@ export async function deployStaff(input: {
   startDate: string;
   endDate?: string | null;
 }) {
-  await guardModuleAction("sites");
+  await guardModuleWrite("sites");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -430,7 +430,7 @@ export async function deployStaff(input: {
 }
 
 export async function endDeployment(deploymentId: string) {
-  await guardModuleAction("sites");
+  await guardModuleWrite("sites");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -450,7 +450,7 @@ export async function endDeployment(deploymentId: string) {
 }
 
 export async function removeDeployment(deploymentId: string) {
-  await guardModuleAction("sites");
+  await guardModuleWrite("sites");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 

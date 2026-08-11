@@ -6,7 +6,7 @@ import type { ScheduleStatus, SwapStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/server/auth";
 import { getOwnerUser } from "@/lib/server/owner";
-import { guardModuleAction } from "@/platform/modules/guard";
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import { hasModule } from "@/platform/modules/entitlements";
 
 /**
@@ -182,7 +182,7 @@ export async function scheduleShift(input: {
   date: string;
   notes?: string | null;
 }) {
-  await guardModuleAction("scheduling");
+  await guardModuleWrite("scheduling");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -232,7 +232,7 @@ export async function scheduleShift(input: {
  * Monday is how a schedule stops being kept up to date.
  */
 export async function copyWeek(input: { fromWeekStart: string; toWeekStart: string }) {
-  await guardModuleAction("scheduling");
+  await guardModuleWrite("scheduling");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -269,7 +269,7 @@ export async function copyWeek(input: { fromWeekStart: string; toWeekStart: stri
 }
 
 export async function setScheduleStatus(scheduleId: string, status: ScheduleStatus) {
-  await guardModuleAction("scheduling");
+  await guardModuleWrite("scheduling");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -284,7 +284,7 @@ export async function setScheduleStatus(scheduleId: string, status: ScheduleStat
 }
 
 export async function deleteSchedule(scheduleId: string) {
-  await guardModuleAction("scheduling");
+  await guardModuleWrite("scheduling");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -308,7 +308,7 @@ export async function requestSwap(input: {
   swapWithId?: string | null;
   reason?: string | null;
 }) {
-  await guardModuleAction("scheduling");
+  await guardModuleWrite("scheduling");
   const session = await getUserSession();
   if (!session) return { error: "Unauthorized" };
   const user = { id: session.userId, factoryId: session.factoryId };
@@ -362,7 +362,7 @@ export async function requestSwap(input: {
  * than a rejected one.
  */
 export async function resolveSwap(swapId: string, decision: Exclude<SwapStatus, "PENDING">) {
-  await guardModuleAction("scheduling");
+  await guardModuleWrite("scheduling");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 

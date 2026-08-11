@@ -2755,6 +2755,9 @@ model TenantSubscription {
   currentPeriodStart DateTime @default(now())
   currentPeriodEnd   DateTime
 
+  lines    SubscriptionLine[]
+  invoices PlatformInvoice[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -2762,4 +2765,91 @@ model TenantSubscription {
   /// these two together.
   @@index([status, trialEndsAt])
   @@index([status, readOnlySince])
+}
+
+/// One charge on a subscription: a module, the platform fee, or the team bracket.
+///
+/// Append-only with a validity window. Deactivating a module **closes** its line;
+/// it never deletes it. Last month's invoice has to stay explainable in six
+/// months, and that is impossible if the line it was built from is gone.
+model SubscriptionLine {
+  id             String             @id @default(cuid())
+  subscriptionId String
+  subscription   TenantSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  /// A module key, or the reserved "platform" / "team" for the base and bracket.
+  itemKey String
+  /// What the customer reads on the invoice.
+  label   String
+
+  /// Paise, snapshotted when the line opened. Never read live — a price change
+  /// must not silently re-bill everyone already on the old one.
+  unitPrice Int
+  quantity  Int @default(1)
+
+  activeFrom DateTime  @default(now())
+  /// Null while the line is still being charged.
+  activeTo   DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([subscriptionId])
+  @@index([subscriptionId, activeTo])
+}
+
+/// A month's bill for one tenant. Verity → tenant, never tenant → their customer.
+model PlatformInvoice {
+  id             String             @id @default(cuid())
+  subscriptionId String
+  subscription   TenantSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  organizationId String
+
+  /// Sequential per tenant, so an accountant can spot a gap.
+  invoiceNumber String @unique
+
+  periodStart DateTime
+  periodEnd   DateTime
+
+  /// Paise. Sum of the lines below, stored so the total cannot drift from what
+  /// was sent when a price later changes.
+  subtotal Int
+  total    Int
+
+  /// DRAFT, ISSUED, PAID, VOID. Not an enum yet: payment collection is out of
+  /// scope, and inventing the states before the gateway is chosen would mean
+  /// migrating them once it is.
+  status String @default("DRAFT")
+
+  issuedAt DateTime?
+  paidAt   DateTime?
+
+  lines PlatformInvoiceLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One invoice per tenant per period. This is what makes generation idempotent
+  /// — a cron that runs twice cannot bill twice.
+  @@unique([subscriptionId, periodStart])
+  @@index([organizationId])
+  @@index([status])
+}
+
+/// A frozen copy of a charge line at the moment the invoice was cut.
+///
+/// Deliberately a copy rather than a relation to SubscriptionLine: an invoice is
+/// a historical statement, and it must render identically in two years even if
+/// the line it came from has been closed, re-priced, or the module retired.
+model PlatformInvoiceLine {
+  id        String          @id @default(cuid())
+  invoiceId String
+  invoice   PlatformInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  itemKey   String
+  label     String
+  unitPrice Int
+  quantity  Int @default(1)
+  amount    Int
+
+  @@index([invoiceId])
 }

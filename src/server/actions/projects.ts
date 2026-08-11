@@ -6,7 +6,7 @@ import type { ProjectStatus, TaskStatus, TicketPriority } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { createWithDocNumber, formatDocNumber } from "@/lib/server/numbering";
-import { guardModuleAction } from "@/platform/modules/guard";
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import { hasModule } from "@/platform/modules/entitlements";
 
 /**
@@ -248,7 +248,7 @@ export async function getProjectDetail(projectId: string) {
 }
 
 export async function createProject(input: ProjectInput) {
-  await guardModuleAction("projects");
+  await guardModuleWrite("projects");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   if (!input.name?.trim()) return { error: "A project name is required." };
@@ -286,7 +286,7 @@ export async function createProject(input: ProjectInput) {
 }
 
 export async function updateProject(projectId: string, input: ProjectInput) {
-  await guardModuleAction("projects");
+  await guardModuleWrite("projects");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   if (!input.name?.trim()) return { error: "A project name is required." };
@@ -313,7 +313,7 @@ export async function updateProject(projectId: string, input: ProjectInput) {
 }
 
 export async function setProjectStatus(projectId: string, status: ProjectStatus) {
-  await guardModuleAction("projects");
+  await guardModuleWrite("projects");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -328,7 +328,7 @@ export async function setProjectStatus(projectId: string, status: ProjectStatus)
 }
 
 export async function deleteProject(projectId: string) {
-  await guardModuleAction("projects");
+  await guardModuleWrite("projects");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -358,7 +358,7 @@ export interface TaskInput {
 }
 
 export async function createTask(input: TaskInput) {
-  await guardModuleAction("projects");
+  await guardModuleWrite("projects");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   if (!input.title?.trim()) return { error: "A task title is required." };
@@ -388,7 +388,7 @@ export async function createTask(input: TaskInput) {
 }
 
 export async function updateTask(taskId: string, input: Omit<TaskInput, "projectId">) {
-  await guardModuleAction("projects");
+  await guardModuleWrite("projects");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   if (!input.title?.trim()) return { error: "A task title is required." };
@@ -419,7 +419,7 @@ export async function updateTask(taskId: string, input: Omit<TaskInput, "project
 }
 
 export async function setTaskStatus(taskId: string, status: TaskStatus) {
-  await guardModuleAction("projects");
+  await guardModuleWrite("projects");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -442,7 +442,7 @@ export async function setTaskStatus(taskId: string, status: TaskStatus) {
 }
 
 export async function deleteTask(taskId: string) {
-  await guardModuleAction("projects");
+  await guardModuleWrite("projects");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -468,7 +468,7 @@ export async function recordTime(input: {
   notes?: string | null;
   billable?: boolean;
 }) {
-  await guardModuleAction("projects");
+  await guardModuleWrite("projects");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -512,7 +512,7 @@ export async function recordTime(input: {
 }
 
 export async function approveTimesheet(entryId: string, approved: boolean) {
-  await guardModuleAction("projects");
+  await guardModuleWrite("projects");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -532,7 +532,7 @@ export async function approveTimesheet(entryId: string, approved: boolean) {
 }
 
 export async function deleteTimesheet(entryId: string) {
-  await guardModuleAction("projects");
+  await guardModuleWrite("projects");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 

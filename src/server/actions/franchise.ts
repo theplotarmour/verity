@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { canUser } from "@/lib/server/permissions";
-import { guardModuleAction } from "@/platform/modules/guard";
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import { hashPin } from "@/lib/server/hash";
 import { phoneKey } from "@/lib/phone";
 import { systemRoleId } from "@/platform/tenancy/provision";
@@ -42,7 +42,7 @@ export interface LaunchOutletInput {
 }
 
 export async function launchOutlet(input: LaunchOutletInput) {
-  await guardModuleAction("sites");
+  await guardModuleWrite("sites");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   if (!(await canUser(user, "MANAGE_TEAM"))) {
@@ -165,7 +165,7 @@ export async function launchOutlet(input: LaunchOutletInput) {
  * and letting them confirm is the honest version until franchises tell us what
  * "standard" means for them.
  */
-export async function outletLaunchChecklist() {
+export async function getOutletLaunchOptions() {
   await guardModuleAction("sites");
   const user = await getOwnerUser();
   if (!user) return { templates: [], shifts: [] };

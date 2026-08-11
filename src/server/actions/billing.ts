@@ -6,7 +6,7 @@ import type { InvoiceStatus, PayrollStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { createWithDocNumber } from "@/lib/server/numbering";
-import { guardModuleAction } from "@/platform/modules/guard";
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import { hasModule } from "@/platform/modules/entitlements";
 
 /**
@@ -234,7 +234,7 @@ export async function createInvoice(input: {
   notes?: string | null;
   lineItems: LineItemInput[];
 }) {
-  await guardModuleAction("billing");
+  await guardModuleWrite("billing");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   if (!input.customerId) return { error: "Pick a customer." };
@@ -295,7 +295,7 @@ export async function updateInvoice(
     lineItems: LineItemInput[];
   },
 ) {
-  await guardModuleAction("billing");
+  await guardModuleWrite("billing");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -342,7 +342,7 @@ export async function updateInvoice(
 }
 
 export async function setInvoiceStatus(invoiceId: string, status: InvoiceStatus) {
-  await guardModuleAction("billing");
+  await guardModuleWrite("billing");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -365,7 +365,7 @@ export async function setInvoiceStatus(invoiceId: string, status: InvoiceStatus)
 }
 
 export async function deleteInvoice(invoiceId: string) {
-  await guardModuleAction("billing");
+  await guardModuleWrite("billing");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -397,7 +397,7 @@ export async function buildInvoiceFromWork(input: {
   periodStart: string;
   periodEnd: string;
 }) {
-  const organizationId = await guardModuleAction("billing");
+  const organizationId = await guardModuleWrite("billing");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -487,7 +487,7 @@ export async function buildInvoiceFromWork(input: {
  * already been handed off must not silently change underneath the handoff.
  */
 export async function generatePayrollInputs(input: { periodStart: string; periodEnd: string }) {
-  const organizationId = await guardModuleAction("billing");
+  const organizationId = await guardModuleWrite("billing");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -596,7 +596,7 @@ export async function generatePayrollInputs(input: { periodStart: string; period
 }
 
 export async function setPayrollStatus(payrollId: string, status: PayrollStatus) {
-  await guardModuleAction("billing");
+  await guardModuleWrite("billing");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 

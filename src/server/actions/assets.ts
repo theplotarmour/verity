@@ -6,7 +6,7 @@ import type { AssetStatus } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { createWithDocNumber, formatDocNumber } from "@/lib/server/numbering";
-import { guardModuleAction } from "@/platform/modules/guard";
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import { hasModule } from "@/platform/modules/entitlements";
 
 /**
@@ -211,7 +211,7 @@ export async function getAssetDetail(assetId: string) {
 }
 
 export async function createAsset(input: AssetInput) {
-  await guardModuleAction("assets");
+  await guardModuleWrite("assets");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   if (!input.name?.trim()) return { error: "An asset name is required." };
@@ -252,7 +252,7 @@ export async function createAsset(input: AssetInput) {
 }
 
 export async function updateAsset(assetId: string, input: AssetInput) {
-  await guardModuleAction("assets");
+  await guardModuleWrite("assets");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   if (!input.name?.trim()) return { error: "An asset name is required." };
@@ -282,7 +282,7 @@ export async function updateAsset(assetId: string, input: AssetInput) {
 }
 
 export async function setAssetStatus(assetId: string, status: AssetStatus) {
-  await guardModuleAction("assets");
+  await guardModuleWrite("assets");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -297,7 +297,7 @@ export async function setAssetStatus(assetId: string, status: AssetStatus) {
 }
 
 export async function deleteAsset(assetId: string) {
-  await guardModuleAction("assets");
+  await guardModuleWrite("assets");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -331,7 +331,7 @@ export async function logMaintenance(input: {
   /** When set, this log satisfies that schedule and rolls its next due date. */
   scheduleId?: string | null;
 }) {
-  await guardModuleAction("assets");
+  await guardModuleWrite("assets");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   if (!input.type?.trim()) return { error: "A maintenance type is required." };
@@ -387,7 +387,7 @@ export async function createMaintenanceSchedule(input: {
   intervalDays: number;
   firstDueAt?: string | null;
 }) {
-  await guardModuleAction("assets");
+  await guardModuleWrite("assets");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   if (!input.name?.trim()) return { error: "A schedule name is required." };
@@ -422,7 +422,7 @@ export async function createMaintenanceSchedule(input: {
 }
 
 export async function setMaintenanceScheduleActive(scheduleId: string, isActive: boolean) {
-  await guardModuleAction("assets");
+  await guardModuleWrite("assets");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -442,7 +442,7 @@ export async function setMaintenanceScheduleActive(scheduleId: string, isActive:
 }
 
 export async function deleteMaintenanceSchedule(scheduleId: string) {
-  await guardModuleAction("assets");
+  await guardModuleWrite("assets");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 

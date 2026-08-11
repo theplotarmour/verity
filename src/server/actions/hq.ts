@@ -35,13 +35,29 @@ import { assertDeliverable } from "@/lib/webhooks/url-guard";
  * Board", "Quality Gates"). Map them onto registry keys, ignoring anything
  * unrecognised so a typo in an agreement cannot grant or deny a module.
  */
+/**
+ * The vertical pack an agreement names, or null.
+ *
+ * Extracted so `acceptAgreement` can *refuse* an agreement with no pack rather
+ * than provisioning one and letting it fall through to the auto-components
+ * dashboard. A facility-management company landing on a screen headed "Today
+ * Production" concludes the product is not for them, and nothing in the code
+ * reports that it happened.
+ */
+function packFromAgreement(raw: unknown): string | null {
+  const labels = Array.isArray(raw) ? raw.map((v) => String(v).toLowerCase()) : [];
+  return (
+    labels.find((l) => Object.prototype.hasOwnProperty.call(VERTICAL_PACKS, l)) ?? null
+  );
+}
+
 function modulesFromAgreement(raw: unknown): ModuleKey[] {
   const labels = Array.isArray(raw) ? raw.map((v) => String(v).toLowerCase()) : [];
 
   // A vertical pack named in the agreement wins over label matching: "Facility
   // Management" is a decision about what kind of business this is, not a guess
   // at which module a phrase resembles.
-  const pack = labels.find((l) => Object.prototype.hasOwnProperty.call(VERTICAL_PACKS, l));
+  const pack = packFromAgreement(raw);
   if (pack) return modulesForPack(pack);
 
   const matched = allModules()
@@ -117,6 +133,19 @@ export async function acceptAgreement(id: string, signature: string) {
       return { success: false, error: "Agreement not found or already accepted" };
     }
 
+    // Every tenant must land on a vertical. Without one this used to write
+    // industry: "Custom Manufacturing", which resolves to no pack, so the
+    // workspace silently fell through to the auto-components dashboard.
+    const packKey = packFromAgreement(agreement.modules);
+    if (!packKey) {
+      return {
+        success: false,
+        error:
+          "This agreement does not name a vertical pack. Add one of " +
+          `${Object.keys(VERTICAL_PACKS).join(", ")} to its modules before accepting.`,
+      };
+    }
+
     // Create the slug from factory name
     const slug = agreement.factoryName
       .toLowerCase()
@@ -131,7 +160,8 @@ export async function acceptAgreement(id: string, signature: string) {
     const { factoryId: newFactoryId, organizationId } = await provisionTenant({
       name: agreement.factoryName,
       slug,
-      industry: "Custom Manufacturing",
+      // The pack key, so the dashboard router resolves it exactly.
+      industry: packKey,
       onboardingStatus: "SETUP",
       setupFee: agreement.setupFee,
       monthlyFee: agreement.monthlyFee,
@@ -355,13 +385,25 @@ export async function createAndSignAgreementDirect(data: {
   phone: string;
   signature: string;
   /**
-   * Which kind of business this is. Drives the module bundle, so a security
-   * company is not provisioned with a production board it will never open.
-   * Omitted keeps the historical automotive-manufacturer default.
+   * Which kind of business this is. Drives the module bundle *and* the dashboard
+   * the tenant lands on, so a security company is not provisioned with a
+   * production board it will never open.
+   *
+   * **Required.** It used to be optional and fell back to auto components, which
+   * meant the wrong choice was the easy one: omit the field and the tenant gets
+   * a factory dashboard with no error anywhere.
    */
-  verticalPack?: string;
+  verticalPack: string;
 }) {
   await requireHqAction();
+
+  if (!VERTICAL_PACKS[data.verticalPack]) {
+    return {
+      success: false,
+      error: `Pick a business type: ${Object.keys(VERTICAL_PACKS).join(", ")}.`,
+    };
+  }
+
   try {
     const slug = data.factoryName
       .toLowerCase()
@@ -377,17 +419,17 @@ export async function createAndSignAgreementDirect(data: {
     const finalSlug = existing ? `${slug}-${Math.floor(Math.random() * 1000)}` : slug;
 
     // 1. Create Factory Workspace
-    const pack = data.verticalPack ? VERTICAL_PACKS[data.verticalPack] : undefined;
+    // Validated above, so there is no fallback branch left to take.
     const { factoryId: newFactoryId, organizationId } = await provisionTenant({
       name: data.factoryName,
       slug: finalSlug,
       // The pack *key*, not its label: this field routes the tenant to its
       // dashboard, so it has to be exact. `packLabel()` renders it for humans.
-      industry: pack ? data.verticalPack! : "auto_components",
+      industry: data.verticalPack,
       onboardingStatus: "LIVE",
       setupFee: 150000,
       monthlyFee: 18000,
-      modules: pack ? modulesForPack(data.verticalPack) : [...DEFAULT_MODULES, "automotive"],
+      modules: modulesForPack(data.verticalPack),
     });
     const factory = await prisma.factory.findUniqueOrThrow({ where: { id: newFactoryId } });
 
