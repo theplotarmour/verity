@@ -41,13 +41,23 @@ export const VERTICAL_PACKS: Record<string, { label: string; modules: ModuleKey[
     label: "Facility Management",
     modules: ["core", "hr", "sites", "scheduling", "helpdesk", "assets", "quality", "procurement", "billing"],
   },
+  /*
+   * The franchise packs carry `sites` because an outlet *is* a Site — a place
+   * with a manager, a roster and a checklist. That was a deliberate modelling
+   * choice (one table, not a near-identical copy that drifts), and it has a
+   * consequence the original module list missed: without the module, the
+   * dashboard renders an outlet list whose every link redirects.
+   *
+   * QSR additionally carries `helpdesk`, because its dashboard reports open
+   * issues across the network and a ticket is what an issue is.
+   */
   franchise_qsr: {
     label: "Franchise — QSR",
-    modules: ["core", "hr", "inventory", "quality", "procurement", "billing"],
+    modules: ["core", "hr", "inventory", "quality", "procurement", "billing", "sites", "helpdesk"],
   },
   franchise_retail: {
     label: "Franchise — Retail",
-    modules: ["core", "hr", "inventory", "quality", "procurement", "sales", "billing"],
+    modules: ["core", "hr", "inventory", "quality", "procurement", "sales", "billing", "sites"],
   },
 };
 

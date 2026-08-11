@@ -14,6 +14,14 @@ import { guardModuleAction } from "@/platform/modules/guard";
  * `ChecklistTemplate`, one set of `Checkpoint`s. Only the answers are stored
  * separately, on `ServiceCheckpointSubmission`, because the production
  * `Inspection` is anchored to a JobCard that a site visit does not have.
+ *
+ * **Guarded on `quality`, not `helpdesk`.** These actions were gated behind
+ * helpdesk — presumably copied from the ticket actions they sit beside — and
+ * neither franchise pack carries that module. The effect was silent and total:
+ * a QSR or Retail tenant could not create or complete a single audit, while
+ * their dashboard cheerfully rendered an SOP panel reading rows that could
+ * never exist. An inspection is a quality function, and `quality` is in all
+ * four packs.
  */
 
 function revalidateInspectionPaths(siteId?: string | null) {
@@ -26,7 +34,7 @@ function revalidateInspectionPaths(siteId?: string | null) {
  * each carrying whatever answer has been recorded so far.
  */
 export async function getServiceInspection(inspectionId: string) {
-  await guardModuleAction("helpdesk");
+  await guardModuleAction("quality");
   const user = await getOwnerUser();
   if (!user) return null;
 
@@ -105,7 +113,7 @@ export async function recordServiceCheckpoint(input: {
   value?: string | null;
   remarks?: string | null;
 }) {
-  await guardModuleAction("helpdesk");
+  await guardModuleAction("quality");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -164,7 +172,7 @@ export async function recordServiceCheckpoint(input: {
  * that is plainly still open.
  */
 export async function submitServiceInspection(inspectionId: string, notes?: string | null) {
-  await guardModuleAction("helpdesk");
+  await guardModuleAction("quality");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
@@ -213,7 +221,7 @@ export async function resolveServiceInspection(
   inspectionId: string,
   decision: Extract<QCStatus, "APPROVED" | "REJECTED" | "REWORK_REQUIRED">,
 ) {
-  await guardModuleAction("helpdesk");
+  await guardModuleAction("quality");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
 
