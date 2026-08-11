@@ -305,6 +305,17 @@ Anything Verity could not match — a fabric name that does not exist in your it
 
 **Events out.** Configure a webhook endpoint and Verity POSTs order milestones (`ORDER_RECEIVED`, `ORDER_COMMITTED`, `ORDER_QC_PASSED`, `ORDER_DISPATCHED`) to it, signed the same way so you can verify they came from us. Deliveries are queued and retried with backoff, so a receiver that is briefly down does not lose events. Endpoints must be public `https` addresses — private and internal addresses are refused.
 
+**Where to set this up:** Settings → Integrations. Issue a key, copy the token and signing secret (the token is shown once), and add your webhook endpoint. The operator console can do the same for you if you would rather not.
+
+**Shopify, specifically.** Enter your shop domain when issuing the key, then in Shopify go to Settings → Notifications → Webhooks and add an **Order creation** webhook pointing at `/api/integrations/shopify`. Paste the signing secret from Verity into Shopify.
+
+Two things worth knowing about the Shopify path:
+
+- **Custom options come through.** Fabric, vehicle, colour, headrest count and armrest are read from your line-item properties or cart attributes, under whatever names your storefront uses — "Fabric", "Material" and "Seat fabric" all work. Anything Verity cannot match to your item master arrives as a warning on the order rather than being dropped.
+- **Zero-quantity lines are ignored.** Shopify sends refunded and removed lines with quantity 0; booking those would put a job card on the floor for nothing.
+
+**Tally export.** Reports → **Tally CSV** downloads every dispatch in the date range shown on that page, formatted for Tally's voucher import: DD-MM-YYYY dates, one row per line item, GSTIN and billing address from the customer record. Fill those in before month end, not after — a blank GSTIN column is a manual fix per row on the Tally side.
+
 ### 4.6 Franchise OS in depth
 
 The franchise packs treat an **outlet or store as a Site**. A franchise outlet and a serviced site are the same shape — a place with a manager, a roster and a checklist — so they share one table and one set of screens rather than a near-identical copy that drifts.
@@ -322,3 +333,33 @@ An alert is a question, not an accusation. Legitimate reasons exist: an emergenc
 **Scorecards.** Compliance is passed audits over completed audits. It is deliberately not blended with sales into one number — see 4.4 for why.
 
 **What a franchise pack does not do.** No POS, no accounting. Sales come in through the integration layer; ledgers stay in Tally or Busy. Verity holds the operation.
+
+### 4.7 The daily opening checklist, and what it gates
+
+If you name an active checklist **"Opening SOP"** (or anything containing "opening" or "daily SOP"), it becomes that day's gate for every outlet.
+
+**What it does:** until today's opening checklist is *approved* for an outlet, that outlet cannot dispatch. Yesterday's approval does not carry over — that is the entire point of a daily checklist.
+
+**What it deliberately does not do:**
+
+- It does not block recording anything. You can still raise tickets, complete work orders and log what happened. Blocking the record would lose the day's history as well as its trading, and the history is the part worth keeping.
+- It does not apply if you have not created an opening checklist. The gate is opt-in; a business that never asked for the rule is not subject to it.
+- It does not apply to work with no outlet attached.
+
+**If an outlet is blocked**, the message says which of the two situations you are in: the checklist has not been started, or it is filled in and waiting for sign-off. Those need different actions, so they are phrased differently.
+
+### 4.8 Photo evidence on checklists
+
+Any checkpoint can carry a photo. Tick **Require image** on a checkpoint and the inspection cannot be submitted until one is attached — useful for hygiene checks and visual-standards audits, where "it was done" and "here is what it looked like" are different claims.
+
+On a phone the camera button opens the rear camera directly rather than the photo library, because these are completed standing in front of the thing being checked.
+
+Re-answering a checkpoint keeps the photo already attached to it. Remove it explicitly if it no longer applies.
+
+### 4.9 Launching an outlet
+
+**Sites → Launch outlet.** This creates the outlet inside your own workspace, so it joins the network scorecard, the price audit and the dashboard immediately.
+
+Give it a manager at the same time if you can. Without an account, nobody on site can complete the opening checklist — and if you have configured one, that outlet cannot dispatch until somebody does. The manager's PIN is shown once at creation; copy it then.
+
+Note this is different from a new *workspace*. A franchise network is one Verity workspace containing many outlets. That is what makes comparing outlets possible — fifty separate workspaces would mean fifty dashboards and no network view at all.
