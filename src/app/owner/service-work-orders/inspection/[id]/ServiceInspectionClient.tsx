@@ -8,6 +8,7 @@ import { ArrowLeft, Check, X } from "lucide-react";
 import { Button, Card, Input } from "@/components/ui/primitives";
 import { toast } from "@/components/ui/toast";
 import { StatusPill, TextArea, formatDay } from "@/components/service/kit";
+import { CheckpointPhoto } from "@/components/spec/CheckpointPhoto";
 import {
   recordServiceCheckpoint,
   resolveServiceInspection,
@@ -26,6 +27,8 @@ type Checkpoint = {
   passFail: string | null;
   value: string | null;
   remarks: string | null;
+  /** Evidence attached to this answer, if any. */
+  photoUrl: string | null;
   answered: boolean;
 };
 
@@ -67,7 +70,10 @@ export function ServiceInspectionClient({ inspection }: { inspection: Inspection
     };
   }, [inspection.sections]);
 
-  function save(checkpointId: string, patch: { passFail?: string; value?: string; remarks?: string }) {
+  function save(
+    checkpointId: string,
+    patch: { passFail?: string; value?: string; remarks?: string; photoUrl?: string | null },
+  ) {
     if (locked) return;
     start(async () => {
       const result = await recordServiceCheckpoint({
@@ -213,6 +219,18 @@ export function ServiceInspectionClient({ inspection }: { inspection: Inspection
                       }}
                     />
                   ) : null}
+
+                  {/* Evidence. Offered on every checkpoint, not only the ones
+                      that demand it — a failed check is worth a photo whether
+                      or not the template thought to ask. */}
+                  <CheckpointPhoto
+                    value={cp.photoUrl}
+                    disabled={locked}
+                    required={cp.requireImage}
+                    inspectionId={inspection.id}
+                    checkpointId={cp.id}
+                    onChange={(url) => save(cp.id, { photoUrl: url })}
+                  />
 
                   {cp.requireRemarks || cp.passFail === "FAIL" ? (
                     <Input

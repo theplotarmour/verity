@@ -98,6 +98,7 @@ export async function getServiceInspection(inspectionId: string) {
           passFail: answer?.passFail ?? null,
           value: answer?.value ?? null,
           remarks: answer?.remarks ?? null,
+          photoUrl: answer?.photoUrl ?? null,
           answered: !!answer?.completedAt,
         };
       }),
@@ -112,6 +113,13 @@ export async function recordServiceCheckpoint(input: {
   passFail?: string | null;
   value?: string | null;
   remarks?: string | null;
+  /**
+   * Evidence. The column existed from the start and nothing ever wrote to it,
+   * which made `Checkpoint.requireImage` a setting with no effect — a hygiene
+   * or visual-standards audit that cannot carry a photo is an assertion, not a
+   * record.
+   */
+  photoUrl?: string | null;
 }) {
   await guardModuleAction("quality");
   const user = await getOwnerUser();
@@ -143,6 +151,10 @@ export async function recordServiceCheckpoint(input: {
     passFail: input.passFail ?? null,
     value: input.value?.trim() || null,
     remarks: input.remarks?.trim() || null,
+    // `undefined` leaves an existing photo alone; an explicit null clears it.
+    // Answering a checkpoint again should not silently drop the evidence
+    // attached to it the first time.
+    ...(input.photoUrl !== undefined ? { photoUrl: input.photoUrl || null } : {}),
     completedAt: new Date(),
   };
 
@@ -182,25 +194,41 @@ export async function submitServiceInspection(inspectionId: string, notes?: stri
       id: true,
       siteId: true,
       checklistId: true,
-      submissions: { select: { checkpointId: true, completedAt: true } },
+      submissions: { select: { checkpointId: true, completedAt: true, photoUrl: true } },
     },
   });
   if (!inspection) return { error: "Inspection not found." };
 
-  const required = await prisma.checkpoint.findMany({
+  const checkpoints = await prisma.checkpoint.findMany({
     where: {
       factoryId: user.factoryId,
-      isRequired: true,
       section: { templateId: inspection.checklistId },
     },
-    select: { id: true },
+    select: { id: true, name: true, isRequired: true, requireImage: true },
   });
+
   const answered = new Set(
     inspection.submissions.filter((s) => s.completedAt).map((s) => s.checkpointId),
   );
-  const missing = required.filter((cp) => !answered.has(cp.id)).length;
-  if (missing > 0) {
-    return { error: `${missing} required checkpoint${missing === 1 ? "" : "s"} still unanswered.` };
+  const missing = checkpoints.filter((cp) => cp.isRequired && !answered.has(cp.id));
+  if (missing.length > 0) {
+    return {
+      error: `${missing.length} required checkpoint${missing.length === 1 ? "" : "s"} still unanswered.`,
+    };
+  }
+
+  // `requireImage` was a setting nothing enforced, because nothing could write
+  // a photo. Now that a photo can be attached, an audit that demands evidence
+  // and accepts none would be worse than one that never asked.
+  const photos = new Map(inspection.submissions.map((s) => [s.checkpointId, s.photoUrl]));
+  const withoutPhoto = checkpoints.filter(
+    (cp) => cp.requireImage && answered.has(cp.id) && !photos.get(cp.id),
+  );
+  if (withoutPhoto.length > 0) {
+    const names = withoutPhoto.slice(0, 3).map((cp) => cp.name).join(", ");
+    return {
+      error: `A photo is required for: ${names}${withoutPhoto.length > 3 ? `, and ${withoutPhoto.length - 3} more` : ""}.`,
+    };
   }
 
   await prisma.serviceInspection.update({

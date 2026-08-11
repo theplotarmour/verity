@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { revalidatePath } from "next/cache";
 import { deriveProductionStatus, isDispatchReady } from "@/lib/production-status";
+import { checkOpeningSop } from "@/server/internal/sopGate";
 
 // Ensures a Default zone/rack/shelf/bin chain for a warehouse (mirrors
 // inventory.ts — the ledger is bin-level while the UI works per location).
@@ -137,6 +138,12 @@ export async function createDispatch(data: {
   });
   if (!order) return { error: "Order not found" };
   if (order.dispatches.length > 0) return { error: "Order already dispatched" };
+
+  // The daily SOP gate. Only bites where the order belongs to an outlet *and*
+  // that tenant has configured an opening checklist — a factory with neither is
+  // not blocked by a rule it never opted into. See `internal/sopGate.ts`.
+  const sop = await checkOpeningSop(factoryId, order.siteId);
+  if (!sop.open) return { error: sop.reason ?? "Today's opening checklist is not complete." };
 
   const hasPassport = order.status === "READY" || order.plans.some((p) =>
     p.workOrders.some((wo) => wo.jobCards.some((jc) => jc.inspection?.report))

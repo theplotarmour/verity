@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Search } from "lucide-react";
+import { Plus, Rocket, Search } from "lucide-react";
 import type { SiteStatus } from "@prisma/client";
 
 import { PageHeader } from "@/components/design/PageHeader";
@@ -26,6 +26,7 @@ import {
   toDateInput,
 } from "@/components/service/kit";
 import { createSite, deleteSite, updateSite } from "@/server/actions/sites";
+import { LaunchOutletDialog } from "@/components/service/LaunchOutletDialog";
 
 export type SiteRow = {
   id: string;
@@ -87,6 +88,7 @@ export function SitesClient({
   const [status, setStatus] = useState<SiteStatus | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState(BLANK);
+  const [launching, setLaunching] = useState(false);
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -194,12 +196,22 @@ export function SitesClient({
         title="Sites"
         description="Every client location, who is posted there, and what work is outstanding."
         actions={
-          <Button onClick={() => open()}>
-            <Plus className="h-4 w-4" />
-            New site
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Launch does more than New site: it can create the manager account
+                that the opening checklist needs somebody to complete. */}
+            <Button variant="secondary" onClick={() => setLaunching(true)}>
+              <Rocket className="h-4 w-4" />
+              Launch outlet
+            </Button>
+            <Button onClick={() => open()}>
+              <Plus className="h-4 w-4" />
+              New site
+            </Button>
+          </div>
         }
       />
+
+      <LaunchOutletDialog open={launching} onClose={() => setLaunching(false)} />
 
       <StatStrip>
         <Stat label="Active sites" value={totals.active} tone="success" />

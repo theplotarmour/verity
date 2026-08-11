@@ -1310,6 +1310,16 @@ model SalesOrder {
   fulfilledFromStockQty Float?           @default(0) // partial stock: how many of the order were taken from stock
   productionBatchId     String? // set when drafts are released together as one batch
   productionBatch       ProductionBatch? @relation(fields: [productionBatchId], references: [id], onDelete: SetNull)
+  /// The outlet or store this order belongs to, for franchise networks.
+  ///
+  /// Null for a single-location business, which is why it is nullable rather
+  /// than required — a factory has no outlets and should not be made to invent
+  /// one. Where it is set, it is what makes per-outlet reporting and the daily
+  /// SOP gate possible: without it there is no way to ask "has *this* outlet
+  /// opened properly today".
+  siteId String?
+  site   Site?   @relation("SalesOrderSite", fields: [siteId], references: [id], onDelete: SetNull)
+
   // Vehicle is stored per-order. Previously it lived only as a fitment on the
   // (shared) product variant, so two orders of the same product type showed
   // each other's vehicle. These columns give every order its own identity.
@@ -1912,6 +1922,8 @@ model Site {
   schedules   ShiftSchedule[]
   invoices    ServiceInvoice[]
   inspections ServiceInspection[]
+  /// Orders booked at this outlet, for franchise networks.
+  salesOrders SalesOrder[]        @relation("SalesOrderSite")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
