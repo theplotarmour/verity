@@ -32,100 +32,57 @@ import { Settings, Shield, Plus , Package, ShoppingCart, Wrench, FlaskConical, D
 import { SystemRole } from "@prisma/client";
 import { can, Permission, type PermissionMatrix } from "@/lib/permissions";
 import type { ModuleKey } from "@/platform/modules/registry";
+import {
+  activeNavItem,
+  resolveNavGroups,
+  resolveNavItems,
+  resolveTopbarItems,
+  type ResolvedNavItem,
+} from "@/platform/modules/navigation";
 import { VerityLogo } from "@/components/ui/VerityLogo";
 import { InstallPromptBanner } from "./InstallPromptBanner";
 import { NavMenu } from "./NavMenu";
 import { BRAND_ACCENT } from "@/lib/brand";
 
-type NavItem = {
-  label: string;
-  href: string;
-  icon: React.ReactNode;
-  permission: Permission;
-  /**
-   * The module that must be entitled for this destination to appear. Omitted
-   * means "always" — only for things every tenant has, like the dashboard.
-   *
-   * This is an affordance, not a control: `guardModulePage` on the page itself
-   * is what actually stops an un-entitled tenant who types the URL.
-   */
-  requiredModule?: ModuleKey;
-  /**
-   * Registry permission key (`@/platform/modules/registry`) required to see
-   * this item. Preferred over `permission`, which is the deprecated 15-value
-   * union with no service-side entries — that union is why every service
-   * destination was gated on CREATE_ORDER, so anyone who could book an order
-   * could also see Billing.
-   *
-   * Production items still use `permission` until they are migrated
-   * deliberately; this field is the migration path, not a second system.
-   */
-  requires?: string;
+/**
+ * Icon keys → components.
+ *
+ * Modules declare an icon by string key, because the registry is imported by
+ * server code, scripts and tests and none of them can hold JSX. The shell is the
+ * only place that knows what a "package" looks like.
+ */
+const NAV_ICONS: Record<string, React.ReactNode> = {
+  home: <Home className="h-4.5 w-4.5" />,
+  lifebuoy: <LifeBuoy className="h-4.5 w-4.5" />,
+  hammer: <Hammer className="h-4.5 w-4.5" />,
+  folder: <FolderKanban className="h-4.5 w-4.5" />,
+  pin: <MapPin className="h-4.5 w-4.5" />,
+  calendar: <CalendarDays className="h-4.5 w-4.5" />,
+  clipboard: <ClipboardList className="h-4.5 w-4.5" />,
+  wrench: <Wrench className="h-4.5 w-4.5" />,
+  flask: <FlaskConical className="h-4.5 w-4.5" />,
+  truck: <Truck className="h-4.5 w-4.5" />,
+  package: <Package className="h-4.5 w-4.5" />,
+  cart: <ShoppingCart className="h-4.5 w-4.5" />,
+  hardhat: <HardHat className="h-4.5 w-4.5" />,
+  check: <CircleCheckBig className="h-4.5 w-4.5" />,
+  receipt: <ReceiptText className="h-4.5 w-4.5" />,
+  chart: <BarChart3 className="h-4.5 w-4.5" />,
+  database: <Database className="h-4 w-4" />,
+  building: <Building2 className="h-4 w-4" />,
+  users: <Users className="h-4 w-4" />,
+  factory: <Factory className="h-4 w-4" />,
+  settings: <Settings className="h-4 w-4" />,
 };
 
-type NavGroup = {
-  title: string;
-  items: NavItem[];
-};
+/** A nav item with its icon resolved, which is all the shell renders. */
+type ShellNavItem = ResolvedNavItem & { icon: React.ReactNode };
 
-const navGroups: NavGroup[] = [
-  {
-    title: "Overview",
-    items: [
-      { label: "Dashboard", href: "/owner/dashboard", icon: <Home className="h-4.5 w-4.5" />, permission: "VIEW_DASHBOARD" },
-    ]
-  },
-  {
-    title: "Service Operations",
-    items: [
-      { label: "Helpdesk", href: "/owner/helpdesk", icon: <LifeBuoy className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "ticket.view", requiredModule: "helpdesk" },
-      { label: "Work Orders", href: "/owner/service-work-orders", icon: <Hammer className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "service_wo.view", requiredModule: "helpdesk" },
-      { label: "Projects", href: "/owner/projects", icon: <FolderKanban className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "project.view", requiredModule: "projects" },
-      { label: "Sites", href: "/owner/sites", icon: <MapPin className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "site.view", requiredModule: "sites" },
-      { label: "Scheduling", href: "/owner/scheduling", icon: <CalendarDays className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "schedule.view", requiredModule: "scheduling" },
-    ]
-  },
-  {
-    title: "Production",
-    items: [
-      { label: "Order Taking", href: "/owner/order-taking", icon: <ClipboardList className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requiredModule: "sales" },
-      { label: "Production", href: "/owner/production", icon: <Wrench className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requiredModule: "manufacturing" },
-      { label: "Floor", href: "/owner/floor", icon: <FlaskConical className="h-4.5 w-4.5" />, permission: "QC_QUEUE", requiredModule: "manufacturing" },
-      { label: "Logistics", href: "/owner/logistics", icon: <Truck className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requiredModule: "sales" },
-    ]
-  },
-  {
-    title: "Shared Operations",
-    items: [
-      { label: "Inventory", href: "/owner/inventory", icon: <Package className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requiredModule: "inventory" },
-      { label: "Purchase", href: "/owner/purchase", icon: <ShoppingCart className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requiredModule: "procurement" },
-      { label: "Assets", href: "/owner/assets", icon: <HardHat className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "asset.view", requiredModule: "assets" },
-      { label: "Quality", href: "/owner/qc-floor", icon: <CircleCheckBig className="h-4.5 w-4.5" />, permission: "QC_QUEUE", requiredModule: "quality" },
-    ]
-  },
-  {
-    title: "Finance",
-    items: [
-      { label: "Billing", href: "/owner/billing", icon: <ReceiptText className="h-4.5 w-4.5" />, permission: "CREATE_ORDER", requires: "invoice.view", requiredModule: "billing" },
-      { label: "Reports", href: "/owner/reports", icon: <BarChart3 className="h-4.5 w-4.5" />, permission: "VIEW_REPORTS" },
-    ]
-  },
-];
+const withIcon = (item: ResolvedNavItem): ShellNavItem => ({
+  ...item,
+  icon: NAV_ICONS[item.iconKey] ?? <Home className="h-4.5 w-4.5" />,
+});
 
-// Config-style destinations pinned to the top bar (next to the theme switch)
-// instead of the sidebar.
-const topbarItems: NavItem[] = [
-  { label: "Master Data", href: "/owner/master-data", icon: <Database className="h-4 w-4" />, permission: "ACCESS_MASTER_DATA" },
-  // Customers are counterparties, not master data. They sit here beside Team
-  // and Departments — the other things a factory keeps but does not make.
-  { label: "Customers", href: "/owner/customers", icon: <Building2 className="h-4 w-4" />, permission: "CREATE_ORDER" },
-  { label: "Team", href: "/owner/team", icon: <Users className="h-4 w-4" />, permission: "MANAGE_TEAM" },
-  { label: "Departments", href: "/owner/departments", icon: <Factory className="h-4 w-4" />, permission: "MANAGE_TEAM" },
-  { label: "Settings", href: "/owner/settings", icon: <Settings className="h-4 w-4" />, permission: "ACCESS_SETTINGS" },
-];
-
-// Flat list for active item detection (sidebar + topbar destinations)
-const navItems: NavItem[] = [...navGroups.flatMap(g => g.items), ...topbarItems];
 
 type NotificationItem = {
   id: string;
@@ -206,73 +163,53 @@ export function OwnerShell({
     return () => document.removeEventListener("mousedown", onClickAway);
   }, []);
 
-  // A nav item survives three filters: the tenant's entitlements, the role's
-  // permissions, and the store-manager carve-out. Entitlement is checked first
-  // because it is the only one that can empty a whole group.
-  const moduleAllows = useMemo(() => {
-    const enabled = enabledModules ? new Set<ModuleKey>(enabledModules) : null;
-    return (item: NavItem) =>
-      !item.requiredModule || enabled === null || enabled.has(item.requiredModule);
-  }, [enabledModules]);
-
   /**
-   * Permission gate for items carrying a registry key.
+   * Navigation, resolved from the modules that own it.
    *
-   * Every role now holds its entitled grants — scripts/backfill-role-grants.ts
-   * topped up the roles that predated these keys, so the transitional carve-out
-   * that let administrators through without the key is gone. Everyone is
-   * checked the same way.
-   *
-   * `undefined` still means "unknown" rather than "denied": a caller that has
-   * not been updated to pass the prop degrades to the old nav rather than an
-   * empty one. Undefined is not the same as an empty array.
+   * The four gates — entitlement, registry grant, legacy permission and the
+   * store-manager carve-out — live in `resolveNavItems`. They used to be
+   * written out three times in this file, once per surface, which is three
+   * chances for one copy to drift from the others.
    */
-  const grantAllows = useMemo(() => {
-    const held = grantedPermissions ? new Set(grantedPermissions) : null;
-    return (item: NavItem) => {
-      if (!item.requires) return true;
-      if (held === null) return true;
-      return held.has(item.requires);
-    };
-  }, [grantedPermissions]);
-
-  const visibleNavItems = useMemo(
-    () => navItems.filter((item) => moduleAllows(item) && grantAllows(item)),
-    [moduleAllows, grantAllows],
+  const navContext = useMemo(
+    () => ({
+      enabledModules,
+      grantedPermissions,
+      userRole,
+      can: (permission: string) => can(userRole, permission as Permission, permissionMatrix),
+    }),
+    [enabledModules, grantedPermissions, userRole, permissionMatrix],
   );
 
-  const activeItem = useMemo(
-    () => visibleNavItems.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`)),
-    [pathname, visibleNavItems],
+  const navGroups = useMemo(
+    () =>
+      resolveNavGroups(navContext).map((group) => ({
+        title: group.title,
+        items: group.items.map(withIcon),
+      })),
+    [navContext],
   );
 
-  // Everything this tenant and role can actually reach, before the mobile bar
-  // decides which four get a permanent slot.
-  const reachable = useMemo(() => {
-    const storeManagerAllowed = ["/owner/order-taking", "/owner/dashboard", "/owner/inventory"];
-    return visibleNavItems.filter(
-      (item) =>
-        can(userRole, item.permission, permissionMatrix) &&
-        (userRole === "STORE_MANAGER"
-          ? storeManagerAllowed.includes(item.href)
-          : item.href !== "/owner/order-taking"),
-    );
-  }, [visibleNavItems, userRole, permissionMatrix]);
+  const topbarItems = useMemo(
+    () => resolveTopbarItems(navContext).map(withIcon),
+    [navContext],
+  );
 
-  /**
-   * The mobile bar has four slots, and a phone tab bar with eleven items is
-   * not a tab bar. Dashboard and Settings bookend; Quality takes the third
-   * slot when the tenant has it, otherwise the first operational destination
-   * does. Everything else lives behind Operations, which opens a sheet.
-   */
+  /** Everything reachable, for the mobile dock and its Operations sheet. */
+  const reachable = useMemo(() => resolveNavItems(navContext).map(withIcon), [navContext]);
+
+  const activeItem = useMemo(() => activeNavItem(reachable, pathname), [reachable, pathname]);
+
   const mobileNav = useMemo(() => {
     const dashboard = reachable.find((i) => i.href === "/owner/dashboard");
     const settings = reachable.find((i) => i.href === "/owner/settings");
     const rest = reachable.filter(
       (i) => i.href !== "/owner/dashboard" && i.href !== "/owner/settings",
     );
-    const third =
-      rest.find((i) => i.requiredModule === "quality") ?? rest.find((i) => i.href !== undefined);
+    // Quality gets the third slot when the tenant has it; otherwise whatever is
+    // first. `moduleKey` replaces the old `requiredModule` — same meaning, now
+    // supplied by the module rather than restated on the item.
+    const third = rest.find((i) => i.moduleKey === "quality") ?? rest[0];
 
     return {
       dashboard,
@@ -350,18 +287,10 @@ export function OwnerShell({
 
             <nav className="flex min-w-0 flex-1 items-center gap-0.5">
               {navGroups.map((group) => {
-                // Same filtering the sidebar applied — module entitlement,
-                // registry grant, legacy permission, and the store-manager
-                // carve-out. Moving the nav must not move who can see what.
-                const storeManagerAllowed = ["/owner/order-taking", "/owner/dashboard", "/owner/inventory"];
-                const visible = group.items.filter((item) =>
-                  moduleAllows(item) &&
-                  grantAllows(item) &&
-                  can(userRole, item.permission, permissionMatrix) &&
-                  (userRole === "STORE_MANAGER"
-                    ? storeManagerAllowed.includes(item.href)
-                    : item.href !== "/owner/order-taking"));
-                if (visible.length === 0) return null;
+                // Already filtered by `resolveNavGroups`, and already stripped
+                // of empty groups. Re-filtering here is what created three
+                // copies of the permission logic in the first place.
+                const visible = group.items;
                 return (
                   <NavMenu
                     key={group.title}
@@ -424,7 +353,6 @@ export function OwnerShell({
                   </Link>
                 )}
                 {topbarItems
-                  .filter((item) => can(userRole, item.permission, permissionMatrix))
                   .map((item) => {
                     const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                     return (
@@ -669,7 +597,6 @@ export function OwnerShell({
 
                 <div className="mt-4 border-t border-border px-4 pt-3">
                   {topbarItems
-                    .filter((item) => can(userRole, item.permission, permissionMatrix))
                     .map((item) => (
                       <Link
                         key={item.href}
@@ -696,7 +623,7 @@ export function OwnerShell({
  * One tab in the mobile bar. The whole control is at least 44×44 — the label
  * is small, but the target it sits in is not.
  */
-function MobileTab({ item, pathname }: { item: NavItem; pathname: string }) {
+function MobileTab({ item, pathname }: { item: ShellNavItem; pathname: string }) {
   const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
   return (
     <Link
