@@ -1,7 +1,7 @@
 "use server";
 
 import { uploadStorageImage as uploadStorageImageImpl, type StorageUploadInput } from "@/lib/storage/upload";
-import { getUserSession } from "@/lib/server/auth";
+import { getActiveSessionUser } from "@/lib/server/session-user";
 
 /**
  * Image upload, for the browser.
@@ -20,7 +20,10 @@ import { getUserSession } from "@/lib/server/auth";
  *     means a chosen path is a write to *someone's* existing object.
  */
 export async function uploadStorageImage(input: StorageUploadInput) {
-  const session = await getUserSession();
+  // Confirmed against the database rather than read off the cookie: a JWT keeps
+  // asserting what was true when it was minted, so a deleted or deactivated
+  // user could otherwise keep writing to public storage until it expired.
+  const session = await getActiveSessionUser();
   if (!session) throw new Error("Sign in to upload.");
 
   // Strip any leading tenant segment the client may have supplied, then anchor

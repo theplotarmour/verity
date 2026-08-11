@@ -229,7 +229,10 @@ describe("cross-tenant surface", () => {
     // A "use server" export writing to a public bucket. Without both of these
     // it is an open upload endpoint on your domain and your bill.
     const source = readFileSync(path.join(ACTIONS_DIR, "storage.ts"), "utf8");
-    expect(source).toMatch(/getUserSession\(\)/);
+    // `getActiveSessionUser`, not `getUserSession`: the latter only decrypts the
+    // cookie, so a deleted or deactivated user would keep write access to public
+    // storage until their token expired.
+    expect(source).toMatch(/getActiveSessionUser\(\)/);
     expect(source).toMatch(/session\.factoryId/);
   });
 });

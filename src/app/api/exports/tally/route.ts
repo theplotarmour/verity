@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { getUserSession } from "@/lib/server/auth";
+import { getActiveSessionUser } from "@/lib/server/session-user";
 import { toTallyCsv, tallyDate, type TallyRow } from "@/lib/exports/tally";
 
 /**
@@ -20,7 +20,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const session = await getUserSession();
+  // Confirmed against the database, not read off the cookie. A JWT keeps
+  // asserting what was true when it was minted, so a session-only check would
+  // let a deleted or deactivated user — or one demoted out of OWNER — download
+  // the whole dispatch book until their token expired.
+  const session = await getActiveSessionUser();
   if (!session) return Response.json({ error: "Sign in first." }, { status: 401 });
 
   // Owners and co-owners only: this is the whole book of what left and what it
