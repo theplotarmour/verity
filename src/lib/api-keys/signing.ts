@@ -56,6 +56,30 @@ export function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(left, right);
 }
 
+/**
+ * Shopify's webhook signature.
+ *
+ * Deliberately its own function rather than a flag on `verifySignature`: it is
+ * base64 rather than hex, it signs the body alone with no timestamp, and the
+ * secret is the app's shared secret rather than one we minted. Folding those
+ * three differences into the main verifier as options is how a subtle mistake
+ * ends up applying to both.
+ *
+ * Note what it does *not* have: a timestamp. Shopify does not send one, so this
+ * cannot detect replay on its own — the idempotency record on the ingest path
+ * is what stops a replayed order becoming a second order.
+ */
+export function verifyShopifySignature(args: {
+  secret: string;
+  /** The raw `X-Shopify-Hmac-Sha256` header, base64. */
+  signature: string;
+  rawBody: string;
+}): boolean {
+  if (!args.signature || !args.secret) return false;
+  const expected = createHmac("sha256", args.secret).update(args.rawBody, "utf8").digest("base64");
+  return safeEqual(args.signature, expected);
+}
+
 export type SignatureVerdict = { ok: true } | { ok: false; reason: string };
 
 /**

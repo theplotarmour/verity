@@ -2537,6 +2537,15 @@ model ApiKey {
   /// leaked token alone from being enough, and stops replay of a modified body.
   signingSecret String
 
+  /// The external system this key belongs to, when it is a named connector
+  /// rather than a generic key: a Shopify shop domain like `acme.myshopify.com`.
+  ///
+  /// Shopify webhooks cannot carry a custom header or a bearer token, so the
+  /// only thing identifying the caller is `X-Shopify-Shop-Domain`. This column
+  /// is what turns that into a tenant. Unique, because one shop posting into
+  /// two workspaces is not a configuration, it is a mistake.
+  externalDomain String? @unique
+
   /// Revocation without deletion, so the audit trail survives.
   revokedAt  DateTime?
   lastUsedAt DateTime?

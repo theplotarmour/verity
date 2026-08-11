@@ -19,6 +19,8 @@ type ApiKey = {
   name: string;
   prefix: string;
   signingSecret: string;
+  /** Set when this key is a Shopify connector rather than a generic key. */
+  externalDomain: string | null;
   revokedAt: string | null;
   lastUsedAt: string | null;
 };
@@ -56,6 +58,8 @@ export function IntegrationsClient({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [keyName, setKeyName] = useState("");
+  /** Optional. Set it and this key becomes the Shopify connector for that shop. */
+  const [shopDomain, setShopDomain] = useState("");
   const [hook, setHook] = useState({ name: "", url: "" });
   /** The single moment the token is visible. */
   const [issued, setIssued] = useState<{ token: string; signingSecret: string } | null>(null);
@@ -88,17 +92,25 @@ export function IntegrationsClient({
             aria-label="Key name"
             className="flex-1"
           />
+          <Input
+            value={shopDomain}
+            onChange={(e) => setShopDomain(e.currentTarget.value)}
+            placeholder="acme.myshopify.com (optional)"
+            aria-label="Shopify shop domain"
+            className="flex-1"
+          />
           <Button
             disabled={pending || !keyName.trim()}
             onClick={() =>
               start(async () => {
-                const result = await issueMyApiKey(keyName);
+                const result = await issueMyApiKey(keyName, shopDomain);
                 if ("error" in result && result.error) {
                   toast.error(result.error);
                   return;
                 }
                 if ("credentials" in result && result.credentials) {
                   setKeyName("");
+                  setShopDomain("");
                   setIssued({
                     token: result.credentials.token,
                     signingSecret: result.credentials.signingSecret,
@@ -131,6 +143,14 @@ export function IntegrationsClient({
                       ? `last used ${new Date(key.lastUsedAt).toLocaleDateString()}`
                       : "never used"}
                   </p>
+                  {key.externalDomain ? (
+                    <p className="mt-1 truncate text-[11px] text-text-secondary">
+                      Shopify · {key.externalDomain} → point its{" "}
+                      <span className="font-mono">Order creation</span> webhook at{" "}
+                      <span className="font-mono">/api/integrations/shopify</span> and paste the
+                      signing secret above into Shopify.
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <Button size="sm" variant="secondary" onClick={() => copy("Signing secret", key.signingSecret)}>

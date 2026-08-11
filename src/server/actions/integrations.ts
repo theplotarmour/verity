@@ -42,6 +42,7 @@ export async function listMyApiKeys() {
       name: true,
       prefix: true,
       signingSecret: true,
+      externalDomain: true,
       revokedAt: true,
       lastUsedAt: true,
       createdAt: true,
@@ -57,13 +58,58 @@ export async function listMyApiKeys() {
   }));
 }
 
+/**
+ * Normalise a Shopify shop domain.
+ *
+ * People paste `https://acme.myshopify.com/admin`, `Acme.myshopify.com`, or
+ * the bare handle. Shopify's webhook header sends the lowercase host and
+ * nothing else, so anything that does not reduce to exactly that will never
+ * match — and the symptom is an integration that silently receives nothing.
+ */
+function normaliseShopDomain(raw: string): string | { error: string } {
+  let value = raw.trim().toLowerCase();
+  if (!value) return "";
+
+  value = value.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  // A bare handle is the commonest paste; complete it rather than refusing.
+  if (!value.includes(".")) value = `${value}.myshopify.com`;
+
+  if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(value)) {
+    return { error: `"${raw}" is not a Shopify domain. It should look like acme.myshopify.com.` };
+  }
+  return value;
+}
+
 /** Issue a key for the caller's own workspace. Token shown once. */
-export async function issueMyApiKey(name: string) {
+export async function issueMyApiKey(name: string, shopDomain?: string) {
   const user = await requireSettingsAccess();
   if (!user) return { error: "You do not have permission to manage integrations." };
 
   const label = name?.trim();
   if (!label) return { error: "Give the key a name so it can be told apart later." };
+
+  let externalDomain: string | null = null;
+  if (shopDomain?.trim()) {
+    const normalised = normaliseShopDomain(shopDomain);
+    if (typeof normalised !== "string") return normalised;
+    externalDomain = normalised;
+
+    // Globally unique, so this is checked before insert to return a sentence
+    // rather than a constraint violation. The check is advisory — the unique
+    // index is what actually guarantees it under a race.
+    const taken = await prisma.apiKey.findUnique({
+      where: { externalDomain },
+      select: { factoryId: true },
+    });
+    if (taken) {
+      return {
+        error:
+          taken.factoryId === user.factoryId
+            ? "That shop is already connected to a key here. Revoke it first."
+            : "That shop is already connected to another Verity workspace.",
+      };
+    }
+  }
 
   // A cap, because each live key is an independent way in and "we issued
   // hundreds and cannot say which is which" is how a leak becomes unfixable.
@@ -82,6 +128,7 @@ export async function issueMyApiKey(name: string) {
       prefix: material.prefix,
       tokenHash: material.tokenHash,
       signingSecret: material.signingSecret,
+      externalDomain,
       createdById: user.id,
     },
   });
@@ -93,6 +140,7 @@ export async function issueMyApiKey(name: string) {
       token: material.token,
       signingSecret: material.signingSecret,
       prefix: material.prefix,
+      shopDomain: externalDomain,
     },
   };
 }

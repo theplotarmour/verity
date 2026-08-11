@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import Papa from "papaparse";
-import { Download, Printer, ExternalLink, FileCheck2, Calendar } from "lucide-react";
+import { Download, Printer, ExternalLink, FileCheck2, Calendar, FileDown } from "lucide-react";
 import { getReportsData } from "@/server/actions/reports";
 import { PageHeader } from "@/components/design/PageHeader";
 import { Surface } from "@/components/design/Surface";
@@ -66,6 +66,18 @@ export function ReportsPackClient({ initialData, passports }: { initialData: any
             </div>
             <Button onClick={apply} disabled={pending} className="h-10">{pending ? "Loading…" : "Apply"}</Button>
             <Button variant="secondary" className="h-10 gap-2" onClick={() => window.print()}><Printer className="h-4 w-4" />Print</Button>
+            {/* A plain link, not a fetch-then-Blob: the browser's own download
+                handles the filename, the progress and the save dialog, and the
+                route already sets Content-Disposition. Reuses the date range
+                that is already on screen. */}
+            <a
+              href={`/api/exports/tally?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`}
+              className="inline-flex h-10 items-center gap-2 rounded-[12px] border border-border bg-surface px-4 text-sm font-semibold text-text-primary transition hover:border-[var(--brand)]/50"
+              title="Dispatches in this period, as a CSV Tally can import"
+            >
+              <FileDown className="h-4 w-4" />
+              Tally CSV
+            </a>
           </div>
         }
       />
