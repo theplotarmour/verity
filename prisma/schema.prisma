@@ -274,6 +274,8 @@ model Factory {
   workflowStages  WorkflowStage[]
   menuCategories  MenuCategory[]
   menuItems       MenuItem[]
+  diningTables    RestaurantTable[]
+  diningOrders    DiningOrder[]
 
   @@index([organizationId])
 }
@@ -2893,12 +2895,99 @@ model MenuItem {
   notes       String?
   sortOrder   Int     @default(0)
 
-  category MenuCategory @relation(fields: [categoryId], references: [id])
-  factory  Factory      @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+  category   MenuCategory      @relation(fields: [categoryId], references: [id])
+  factory    Factory           @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+  orderItems DiningOrderItem[]
 
   @@index([factoryId])
   @@index([categoryId])
   // The availability toggle is the hot path during service, and the kitchen
   // display reads "what is on right now" constantly.
   @@index([factoryId, available])
+}
+
+// ==========================================
+// RESTAURANT OS — TABLES & ORDERS
+// ==========================================
+
+/// Where the floor staff look. The order is the source of truth for what is
+/// happening; this is the shape of the room.
+model RestaurantTable {
+  id        String     @id @default(cuid())
+  factoryId String
+  number    String /// "T01", "Patio 3" — free text, because floors are named not numbered
+  capacity  Int
+  state     TableState @default(AVAILABLE)
+
+  orders  DiningOrder[]
+  factory Factory       @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+
+  // Two tables called T01 is a data-entry error that puts an order on the wrong
+  // one.
+  @@unique([factoryId, number])
+  @@index([factoryId])
+}
+
+enum TableState {
+  AVAILABLE
+  OCCUPIED
+  ORDERED
+  PREPARING
+  READY
+  SERVED
+  BILLING
+  PAID
+}
+
+model DiningOrder {
+  id         String     @id @default(cuid())
+  factoryId  String
+  tableId    String
+  customerId String?
+  notes      String?
+  state      OrderState @default(NEW)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  items   DiningOrderItem[]
+  table   RestaurantTable   @relation(fields: [tableId], references: [id])
+  factory Factory           @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+
+  @@index([factoryId])
+  @@index([tableId])
+  // "What is live on the floor" is the query the whole module runs constantly.
+  @@index([factoryId, state])
+}
+
+enum OrderState {
+  NEW
+  ACCEPTED
+  PREPARING
+  READY
+  SERVED
+  BILLED
+  PAID
+  CANCELLED
+}
+
+model DiningOrderItem {
+  id         String  @id @default(cuid())
+  orderId    String
+  menuItemId String
+  quantity   Int
+  notes      String?
+
+  /// The price per unit **at the moment it was ordered**, in paise.
+  ///
+  /// Snapshotted rather than read through to `MenuItem.price`, because this order
+  /// reaches BILLED and PAID: without it, repricing the menu silently rewrites
+  /// what a settled bill says it charged. The same reason the subscription
+  /// invoice lines snapshot their prices.
+  unitPrice  Int     @default(0)
+
+  order    DiningOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem    @relation(fields: [menuItemId], references: [id])
+
+  @@index([orderId])
+  @@index([menuItemId])
 }
