@@ -61,7 +61,6 @@ export function SettingsClient({
   const [isConfirmTransferOpen, setIsConfirmTransferOpen] = useState(false);
 
   // Workspace Explorer states
-  const [activeExplorerTab, setActiveExplorerTab] = useState<"products" | "materials" | "variants" | "templates" | "workflows">("products");
   const [isExplorerFullScreen, setIsExplorerFullScreen] = useState(false);
   const [catalogSearch, setCatalogSearch] = useState("");
   const [expandedBrands, setExpandedBrands] = useState<Record<string, boolean>>({});
@@ -72,19 +71,6 @@ export function SettingsClient({
   const [activeBrandId, setActiveBrandId] = useState("");
   const [showAddMaterial, setShowAddMaterial] = useState(false);
   const [showAddColor, setShowAddColor] = useState(false);
-
-  // Edit / Delete Detail overlay drawer state
-  const [selectedItem, setSelectedItem] = useState<{
-    id: string;
-    type: "brand" | "model" | "material" | "color";
-    name: string;
-  } | null>(null);
-
-  const [editingExplorerItem, setEditingExplorerItem] = useState<{
-    id: string;
-    type: "brand" | "model" | "material" | "color";
-    name: string;
-  } | null>(null);
 
   // Form input field state
   const [newBrandName, setNewBrandName] = useState("");
@@ -101,18 +87,6 @@ export function SettingsClient({
       models.some((m: any) => m.brandId === brand.id && m.name.toLowerCase().includes(catalogSearch.toLowerCase()))
     );
   }, [brands, models, catalogSearch]);
-
-  const filteredMaterials = useMemo(() => {
-    return materials.filter((mat: any) =>
-      mat.name.toLowerCase().includes(catalogSearch.toLowerCase())
-    );
-  }, [materials, catalogSearch]);
-
-  const filteredColors = useMemo(() => {
-    return colors.filter((color: any) =>
-      color.name.toLowerCase().includes(catalogSearch.toLowerCase())
-    );
-  }, [colors, catalogSearch]);
 
   // Sync brand models counts
   const totalRecordCount = useMemo(() => {
@@ -171,38 +145,6 @@ export function SettingsClient({
       toast.error("Error saving configuration.");
     } finally {
       setLoading(false);
-    }
-  }
-
-  const handleUpdateExplorerItem = async () => {
-    if (!editingExplorerItem) return;
-    const { id, type, name } = editingExplorerItem;
-    if (!name.trim()) return;
-    setLoading(true);
-    try {
-      toast.success("Updated successfully");
-      setEditingExplorerItem(null);
-      router.refresh();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Deletion dispatcher
-  async function handleDeleteItem() {
-    if (!selectedItem) return;
-    try {
-      const { id, type } = selectedItem;
-      
-      
-      setSelectedItem(null);
-      router.refresh();
-      toast.success("Record deleted");
-    } catch (err) {
-      console.error("Deletion failed", err);
-      toast.error("Failed to delete this item.");
     }
   }
 
@@ -813,37 +755,6 @@ export function SettingsClient({
         )}
       </AnimatePresence>
 
-      {/* Confirm Item Deletion Modal */}
-      <AnimatePresence>
-        {selectedItem && (
-          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
-            <div onClick={() => setSelectedItem(null)} className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="relative w-full max-w-sm bg-surface rounded-[24px] border border-border p-6 shadow-2xl z-10"
-            >
-              <div className="flex items-center gap-3 text-danger mb-4">
-                <ShieldAlert className="h-6 w-6 shrink-0" />
-                <h3 className="text-base font-bold">Delete Record?</h3>
-              </div>
-              <p className="text-xs text-text-secondary mb-5">
-                Are you sure you want to permanently delete "{selectedItem.name}"? This action cannot be undone.
-              </p>
-              <div className="flex gap-2.5 justify-end">
-                <Button variant="secondary" onClick={() => setSelectedItem(null)}>Cancel</Button>
-                <Button
-                  onClick={handleDeleteItem}
-                  className="bg-danger hover:bg-danger text-white border-transparent cursor-pointer"
-                >
-                  Confirm Delete
-                </Button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* Factory Ownership Transfer Modal */}
       <AnimatePresence>

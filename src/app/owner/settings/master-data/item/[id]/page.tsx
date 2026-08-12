@@ -5,6 +5,7 @@ import { getOwnerUser } from "@/lib/server/owner";
 import { canUser } from "@/lib/server/permissions";
 import { getItemUsedIn, loadRefLabels } from "@/server/queries/spec";
 import { DeleteItemButton } from "@/components/spec/DeleteItemButton";
+import { ItemMetadataForm } from "@/components/spec/ItemMetadataForm";
 import { ItemBomEditor } from "@/components/spec/ItemBomEditor";
 import { ContributionEditor } from "@/components/spec/ContributionEditor";
 import { resolveBomMode } from "@/server/actions/itemBlueprint";
@@ -22,6 +23,11 @@ export default async function ItemDetailPage({
     where: { id, factoryId: dbUser.factoryId },
     include: {
       group: true,
+      // Needed by the edit form. `updateItem` rebuilds the conversion from
+      // scratch on every save, so a form that does not carry the existing factor
+      // through silently deletes it — the item keeps its secondary unit and
+      // loses the number that makes it mean anything.
+      conversions: { select: { conversionFactor: true }, take: 1 },
       specValues: {
         include: {
           field: { select: { name: true, unitSuffix: true, sortOrder: true } },
@@ -89,7 +95,32 @@ export default async function ItemDetailPage({
           {item.itemType} / {item.manufacturingType} / {item.defaultUOM}
           {item.aliasName && <> / alias &quot;{item.aliasName}&quot;</>}
         </p>
-        <div className="mt-4">
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {/* Edit before Delete. The page previously offered only Delete, so a
+              typo in a name meant destroying the item and recreating it — losing
+              its BOM, its spec answers and any stock history pointing at it. */}
+          <ItemMetadataForm
+            item={{
+              id: item.id,
+              name: item.name,
+              sku: item.sku,
+              itemCode: item.itemCode,
+              defaultUOM: item.defaultUOM,
+              secondaryUOM: item.secondaryUOM,
+              brand: item.brand,
+              hsnCode: item.hsnCode,
+              taxRate: item.taxRate,
+              description: item.description,
+              imageUrl: item.imageUrl,
+              aliasName: item.aliasName,
+              searchKeywords: item.searchKeywords,
+              categoryId: item.categoryId,
+              subcategoryId: item.subcategoryId,
+              status: item.status,
+              minStockLevel: item.minStockLevel,
+              conversionFactor: item.conversions[0]?.conversionFactor ?? null,
+            }}
+          />
           <DeleteItemButton
             itemId={item.id}
             itemName={item.name}

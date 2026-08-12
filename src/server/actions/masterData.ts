@@ -522,3 +522,264 @@ export async function importMasterCsvExtra(sheet: string, rows: Array<Record<str
   revalidateMasterPaths();
   return { imported };
 }
+
+// =======================
+// Location structure — update and delete
+// =======================
+
+/**
+ * Renaming and removing the warehouse subtree.
+ *
+ * Only `add*` existed, so a typo in a zone name was permanent and an
+ * experimental rack could never be cleared away.
+ *
+ * Deleting needs care that renaming does not. The subtree cascades — zone →
+ * racks → shelves → bins — but `BinBalance` and `StockLedgerEntry` hold a
+ * required relation to a bin with no `onDelete`, which Prisma defaults to
+ * `Restrict`. So the database already refuses to destroy stock; what it produces
+ * is a raw foreign-key error from three levels down the cascade, which tells an
+ * operator nothing about which bin is holding what. These check first and name
+ * the blocker.
+ */
+
+/** A bin holding stock, or carrying history that must not be destroyed. */
+interface LocationBlocker {
+  reason: "stock" | "history";
+  binName: string;
+  detail: string;
+}
+
+/** The four levels, and the word used when talking to the operator. */
+type LocationLevel = "zone" | "rack" | "shelf" | "bin";
+
+/**
+ * What is stopping this part of the subtree from being removed.
+ *
+ * Takes a bin-id list so one implementation serves all four levels — the check
+ * is identical, only the way the bins are found differs. Four copies would be
+ * four chances for one of them to forget the ledger.
+ */
+async function locationBlockers(binIds: string[]): Promise<LocationBlocker[]> {
+  if (binIds.length === 0) return [];
+
+  const [balances, movements] = await Promise.all([
+    prisma.binBalance.findMany({
+      // All three buckets count. Stock on QC hold or marked rejected is still
+      // physically in the bin — checking only `stockAvailable` would let a bin
+      // full of quarantined goods be deleted, which is the case most worth
+      // catching because nobody is looking at it.
+      //
+      // An all-zero row is not a blocker: it records that a bin once held an
+      // item and now holds none, which the ledger already says.
+      where: {
+        binId: { in: binIds },
+        OR: [
+          { stockAvailable: { not: 0 } },
+          { stockQcHold: { not: 0 } },
+          { stockRejected: { not: 0 } },
+        ],
+      },
+      select: {
+        stockAvailable: true,
+        stockQcHold: true,
+        stockRejected: true,
+        bin: { select: { name: true } },
+        item: { select: { name: true } },
+      },
+      take: 5,
+    }),
+    prisma.stockLedgerEntry.groupBy({
+      by: ["binId"],
+      where: { binId: { in: binIds } },
+      _count: { binId: true },
+    }),
+  ]);
+
+  const blockers: LocationBlocker[] = balances.map((balance) => {
+    const held = balance.stockAvailable + balance.stockQcHold + balance.stockRejected;
+    const onHold = balance.stockQcHold + balance.stockRejected;
+    return {
+      reason: "stock" as const,
+      binName: balance.bin.name,
+      // Name the held portion separately: "12 × Nappa Leather (4 on hold)" tells
+      // an operator why the number does not match what they can see as available.
+      detail: `${held} × ${balance.item?.name ?? "item"}${onHold > 0 ? ` (${onHold} on hold)` : ""}`,
+    };
+  });
+
+  if (movements.length > 0) {
+    // History is the audit trail. A bin that has ever moved stock cannot be
+    // deleted, because the ledger entry pointing at it must keep resolving —
+    // that record is what a stock reconciliation is built from.
+    const named = await prisma.warehouseBin.findMany({
+      where: { id: { in: movements.map((m) => m.binId) } },
+      select: { id: true, name: true },
+      take: 5,
+    });
+    const counts = new Map(movements.map((m) => [m.binId, m._count.binId]));
+    for (const bin of named) {
+      const n = counts.get(bin.id) ?? 0;
+      blockers.push({
+        reason: "history",
+        binName: bin.name,
+        detail: `${n} stock movement${n === 1 ? "" : "s"}`,
+      });
+    }
+  }
+
+  return blockers;
+}
+
+/** One readable sentence from a blocker list. */
+function blockerMessage(what: string, blockers: LocationBlocker[]): string {
+  const stock = blockers.filter((b) => b.reason === "stock");
+  const history = blockers.filter((b) => b.reason === "history");
+
+  if (stock.length > 0) {
+    const named = stock.slice(0, 3).map((b) => `${b.binName} (${b.detail})`).join(", ");
+    const more = stock.length > 3 ? ` and ${stock.length - 3} more` : "";
+    return `Cannot delete this ${what}: stock is still held in ${named}${more}. Move or adjust it first.`;
+  }
+
+  const named = history.slice(0, 3).map((b) => `${b.binName} (${b.detail})`).join(", ");
+  const more = history.length > 3 ? ` and ${history.length - 3} more` : "";
+  return `Cannot delete this ${what}: ${named}${more} carry stock history, which has to keep resolving for reconciliation. Rename it instead.`;
+}
+
+/**
+ * Every bin under a node, for the blocker check.
+ *
+ * Scoped through the parent chain rather than on the node's own `factoryId`,
+ * which is nullable on all four of these tables — it was added after the rows
+ * existed, so it cannot be trusted as the tenancy filter. `Warehouse.factoryId`
+ * is required, and it is what ownership resolves to.
+ */
+async function binsUnder(factoryId: string, level: LocationLevel, id: string): Promise<string[]> {
+  const where =
+    level === "zone"
+      ? { shelf: { rack: { zone: { id, warehouse: { factoryId } } } } }
+      : level === "rack"
+        ? { shelf: { rack: { id, zone: { warehouse: { factoryId } } } } }
+        : level === "shelf"
+          ? { shelf: { id, rack: { zone: { warehouse: { factoryId } } } } }
+          : { id, shelf: { rack: { zone: { warehouse: { factoryId } } } } };
+
+  const bins = await prisma.warehouseBin.findMany({ where, select: { id: true } });
+  return bins.map((b) => b.id);
+}
+
+/** Confirm a node belongs to the caller's factory. See the note on `binsUnder`. */
+async function ownsLocation(factoryId: string, level: LocationLevel, id: string): Promise<boolean> {
+  if (level === "zone") {
+    return (await prisma.warehouseZone.count({ where: { id, warehouse: { factoryId } } })) > 0;
+  }
+  if (level === "rack") {
+    return (
+      (await prisma.warehouseRack.count({ where: { id, zone: { warehouse: { factoryId } } } })) > 0
+    );
+  }
+  if (level === "shelf") {
+    return (
+      (await prisma.warehouseShelf.count({
+        where: { id, rack: { zone: { warehouse: { factoryId } } } },
+      })) > 0
+    );
+  }
+  return (
+    (await prisma.warehouseBin.count({
+      where: { id, shelf: { rack: { zone: { warehouse: { factoryId } } } } },
+    })) > 0
+  );
+}
+
+/** Rename any node in the subtree. One implementation, four thin exports. */
+async function renameLocation(
+  level: LocationLevel,
+  id: string,
+  name: string,
+): Promise<{ success: true } | { error: string }> {
+  const user = await getOwnerUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const clean = name?.trim();
+  if (!clean) return { error: `Give the ${level} a name.` };
+
+  if (!(await ownsLocation(user.factoryId, level, id))) {
+    return { error: `That ${level} was not found.` };
+  }
+
+  const data = { name: clean };
+  if (level === "zone") await prisma.warehouseZone.update({ where: { id }, data });
+  else if (level === "rack") await prisma.warehouseRack.update({ where: { id }, data });
+  else if (level === "shelf") await prisma.warehouseShelf.update({ where: { id }, data });
+  else await prisma.warehouseBin.update({ where: { id }, data });
+
+  revalidateMasterPaths("materials");
+  return { success: true };
+}
+
+/** Delete any node, refusing when stock or history depends on it. */
+async function deleteLocation(
+  level: LocationLevel,
+  id: string,
+): Promise<{ success: true } | { error: string }> {
+  const user = await getOwnerUser();
+  if (!user) return { error: "Unauthorized" };
+
+  if (!(await ownsLocation(user.factoryId, level, id))) {
+    return { error: `That ${level} was not found.` };
+  }
+
+  const binIds = await binsUnder(user.factoryId, level, id);
+  const blockers = await locationBlockers(binIds);
+  if (blockers.length > 0) return { error: blockerMessage(level, blockers) };
+
+  // Only zero-quantity balance rows can remain, and they carry nothing the
+  // ledger does not. Removing them lets the cascade through; without this the
+  // Restrict on BinBalance turns an allowed delete into a raw FK error.
+  if (binIds.length > 0) {
+    await prisma.binBalance.deleteMany({ where: { binId: { in: binIds } } });
+  }
+
+  // guardDelete turns a constraint violation into a sentence, for anything the
+  // checks above did not anticipate — a relation added later, most likely.
+  const result = await guardDelete(level, async () => {
+    if (level === "zone") await prisma.warehouseZone.delete({ where: { id } });
+    else if (level === "rack") await prisma.warehouseRack.delete({ where: { id } });
+    else if (level === "shelf") await prisma.warehouseShelf.delete({ where: { id } });
+    else await prisma.warehouseBin.delete({ where: { id } });
+  });
+
+  if ("error" in result) return { error: result.error ?? `Could not delete that ${level}.` };
+
+  revalidateMasterPaths("materials");
+  return { success: true };
+}
+
+export async function updateWarehouseZone(id: string, name: string) {
+  return renameLocation("zone", id, name);
+}
+export async function removeWarehouseZone(id: string) {
+  return deleteLocation("zone", id);
+}
+
+export async function updateWarehouseRack(id: string, name: string) {
+  return renameLocation("rack", id, name);
+}
+export async function removeWarehouseRack(id: string) {
+  return deleteLocation("rack", id);
+}
+
+export async function updateWarehouseShelf(id: string, name: string) {
+  return renameLocation("shelf", id, name);
+}
+export async function removeWarehouseShelf(id: string) {
+  return deleteLocation("shelf", id);
+}
+
+export async function updateWarehouseBin(id: string, name: string) {
+  return renameLocation("bin", id, name);
+}
+export async function removeWarehouseBin(id: string) {
+  return deleteLocation("bin", id);
+}
