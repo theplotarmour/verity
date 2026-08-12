@@ -69,9 +69,15 @@ describe("provisioning requires a pack", () => {
   });
 });
 
-describe("the four packs are the only choices", () => {
-  it("offers exactly four", () => {
-    expect(Object.keys(VERTICAL_PACKS)).toHaveLength(4);
+describe("the packs are the only choices", () => {
+  it("offers a closed set, every one of which has a dashboard", () => {
+    // The count moved from four to five when Restaurant OS landed. What this
+    // guards is not the number but that the set is finite and enumerated — the
+    // exact membership is pinned in packs.test.ts, and the dashboard-routing test
+    // pins that each one has a screen built for it.
+    const keys = Object.keys(VERTICAL_PACKS);
+    expect(keys.length).toBeGreaterThanOrEqual(4);
+    expect(new Set(keys).size, "a duplicate pack key").toBe(keys.length);
   });
 
   it("resolves every one to itself", () => {

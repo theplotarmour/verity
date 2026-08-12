@@ -272,6 +272,8 @@ model Factory {
   agreements      Agreement[]
   supportSessions SupportSession[]
   workflowStages  WorkflowStage[]
+  menuCategories  MenuCategory[]
+  menuItems       MenuItem[]
 
   @@index([organizationId])
 }
@@ -2852,4 +2854,51 @@ model PlatformInvoiceLine {
   amount    Int
 
   @@index([invoiceId])
+}
+
+// ==========================================
+// RESTAURANT OS — MENU
+// ==========================================
+
+/// A section of the menu — Starters, Breads, Desserts.
+model MenuCategory {
+  id        String  @id @default(cuid())
+  factoryId String
+  name      String
+  sortOrder Int     @default(0)
+
+  items   MenuItem[]
+  factory Factory    @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+
+  // Two categories called "Starters" in one restaurant is a data-entry mistake,
+  // not a use case: the second one is invisible on the printed card and splits
+  // the reporting.
+  @@unique([factoryId, name])
+  @@index([factoryId])
+}
+
+model MenuItem {
+  id          String  @id @default(cuid())
+  factoryId   String
+  categoryId  String
+  name        String
+  description String?
+  /// Paise, as an integer. A menu price that is a float is a rounded bill.
+  price       Int
+  isVeg       Boolean @default(true)
+  /// False when it has run out. Kept off the menu without deleting the item —
+  /// deleting would lose its price, photo and history for the sake of one service.
+  available   Boolean @default(true)
+  imageUrl    String?
+  notes       String?
+  sortOrder   Int     @default(0)
+
+  category MenuCategory @relation(fields: [categoryId], references: [id])
+  factory  Factory      @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+
+  @@index([factoryId])
+  @@index([categoryId])
+  // The availability toggle is the hot path during service, and the kitchen
+  // display reads "what is on right now" constantly.
+  @@index([factoryId, available])
 }

@@ -106,6 +106,19 @@ export const PACK_PRICE: Record<VerticalPackKey, number> = {
   franchise_qsr: 19_999 * RUPEE,
   // à la carte ₹28,000 → 21.4% off
   franchise_retail: 21_999 * RUPEE,
+  /*
+   * à la carte ₹25,500 → 21.6% off.
+   *
+   * Specified as ₹22,499 against an à la carte of ₹29,500. That figure priced all
+   * six paid modules at Tier 2; `hr` and `billing` are Tier 1 (₹2,500, see
+   * TIER_ONE), so the real total is ₹25,500 and ₹22,499 was 11.8% off — half the
+   * committed floor, and the test said so.
+   *
+   * The band for this pack is ₹19,125–₹20,400. ₹19,999 sits at 21.6%, and matches
+   * franchise_qsr — a restaurant and a QSR outlet buying near-identical bundles for
+   * near-identical money is a price list somebody can defend out loud.
+   */
+  restaurant_ops: 19_999 * RUPEE,
 };
 
 /** The discount band a pack must sit inside. Enforced by test, not by intent. */

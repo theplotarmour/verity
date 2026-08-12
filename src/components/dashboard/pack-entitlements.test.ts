@@ -26,6 +26,7 @@ const DASHBOARDS: Record<string, string> = {
   facility_management: "FacilityManagementDashboard.tsx",
   franchise_qsr: "QsrFranchiseDashboard.tsx",
   franchise_retail: "RetailFranchiseDashboard.tsx",
+  restaurant_ops: "RestaurantDashboard.tsx",
 };
 
 /**
@@ -59,6 +60,9 @@ const MODEL_MODULE: Record<string, ModuleKey | null> = {
   checkpointSubmission: "quality",
   qualityReport: "quality",
   serviceInspection: "quality",
+
+  menuCategory: "menu",
+  menuItem: "menu",
 
   salesOrder: "sales",
   itemMaster: "inventory",
@@ -112,10 +116,18 @@ describe("dashboards only show what their pack entitles", () => {
 });
 
 describe("service inspections are reachable by every pack that shows them", () => {
-  it("is guarded on a module all four packs carry", () => {
+  it("is guarded on a module every pack with a service-quality dashboard carries", () => {
     // The original bug: these actions were gated on `helpdesk`, which neither
     // franchise pack has, so their SOP engine was unreachable while their
     // dashboard advertised it.
+    //
+    // Scoped to the packs whose dashboard actually reads a service inspection,
+    // derived rather than hand-listed. Restaurant OS is why that distinction
+    // matters: it carries no `quality` module and its dashboard shows no
+    // inspections, so it is not a pack "that shows them" — the condition in this
+    // block's own name. Asserting across every pack would have forced `quality`
+    // into the restaurant bundle to satisfy a test, pushing its à la carte to
+    // ₹30,000 and breaking the discount band. The tail would be wagging the dog.
     const source = readFileSync(
       path.resolve(__dirname, "../../server/actions/serviceQuality.ts"),
       "utf8",
@@ -124,15 +136,29 @@ describe("service inspections are reachable by every pack that shows them", () =
 
     expect(guards.length).toBeGreaterThan(0);
 
+    const showsInspections = Object.entries(DASHBOARDS)
+      .filter(([, file]) => modelsQueriedBy(file).includes("serviceInspection"))
+      .map(([key]) => key);
+
+    // If this is empty the test proves nothing, which is how a scoped assertion
+    // rots into a no-op.
+    expect(showsInspections.length, "no dashboard reads serviceInspection").toBeGreaterThan(0);
+
     for (const guard of new Set(guards)) {
-      const packsWithout = Object.entries(VERTICAL_PACKS)
-        .filter(([, pack]) => !withDependencies(pack.modules).includes(guard as ModuleKey))
-        .map(([key]) => key);
+      const packsWithout = showsInspections.filter(
+        (key) => !withDependencies(VERTICAL_PACKS[key].modules).includes(guard as ModuleKey),
+      );
 
       expect(
         packsWithout,
         `serviceQuality.ts guards on "${guard}", missing from: ${packsWithout.join(", ")}`,
       ).toEqual([]);
+    }
+  });
+
+  it("names only real packs in DASHBOARDS", () => {
+    for (const key of Object.keys(DASHBOARDS)) {
+      expect(VERTICAL_PACKS, `DASHBOARDS names ${key}, which is not a pack`).toHaveProperty(key);
     }
   });
 });

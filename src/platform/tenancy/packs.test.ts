@@ -17,20 +17,32 @@ import {
  * value a live `Factory.industry` actually holds still resolves.
  */
 
+/**
+ * The supported packs, as a closed allowlist.
+ *
+ * The count is not the point — a deliberate list is. Restaurant OS was the fifth,
+ * added because a customer asked for it, which is the bar `packs.ts` sets for
+ * itself. Adding a sixth should mean editing this line and noticing that a pack
+ * without a dashboard case falls through to a factory floor.
+ */
+const SUPPORTED_PACKS = [
+  "auto_components",
+  "facility_management",
+  "franchise_qsr",
+  "franchise_retail",
+  "restaurant_ops",
+];
+
 describe("vertical packs", () => {
-  it("offers exactly the four supported verticals", () => {
-    expect(Object.keys(VERTICAL_PACKS).sort()).toEqual([
-      "auto_components",
-      "facility_management",
-      "franchise_qsr",
-      "franchise_retail",
-    ]);
+  it("offers exactly the supported verticals", () => {
+    expect(Object.keys(VERTICAL_PACKS).sort()).toEqual([...SUPPORTED_PACKS].sort());
   });
 
   it("does not offer retired packs in the selector", () => {
     const offered = verticalPackOptions().map((p) => p.key);
     expect(offered).not.toContain("security_services");
-    expect(offered).toHaveLength(4);
+    // Derived from the allowlist above, so the two assertions cannot drift apart.
+    expect(offered).toHaveLength(SUPPORTED_PACKS.length);
   });
 
   it("every pack resolves to a non-empty module set including core", () => {

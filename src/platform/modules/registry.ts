@@ -34,7 +34,11 @@ export type ModuleKey =
   | "sites"
   | "scheduling"
   | "billing"
-  | "automotive";
+  | "automotive"
+  | "menu"
+  | "tables_orders"
+  | "kitchen"
+  | "serving";
 
 export interface ModuleDefinition {
   key: ModuleKey;
@@ -395,6 +399,65 @@ const MODULES: ModuleDefinition[] = [
       { key: "vehicle_catalog.manage", label: "Manage vehicle catalogue", group: "Automotive" },
       { key: "fitment.manage", label: "Manage product fitment", group: "Automotive" },
     ],
+  },
+
+  /*
+   * Restaurant OS — single-location restaurants.
+   *
+   * Four modules rather than one, because they are genuinely separable and a
+   * restaurant buys them in that order: the menu is worth having on its own (a
+   * priced, photographed, in-stock card), table orders need a menu to order from,
+   * and the kitchen and pass both need orders to work on. Someone running a
+   * takeaway counter wants menu and orders and no table service at all.
+   *
+   * Not marked `vertical`, which is a pricing decision as much as a taxonomic
+   * one: `pricingTier` reads that flag as Tier 3 (₹7,000), and these are Tier 2
+   * operations modules (₹4,500). A restaurant's menu is no more industry-exotic
+   * than a factory's BOM.
+   *
+   * Permissions land with each module's screens. An empty list here means "not
+   * yet", and the permission matrix simply shows nothing for them — better than
+   * inventing keys now and having to rename them once the screens exist.
+   */
+  {
+    key: "menu",
+    version: "1.0.0",
+    name: "Menu",
+    description:
+      "Menu categories and items — price, veg marker, photo, and the availability toggle " +
+      "a manager hits when something runs out mid-service.",
+    requires: ["core"],
+    permissions: [],
+  },
+  {
+    key: "tables_orders",
+    version: "1.0.0",
+    name: "Tables & Orders",
+    description:
+      "Floor plan, table state, and the running order (KOT) attached to each — the spine " +
+      "the kitchen and the pass both read from.",
+    requires: ["core", "menu"],
+    permissions: [],
+  },
+  {
+    key: "kitchen",
+    version: "1.0.0",
+    name: "Kitchen",
+    description:
+      "The kitchen display: tickets by station, fire and bump, and per-item timing so a " +
+      "table's courses land together.",
+    requires: ["core", "tables_orders"],
+    permissions: [],
+  },
+  {
+    key: "serving",
+    version: "1.0.0",
+    name: "Serving",
+    description:
+      "The pass and the floor: what is ready to run, what has been delivered, and which " +
+      "table is waiting on what.",
+    requires: ["core", "tables_orders"],
+    permissions: [],
   },
 ];
 

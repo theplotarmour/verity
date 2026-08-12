@@ -59,6 +59,24 @@ export const VERTICAL_PACKS: Record<string, { label: string; modules: ModuleKey[
     label: "Franchise — Retail",
     modules: ["core", "hr", "inventory", "quality", "procurement", "sales", "billing", "sites"],
   },
+  /*
+   * Restaurant OS — a single location, not a chain.
+   *
+   * The fifth pack, and it follows a customer rather than preceding one, which is
+   * the bar this list sets for itself.
+   *
+   * Deliberately without `sites`: a single restaurant is one place, and modelling
+   * it as a network of one buys nothing but an extra hop in every query. A
+   * multi-location group is `franchise_qsr`, which already exists.
+   *
+   * `inventory` is absent too. It will earn its way in when recipe-level stock
+   * depletion lands; until then a restaurant that cannot deplete stock on a sale
+   * would be paying for a module that only holds numbers somebody types twice.
+   */
+  restaurant_ops: {
+    label: "Restaurant OS",
+    modules: ["core", "hr", "menu", "tables_orders", "kitchen", "serving", "billing"],
+  },
 };
 
 export type VerticalPackKey = keyof typeof VERTICAL_PACKS;
