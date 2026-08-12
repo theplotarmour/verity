@@ -35,14 +35,45 @@ export async function createItemGroup(input: {
   // A subgroup always takes its parent's type — a group under Raw Material
   // cannot hold finished goods, and letting the caller pass a type would make
   // that contradiction expressible.
+  //
+  // It also inherits the parent's behavioural flags. Without this, a subcategory
+  // created under a configured parent came out with defaults derived from
+  // `itemType` alone, so a subfolder under a producible category was not itself
+  // producible — and `itemSearch`, `orderItemResolver` and `orders` all filter on
+  // `isProducible: true`, so every item in it was invisible to production and
+  // order taking with nothing reporting why.
+  //
+  // One fetch, not two: the auto-linking block below needs the parent as well,
+  // and reading the same row twice is how the two copies drift.
   let itemType = input.itemType;
+  let parentGroup: {
+    id: string;
+    name: string;
+    parentId: string | null;
+    itemType: ItemType;
+    isProducible: boolean;
+    isSalable: boolean;
+    isPurchasable: boolean;
+    hasInventoryUnits: boolean;
+  } | null = null;
+
   if (input.parentId) {
-    const parent = await prisma.itemGroup.findFirst({
+    parentGroup = await prisma.itemGroup.findFirst({
       where: { id: input.parentId, factoryId: user.factoryId },
-      select: { itemType: true },
+      select: {
+        id: true,
+        name: true,
+        parentId: true,
+        itemType: true,
+        isProducible: true,
+        isSalable: true,
+        isPurchasable: true,
+        hasInventoryUnits: true,
+        // `bomMode` is deliberately NOT read. See the note at the create call.
+      },
     });
-    if (!parent) return { error: "Parent group not found" };
-    itemType = parent.itemType;
+    if (!parentGroup) return { error: "Parent group not found" };
+    itemType = parentGroup.itemType;
   }
 
   const clash = await prisma.itemGroup.findFirst({
@@ -59,11 +90,32 @@ export async function createItemGroup(input: {
       parentId: input.parentId ?? null,
       shortCode: input.shortCode?.trim() || null,
       isSheet: !input.parentId,
-      // A category holding finished or semi-finished goods is something the
+
+      // A subcategory inherits how its parent behaves; a root derives from its
+      // type. A category holding finished or semi-finished goods is something the
       // factory produces, so it must be producible for its items to appear in
-      // the production and order-taking search. Defaulting to false hid every
+      // the production and order-taking search — defaulting to false hid every
       // item created under a freshly made finished-goods subfolder.
-      isProducible: itemType === "FINISHED_PRODUCT" || itemType === "SEMI_FINISHED",
+      isProducible:
+        parentGroup?.isProducible ??
+        (itemType === "FINISHED_PRODUCT" || itemType === "SEMI_FINISHED"),
+      isSalable:
+        parentGroup?.isSalable ?? (itemType === "FINISHED_PRODUCT" || itemType === "SPARE_PART"),
+      isPurchasable:
+        parentGroup?.isPurchasable ??
+        ["RAW_MATERIAL", "CONSUMABLE", "PACKAGING", "SPARE_PART"].includes(itemType),
+      hasInventoryUnits: parentGroup?.hasInventoryUnits ?? true,
+
+      // `bomMode` is left unset on purpose, and this is a deliberate departure
+      // from the source commit being ported.
+      //
+      // Veda copied the parent's value onto the child, because there it was a
+      // non-null column. Here it is nullable and null *means* "inherit from my
+      // parent", resolved at read time by `resolveBomMode`. Copying the value
+      // would pin the child to whatever the parent said today, so changing the
+      // parent later would stop propagating — which is the whole feature.
+      //
+      // Leaving it null is strictly better and needs no field here.
     },
   });
 
@@ -76,11 +128,8 @@ export async function createItemGroup(input: {
   // subgroup directly under a root sheet gets no auto-column: the root is the
   // sheet, not a filterable dimension.
   if (input.parentId) {
-    const parentGroup = await prisma.itemGroup.findFirst({
-      where: { id: input.parentId, factoryId: user.factoryId },
-      select: { id: true, name: true, parentId: true },
-    });
-
+    // Already fetched above, with the flags. Re-reading it was a second round
+    // trip and a second place for the tenancy filter to be got wrong.
     if (parentGroup && parentGroup.parentId) {
       // Slug the parent name into a template key. Guard the three built-in
       // column keys so the reference never shadows id/name/code.
