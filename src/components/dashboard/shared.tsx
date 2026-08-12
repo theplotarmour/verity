@@ -149,6 +149,70 @@ export function BarRow({
   );
 }
 
+export type FunnelStage = { name: string; count: number };
+
+/**
+ * The production funnel: one bucket per stage, live count in each.
+ *
+ * Reads as a floor, left to right, and the shape is the information — a fat
+ * bucket three stages in is a queue forming, which no single number on this page
+ * says. Deliberately built from the same tokens as `StageIndicator` (the 1.5px
+ * rail, the 9px uppercase label) so a card's strip and the dashboard's funnel are
+ * recognisably the same object at two scales.
+ *
+ * Renders nothing when there are no stages. A factory that has not set up
+ * departments has no funnel, and an empty rail would imply the floor is empty
+ * rather than unconfigured.
+ */
+export function FunnelStrip({ stages }: { stages: FunnelStage[] }) {
+  if (stages.length === 0) return null;
+
+  const busiest = Math.max(...stages.map((s) => s.count));
+
+  return (
+    <div className="flex items-stretch gap-1.5">
+      {stages.map((stage) => {
+        const empty = stage.count === 0;
+        // The bottleneck earns the brand colour; everything else stays quiet so
+        // one glance finds the queue. A tie means neither is the bottleneck.
+        const isBusiest = !empty && stage.count === busiest && busiest > 0;
+
+        return (
+          <div key={stage.name} className="flex min-w-0 flex-1 flex-col gap-1">
+            <div
+              className={
+                "h-1.5 rounded-full transition-all duration-300 " +
+                (empty
+                  ? "bg-border dark:bg-white/5"
+                  : isBusiest
+                    ? "bg-[var(--brand)] shadow-[0_0_8px_rgba(0,122,255,0.3)]"
+                    : "bg-success shadow-[0_0_8px_rgba(48,209,88,0.25)]")
+              }
+            />
+            <p
+              className={
+                "font-mono text-lg font-semibold leading-none tracking-[-0.04em] " +
+                (empty ? "text-text-tertiary" : isBusiest ? "text-[var(--brand)]" : "text-text-primary")
+              }
+            >
+              {stage.count}
+            </p>
+            <span
+              title={stage.name}
+              className={
+                "truncate text-[9px] font-semibold uppercase tracking-wide " +
+                (empty ? "text-text-tertiary" : "text-text-secondary")
+              }
+            >
+              {stage.name}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** Formats a duration in hours the way an operations person reads it. */
 export function hoursLabel(hours: number): string {
   if (hours < 1) return `${Math.max(1, Math.round(hours * 60))}m`;

@@ -8,7 +8,10 @@ import { Metric } from "@/components/design/Metric";
 import { FloorProgressList } from "@/components/factory/FloorProgressList";
 import { FactoryFeed } from "@/components/factory/FactoryFeed";
 import { salesOrderInclude, toLegacyOrder } from "@/lib/server/jobCardAdapter";
-import { BarRow, Nothing, Panel, StatRow } from "./shared";
+import { JOB_CARD_DONE } from "@/lib/production-status";
+import { listUnreadWarnings } from "@/server/actions/notifications";
+import { BarRow, FunnelStrip, Nothing, Panel, StatRow } from "./shared";
+import { WarningsQueue } from "./WarningsQueue";
 
 /**
  * Auto components — a production floor.
@@ -41,6 +44,8 @@ export async function AutoComponentsDashboard({
     activeWorkersList,
     defectGroups,
     auditLogs,
+    funnelDepartments,
+    warnings,
   ] = await Promise.all([
     prisma.salesOrder.count({ where: { factoryId, orderDate: { gte: todayStart } } }),
     prisma.inspection.count({ where: { factoryId, status: "WAITING_QC" } }),
@@ -81,7 +86,38 @@ export async function AutoComponentsDashboard({
       take: 6,
     }),
     prisma.auditLog.findMany({ where: { factoryId }, orderBy: { createdAt: "desc" }, take: 10 }),
+    /*
+     * The funnel. One query, and it has to be its own.
+     *
+     * The obvious saving — counting the job cards already loaded with
+     * `recentOrders` — would be wrong: that query takes the five most recent
+     * orders, so a funnel built from it silently reports five orders' worth of
+     * work as the whole floor. A dashboard number that understates the floor is
+     * worse than no number.
+     *
+     * A filtered relation count does it in one round trip, inside this
+     * Promise.all, so it costs no extra latency — the same shape as the Pareto
+     * groupBy above. Departments are the buckets because every job card has one
+     * (`departmentId` is required) and they carry the floor's own order.
+     */
+    prisma.department.findMany({
+      where: { factoryId, active: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        _count: { select: { jobCards: { where: { status: { not: JOB_CARD_DONE } } } } },
+      },
+    }),
+    // The action, not a second copy of its query. It derives the tenant from the
+    // session — the same session this page's `factoryId` came from, checked against
+    // the database rather than the cookie — and `getActiveSessionUser` is
+    // React-cached, so the lookup is free inside this request.
+    listUnreadWarnings(),
   ]);
+
+  const funnelStages = funnelDepartments.map((d) => ({ name: d.name, count: d._count.jobCards }));
+  const onFloor = funnelStages.reduce((n, s) => n + s.count, 0);
 
   // Names for the ranked checkpoints, in one query rather than one per bar.
   const checkpointNames = new Map<string, string>();
@@ -143,6 +179,20 @@ export async function AutoComponentsDashboard({
         <Metric href="/owner/floor" label="Problems" value={String(failedChecks)} detail="Needs attention" tone="red" />
         <Metric href="/owner/reports" label="Proof Ready" value={String(reportsGenerated)} detail="Passports issued" tone="amber" />
       </section>
+
+      {funnelStages.length > 0 ? (
+        <Panel
+          eyebrow="Active production"
+          title="Where the work is"
+          action={
+            <span className="shrink-0 font-mono text-[13px] text-text-tertiary">
+              {onFloor} on floor
+            </span>
+          }
+        >
+          <FunnelStrip stages={funnelStages} />
+        </Panel>
+      ) : null}
 
       <section className="grid w-full flex-1 gap-4 xl:grid-cols-3 xl:gap-6">
         <Panel eyebrow="Production timeline" title="Floor progress" className="xl:col-span-2">
@@ -222,6 +272,22 @@ export async function AutoComponentsDashboard({
           <FactoryFeed initialEvents={feedEvents} />
         </Panel>
       </section>
+
+      {/* Bottom of the page on purpose: this is the queue you work through once
+          you have read the floor, not the first thing you look at. */}
+      <Panel
+        eyebrow="Needs attention"
+        title="Operational warnings"
+        action={
+          warnings.length > 0 ? (
+            <AlertTriangle className="h-5 w-5 shrink-0 text-[var(--warning)]" />
+          ) : null
+        }
+      >
+        <WarningsQueue
+          initial={warnings.map((w) => ({ ...w, createdAt: w.createdAt.toISOString() }))}
+        />
+      </Panel>
     </div>
   );
 }

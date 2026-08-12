@@ -48,6 +48,22 @@ export function productionStatusIndex(status: string): number {
   return i === -1 ? 0 : i;
 }
 
+/**
+ * The one terminal job-card status.
+ *
+ * Everything else — WAITING, BLOCKED, ON_HOLD, IN_PROGRESS, QC_PENDING,
+ * AWAITING_APPROVAL, REWORK_REQUIRED — is a card still on the floor, queued at or
+ * being worked on at its stage. `deriveProductionStatus` already draws the line
+ * here ("the first card that is not finished is where the bag physically is"), so
+ * the funnel counts against the same definition rather than inventing a second
+ * list of statuses that would drift from it.
+ */
+export const JOB_CARD_DONE = "COMPLETED";
+
+export function isJobCardOnFloor(status: string): boolean {
+  return status !== JOB_CARD_DONE;
+}
+
 // Department names are free text in master data, so match on the recognisable
 // keyword rather than an exact string.
 export type DepartmentKind = "CAD" | "CUTTING" | "STITCHING" | "QC" | "PACKING" | "OTHER";

@@ -41,6 +41,13 @@ const MODEL_MODULE: Record<string, ModuleKey | null> = {
   auditLog: null,
   customer: null,
   factory: null,
+  // Every module writes notifications and the shell reads them for every user,
+  // so the warnings queue needs no entitlement of its own.
+  notification: null,
+
+  // The funnel buckets by department, and a department is a station on a
+  // production route — the same module that owns job cards.
+  department: "manufacturing",
 
   attendanceLog: "hr",
   shiftSchedule: "scheduling",
