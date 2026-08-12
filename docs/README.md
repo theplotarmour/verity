@@ -17,6 +17,7 @@ Start here. Three reading paths depending on what you need.
 - **[PRD index](./prd/README.md)** — what to build, in what order, and how you'll know it worked.
 - **[Sync guide](./SYNC_GUIDE.md)** — how to port a fix from Veda into Verity (cherry-pick standard, no copy-paste).
 - **[Audit log](./AUDIT.md)** — recurring defect patterns in this codebase and why each rule exists. Read before touching auth, billing, or permissions.
+- **[Migrations](./MIGRATIONS.md)** — use `db push`, never `migrate dev`. Read before changing the schema; the wrong command here drops the database.
 
 ---
 
