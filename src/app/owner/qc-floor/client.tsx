@@ -125,6 +125,8 @@ export function QCFloorClient({ inspections = [], workers = [], inspectors = [],
                   submissions={inspection.submissions || []}
                   totalCheckpoints={totalCheckpoints}
                   hasReport={!!inspection.report}
+                  stages={inspection.batch?.stageSequence?.stages ?? []}
+                  currentStage={inspection.batch?.stageSequence?.currentStage ?? null}
                 />
               ))}
             </div>

@@ -1,5 +1,11 @@
 # PRD 03 — Module Contract & Developer Platform
 
+> [!CAUTION]
+> **DEFERRED — DO NOT IMPLEMENT.**
+> Timeline: ~November 2026 (3 months out). No work on this PRD until PRD 02, PRD 04, and PRD 06 are fully shipped.
+> This means: no `src/modules/<key>/` folder restructuring, no `verity-cli`, no module store UI, no import boundary lints.
+> If you are an agent reading this file, stop here and work on something else.
+
 **Phase D · Depends on PRD 00**
 
 ## Problem

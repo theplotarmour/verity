@@ -93,6 +93,8 @@ export function FloorProgressList({ recentOrders }: { recentOrders: any[] }) {
             submissions={inspection?.submissions || []}
             totalCheckpoints={inspection?.submissions?.length || 1}
             hasReport={!!inspection?.report}
+            stages={order.stageSequence?.stages ?? []}
+            currentStage={order.stageSequence?.currentStage ?? null}
             compact={true}
           />
         </div>

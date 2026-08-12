@@ -15,6 +15,7 @@ import { startStage, holdStage, completeStage, approveStageCard, rejectStageCard
 import { createStageVideoUploadUrl, resolveStageVideoUrl } from "@/server/actions/stage-video";
 import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { OrderSpecCard } from "@/components/factory/OrderSpecCard";
+import { HOLD_CAUSES, HOLD_CAUSE_KEYS, isUrgentHold, type HoldCause } from "@/lib/stage-holds";
 import { cn } from "@/lib/utils";
 
 type StageImage = { dataUrl: string; fileName: string; contentType: string; size: number };
@@ -66,6 +67,9 @@ export default function StageClient({ data }: { data: any }) {
   // mounted with, so a hold/approval elsewhere never showed up.
   const [status, setStatus] = useState<string>(job.status);
   useEffect(() => { setStatus(job.status); }, [job.status]);
+  // The pause panel: a cause, and an optional note for the supervisor.
+  const [holdPanel, setHoldPanel] = useState(false);
+  const [holdNote, setHoldNote] = useState("");
   // Set when the worker reopens an already-submitted response to amend it.
   const [editing, setEditing] = useState(false);
   const [beforeImages, setBeforeImages] = useState<StageImage[]>([]);
@@ -191,13 +195,18 @@ export default function StageClient({ data }: { data: any }) {
     })();
   }, [status, job.id, router]);
 
-  const handleHold = async () => {
+  // Pausing asks why. A bare "on hold" told a supervisor nothing — a broken
+  // machine and a tea break looked identical on the floor board — so the cause is
+  // collected here and drives whether the alert shouts.
+  const handleHold = async (cause: HoldCause) => {
     setBusy(true);
     try {
-      const res = await holdStage(job.id);
+      const res = await holdStage(job.id, holdNote.trim() || undefined, cause);
       if ((res as any)?.error) throw new Error((res as any).error);
       setStatus("ON_HOLD");
-      toast.success("Stage on hold");
+      toast.success(
+        isUrgentHold(cause) ? "Stage on hold — your supervisor has been alerted" : "Stage on hold"
+      );
       router.push(homePath);
     } catch (e: any) {
       toast.error(e.message || "Failed to hold stage");
@@ -588,8 +597,43 @@ export default function StageClient({ data }: { data: any }) {
               <Button onClick={() => setEditing(false)} disabled={busy} variant="secondary" className="w-full gap-2">
                 Cancel
               </Button>
+            ) : holdPanel ? (
+              <Surface className="p-4 space-y-3">
+                <p className="text-xs font-semibold text-text-primary">Why are you pausing?</p>
+                <Input
+                  placeholder="Anything the supervisor should know (optional)"
+                  value={holdNote}
+                  onChange={(e) => setHoldNote(e.target.value)}
+                />
+                <div className="grid gap-2">
+                  {HOLD_CAUSE_KEYS.map((cause) => (
+                    <Button
+                      key={cause}
+                      onClick={() => handleHold(cause)}
+                      disabled={busy}
+                      variant={isUrgentHold(cause) ? "primary" : "secondary"}
+                      className="w-full justify-start gap-2"
+                    >
+                      {isUrgentHold(cause) ? (
+                        <AlertTriangle className="h-4 w-4" />
+                      ) : (
+                        <PauseCircle className="h-4 w-4" />
+                      )}
+                      {HOLD_CAUSES[cause]}
+                    </Button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setHoldPanel(false)}
+                  disabled={busy}
+                  className="w-full text-xs font-medium text-text-tertiary hover:text-text-secondary"
+                >
+                  Never mind, keep working
+                </button>
+              </Surface>
             ) : (
-              <Button onClick={handleHold} disabled={busy} variant="secondary" className="w-full gap-2">
+              <Button onClick={() => setHoldPanel(true)} disabled={busy} variant="secondary" className="w-full gap-2">
                 <PauseCircle className="h-4 w-4" />
                 Pause &amp; come back later
               </Button>

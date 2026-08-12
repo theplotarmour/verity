@@ -15,7 +15,7 @@ ignores that produces a rewrite estimate instead of a plan.
 | [00](./00-module-system.md) | Module system — manifest, installer, ownership | A | Everything below |
 | [01](./01-metering-and-billing.md) | Metering & subscription billing | A | Charging for anything |
 | [02](./02-ai-assistant.md) | AI assistant (Groq) | A | The implementation-cost wedge |
-| [03](./03-module-contract.md) | Module contract & developer platform | D | External developers |
+| [03](./03-module-contract.md) | Module contract & developer platform | **DEFERRED ~Nov 2026** | External developers — do not touch until PRD 02 + 04 are shipped |
 | [04](./04-franchise-modules.md) | Kitchen Ops, Field Compliance, Franchise Ops | B | Franchise pack completeness |
 | [05](./05-master-data-refinements.md) | Master Data edit & delete options | A | UI/UX and database consistency |
 | [06](./06-veda-backports.md) | Veda platform backports & optimizations | B | Alignment with Veda updates |

@@ -9,6 +9,15 @@ export const EVENTS = {
   ORDER_CREATED: "ORDER_CREATED",
   STAGE_COMPLETED: "STAGE_COMPLETED",
   QC_REJECTED: "QC_REJECTED",
+  // A submitted audit that scored below the pass threshold. Distinct from
+  // QC_REJECTED: nobody has rejected it, which is exactly the problem — the batch
+  // is sitting in the queue with a third of its checkpoints failed and only the
+  // department's own supervisor has been told it arrived.
+  QC_SCORE_LOW: "QC_SCORE_LOW",
+  // A worker stopped a stage: broken machine, missing material, a delay they
+  // cannot absorb. The line is idle from this moment, so it is a supervisor's
+  // problem within minutes, not at the end of the shift.
+  STAGE_HELD: "STAGE_HELD",
   REWORK_ASSIGNED: "REWORK_ASSIGNED",
   DISPATCH_COMPLETED: "DISPATCH_COMPLETED",
   LOW_STOCK: "LOW_STOCK",
@@ -108,6 +117,25 @@ function escapeHtml(s: string) {
 export async function ownerRecipients(factoryId: string) {
   const rows = await prisma.user.findMany({
     where: { factoryId, role: { in: ["OWNER", "CO_OWNER", "MANAGER"] }, isActive: true },
+    select: { id: true },
+  });
+  return rows.map((r) => r.id);
+}
+
+/**
+ * Every active supervisor in the factory.
+ *
+ * Deliberately not filtered by department, unlike the "ready for QC" nudge in
+ * `submitStageWork`: a routine queue item belongs to the department that owns it,
+ * but a stopped machine or a failing audit is a floor-wide problem and the
+ * supervisor who can act on it is often not the one whose queue it landed in.
+ *
+ * `isActive` matters — a departed supervisor's unread pile is where alerts go to
+ * die.
+ */
+export async function supervisorRecipients(factoryId: string) {
+  const rows = await prisma.user.findMany({
+    where: { factoryId, role: "SUPERVISOR", isActive: true },
     select: { id: true },
   });
   return rows.map((r) => r.id);

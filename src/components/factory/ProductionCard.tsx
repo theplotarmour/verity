@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Surface } from "@/components/design/Surface";
 import { Badge, Avatar, Button, Select } from "@/components/ui/primitives";
-import { StageIndicator } from "./StageIndicator";
+import { StageIndicator, type QcState } from "./StageIndicator";
 import { updateOrderAssignments } from "@/server/actions/orders";
 import { AlertCircle, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -29,6 +29,15 @@ export interface ProductionCardProps {
   totalCheckpoints: number;
   hasReport?: boolean;
   compact?: boolean;
+  /**
+   * The item's real route, resolved server-side by `resolveProductionStages` (or
+   * read off the loaded job cards by `stageSequenceFromJobCards`). This card is a
+   * client component, so it cannot resolve the route itself — and it should not:
+   * the stages belong to the item, not to the card drawing them.
+   */
+  stages?: string[];
+  /** Which stage the work is on. Falls back to the QC-derived position below. */
+  currentStage?: string | null;
 }
 
 export function ProductionCard({
@@ -51,6 +60,8 @@ export function ProductionCard({
   totalCheckpoints,
   hasReport,
   compact = false,
+  stages = [],
+  currentStage,
 }: ProductionCardProps) {
   const [assignMode, setAssignMode] = useState(false);
   const [nextWorkerId, setNextWorkerId] = useState(workerId || workers[0]?.id || "");
@@ -76,7 +87,7 @@ export function ProductionCard({
   const issueCount = submissions.filter((sub) => sub.passFail === "FAIL").length;
   const hasFailures = submissions.some((sub: any) => sub.passFail === "FAIL");
 
-  let qcState: "PENDING_INSPECTION" | "PASSED_BY_WORKER" | "FLAGGED_BY_WORKER" | "APPROVED_BY_INSPECTOR" | "REWORK_REQUIRED" | "CERTIFIED" = "PENDING_INSPECTION";
+  let qcState: QcState = "PENDING_INSPECTION";
   if (status === "APPROVED") {
     qcState = hasReport ? "CERTIFIED" : "APPROVED_BY_INSPECTOR";
   } else if (status === "REWORK_REQUIRED" || status === "REJECTED") {
@@ -87,16 +98,13 @@ export function ProductionCard({
     qcState = hasFailures ? "FLAGGED_BY_WORKER" : "PENDING_INSPECTION";
   }
 
-  let activeStage: "CUTTING" | "STITCHING" | "QC" | "PASSPORT" = "CUTTING";
-  if (qcState === "CERTIFIED") {
-    activeStage = "PASSPORT";
-  } else if (qcState === "APPROVED_BY_INSPECTOR" || qcState === "REWORK_REQUIRED" || qcState === "PASSED_BY_WORKER" || qcState === "FLAGGED_BY_WORKER") {
-    activeStage = "QC";
-  } else if (submissions.length > 2) {
-    activeStage = "STITCHING";
-  }
+  // Where the work sits on the route. The caller knows this from the job-card
+  // chain; without it, the head of the route is the only honest guess — the old
+  // code inferred "Stitching" from more than two submissions, which said nothing
+  // about a route that has no stitching in it.
+  const activeStage = currentStage ?? stages[0] ?? null;
 
-  const badgeVariants: Record<typeof qcState, { text: string; variant: "success" | "warning" | "danger" | "neutral" | "default" }> = {
+  const badgeVariants: Record<QcState, { text: string; variant: "success" | "warning" | "danger" | "neutral" | "default" }> = {
     PENDING_INSPECTION: { text: "Pending Inspection", variant: "neutral" },
     PASSED_BY_WORKER: { text: "Passed by Worker", variant: "success" },
     FLAGGED_BY_WORKER: { text: "Flagged by Worker", variant: "warning" },
@@ -162,9 +170,11 @@ export function ProductionCard({
           </div>
         </div>
 
-        <div className={cn("border-t border-border/60 pt-3", compact && "[@media(max-height:699px)]:hidden")}>
-          <StageIndicator currentStage={activeStage} status={qcState} />
-        </div>
+        {stages.length > 0 && (
+          <div className={cn("border-t border-border/60 pt-3", compact && "[@media(max-height:699px)]:hidden")}>
+            <StageIndicator stages={stages} currentStage={activeStage} status={qcState} />
+          </div>
+        )}
 
         {!compact ? (
           <>

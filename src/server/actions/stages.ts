@@ -11,6 +11,7 @@ import { recordTimeline } from "@/lib/server/stages";
 import { receiveFinishedGoods } from "@/server/internal/stockMovements";
 import { publishChange } from "@/lib/server/live-bus";
 import { getSessionHomePath } from "@/lib/server/roleHome";
+import { HOLD_CAUSES, isUrgentHold, normalizeHoldCause, type HoldCause } from "@/lib/stage-holds";
 
 type StageImagePayload = {
   dataUrl: string;
@@ -235,28 +236,60 @@ export async function startStage(jobCardId: string) {
   return { success: true };
 }
 
-export async function holdStage(jobCardId: string, reason?: string) {
+export async function holdStage(jobCardId: string, reason?: string, cause?: HoldCause) {
   const session = await getUserSession();
   if (!session || !canWorkStage(session.role)) return { error: "Unauthorized" };
 
   const jobCard = await prisma.jobCard.findFirst({
     where: { id: jobCardId, factoryId: session.factoryId },
-    include: { stage: true, department: true },
+    include: { stage: true, department: true, workOrder: { select: { woNumber: true } } },
   });
   if (!jobCard) return { error: "Job card not found" };
   if (!(await canAccessJobCard(session, jobCard))) return { error: "This job card isn't assigned to you." };
   if (jobCard.status !== "IN_PROGRESS") return { error: "Only an in-progress stage can be held" };
+
+  const holdCause = normalizeHoldCause(cause);
+  const causeLabel = HOLD_CAUSES[holdCause];
 
   await prisma.jobCard.update({ where: { id: jobCard.id }, data: { status: "ON_HOLD" } });
   await recordTimeline(prisma, {
     factoryId: session.factoryId,
     workOrderId: jobCard.workOrderId,
     eventType: "STATUS_CHANGED",
-    title: `${stageName(jobCard)} put on hold`,
+    title: `${stageName(jobCard)} put on hold — ${causeLabel}`,
     description: reason,
     actorId: session.userId,
-    metadata: { jobCardId: jobCard.id },
+    metadata: { jobCardId: jobCard.id, cause: holdCause },
   });
+
+  // After the hold is recorded, and never in its way: the card is already parked,
+  // so a failed fan-out must not leave a worker unable to stop a broken machine.
+  try {
+    const { emitEvent, supervisorRecipients } = await import("@/lib/server/events");
+    const recipients = (await supervisorRecipients(session.factoryId)).filter(
+      (id) => id !== session.userId
+    );
+    if (recipients.length > 0) {
+      const label = jobCardBatchLabel(jobCard as any);
+      const urgent = isUrgentHold(holdCause);
+      await emitEvent({
+        factoryId: session.factoryId,
+        event: "STAGE_HELD",
+        recipients,
+        title: urgent ? `${causeLabel} — ${stageName(jobCard)} stopped` : `${stageName(jobCard)} on hold`,
+        message: `${label} was put on hold at ${stageName(jobCard)}: ${causeLabel}${
+          reason?.trim() ? ` — ${reason.trim()}` : ""
+        }`,
+        linkUrl: `/owner/floor`,
+        // A broken machine is something to act on; a routine pause is something
+        // to know about. Both are worth sending; only one should shout.
+        type: urgent ? "ACTION_REQUIRED" : "WARNING",
+        actorId: session.userId,
+      });
+    }
+  } catch (e) {
+    console.error("Stage-held alert failed", e);
+  }
 
   revalidateStagePaths(session.factoryId, session.userId);
   return { success: true };

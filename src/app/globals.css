@@ -1,6 +1,16 @@
 @import "tailwindcss";
 
 :root {
+  /* The three faces. `next/font/google` used to inject these three variables as
+     generated class names on <html>; the fonts now arrive as a stylesheet link in
+     layout.tsx (the loader's build-time fetch 404s under Turbopack), so the
+     variables are declared here instead. `--font-sans` / `--font-display` below
+     compose them exactly as before, and every `font-family` rule in this file and
+     in Tailwind reads those — so this is the only place the change lands. */
+  --font-inter: "Inter";
+  --font-sora: "Sora";
+  --font-noto-sans-devanagari: "Noto Sans Devanagari";
+
   /* Make native controls (dropdown option lists, date pickers, scrollbars)
      follow the app theme so every dropdown reads as in-app and theme-consistent. */
   color-scheme: light;

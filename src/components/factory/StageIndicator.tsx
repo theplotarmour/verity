@@ -1,63 +1,61 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { Check, AlertTriangle, Play, HelpCircle, FileCheck } from "lucide-react";
 
-type Stage = "CUTTING" | "STITCHING" | "QC" | "PASSPORT";
+export type QcState =
+  | "PENDING_INSPECTION"
+  | "PASSED_BY_WORKER"
+  | "FLAGGED_BY_WORKER"
+  | "APPROVED_BY_INSPECTOR"
+  | "REWORK_REQUIRED"
+  | "CERTIFIED";
 
 interface StageIndicatorProps {
-  currentStage: Stage;
-  status: "PENDING_INSPECTION" | "PASSED_BY_WORKER" | "FLAGGED_BY_WORKER" | "APPROVED_BY_INSPECTOR" | "REWORK_REQUIRED" | "CERTIFIED";
+  /**
+   * The ordered stage names this product actually passes through, resolved from
+   * the item's route by `resolveProductionStages`. Presentational only — the
+   * component no longer knows or guesses what a factory's stages are called,
+   * because Cutting/Stitching/QC/Passport is true of one of the four verticals.
+   */
+  stages: string[];
+  /** Which of `stages` the work is sitting on. Null once every stage is done. */
+  currentStage?: string | null;
+  status: QcState;
   className?: string;
 }
 
-export function StageIndicator({ currentStage, status, className }: StageIndicatorProps) {
-  const stages: { key: Stage; label: string; icon: any }[] = [
-    { key: "CUTTING", label: "Cutting", icon: Play },
-    { key: "STITCHING", label: "Stitching", icon: Play },
-    { key: "QC", label: "QC Review", icon: AlertTriangle },
-    { key: "PASSPORT", label: "Passport", icon: FileCheck },
-  ];
+export function StageIndicator({ stages, currentStage, status, className }: StageIndicatorProps) {
+  // No route yet — a new item with no blueprint. An empty strip says less than
+  // nothing, so render nothing rather than an invented default.
+  if (stages.length === 0) return null;
 
-  const getStageState = (stageKey: Stage) => {
-    // Determine active / completed / failed states
-    const indexMap: Record<Stage, number> = {
-      CUTTING: 0,
-      STITCHING: 1,
-      QC: 2,
-      PASSPORT: 3,
-    };
+  const currentIdx = currentStage ? stages.indexOf(currentStage) : -1;
 
-    const currentIdx = indexMap[currentStage];
-    const stageIdx = indexMap[stageKey];
+  const getStageState = (idx: number) => {
+    // Everything signed off, whatever the stages are called.
+    if (status === "CERTIFIED" || status === "APPROVED_BY_INSPECTOR") return "completed";
 
-    if (status === "REWORK_REQUIRED" && stageKey === "QC") {
-      return "failed";
-    }
-    if (status === "FLAGGED_BY_WORKER" && stageKey === "QC") {
-      return "warning";
-    }
-
-    if (status === "CERTIFIED" || status === "APPROVED_BY_INSPECTOR") {
-      return "completed";
-    }
-
-    if (stageIdx < currentIdx) {
-      return "completed";
-    }
-    if (stageIdx === currentIdx) {
+    // A rejection or a worker's flag belongs on the stage the work is actually
+    // on. The old code pinned both to a stage literally named "QC", which does
+    // not exist in most routes.
+    if (idx === currentIdx) {
+      if (status === "REWORK_REQUIRED") return "failed";
+      if (status === "FLAGGED_BY_WORKER") return "warning";
       return "active";
     }
+
+    // currentIdx of -1 means no stage is outstanding: the chain is finished.
+    if (currentIdx === -1 || idx < currentIdx) return "completed";
     return "pending";
   };
 
   return (
     <div className={cn("flex items-center gap-1.5 w-full", className)}>
       {stages.map((stage, idx) => {
-        const state = getStageState(stage.key);
-        
+        const state = getStageState(idx);
+
         return (
-          <div key={stage.key} className="flex-1 flex flex-col gap-1 min-w-0">
+          <div key={`${stage}-${idx}`} className="flex-1 flex flex-col gap-1 min-w-0">
             {/* Step Bar */}
             <div
               className={cn(
@@ -71,6 +69,7 @@ export function StageIndicator({ currentStage, status, className }: StageIndicat
             />
             {/* Label */}
             <span
+              title={stage}
               className={cn(
                 "text-[9px] font-semibold tracking-wide uppercase truncate text-center",
                 state === "completed" && "text-success",
@@ -80,7 +79,7 @@ export function StageIndicator({ currentStage, status, className }: StageIndicat
                 state === "pending" && "text-text-tertiary"
               )}
             >
-              {stage.label}
+              {stage}
             </span>
           </div>
         );

@@ -302,5 +302,20 @@ export async function submitCheckpoints(jobCardId: string, submissions: any[]) {
     }
   }, { timeout: 30000, maxWait: 10000 })
 
+  // After the commit, and outside it. The audit is saved; a failed fan-out must
+  // not roll back a worker's submission, and the notification is worthless if the
+  // transaction it was written inside later aborts.
+  //
+  // The routine nudge above tells the owning department its queue has an item.
+  // This is the separate case: the audit came back below the pass mark, which is
+  // the owner's and every supervisor's problem, and until now was visible only to
+  // whoever opened the inspection.
+  try {
+    const { reportQcAuditScore } = await import('./qc')
+    await reportQcAuditScore(inspection!.id)
+  } catch (e) {
+    console.error('QC audit score alert failed', e)
+  }
+
   return { success: true }
 }
