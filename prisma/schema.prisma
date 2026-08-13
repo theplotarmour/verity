@@ -276,6 +276,7 @@ model Factory {
   menuItems       MenuItem[]
   diningTables    RestaurantTable[]
   diningOrders    DiningOrder[]
+  diningBills     DiningBill[]
 
   @@index([organizationId])
 }
@@ -2759,6 +2760,15 @@ model TenantSubscription {
   currentPeriodStart DateTime @default(now())
   currentPeriodEnd   DateTime
 
+  /// Assistant tokens spent in the current window, and when that window opened.
+  ///
+  /// Counted rather than metered live because the cap only has to be roughly
+  /// right: it exists so a runaway loop cannot bill a month of inference in an
+  /// afternoon, not to bill the tenant per token. A null reset means the window
+  /// has never opened; the first request stamps it.
+  assistantTokensUsed   Int       @default(0)
+  assistantTokenResetAt DateTime?
+
   lines    SubscriptionLine[]
   invoices PlatformInvoice[]
 
@@ -2951,6 +2961,7 @@ model DiningOrder {
 
   items   DiningOrderItem[]
   table   RestaurantTable   @relation(fields: [tableId], references: [id])
+  bill    DiningBill?
   factory Factory           @relation(fields: [factoryId], references: [id], onDelete: Cascade)
 
   @@index([factoryId])
@@ -2990,4 +3001,36 @@ model DiningOrderItem {
 
   @@index([orderId])
   @@index([menuItemId])
+}
+
+// ==========================================
+// RESTAURANT OS — BILLING
+// ==========================================
+
+/// One bill per order. All amounts are integer paise.
+model DiningBill {
+  id            String         @id @default(cuid())
+  factoryId     String
+  orderId       String         @unique
+  subtotal      Int
+  discountPaise Int            @default(0)
+  taxPaise      Int            @default(0)
+  total         Int
+  paymentMethod PaymentMethod?
+  paidAt        DateTime?
+  createdAt     DateTime       @default(now())
+
+  order   DiningOrder @relation(fields: [orderId], references: [id])
+  factory Factory     @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+
+  @@index([factoryId])
+  // Today's takings, split by method — the one report a restaurant runs daily.
+  @@index([factoryId, paidAt])
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  CARD
+  OTHER
 }

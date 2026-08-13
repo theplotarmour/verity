@@ -63,6 +63,9 @@ const MODEL_MODULE: Record<string, ModuleKey | null> = {
 
   menuCategory: "menu",
   menuItem: "menu",
+  restaurantTable: "tables_orders",
+  diningOrder: "tables_orders",
+  diningBill: "billing",
 
   salesOrder: "sales",
   itemMaster: "inventory",

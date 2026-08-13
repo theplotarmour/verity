@@ -18,10 +18,23 @@ describe("order and blueprint shape", () => {
   let factoryId: string;
   let seeded = false;
 
+  /**
+   * Seeded orders only — anything the headless API booked is excluded.
+   *
+   * vitest runs files in parallel against one database, and
+   * `orderIngest.test.ts` deliberately books an order whose line holds a *refused*
+   * cross-tenant item, so its `itemId` is null. That is the correct outcome there
+   * and a failure here, and scanning "every order in the factory" made this file
+   * pass or fail on timing. `ingestExternalOrder` stamps every order it creates
+   * `EXT-…`, so the filter is what the writer actually writes rather than a
+   * snapshot taken at a moment that has no guaranteed order.
+   */
+  const SEEDED_ORDERS = { soNumber: { not: { startsWith: "EXT-" } } } as const;
+
   beforeAll(async () => {
     const f = await prisma.factory.findFirstOrThrow({ where: { slug: "carxen" } });
     factoryId = f.id;
-    seeded = (await prisma.salesOrder.count({ where: { factoryId } })) > 0;
+    seeded = (await prisma.salesOrder.count({ where: { factoryId, ...SEEDED_ORDERS } })) > 0;
   });
 
   afterAll(async () => {
@@ -30,13 +43,13 @@ describe("order and blueprint shape", () => {
 
   it("has seeded orders to characterise", async () => {
     if (!seeded) return;
-    expect(await prisma.salesOrder.count({ where: { factoryId } })).toBeGreaterThan(0);
+    expect(await prisma.salesOrder.count({ where: { factoryId, ...SEEDED_ORDERS } })).toBeGreaterThan(0);
   });
 
   it("every order line resolves to a producible item", async () => {
     if (!seeded) return;
     const orders = await prisma.salesOrder.findMany({
-      where: { factoryId },
+      where: { factoryId, ...SEEDED_ORDERS },
       include: { items: true },
     });
     for (const o of orders) {
@@ -51,7 +64,7 @@ describe("order and blueprint shape", () => {
   it("every order resolves to a finished-good item with a full production definition", async () => {
     if (!seeded) return;
     const orders = await prisma.salesOrder.findMany({
-      where: { factoryId },
+      where: { factoryId, ...SEEDED_ORDERS },
       include: {
         item: {
           include: {

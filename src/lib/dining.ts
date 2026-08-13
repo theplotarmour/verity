@@ -137,6 +137,36 @@ export const KITCHEN_QUEUE_STATES: OrderState[] = ["NEW", "ACCEPTED", "PREPARING
 /** The pass: cooked, not yet carried. */
 export const SERVING_QUEUE_STATES: OrderState[] = ["READY"];
 
+/**
+ * GST on restaurant service, 5%.
+ *
+ * Charged on the subtotal before any discount — money comes off the food, not off
+ * the government's share.
+ *
+ * ponytail: one flat rate, no HSN table and no state split. Upgrade path is a rate
+ * per menu item when a tenant sells something that is not 5% (packaged goods, or
+ * alcohol, which is outside GST entirely).
+ */
+export const GST_RATE = 0.05;
+
+/**
+ * Midnight tonight-just-gone, in IST, as a UTC instant.
+ *
+ * The server clock is UTC and the restaurant is not. Without this, "today's
+ * takings" rolls over at 05:30 local — in the middle of a late service, splitting
+ * one night's cash across two days.
+ *
+ * ponytail: IST is hardcoded because every tenant is in India. Upgrade path is a
+ * timezone on Factory, read here, the moment one is not.
+ */
+export function istDayStart(now: Date = new Date()): Date {
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+  const ist = new Date(now.getTime() + IST_OFFSET_MS);
+  // Floor to the IST calendar day, then convert the instant back to UTC.
+  const istMidnight = Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate());
+  return new Date(istMidnight - IST_OFFSET_MS);
+}
+
 /** Line total in paise, from the snapshotted unit price. */
 export function lineTotal(item: { quantity: number; unitPrice: number }): number {
   return item.quantity * item.unitPrice;
