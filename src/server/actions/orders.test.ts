@@ -93,8 +93,19 @@ describe("order and blueprint shape", () => {
 
   it("every blueprint is keyed on an item and has at least one version", async () => {
     if (!seeded) return;
+    // Scoped to the items seeded orders are built from, for the same reason the
+    // scans above are: several test files create a Blueprint and then its first
+    // version as two writes, and a factory-wide scan running in parallel lands
+    // between them and sees a version-less blueprint that is about to have one.
+    const seededOrders = await prisma.salesOrder.findMany({
+      where: { factoryId, ...SEEDED_ORDERS, itemId: { not: null } },
+      select: { itemId: true },
+    });
+    const itemIds = seededOrders.map((o) => o.itemId!).filter(Boolean);
+    if (itemIds.length === 0) return;
+
     const blueprints = await prisma.blueprint.findMany({
-      where: { factoryId },
+      where: { factoryId, itemId: { in: itemIds } },
       include: { versions: { select: { id: true, isActive: true } } },
     });
     expect(blueprints.length).toBeGreaterThan(0);

@@ -11,7 +11,6 @@ import {
   Factory,
   Home,
   LogOut,
-  Menu,
   Search,
   Users,
   CircleCheckBig,
@@ -24,16 +23,17 @@ import {
   ReceiptText,
   LayoutGrid,
   X,
+  PanelLeft,
+  MoreHorizontal,
 } from "lucide-react";
-import { cn, formatDate } from "@/lib/utils";
-import { Badge, Button, Input } from "@/components/ui/primitives";
+import { cn } from "@/lib/utils";
+import { Avatar, Badge, Input } from "@/components/ui/primitives";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { Settings, Shield, Plus , Package, ShoppingCart, Wrench, FlaskConical, Database, Building2, ChefHat, UtensilsCrossed } from "lucide-react";
+import { Settings, Plus , Package, ShoppingCart, Wrench, FlaskConical, Database, Building2, ChefHat, UtensilsCrossed } from "lucide-react";
 import { SystemRole } from "@prisma/client";
 import { can, Permission, type PermissionMatrix } from "@/lib/permissions";
 import type { ModuleKey } from "@/platform/modules/registry";
 import {
-  activeNavItem,
   resolveNavGroups,
   resolveNavItems,
   resolveTopbarItems,
@@ -41,7 +41,6 @@ import {
 } from "@/platform/modules/navigation";
 import { VerityLogo } from "@/components/ui/VerityLogo";
 import { InstallPromptBanner } from "./InstallPromptBanner";
-import { NavMenu } from "./NavMenu";
 import { BRAND_ACCENT } from "@/lib/brand";
 
 /**
@@ -124,7 +123,6 @@ export function OwnerShell({
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   // The mobile Operations sheet. Closed on navigation, below.
@@ -132,6 +130,28 @@ export function OwnerShell({
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const notifRef = useRef<HTMLDivElement | null>(null);
   const profileRef = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * Sidebar width, remembered between visits.
+   *
+   * Starts expanded and reads localStorage in an effect rather than during
+   * render: reading it inline makes the server and client disagree on first
+   * paint, and React answers a root-level mismatch by re-rendering the whole
+   * document — which is the bug `suppressHydrationWarning` on <html> already
+   * exists to work around.
+   */
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    setCollapsed(localStorage.getItem("verity:sidebar-collapsed") === "1");
+  }, []);
+
+  function toggleSidebar() {
+    setCollapsed((value) => {
+      localStorage.setItem("verity:sidebar-collapsed", value ? "0" : "1");
+      return !value;
+    });
+  }
 
   useEffect(() => {
     async function loadNotifications() {
@@ -197,10 +217,28 @@ export function OwnerShell({
     [navContext],
   );
 
+  /**
+   * The sidebar's sections.
+   *
+   * The config destinations that were an icon row in the old header become an
+   * ordinary "Configure" section here. They were only ever a separate surface
+   * because the pill had no room for them — as icon-only buttons with a `title`,
+   * they were also the least discoverable thing in the shell.
+   *
+   * Empty sections are dropped by `resolveNavGroups` already; Configure is
+   * appended only when something survived the permission filter.
+   */
+  const sidebarSections = useMemo(
+    () =>
+      topbarItems.length > 0
+        ? [...navGroups, { title: "Configure", items: topbarItems }]
+        : navGroups,
+    [navGroups, topbarItems],
+  );
+
   /** Everything reachable, for the mobile dock and its Operations sheet. */
   const reachable = useMemo(() => resolveNavItems(navContext).map(withIcon), [navContext]);
 
-  const activeItem = useMemo(() => activeNavItem(reachable, pathname), [reachable, pathname]);
 
   const mobileNav = useMemo(() => {
     const dashboard = reachable.find((i) => i.href === "/owner/dashboard");
@@ -257,19 +295,31 @@ export function OwnerShell({
           DESKTOP & TABLET SHELL (md and up)
           ================================================== */}
       {/*
-        Desktop: a floating header over the canvas, not a sidebar.
+        Desktop: a fixed left sidebar, macOS-style.
 
-        The nav groups that were sidebar sections are dropdowns now. That trades
-        some wayfinding for the width it gives back — so the trigger stays lit
-        while any page inside its group is open, which is what keeps "where am
-        I" answerable without opening a menu. The backdrop gradients come from
-        `verity-canvas` on <body>; the old per-shell gradient div is gone with
-        the sidebar.
+        It replaced a floating pill header whose nav groups were dropdowns. The
+        dropdowns bought width and cost wayfinding — every group needed a click
+        before it would say what was inside it. A sidebar spends that width once
+        and answers "where am I" without any click at all, which is the trade
+        worth making on a screen somebody sits in front of all day.
+
+        Collapsed it keeps the icons and drops the labels, so muscle memory for
+        position survives the width change.
       */}
-      <div className="hidden md:flex h-screen w-full flex-col overflow-hidden text-text-primary">
-          <header className="verity-glass z-40 mx-4 mt-3 flex shrink-0 items-center gap-3 rounded-full px-3 py-2">
-            {/* Identity, then the nav groups that used to be sidebar sections. */}
-            <Link href="/owner/dashboard" className="flex min-w-0 shrink-0 items-center gap-2.5 pl-1 pr-2">
+      <div className="hidden md:flex h-screen w-full overflow-hidden text-text-primary">
+        <aside
+          style={{
+            width: collapsed ? "var(--sidebar-collapsed-width)" : "var(--sidebar-width)",
+          }}
+          className="flex shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200"
+        >
+          {/* Identity. The whole block is the way home. */}
+          <div className="flex shrink-0 items-center gap-2.5 px-3 py-3">
+            <Link
+              href="/owner/dashboard"
+              className="flex min-w-0 flex-1 items-center gap-2.5"
+              title={collapsed ? factoryName : undefined}
+            >
               <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-surface-2">
                 {factoryLogo ? (
                   <img src={factoryLogo} alt="" className="h-full w-full object-cover" />
@@ -277,155 +327,229 @@ export function OwnerShell({
                   <VerityLogo size={19} />
                 )}
               </span>
-              <span className="hidden min-w-0 lg:block">
-                <span className="block truncate text-[12px] font-semibold leading-tight text-text-primary">
-                  {factoryName}
+              {!collapsed ? (
+                <span className="min-w-0">
+                  <span className="block truncate text-[13px] font-semibold leading-tight text-text-primary">
+                    {factoryName}
+                  </span>
+                  <span className="block text-[9px] font-semibold uppercase tracking-wide text-text-tertiary">
+                    Verity
+                  </span>
                 </span>
-                <span className="block text-[9px] font-semibold uppercase tracking-[0.22em] text-text-tertiary">
-                  Verity
-                </span>
-              </span>
+              ) : null}
             </Link>
+            {!collapsed ? (
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                aria-label="Collapse sidebar"
+                title="Collapse sidebar"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-text-tertiary transition hover:bg-surface-secondary/70 hover:text-text-primary"
+              >
+                <PanelLeft className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
 
-            <nav className="flex min-w-0 flex-1 items-center gap-0.5">
-              {navGroups.map((group) => {
-                // Already filtered by `resolveNavGroups`, and already stripped
-                // of empty groups. Re-filtering here is what created three
-                // copies of the permission logic in the first place.
-                const visible = group.items;
-                return (
-                  <NavMenu
-                    key={group.title}
-                    title={group.title}
-                    pathname={pathname}
-                    items={visible.map((item) => ({
-                      href: item.href,
-                      label: item.label,
-                      icon: item.icon,
-                    }))}
-                  />
-                );
-              })}
-            </nav>
+          {collapsed ? (
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              aria-label="Expand sidebar"
+              title="Expand sidebar"
+              className="mx-2 mb-1 flex h-8 items-center justify-center rounded-[8px] text-text-tertiary transition hover:bg-surface-secondary/70 hover:text-text-primary"
+            >
+              <PanelLeft className="h-4 w-4" />
+            </button>
+          ) : null}
 
-            <div className="min-w-0 flex items-center gap-4">
+          {/* The nav. Scrolls on its own so the identity block and the account
+              row below stay put on a short window. */}
+          <nav className="min-h-0 flex-1 overflow-y-auto pb-2 scrollbar-none">
+            {sidebarSections.map((section) => (
+              <div key={section.title} className="mb-3">
+                {!collapsed ? (
+                  <p className="px-5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">
+                    {section.title}
+                  </p>
+                ) : null}
+                {section.items.map((item) => {
+                  const active =
+                    pathname === item.href || pathname.startsWith(`${item.href}/`);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      // Native tooltip, not a library: a collapsed label is the
+                      // only thing here that needs one.
+                      title={collapsed ? item.label : undefined}
+                      className={cn(
+                        "mx-2 flex items-center gap-3 rounded-[8px] px-3 py-2 text-[13px] font-medium transition-colors",
+                        collapsed && "justify-center px-0",
+                        active
+                          ? "bg-[var(--brand-soft)] font-semibold text-[var(--brand)]"
+                          : "text-text-secondary hover:bg-surface-secondary/70 hover:text-text-primary",
+                      )}
+                    >
+                      <span className="flex h-4 w-4 shrink-0 items-center justify-center [&>svg]:h-4 [&>svg]:w-4">
+                        {item.icon}
+                      </span>
+                      {!collapsed ? <span className="truncate">{item.label}</span> : null}
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
+          </nav>
+
+          {/* Account, pinned. Theme, notifications and logout sit behind the
+              overflow rather than as three more permanent controls. */}
+          <div className="shrink-0 border-t border-border p-2" ref={profileRef}>
+            <div className="relative flex items-center gap-2">
+              <span
+                className={cn(
+                  "flex min-w-0 flex-1 items-center gap-2.5",
+                  collapsed && "justify-center",
+                )}
+              >
+                <Avatar fallback={userName} className="h-7 w-7 shrink-0 text-[11px]" />
+                {!collapsed ? (
+                  <span className="min-w-0 truncate text-[13px] font-medium text-text-primary">
+                    {userName}
+                  </span>
+                ) : null}
+              </span>
+              <button
+                type="button"
+                onClick={() => setProfileOpen((value) => !value)}
+                aria-label="Account menu"
+                aria-expanded={profileOpen}
+                title="Account"
+                className={cn(
+                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-text-tertiary transition hover:bg-surface-secondary/70 hover:text-text-primary",
+                  collapsed && "absolute right-0 top-0",
+                )}
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+
+              {profileOpen ? (
+                <div className="verity-fade-in absolute bottom-full left-0 z-50 mb-2 w-56 overflow-hidden rounded-[10px] border border-border bg-surface shadow-[var(--shadow-modal)]">
+                  <div className="flex items-center justify-between gap-2 px-3 py-2">
+                    <span className="text-[12px] text-text-secondary">Theme</span>
+                    <ThemeToggle />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileOpen(false);
+                      setNotifOpen(true);
+                    }}
+                    className="flex w-full items-center justify-between gap-2 border-t border-border px-3 py-2 text-left text-[13px] text-text-secondary transition hover:bg-surface-secondary/70 hover:text-text-primary"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Bell className="h-4 w-4" />
+                      Notifications
+                    </span>
+                    {unreadCount ? (
+                      <Badge variant="danger" className="px-1.5 text-[10px]">
+                        {unreadCount}
+                      </Badge>
+                    ) : null}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="flex w-full items-center gap-2 border-t border-border px-3 py-2 text-left text-[13px] text-text-secondary transition hover:bg-surface-secondary/70 hover:text-text-primary"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Log out
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Content. min-h-0 so a Workspace child can own its own scrolling
+              rather than growing the page. The topbar rides inside this scroll
+              container on purpose — it is a thin utility row, not chrome, and
+              pinning it would spend 40px of every screen holding a search box
+              nobody is looking at. */}
+          <main className="flex min-h-0 flex-1 flex-col overflow-y-auto min-w-0 scrollbar-none">
+            <div className="flex h-10 shrink-0 items-center gap-3 border-b border-border px-4">
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
                   const formData = new FormData(e.currentTarget);
                   const search = formData.get("search") as string;
-                  if (search) {
-                    router.push(`${globalSearchPath}?q=${encodeURIComponent(search)}`);
-                  } else {
-                    router.push("/owner/search");
-                  }
+                  router.push(
+                    search ? `${globalSearchPath}?q=${encodeURIComponent(search)}` : "/owner/search",
+                  );
                 }}
-                className="relative flex-1 max-w-xs min-w-0"
+                className="relative mx-auto w-full max-w-sm"
               >
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-tertiary" />
                 <Input
                   name="search"
                   defaultValue={searchParams.get("q") ?? ""}
-                  className="h-8.5 text-xs rounded-full border-border/60 bg-transparent pl-9 shadow-none w-full focus:border-[var(--brand)]/60 focus:shadow-[inset_0_0_10px_-4px_var(--brand)]/12"
+                  className="h-7 w-full rounded-[6px] border-border/60 bg-transparent pl-9 text-xs shadow-none focus:border-[var(--brand)]/60"
                   placeholder="Search..."
                 />
               </form>
-            </div>
 
-            <div className="flex items-center gap-3 shrink-0">
-              <div className="flex items-center gap-2 px-2.5 py-1 bg-transparent border border-border/60 rounded-full transition-colors hover:border-border">
-                {factoryLogo ? (
-                  <img src={factoryLogo} alt="Logo" className="h-4.5 w-4.5 rounded object-contain" />
-                ) : (
-                  <Factory className="h-3.5 w-3.5 text-text-tertiary" />
-                )}
-                <span className="text-[11px] font-semibold text-text-primary whitespace-nowrap">{factoryName}</span>
-              </div>
-
-              {/* Config destinations (moved off the sidebar): Master Data, Team,
-                  Departments, Settings — permission-gated icon buttons. */}
-              <div className="flex items-center gap-1 pr-1">
-                {can(userRole, "ACCESS_MASTER_DATA", permissionMatrix) && (
-                  <Link
-                    href="/owner/master-data?add=1"
-                    className="mr-1 hidden h-8.5 items-center gap-1.5 rounded-full bg-[var(--brand)] px-3 text-[11px] font-bold text-white shadow-sm transition hover:opacity-90 lg:flex"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Add Master Data
-                  </Link>
-                )}
-                {topbarItems
-                  .map((item) => {
-                    const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        title={item.label}
-                        aria-label={item.label}
-                        className={cn(
-                          "flex h-8.5 w-8.5 items-center justify-center rounded-full border transition-all duration-200",
-                          active
-                            ? "border-[var(--brand)]/60 bg-[var(--brand)]/10 text-[var(--brand)]"
-                            : "border-border/60 bg-transparent text-text-secondary hover:border-[var(--brand)]/60 hover:text-[var(--brand)]"
-                        )}
-                      >
-                        {item.icon}
-                      </Link>
-                    );
-                  })}
-              </div>
-
-              <ThemeToggle />
-              <div className="relative" ref={notifRef}>
+              <div className="relative shrink-0" ref={notifRef}>
                 <button
                   type="button"
                   onClick={() => {
                     setNotifOpen((value) => !value);
                     setProfileOpen(false);
                   }}
-                  className="relative flex h-8.5 w-8.5 items-center justify-center rounded-full border border-border/60 bg-transparent text-text-secondary transition-all duration-200 hover:border-[var(--brand)]/60 hover:text-[var(--brand)] hover:shadow-[inset_0_0_10px_-3px_var(--brand)]/20"
+                  className="relative flex h-7 w-7 items-center justify-center rounded-[6px] text-text-secondary transition hover:bg-surface-secondary/70 hover:text-text-primary"
                   aria-label="Notifications"
                 >
                   <Bell className="h-4 w-4" />
-                  {unreadCount ? <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-danger" /> : null}
+                  {unreadCount ? (
+                    <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-danger" />
+                  ) : null}
                 </button>
 
                 {/* CSS entrance, for the same reason as the mobile sheet:
                     visibility should not depend on an animation completing. */}
                 {notifOpen ? (
-                    <div
-                      className="verity-fade-in absolute right-0 mt-2 w-80 overflow-hidden rounded-2xl border border-border bg-surface shadow-[0_20px_50px_rgba(15,23,42,0.12)]"
-                    >
-                      <div className="border-b border-border px-4 py-3">
-                        <p className="text-xs font-semibold text-text-primary">Notifications</p>
-                        <p className="text-[10px] text-text-secondary mt-0.5">
-                          {unreadCount ? `${unreadCount} unread` : "No unread activity"}
-                        </p>
-                      </div>
-                      <div className="max-h-60 overflow-y-auto">
-                        {notifications.length ? (
-                          notifications.map((item) => (
-                            <div key={item.id} className="border-b border-border/60 px-4 py-3 last:border-b-0">
-                              <p className="text-xs font-semibold text-text-primary">{item.title}</p>
-                              <p className="mt-0.5 text-xs text-text-secondary">{item.message}</p>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="px-4 py-6 text-center text-xs text-text-secondary">No notifications.</div>
-                        )}
-                      </div>
+                  <div className="verity-fade-in absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-[10px] border border-border bg-surface shadow-[var(--shadow-modal)]">
+                    <div className="border-b border-border px-4 py-3">
+                      <p className="text-xs font-semibold text-text-primary">Notifications</p>
+                      <p className="mt-0.5 text-[10px] text-text-secondary">
+                        {unreadCount ? `${unreadCount} unread` : "No unread activity"}
+                      </p>
                     </div>
+                    <div className="max-h-60 overflow-y-auto">
+                      {notifications.length ? (
+                        notifications.map((item) => (
+                          <div
+                            key={item.id}
+                            className="border-b border-border/60 px-4 py-3 last:border-b-0"
+                          >
+                            <p className="text-xs font-semibold text-text-primary">{item.title}</p>
+                            <p className="mt-0.5 text-xs text-text-secondary">{item.message}</p>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-4 py-6 text-center text-xs text-text-secondary">
+                          No notifications.
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 ) : null}
               </div>
             </div>
-          </header>
 
-          {/* Content. min-h-0 so a Workspace child can own its own scrolling
-              rather than growing the page. */}
-          <main className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 min-w-0 scrollbar-none">
-            <div className="flex w-full min-w-0 flex-1 flex-col">{children}</div>
+            <div className="flex w-full min-w-0 flex-1 flex-col p-4">{children}</div>
           </main>
+        </div>
       </div>
 
       {/* ==================================================
@@ -520,8 +644,8 @@ export function OwnerShell({
               >
                 <span
                   className={cn(
-                    "flex h-7 w-12 items-center justify-center rounded-full transition-colors",
-                    opsOpen && "bg-[var(--brand-soft)]",
+                    "flex h-7 w-12 items-center justify-center border-b-2 border-transparent transition-colors",
+                    opsOpen && "border-[var(--brand)]",
                   )}
                 >
                   <LayoutGrid className="h-[18px] w-[18px]" />
@@ -637,8 +761,8 @@ function MobileTab({ item, pathname }: { item: ShellNavItem; pathname: string })
     >
       <span
         className={cn(
-          "flex h-7 w-12 items-center justify-center rounded-full transition-colors",
-          active && "bg-[var(--brand-soft)]",
+          "flex h-7 w-12 items-center justify-center border-b-2 border-transparent transition-colors",
+          active && "border-[var(--brand)]",
         )}
       >
         {item.icon}

@@ -97,7 +97,12 @@
   --glass-surface: #FFFFFF;
   --glass-border: #AEAEB8;
   --glass-border-hover: #8E8E99;
-  --glass-shadow: 0 1px 2px rgba(16, 18, 22, 0.04), 0 12px 32px -16px rgba(16, 18, 22, 0.16);
+  /* Card elevation on light surfaces. Points at the shared scale rather than
+     restating a shadow: `.verity-glass` is what every Card renders as (there is
+     no `.verity-card`), so this is the one place the token has to land. Dark mode
+     keeps its own heavier shadow below — the same elevation reads as nothing
+     against a near-black canvas. */
+  --glass-shadow: var(--shadow-card);
   --canvas-scarlet: rgba(255, 16, 42, 0.035);
   --canvas-indigo: rgba(79, 70, 229, 0.028);
   --canvas-graphite: rgba(31, 35, 40, 0.03);
