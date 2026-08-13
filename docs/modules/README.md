@@ -2,6 +2,8 @@
 
 Verity is built from composable modules. A tenant activates the modules they need; a pack is a curated bundle of modules for a specific type of business.
 
+> A module is an independent business capability. It owns its data, logic, API, UI, permissions, and nav items. It knows nothing about other modules except its declared `requires` list. See [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md) for the full contract.
+
 **Quick orientation:**
 - All modules live in [`src/platform/modules/registry.ts`](../../src/platform/modules/registry.ts)
 - Pricing lives in [`src/platform/pricing.ts`](../../src/platform/pricing.ts)
@@ -240,12 +242,14 @@ core (always on)
 
 ---
 
-## Rules for new developers
+## Rules every module must follow
 
-1. **Every query must be tenant-scoped.** Use `findFirst({ where: { id, factoryId } })`, never `findUnique` by bare id.
-2. **`factoryId` comes from the session.** No server action accepts it as a parameter — that's a parameter a caller can forge.
-3. **Nav items are declared in the module manifest.** Do not add them to the shell. The resolver in `src/platform/modules/navigation.ts` reads the registry.
-4. **Module deactivation hides, never deletes.** All historical data must survive.
-5. **`guardModuleWrite()`** wraps every mutating server action. It blocks writes on `TRIAL_EXPIRED` and `READ_ONLY` subscriptions.
+1. **Every query is tenant-scoped.** `findFirst({ where: { id, factoryId } })` — never `findUnique` by bare id.
+2. **`factoryId` comes from the session.** No server action accepts it as a parameter.
+3. **Nav items live in the module manifest.** Never add them directly to the shell.
+4. **Deactivation hides, never deletes.** All historical data survives a module being turned off.
+5. **`guardModuleWrite()`** wraps every mutating server action — blocks writes on `TRIAL_EXPIRED` and `READ_ONLY` subscriptions.
+6. **No `if (tenant === "xyz")`.** Ever. A business system is a composition; client specifics are configuration.
 
-Full contract: [`docs/prd/00-module-system.md`](../prd/00-module-system.md)
+Full contract: [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md)
+

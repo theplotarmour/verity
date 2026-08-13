@@ -1,12 +1,8 @@
 # Verity PRDs
 
-The architecture document says what Verity should become. These say what to
-build, in what order, and how you will know it worked.
+[`ARCHITECTURE.md`](../ARCHITECTURE.md) is the engineering law. These PRDs describe specific deltas — what to build next, in what order, and how you will know it worked.
 
-One rule for everything here: **a PRD describes a delta from the code that
-exists today, not a greenfield system.** Verity already has multi-tenancy, a
-module registry, entitlements, four vertical packs and 408 tests. A PRD that
-ignores that produces a rewrite estimate instead of a plan.
+**One rule:** a PRD describes a delta from the code that exists today, not a greenfield system. A PRD that ignores what's already built produces a rewrite estimate instead of a plan. Read the architecture doc first, then come here.
 
 ## The documents
 
@@ -22,20 +18,22 @@ ignores that produces a rewrite estimate instead of a plan.
 
 Read 00 first. The other documents assume the manifest exists.
 
-## Status of the architecture's claims
+## Architecture — what's built vs what's aspirational
 
-The architecture makes six promises. Three are substantially true today, three
-are not yet built. Stating which is which is the point of this table — the
-roadmap's Phase A is short because most of the substrate is already there.
+The full picture is in [`ARCHITECTURE.md §Current state vs the end state`](../ARCHITECTURE.md). Short version for PRD context:
 
 | Claim | Reality |
 |---|---|
-| "Modules are independently installable units" | **Partly.** `ModuleEntitlement` already turns modules on and off per tenant, and `guardModuleAction` / `guardModulePage` enforce it. But a module is an entry in one registry file, not a folder that owns anything. See [00](./00-module-system.md). |
-| "Each module owns its DB tables, permissions, nav items" | **Permissions yes, the rest no.** Permissions are declared per module in the registry. DB tables live in one 2,500-line `schema.prisma`. Nav items are a hardcoded array in `owner-shell.tsx` that *filters* on `requiredModule` — module-aware, but not module-owned. |
-| "Modules declare versioned contracts; core never breaks them" | **Not built.** `ModuleDefinition` has no `version` field. Nothing to break yet, which makes now the cheap time to add it. |
-| "Pay only for active modules, per month" | **Priced, not yet billed.** `pricing.ts` and `TenantSubscription` exist, with the pack discount under test. Still missing: charge lines, invoice generation, and the read-only enforcement a lapsed trial needs. See [01](./01-metering-and-billing.md). |
-| "Vertical packs compose a tailored UI from the same modules" | **True.** Four packs, each resolving to a dashboard through `resolvePackKey`, guarded by a test that fails if a pack has no dashboard case. |
-| "AI assistant configures 80% on first setup" | **Not built.** No Groq integration, no assistant surface. See [02](./02-ai-assistant.md). |
+| Modules are independently installable units | ✅ `ModuleEntitlement` gates per tenant; `guardModuleWrite` enforces on every mutating action. |
+| Each module owns its permissions and nav items | ✅ Permissions declared in registry; nav resolved by `navigation.ts` — never hardcoded in shell. |
+| Each module owns its DB tables | ⚠️ Convention only. Tables live in one `schema.prisma`; folder isolation (`src/modules/<key>/`) deferred to Nov 2026. |
+| Modules declare versioned contracts | ✅ `version: "1.0.0"` on all 22 modules; bumping on breaking change is the rule. |
+| Vertical packs compose modules without duplicating logic | ✅ Packs are lists of module keys + a price. Zero business logic in pack files. |
+| Pay only for active modules, per month | ✅ Pricing enforced by test; subscription lifecycle cron live; invoices append-only. |
+| AI assistant configures 80% on first setup | ❌ Not built. See [PRD 02](./02-ai-assistant.md). |
+| Event bus for cross-module communication | ❌ Not built. `Notification` model is the interim. |
+| Configurable workflow engine | ❌ Not built. State machines are per-module today. |
+| Dashboard widget registry | ❌ Not built. Per-pack dashboards today. |
 
 ## Commercial ground truth — settled
 

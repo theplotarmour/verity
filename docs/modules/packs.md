@@ -2,6 +2,8 @@
 
 A pack answers "what kind of business are you?" so onboarding asks one question instead of twenty.
 
+> **A pack is configuration, not code.** It is a list of module keys and a price. It contains zero business logic. If you find yourself writing business logic inside a pack file, it belongs in a module instead. See [`docs/ARCHITECTURE.md §8`](../ARCHITECTURE.md).
+
 Each pack maps to a curated module bundle and a dedicated dashboard. Adding a fifth pack should follow a named customer — not precede one.
 
 **Source of truth:** [`src/platform/tenancy/packs.ts`](../../src/platform/tenancy/packs.ts)
