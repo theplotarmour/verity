@@ -17,10 +17,11 @@ import { createClient as createSupabaseBrowserClient } from "@/lib/supabase/clie
 import { OrderSpecCard } from "@/components/factory/OrderSpecCard";
 import { HOLD_CAUSES, HOLD_CAUSE_KEYS, isUrgentHold, type HoldCause } from "@/lib/stage-holds";
 import { cn } from "@/lib/utils";
+import { isRanged, judgeReading, describeRange } from "@/lib/checkpoint-range";
 
 type StageImage = { dataUrl: string; fileName: string; contentType: string; size: number };
 
-type ChecklistState = Record<string, { ok: boolean; value: string; remarks: string; images: StageImage[] }>;
+type ChecklistState = Record<string, { ok: boolean; value: string; correctiveAction: string; remarks: string; images: StageImage[] }>;
 
 // A worker who pauses mid-stage must return to exactly what they had typed and
 // photographed. localStorage would blow its ~5MB quota on a few phone photos, so
@@ -142,12 +143,12 @@ export default function StageClient({ data }: { data: any }) {
     void idbPut({ id: job.id, measurements, materialNotes, remarks, checklist, beforeImages, afterImages });
   }, [job.id, measurements, materialNotes, remarks, checklist, beforeImages, afterImages]);
 
-  const cpState = (id: string) => checklist[id] ?? { ok: false, value: "", remarks: "", images: [] };
-  const updateCp = (id: string, patch: Partial<{ ok: boolean; value: string; remarks: string; images: StageImage[] }>) =>
-    setChecklist((prev) => ({ ...prev, [id]: { ...(prev[id] ?? { ok: false, value: "", remarks: "", images: [] }), ...patch } }));
+  const cpState = (id: string) => checklist[id] ?? { ok: false, value: "", correctiveAction: "", remarks: "", images: [] };
+  const updateCp = (id: string, patch: Partial<{ ok: boolean; value: string; correctiveAction: string; remarks: string; images: StageImage[] }>) =>
+    setChecklist((prev) => ({ ...prev, [id]: { ...(prev[id] ?? { ok: false, value: "", correctiveAction: "", remarks: "", images: [] }), ...patch } }));
   const addCpImage = (id: string, img: StageImage) =>
     setChecklist((prev) => {
-      const cur = prev[id] ?? { ok: false, value: "", remarks: "", images: [] };
+      const cur = prev[id] ?? { ok: false, value: "", correctiveAction: "", remarks: "", images: [] };
       return { ...prev, [id]: { ...cur, images: [...cur.images, img] } };
     });
   const removeCpImage = (id: string, idx: number) =>
@@ -235,6 +236,13 @@ export default function StageClient({ data }: { data: any }) {
       }
       if (cp.requireImage && r.images.length === 0) { toast.error(`Checklist: "${cp.name}" needs a photo`); return; }
       if (cp.requireRemarks && !r.remarks.trim()) { toast.error(`Checklist: "${cp.name}" needs a remark`); return; }
+      if (isRanged(cp)) {
+        const verdict = judgeReading(r.value, cp);
+        if (!verdict.ok && !r.correctiveAction.trim()) {
+          toast.error(`Checklist: "${cp.name}" ${verdict.reason} (allowed ${describeRange(cp)}). Record what you did about it.`);
+          return;
+        }
+      }
     }
     if (videoRequired && !video) {
       toast.error("Record or upload the walkthrough video before completing");
@@ -250,7 +258,14 @@ export default function StageClient({ data }: { data: any }) {
         remarks,
         checklist: checkpoints.map((cp) => {
           const r = cpState(cp.id);
-          return { checkpointId: cp.id, ok: r.ok, value: r.value, remarks: r.remarks, images: r.images };
+          return {
+            checkpointId: cp.id,
+            ok: r.ok,
+            value: r.value,
+            correctiveAction: r.correctiveAction,
+            remarks: r.remarks,
+            images: r.images,
+          };
         }),
         video,
       });
@@ -505,11 +520,21 @@ export default function StageClient({ data }: { data: any }) {
             <Surface className="p-4 space-y-3">
               {typedCheckpoints.map((cp: any) => {
                 const st = cpState(cp.id);
+                const ranged = isRanged(cp);
+                const verdict = (ranged ? judgeReading(st.value, cp) : { ok: true }) as any;
+                const showCorrective = ranged && !verdict.ok;
                 return (
-                  <div key={cp.id} className="space-y-1">
-                    <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">
-                      {cp.name}{cp.isRequired === false ? "" : " *"}
-                    </label>
+                  <div key={cp.id} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-semibold uppercase tracking-[0.2em] text-text-tertiary">
+                        {cp.name}{cp.isRequired === false ? "" : " *"}
+                      </label>
+                      {ranged && (
+                        <span className="text-[10px] text-text-tertiary font-medium">
+                          Range: {describeRange(cp)}
+                        </span>
+                      )}
+                    </div>
                     {cp.instructions && <p className="text-[11px] text-text-secondary">{cp.instructions}</p>}
                     {cp.referenceImageUrl && (
                       /* eslint-disable-next-line @next/next/no-img-element */
@@ -521,7 +546,22 @@ export default function StageClient({ data }: { data: any }) {
                       placeholder={cp.placeholder || ""}
                       value={st.value}
                       onChange={(e) => updateCp(cp.id, { value: e.target.value })}
+                      className={cn(ranged && !verdict.ok && st.value.trim() !== "" && "border-danger focus:border-danger")}
                     />
+                    {showCorrective && st.value.trim() !== "" && (
+                      <div className="space-y-1 pl-2 border-l-2 border-danger/60">
+                        <p className="text-[11px] text-danger font-medium flex items-center gap-1">
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          Out of range: {verdict.reason}. Corrective action required.
+                        </p>
+                        <Input
+                          placeholder="What did you do about this deviation? *"
+                          value={st.correctiveAction}
+                          onChange={(e) => updateCp(cp.id, { correctiveAction: e.target.value })}
+                          className="text-xs py-1"
+                        />
+                      </div>
+                    )}
                   </div>
                 );
               })}

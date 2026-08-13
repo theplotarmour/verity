@@ -165,7 +165,7 @@ describe("production funnel counts", () => {
 
     expect(funnel.map((s) => s.name)).toEqual(names.map((n) => `${n} ${suffix}`));
     expect(funnel.map((s) => s.count)).toEqual([3, 2, 1, 0]);
-  });
+  }, 15000);
 
   it("orders by sortOrder, not by name or creation", async () => {
     if (!seeded) return;

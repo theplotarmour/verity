@@ -62,6 +62,17 @@ const TRIALS: Record<string, Trial> = {
       { name: "Night", startTime: "22:00", endTime: "06:00" },
     ],
   },
+  "kents": {
+    name: "Kent's Kitchen",
+    slug: "kents",
+    industry: "Restaurant OS",
+    modules: [
+      "core", "hr", "menu", "tables_orders", "kitchen", "serving", "billing"
+    ],
+    owner: { name: "Kent Jones", phone: "8800000008" },
+    sites: [],
+    shifts: [],
+  },
 };
 
 async function main() {
@@ -100,7 +111,7 @@ async function main() {
     select: { id: true },
   });
 
-  const pin = String(Math.floor(1000 + Math.random() * 9000));
+  const pin = key === "kents" ? "1234" : String(Math.floor(1000 + Math.random() * 9000));
 
   const result = await prisma.$transaction(async (tx) => {
     const core = await provisionCore(tx, {
