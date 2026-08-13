@@ -88,6 +88,11 @@ async function main() {
       "product_type.manage", "sales_order.view", "sales_order.create",
       "sales_order.delete", "sales_order.approve", "customer.manage",
       "vehicle_catalog.manage", "fitment.manage",
+      // Restaurant OS. An owner who cooks is the normal case in a single
+      // location, not an edge one.
+      "kitchen.view", "kitchen.work", "serving.view", "serving.work",
+      // `applyDiscount` gates on this, and without it nobody can discount a bill.
+      "invoice.view", "invoice.manage",
     ],
     CO_OWNER: [
       "dashboard.view", "settings.access", "master_data.access", "team.manage",
@@ -96,9 +101,24 @@ async function main() {
     MANAGER: [
       "dashboard.view", "master_data.access", "team.manage", "reports.view",
       "sales_order.view", "sales_order.create",
+      "kitchen.view", "kitchen.work", "serving.view", "serving.work",
+      "invoice.view", "invoice.manage",
     ],
-    SUPERVISOR: ["dashboard.view", "reports.view", "quality.queue", "quality.inspect", "production.supervise"],
-    WORKER: ["production.jobs"],
+    /*
+     * Kitchen and serving grants ride on the existing floor archetypes rather
+     * than new ones: `SystemRole` has no SERVER or KITCHEN_STAFF, and adding
+     * them would be a schema change plus a migration for what is a naming
+     * preference. A supervisor runs the pass; a worker cooks and carries.
+     *
+     * Handing these to a factory's roles costs nothing — `resolveAccess` drops
+     * any permission whose module the tenant is not entitled to, so an auto
+     * components worker never sees a kitchen queue.
+     */
+    SUPERVISOR: [
+      "dashboard.view", "reports.view", "quality.queue", "quality.inspect", "production.supervise",
+      "kitchen.view", "kitchen.work", "serving.view", "serving.work",
+    ],
+    WORKER: ["production.jobs", "kitchen.view", "kitchen.work", "serving.view", "serving.work"],
     STORE_MANAGER: ["dashboard.view", "sales_order.view", "sales_order.create"],
   };
   const ROLE_LABELS: Record<string, string> = {
@@ -122,6 +142,23 @@ async function main() {
         permissions: { create: grants.map((key) => ({ key })) },
       },
     });
+    /*
+     * Grants are synced separately, because the upsert above passes `update: {}`
+     * — an existing role keeps whatever it had, so a permission added to
+     * SEED_GRANTS later never reached any workspace that had already been
+     * seeded. That is how the kitchen and serving keys ended up granted to
+     * nobody: the modules shipped, the roles were already there, and re-running
+     * the seed changed nothing.
+     *
+     * `skipDuplicates` rather than a delete-and-recreate: a tenant may have added
+     * their own permissions to a built-in role, and a seed has no business
+     * removing them.
+     */
+    await prisma.rolePermission.createMany({
+      data: grants.map((key) => ({ roleId: id, key })),
+      skipDuplicates: true,
+    });
+
     roleIdByArchetype[archetype] = id;
   }
 

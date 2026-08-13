@@ -309,9 +309,20 @@ export function OwnerShell({
       <div className="hidden md:flex h-screen w-full overflow-hidden text-text-primary">
         <aside
           style={{
+            // `width` alone does not hold. This is a flex item, and a flex item
+            // defaults to `min-width: auto`, which floors it at its content's
+            // min-content size — the widest nav label — so collapsing set the
+            // style and the box stayed 220px. `minWidth` and `maxWidth` pin it.
             width: collapsed ? "var(--sidebar-collapsed-width)" : "var(--sidebar-width)",
+            minWidth: collapsed ? "var(--sidebar-collapsed-width)" : "var(--sidebar-width)",
+            maxWidth: collapsed ? "var(--sidebar-collapsed-width)" : "var(--sidebar-width)",
           }}
-          className="flex shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200"
+          // No width transition. Animating width/min-width/max-width together
+          // between two custom-property values left the element wedged at the old
+          // size — the state flipped, the labels changed, and the box stayed
+          // 60px until the transition was removed. A nav that snaps is better
+          // than a nav stuck at the wrong width.
+          className="flex shrink-0 flex-col overflow-hidden border-r border-border bg-surface"
         >
           {/* Identity. The whole block is the way home. */}
           <div className="flex shrink-0 items-center gap-2.5 px-3 py-3">
