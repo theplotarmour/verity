@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/server/auth";
+import { guardModulePage } from "@/platform/modules/guard";
 import { getMaterialRequirement } from "@/server/actions/cad";
 import { describeSpecDetails } from "@/lib/server/specUtils";
 import { ProductionLabel } from "./ProductionLabel";
@@ -13,6 +14,7 @@ export default async function ProductionLabelPage({ params }: { params: Promise<
   const { id } = await params;
   const session = await getUserSession();
   if (!session) notFound();
+  await guardModulePage("manufacturing");
 
   const order = await prisma.salesOrder.findFirst({
     where: { id, factoryId: session.factoryId },

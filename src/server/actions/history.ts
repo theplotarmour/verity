@@ -1,5 +1,7 @@
 "use server";
 
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
+
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/server/auth";
 import { jobCardInclude, toWorkerJob } from "@/lib/server/jobCardAdapter";
@@ -30,6 +32,7 @@ const BUCKET_OF: Record<string, HistoryBucket> = {
 export async function getWorkHistory() {
   const session = await getUserSession();
   if (!session) return { jobs: [], scope: "none" as const };
+  await guardModuleAction("manufacturing");
 
   const isOwner = isOwnerRole(session.role);
   const isSupervisor = session.role === "SUPERVISOR";
@@ -77,6 +80,7 @@ export async function getWorkHistory() {
 export async function getHistoryDetail(jobCardId: string) {
   const session = await getUserSession();
   if (!session) return null;
+  await guardModuleAction("manufacturing");
 
   const jobCard = await prisma.jobCard.findFirst({
     where: { id: jobCardId, factoryId: session.factoryId },

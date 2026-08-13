@@ -1,5 +1,7 @@
 "use server";
 
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
+
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/server/auth";
 import { revalidatePath } from "next/cache";
@@ -35,6 +37,7 @@ export type MaterialRequirement = {
 export async function getMaterialRequirement(orderId: string): Promise<MaterialRequirement | null> {
   const session = await getUserSession();
   if (!session) return null;
+  await guardModuleAction("manufacturing");
 
   const order = await prisma.salesOrder.findFirst({
     where: { id: orderId, factoryId: session.factoryId },
@@ -123,6 +126,7 @@ export async function getMaterialRequirement(orderId: string): Promise<MaterialR
 export async function ensureProductionLabel(orderId: string) {
   const session = await getUserSession();
   if (!session) return { error: "Unauthorized" };
+  await guardModuleWrite("manufacturing");
 
   const order = await prisma.salesOrder.findFirst({
     where: { id: orderId, factoryId: session.factoryId },

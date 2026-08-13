@@ -1,5 +1,7 @@
 "use server";
 
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
+
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { revalidatePath } from "next/cache";
@@ -28,6 +30,7 @@ export type BomTemplateRow = {
 
 export async function listBomTemplateLines(groupId: string): Promise<BomTemplateRow[]> {
   const user = await getOwnerUser();
+  await guardModuleAction("manufacturing");
   const lines = await prisma.bomTemplateLine.findMany({
     where: { groupId, factoryId: user.factoryId },
     include: {
@@ -61,6 +64,7 @@ export async function listBomTemplateLines(groupId: string): Promise<BomTemplate
  */
 export async function listComponentItems() {
   const user = await getOwnerUser();
+  await guardModuleAction("manufacturing");
   return prisma.itemMaster.findMany({
     where: {
       factoryId: user.factoryId,
@@ -79,6 +83,7 @@ export async function listComponentItems() {
 /** Reference fields on this group that point at items — each can drive a BOM line. */
 export async function listItemReferenceFields(groupId: string) {
   const user = await getOwnerUser();
+  await guardModuleAction("manufacturing");
   const groups = await prisma.itemGroup.findMany({
     where: { factoryId: user.factoryId },
     select: { id: true, parentId: true },
@@ -117,6 +122,7 @@ export async function listItemReferenceFields(groupId: string) {
  */
 export async function listAllItemReferenceFields() {
   const user = await getOwnerUser();
+  await guardModuleAction("manufacturing");
   const fields = await prisma.specField.findMany({
     where: {
       factoryId: user.factoryId,
@@ -176,6 +182,7 @@ export type QuantityFieldOption = {
 
 export async function listAvailableQuantityFields(groupId: string): Promise<QuantityFieldOption[]> {
   const user = await getOwnerUser();
+  await guardModuleAction("manufacturing");
 
   const groups = await prisma.itemGroup.findMany({
     where: { factoryId: user.factoryId },
@@ -259,6 +266,7 @@ export async function listAvailableQuantityFields(groupId: string): Promise<Quan
 
 export async function removeBomTemplateLine(id: string) {
   const user = await getOwnerUser();
+  await guardModuleWrite("manufacturing");
   await prisma.bomTemplateLine.delete({ where: { id, factoryId: user.factoryId } });
   revalidate();
 }
@@ -272,6 +280,7 @@ export async function removeBomTemplateLine(id: string) {
  */
 export async function regenerateGroupNames(groupId: string, commit: boolean) {
   const user = await getOwnerUser();
+  await guardModuleWrite("manufacturing");
   const { previewGroupRename } = await import("@/server/queries/rename");
   const changes = await previewGroupRename(groupId, user.factoryId);
 

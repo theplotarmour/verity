@@ -1,5 +1,7 @@
 "use server";
 
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
+
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/server/auth";
 import { recordTimeline } from "@/lib/server/stages";
@@ -30,6 +32,7 @@ function revalidateAssignmentPaths(factoryId?: string, actorId?: string) {
 export async function reassignJobCard(jobCardId: string, userId: string | null) {
   const session = await getUserSession();
   if (!session) return { error: "Unauthorized" };
+  await guardModuleWrite("manufacturing");
 
   const jobCard = await prisma.jobCard.findFirst({
     where: { id: jobCardId, factoryId: session.factoryId },
@@ -131,6 +134,7 @@ export async function reassignJobCard(jobCardId: string, userId: string | null) 
 export async function getDepartmentRoster(departmentId: string) {
   const session = await getUserSession();
   if (!session) return [];
+  await guardModuleAction("manufacturing");
   return prisma.user.findMany({
     where: { factoryId: session.factoryId, departmentId, isActive: true },
     select: { id: true, name: true, role: true },

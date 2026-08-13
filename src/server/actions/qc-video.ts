@@ -1,5 +1,7 @@
 "use server";
 
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
+
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/server/auth";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -126,6 +128,7 @@ export async function attachQcVideo(input: {
 export async function removeQcVideo(inspectionId: string) {
   const session = await getUserSession();
   if (!session || !canCaptureQc(session.role)) return { error: "Unauthorized" };
+  await guardModuleWrite("quality");
 
   const inspection = await prisma.inspection.findFirst({
     where: { id: inspectionId, factoryId: session.factoryId },

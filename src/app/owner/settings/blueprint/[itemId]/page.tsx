@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getOwnerUser } from "@/lib/server/owner";
+import { guardModulePage } from "@/platform/modules/guard";
 import prisma from "@/lib/prisma";
 import { BlueprintBuilderClient } from "./BlueprintBuilderClient";
 import { ItemType } from "@prisma/client";
@@ -15,6 +16,7 @@ import { ItemType } from "@prisma/client";
 export default async function BlueprintPage({ params }: { params: Promise<{ itemId: string }> }) {
   const dbUser = await getOwnerUser();
   if (!dbUser) redirect("/onboarding");
+  await guardModulePage("manufacturing");
 
   const { itemId } = await params;
 

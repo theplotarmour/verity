@@ -1,5 +1,7 @@
 "use server";
 
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
+
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { revalidatePath } from "next/cache";
@@ -34,6 +36,7 @@ function ownerWhere(owner: ContributionOwner) {
 
 export async function listContributions(owner: ContributionOwner): Promise<ContributionRow[]> {
   const user = await getOwnerUser();
+  await guardModuleAction("manufacturing");
   const rows = await prisma.bomContribution.findMany({
     where: { factoryId: user.factoryId, ...ownerWhere(owner) },
     include: {
@@ -102,6 +105,7 @@ export async function addContribution(input: {
 
 export async function removeContribution(id: string) {
   const user = await getOwnerUser();
+  await guardModuleWrite("manufacturing");
   await prisma.bomContribution.deleteMany({ where: { id, factoryId: user.factoryId } });
   revalidate();
   return { ok: true };
@@ -115,6 +119,7 @@ export async function removeContribution(id: string) {
  */
 export async function countItemsUsingOwner(owner: ContributionOwner): Promise<number> {
   const user = await getOwnerUser();
+  await guardModuleAction("manufacturing");
   const where =
     owner.kind === "OPTION"
       ? { optionId: owner.id }

@@ -1,5 +1,7 @@
 "use server";
 
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
+
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/server/auth";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -64,6 +66,7 @@ export async function createStageVideoUploadUrl(input: {
 export async function resolveStageVideoUrl(path: string) {
   const session = await getUserSession();
   if (!session) return { error: "Unauthorized" };
+  await guardModuleWrite("manufacturing");
   const expectedPrefix = `factory/${session.factoryId}/stage-video/`;
   if (!path.startsWith(expectedPrefix)) return { error: "Invalid upload path" };
 

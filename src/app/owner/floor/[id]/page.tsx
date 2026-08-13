@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getOwnerUser } from "@/lib/server/owner";
+import { guardModulePage } from "@/platform/modules/guard";
 import { canUser } from "@/lib/server/permissions";
 import { getDepartmentFloor } from "@/server/actions/floor";
 import { PageHeader } from "@/components/design/PageHeader";
@@ -12,6 +13,7 @@ export default async function DepartmentFloorPage({ params }: { params: Promise<
   const { id } = await params;
   const dbUser = await getOwnerUser();
   if (!dbUser) redirect("/onboarding");
+  await guardModulePage("manufacturing");
   if (!(await canUser(dbUser, "QC_QUEUE"))) redirect("/unauthorized");
 
   const data = await getDepartmentFloor(id);

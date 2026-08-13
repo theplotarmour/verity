@@ -1,5 +1,7 @@
 'use server'
 
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
+
 import prisma from '@/lib/prisma'
 import { getUserSession } from '@/lib/server/auth'
 import { uploadStorageImage } from '@/server/actions/storage'
@@ -9,6 +11,7 @@ import { canAccessJobCard } from '@/lib/server/jobCardAccess'
 export async function getWorkerJobs() {
   const session = await getUserSession()
   if (!session) return [] as any
+  await guardModuleAction("manufacturing");
   const isOwner = session.role === 'OWNER' || session.role === 'CO_OWNER' || session.role === 'MANAGER';
   const isSupervisor = session.role === 'SUPERVISOR';
   if (session.role !== 'WORKER' && !isSupervisor && !isOwner) return [] as any
@@ -63,6 +66,7 @@ export async function getWorkerJobs() {
 export async function getInspectionData(jobCardId: string) {
   const session = await getUserSession()
   if (!session) return null
+  await guardModuleAction("manufacturing");
 
   const jobCard = await prisma.jobCard.findFirst({
     where: {
@@ -140,6 +144,7 @@ export async function submitCheckpoints(jobCardId: string, submissions: any[]) {
   if (!session || (session.role !== 'WORKER' && session.role !== 'SUPERVISOR' && !isOwner)) {
     return { error: 'Unauthorized' }
   }
+  await guardModuleWrite("manufacturing");
 
   const jobCard = await prisma.jobCard.findFirst({
     where: { id: jobCardId, factoryId: session.factoryId },

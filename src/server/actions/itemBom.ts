@@ -1,5 +1,7 @@
 "use server";
 
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
+
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { revalidatePath } from "next/cache";
@@ -28,6 +30,7 @@ export type ItemBomRow = {
  */
 export async function listItemBom(itemId: string): Promise<ItemBomRow[]> {
   const user = await getOwnerUser();
+  await guardModuleAction("manufacturing");
   const lines = await getItemBomFor(user.factoryId, itemId);
   return lines.map((l) => ({
     componentItemId: l.itemId,
@@ -50,6 +53,7 @@ export async function listItemBom(itemId: string): Promise<ItemBomRow[]> {
  */
 export async function getItemRecipeTarget(itemId: string) {
   const user = await getOwnerUser();
+  await guardModuleAction("manufacturing");
   const item = await prisma.itemMaster.findFirst({
     where: { id: itemId, factoryId: user.factoryId },
     select: { group: { select: { id: true, name: true } } },
@@ -111,6 +115,7 @@ export async function setItemBomLine(input: {
  */
 export async function removeItemBomLine(itemId: string, componentItemId: string) {
   const user = await getOwnerUser();
+  await guardModuleWrite("manufacturing");
   await prisma.itemBomOverride.upsert({
     where: { itemId_componentItemId: { itemId, componentItemId } },
     create: {
@@ -129,6 +134,7 @@ export async function removeItemBomLine(itemId: string, componentItemId: string)
 /** Forget this item's override and go back to whatever it inherits. */
 export async function clearItemBomOverride(itemId: string, componentItemId: string) {
   const user = await getOwnerUser();
+  await guardModuleWrite("manufacturing");
   await prisma.itemBomOverride.deleteMany({
     where: { itemId, componentItemId, factoryId: user.factoryId },
   });
@@ -144,6 +150,7 @@ export async function clearItemBomOverride(itemId: string, componentItemId: stri
  */
 export async function rebuildItemBlueprint(itemId: string) {
   const user = await getOwnerUser();
+  await guardModuleWrite("manufacturing");
   const item = await prisma.itemMaster.findFirst({
     where: { id: itemId, factoryId: user.factoryId },
     select: { id: true },

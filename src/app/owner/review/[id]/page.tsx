@@ -1,5 +1,6 @@
 import { getReviewData, getOrderReview } from '@/server/actions/inspector'
 import { getUserSession } from '@/lib/server/auth'
+import { guardModulePage } from "@/platform/modules/guard";
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
@@ -18,6 +19,7 @@ export default async function OwnerReviewInspectionPage({ params }: { params: Pr
   if (!session || (session.role !== 'OWNER' && session.role !== 'CO_OWNER' && session.role !== 'MANAGER')) {
     redirect('/');
   }
+  await guardModulePage('quality');
   if (!can(session.role, 'QC_QUEUE')) redirect('/unauthorized');
 
   const [inspection, review] = await Promise.all([

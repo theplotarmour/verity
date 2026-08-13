@@ -1,5 +1,7 @@
 "use server";
 
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
+
 import prisma from "@/lib/prisma";
 import { getUserSession } from "@/lib/server/auth";
 import { revalidatePath } from "next/cache";
@@ -129,6 +131,7 @@ async function resolveStageTemplateId(factoryId: string, jobCard: any): Promise<
 export async function getStageJob(jobCardId: string) {
   const session = await getUserSession();
   if (!session) return null;
+  await guardModuleAction("manufacturing");
 
   const jobCard = await prisma.jobCard.findFirst({
     where: { id: jobCardId, factoryId: session.factoryId },
@@ -197,6 +200,7 @@ export async function getStageJob(jobCardId: string) {
 export async function startStage(jobCardId: string) {
   const session = await getUserSession();
   if (!session || !canWorkStage(session.role)) return { error: "Unauthorized" };
+  await guardModuleWrite("manufacturing");
 
   const jobCard = await prisma.jobCard.findFirst({
     where: { id: jobCardId, factoryId: session.factoryId },
@@ -240,6 +244,7 @@ export async function startStage(jobCardId: string) {
 export async function holdStage(jobCardId: string, reason?: string, cause?: HoldCause) {
   const session = await getUserSession();
   if (!session || !canWorkStage(session.role)) return { error: "Unauthorized" };
+  await guardModuleWrite("manufacturing");
 
   const jobCard = await prisma.jobCard.findFirst({
     where: { id: jobCardId, factoryId: session.factoryId },
@@ -621,6 +626,7 @@ async function advanceStageChain(
 export async function approveStageCard(jobCardId: string) {
   const session = await getUserSession();
   if (!session || !(session.role === "SUPERVISOR" || isOwnerRole(session.role))) return { error: "Unauthorized" };
+  await guardModuleWrite("manufacturing");
 
   const jobCard = await prisma.jobCard.findFirst({
     where: { id: jobCardId, factoryId: session.factoryId },
@@ -645,6 +651,7 @@ export async function approveStageCard(jobCardId: string) {
 export async function rejectStageCard(jobCardId: string, reason: string) {
   const session = await getUserSession();
   if (!session || !(session.role === "SUPERVISOR" || isOwnerRole(session.role))) return { error: "Unauthorized" };
+  await guardModuleWrite("manufacturing");
   if (!reason?.trim()) return { error: "A rework reason is required" };
 
   const jobCard = await prisma.jobCard.findFirst({
@@ -694,6 +701,7 @@ export async function rejectStageCard(jobCardId: string, reason: string) {
 export async function overrideStage(jobCardId: string, remark: string) {
   const session = await getUserSession();
   if (!session || !isOwnerRole(session.role)) return { error: "Unauthorized" };
+  await guardModuleWrite("manufacturing");
   if (!remark?.trim()) return { error: "Override requires a remark" };
 
   const jobCard = await prisma.jobCard.findFirst({

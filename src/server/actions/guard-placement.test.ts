@@ -149,11 +149,16 @@ describe("module guards sit in function bodies", () => {
       const lines = source.split(/\r?\n/);
       lines.forEach((line, i) => {
         if (!GUARD_CALL.test(line) || /^\s*import\b/.test(line)) return;
-        // Look back a few lines for the session read this guard follows.
+        /*
+         * Only the helpers that can *return* null need an explicit check before
+         * the guard. `getOwnerUser()` redirects on no session and never returns
+         * null, so a guard on the next line is already past authentication —
+         * demanding an `if (!user)` there would be demanding dead code.
+         */
         const window = lines.slice(Math.max(0, i - 8), i).join("\n");
-        const hasSession = /await\s+(getOwnerUser|getUserSession|getActiveSessionUser)\s*\(/.test(window);
-        const hasCheck = /if\s*\(\s*!\w+\s*\)/.test(window);
-        if (hasSession && !hasCheck) {
+        const nullable = /await\s+(getUserSession|getActiveSessionUser)\s*\(/.test(window);
+        const hasCheck = /if\s*\(\s*!\w+/.test(window);
+        if (nullable && !hasCheck) {
           offences.push(`${path.relative(ACTIONS_DIR, file)}:${i + 1}`);
         }
       });

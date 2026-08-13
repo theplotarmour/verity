@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getOwnerUser } from "@/lib/server/owner";
+import { guardModulePage } from "@/platform/modules/guard";
 import prisma from "@/lib/prisma";
 import ItemLabelSheet from "./ItemLabelSheet";
 
@@ -12,6 +13,7 @@ export default async function InventoryLabelsPage({
 }) {
   const dbUser = await getOwnerUser();
   if (!dbUser) redirect("/");
+  await guardModulePage("inventory");
 
   const { ids } = await searchParams;
   const only = ids?.split(",").map((s) => s.trim()).filter(Boolean);

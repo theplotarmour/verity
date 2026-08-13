@@ -1,5 +1,7 @@
 'use server'
 
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
+
 import prisma from '@/lib/prisma'
 import { getUserSession } from '@/lib/server/auth'
 import { revalidatePath } from 'next/cache'
@@ -7,6 +9,7 @@ import { revalidatePath } from 'next/cache'
 export async function getQCTemplates() {
   const session = await getUserSession()
   if (!session) throw new Error('Unauthorized')
+  await guardModuleAction("quality");
 
   return await prisma.checklistTemplate.findMany({
     where: { factoryId: session.factoryId, status: 'active' },
@@ -199,6 +202,7 @@ export async function saveQCTemplate(data: {
 export async function deleteQCTemplate(templateId: string) {
   const session = await getUserSession()
   if (!session) return { error: 'Unauthorized' }
+  await guardModuleWrite("quality");
 
   try {
     // Soft delete template
@@ -216,6 +220,7 @@ export async function deleteQCTemplate(templateId: string) {
 export async function updateCheckpointField(checkpointId: string, field: string, value: any) {
   const session = await getUserSession()
   if (!session) return { error: 'Unauthorized' }
+  await guardModuleWrite("quality");
   try {
     const updateData: any = {}
     if (field === 'checkpointName') updateData.name = value
@@ -237,6 +242,7 @@ export async function updateCheckpointField(checkpointId: string, field: string,
 export async function deleteCheckpointAction(checkpointId: string) {
   const session = await getUserSession()
   if (!session) return { error: 'Unauthorized' }
+  await guardModuleWrite("quality");
   try {
     await prisma.checkpoint.delete({
       where: { id: checkpointId }
@@ -251,6 +257,7 @@ export async function deleteCheckpointAction(checkpointId: string) {
 export async function addSectionAction(templateId: string, title: string) {
   const session = await getUserSession()
   if (!session) return { error: 'Unauthorized' }
+  await guardModuleWrite("quality");
   try {
     const count = await prisma.templateSection.count({ where: { templateId } })
     const section = await prisma.templateSection.create({
@@ -271,6 +278,7 @@ export async function addSectionAction(templateId: string, title: string) {
 export async function addCheckpointAction(sectionId: string, name: string) {
   const session = await getUserSession()
   if (!session) return { error: 'Unauthorized' }
+  await guardModuleWrite("quality");
   try {
     const count = await prisma.checkpoint.count({ where: { sectionId } })
     const checkpoint = await prisma.checkpoint.create({
@@ -294,6 +302,7 @@ export async function addCheckpointAction(sectionId: string, name: string) {
 export async function deleteSectionAction(sectionId: string) {
   const session = await getUserSession()
   if (!session) return { error: 'Unauthorized' }
+  await guardModuleWrite("quality");
   try {
     await prisma.templateSection.delete({
       where: { id: sectionId }
@@ -316,6 +325,7 @@ export async function deleteSectionAction(sectionId: string) {
 export async function getTemplateAssignments(templateId: string) {
   const session = await getUserSession();
   if (!session) throw new Error('Unauthorized');
+  await guardModuleAction("quality");
   const user = { factoryId: session.factoryId };
 
   const [groups, departments] = await Promise.all([
@@ -373,6 +383,7 @@ export async function setTemplateForItemGroup(
 ) {
   const session = await getUserSession();
   if (!session) return { error: 'Unauthorized' };
+  await guardModuleWrite("quality");
   const user = { factoryId: session.factoryId };
   // connect/disconnect rather than overwriting a single column, so mapping
   // "Seat Cover" to the Stitching checklist cannot unmap it from Cutting.

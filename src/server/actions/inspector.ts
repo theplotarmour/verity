@@ -1,5 +1,7 @@
 'use server'
 
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
+
 import prisma from '@/lib/prisma'
 import { getUserSession } from '@/lib/server/auth'
 import { QCStatus } from '@prisma/client'
@@ -35,6 +37,7 @@ function getRedirectPath(role: string) {
 export async function getInspectorInbox(filter: 'pending' | 'reviewed' = 'pending') {
   const session = await getUserSession()
   if (!session || !isInspectorOrOwner(session.role)) return [] as any
+  await guardModuleAction("quality");
 
   // A supervisor reviews only their own department's QC queue; management sees
   // every department's.
@@ -68,6 +71,7 @@ export async function getInspectorInbox(filter: 'pending' | 'reviewed' = 'pendin
 export async function getOrderReview(inspectionId: string) {
   const session = await getUserSession()
   if (!session || !isInspectorOrOwner(session.role)) return null
+  await guardModuleAction("quality");
 
   const inspection = await prisma.inspection.findUnique({
     where: { id: inspectionId, factoryId: session.factoryId },
@@ -191,6 +195,7 @@ export async function getOrderReview(inspectionId: string) {
 export async function getReviewData(inspectionId: string) {
   const session = await getUserSession()
   if (!session || !isInspectorOrOwner(session.role)) return null
+  await guardModuleAction("quality");
 
   const inspection = await prisma.inspection.findUnique({
     where: { id: inspectionId, factoryId: session.factoryId },
@@ -262,6 +267,7 @@ export async function getReviewData(inspectionId: string) {
 export async function getPackingOperators() {
   const session = await getUserSession()
   if (!session) return []
+  await guardModuleAction("quality");
   return prisma.user.findMany({
     where: { factoryId: session.factoryId, isActive: true, role: { in: ['WORKER', 'SUPERVISOR'] } },
     select: { id: true, name: true },
@@ -275,6 +281,7 @@ export async function getPackingOperators() {
 export async function approveInspection(inspectionId: string, comments: string, packerId?: string) {
   const session = await getUserSession()
   if (!session || !isInspectorOrOwner(session.role)) throw new Error('Unauthorized')
+  await guardModuleWrite("quality");
   if (!(await canAccessInspection(session, inspectionId))) throw new Error('This inspection is in another department.')
 
   let packerNotify: { userId: string; title: string; message: string; linkUrl: string } | null = null
@@ -457,6 +464,7 @@ export async function approveInspection(inspectionId: string, comments: string, 
 export async function rejectInspection(inspectionId: string, reason: string, returnToJobCardId?: string) {
   const session = await getUserSession()
   if (!session || !isInspectorOrOwner(session.role)) throw new Error('Unauthorized')
+  await guardModuleWrite("quality");
   if (!(await canAccessInspection(session, inspectionId))) throw new Error('This inspection is in another department.')
 
   // Captured inside the tx, delivered through emitEvent after it commits.
@@ -593,6 +601,7 @@ export async function rejectInspection(inspectionId: string, reason: string, ret
 export async function verifyCheckpoint(submissionId: string, status: 'APPROVED' | 'REJECTED' | 'PENDING', comment: string) {
   const session = await getUserSession()
   if (!session || !isInspectorOrOwner(session.role)) throw new Error('Unauthorized')
+  await guardModuleWrite("quality");
 
   const isReset = status === 'PENDING';
 
