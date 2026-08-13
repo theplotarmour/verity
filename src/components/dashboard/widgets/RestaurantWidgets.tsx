@@ -1,3 +1,4 @@
+import { UtensilsCrossed } from "lucide-react";
 import prisma from "@/lib/prisma";
 import { Metric } from "@/components/design/Metric";
 import { formatMenuPrice } from "@/lib/menu";
@@ -45,6 +46,8 @@ export async function RestaurantMetricsWidget({ factoryId }: WidgetProps) {
         value={`${occupied}/${tables}`}
         detail="Occupied"
         tone={occupied > 0 ? "amber" : "green"}
+        hero
+        icon={<UtensilsCrossed className="h-4 w-4" />}
       />
       <Metric
         href="/owner/kitchen"

@@ -9,6 +9,21 @@ Verity's UI is a premium, responsive operational workspace designed for maximum 
 - **Responsive Dashboard Columns:** Dashboard widgets should stretch symmetrically (`items-stretch`) to form a cohesive grid, avoiding awkward alignment gaps.
 - **Symmetric Spacing:** Maintain generous padding (usually `p-6` or `p-8`) inside cards to let content breathe, keeping typographic contrast crisp.
 
+## Hero Metric Cards
+
+For the one or two numbers a dashboard leads with, `Metric` takes a `hero`
+prop: a filled Scarlet-to-Deep-Red gradient card (`from-[var(--accent)]
+to-[var(--accent-deep)]`), white text, and a static radial glow in the corner
+drawn from the same gradient family as the `.verity-glass` cursor glow —
+`accent-deep` blurred at the edge, so the emphasis reads as this app's
+language and not a borrowed palette.
+
+Reserve it for the single stat that matters most on that screen (occupancy,
+today's revenue, orders overdue). Filling every card this way turns emphasis
+into wallpaper — the rest of the grid stays the quiet bordered tile
+(`Metric` without `hero`). See `RestaurantMetricsWidget`'s `Tables` card for
+the reference usage.
+
 ## Controls & Interaction
 
 - **Pill Segmented Controls:** Active mode selection, tabs, and filters should use rounded pill shapes (`rounded-full`) with active states filled in Scarlet Red (`bg-[var(--brand)] text-white`).

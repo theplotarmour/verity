@@ -88,8 +88,15 @@ We introduce/update three packs to target this market:
 
 ---
 
-## 4. UI/UX Refinements
+## 4. UI/UX Refinements & Mockups
 
 To capture this market, the UI/UX must adopt the premium aesthetic detailed in our design specifications:
 *   **Calendars:** Smooth, rounded calendar blocks (`rounded-[24px]`) to schedule appointments easily.
 *   **POS interface:** High-contrast checkout screen optimized for tablets and mobile devices.
+
+### Light Mode Layout Mockup
+![Verity Light Mode Booking OS Layout](file:///C:/Users/divyo/.gemini/antigravity/brain/3b9a615e-f260-4d21-ac9c-b67a35582c82/verity_light_mode_1786651002754.jpg)
+
+### Dark Mode Layout Mockup
+![Verity Dark Mode Booking OS Layout](file:///C:/Users/divyo/.gemini/antigravity/brain/3b9a615e-f260-4d21-ac9c-b67a35582c82/verity_dark_mode_1786651037149.jpg)
+
