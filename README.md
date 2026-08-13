@@ -1,26 +1,63 @@
-
 # Verity
 
-Verity is a Next.js 16 production-grade Factory Operating System backed by Prisma on PostgreSQL. The active application code lives in `src/`, the database contract lives in `prisma/schema.prisma`, and the canonical product authority now lives entirely under `docs/`.
+Verity is a module-driven business operating platform built with Next.js, Prisma, and PostgreSQL.
 
-## Canonical References
+The product goal is not "a SaaS app with modules." Verity is a platform where internal admins assemble reusable modules, packs, and system templates into configured tenant workspaces.
 
-- `docs/README.md`: canonical documentation entrypoint
-- `docs/00_Vision/01_Verity_Vision.md`: mission, philosophy, and non-goals
-- `docs/01_Product/01_Product_Bible.md`: product strategy and operating thesis
-- `docs/03_Architecture/01_Architecture_Overview.md`: current and intended platform shape
-- `docs/04_Business_Engines/`: engine-level authority
-- `docs/06_Modular_Workflows/`: workflow authority
-- `docs/08_Data_Model/`: data-model authority
+## Canonical Documentation
 
-## Current Technical Baseline
+The canonical product and architecture authority lives in [docs/](./docs).
 
-- Framework: Next.js `16.2.10`
-- Runtime: React `19.2.4`
-- Database: Prisma Client with PostgreSQL
-- Build command: `npm run build`
+Start here:
 
-## Notes
+1. [docs/README.md](./docs/README.md)
+2. [docs/00-foundation/vision.md](./docs/00-foundation/vision.md)
+3. [docs/00-foundation/terminology.md](./docs/00-foundation/terminology.md)
+4. [docs/01-platform/module-registry.md](./docs/01-platform/module-registry.md)
+5. [docs/07-architecture/current-architecture.md](./docs/07-architecture/current-architecture.md)
+6. [docs/10-development/module-development.md](./docs/10-development/module-development.md)
 
-- `prisma/schema.prisma` is still ahead of the checked-in SQL migration history, so database hardening remains an open implementation concern.
-- The old `prd/` and `prd-v2/` trees were intentionally removed because they are no longer canonical.
+## Repository Layout
+
+| Path | Purpose |
+| --- | --- |
+| `src/app` | Next.js App Router pages, layouts, route handlers |
+| `src/platform` | Platform primitives: tenancy, module registry, RBAC, billing |
+| `src/server/actions` | Server Actions, including legacy and module-owned actions |
+| `src/components` | UI components, dashboards, shell, module surfaces |
+| `prisma/schema.prisma` | Current database schema |
+| `docs` | Canonical product, architecture, migration, and development docs |
+
+## Current Architecture Status
+
+Verity is in a migration phase from VEDA-derived manufacturing software toward a general-purpose modular platform.
+
+Already present:
+
+- central module registry,
+- organization-scoped module entitlements,
+- pack definitions,
+- entitlement-aware navigation,
+- HQ module toggles,
+- newer module route/action guards,
+- registry-based RBAC resolver.
+
+Still incomplete:
+
+- full route/action entitlement coverage,
+- blank-client portal proof,
+- module-composed dashboard widgets,
+- true module package/SDK boundary,
+- VEDA manufacturing extraction from core app surfaces.
+
+See [docs/VERITY_MODULE_PLATFORM_AUDIT_2026-08-13.md](./docs/VERITY_MODULE_PLATFORM_AUDIT_2026-08-13.md) for the evidence-backed audit.
+
+## Development Commands
+
+```bash
+npm run typecheck
+npm run test
+npm run build
+```
+
+Read `AGENTS.md` before editing UI. This repo uses Next.js 16; read the local Next.js docs in `node_modules/next/dist/docs/` before changing framework-sensitive code.
