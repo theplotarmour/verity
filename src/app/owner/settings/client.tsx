@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRef, useState, useEffect, type ChangeEvent, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { 
-  Factory, ImagePlus, Loader2, Upload, Car, Layers, Palette, Plus, ChevronRight, 
+  Factory, ImagePlus, Loader2, Upload, Car, Layers, Plus, ChevronRight, 
   ChevronDown, Check, X, ShieldAlert, Search, FileSpreadsheet, Smartphone, 
   Download, CheckCircle2, Info, Edit, Settings, Database, Activity, HardDrive, 
   Cpu, FileCode, Trash2, ArrowRight, UserCheck, ShieldCheck, Plug, CreditCard
@@ -148,22 +148,7 @@ export function SettingsClient({
     }
   }
 
-  // Accent Colors mapping
-  const ACCENT_COLORS = [
-    { name: "Verity Scarlet", hex: "#E11D2A" },
-    { name: "Blue", hex: "#007AFF" },
-    { name: "Graphite", hex: "#8E8E93" },
-    { name: "Red", hex: "#FF3B30" },
-    { name: "Orange", hex: "#FF9500" },
-    { name: "Green", hex: "#34C759" },
-    { name: "Purple", hex: "#AF52DE" },
-  ];
 
-  // Dynamic style updates
-  useEffect(() => {
-    document.documentElement.style.setProperty("--brand", formData.themeColor);
-    document.documentElement.style.setProperty("--accent", formData.themeColor);
-  }, [formData.themeColor]);
 
   // Export workspace configurations
   const handleExportConfig = () => {
@@ -393,107 +378,7 @@ export function SettingsClient({
               </div>
             </Surface>
 
-            {/* Theme Studio Module */}
-            <Surface className={`${components.card.identity} flex-1`}>
-              <div className="flex items-center justify-between border-b border-border/40 pb-4 mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-brand-soft text-[var(--brand)]">
-                    <Palette className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h2 className={typography.headingL}>Theme Studio</h2>
-                    <p className={typography.caption}>Anodized accent themes and live interface styling.</p>
-                  </div>
-                </div>
-              </div>
 
-              <div className="space-y-6">
-                <div className="space-y-4 rounded-2xl border border-border/80 bg-surface-secondary/20 p-4">
-                  <div className="flex flex-wrap items-center gap-4">
-                    {ACCENT_COLORS.map((color) => {
-                      const isActive = formData.themeColor.toLowerCase() === color.hex.toLowerCase();
-                      return (
-                        <motion.button
-                          key={color.hex}
-                          type="button"
-                          whileHover={{ scale: 1.08, y: -1 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => setFormData({ ...formData, themeColor: color.hex })}
-                          className="flex flex-col items-center gap-1.5 focus:outline-none group cursor-pointer"
-                        >
-                          <div
-                            style={{ backgroundColor: color.hex }}
-                            className={`w-9.5 h-9.5 rounded-full relative flex items-center justify-center transition-all shadow-md ${
-                              isActive 
-                                ? "ring-2 ring-offset-2 ring-[var(--brand)] dark:ring-offset-neutral-900 dark:ring-white scale-105" 
-                                : "opacity-85 hover:opacity-100"
-                            }`}
-                          >
-                            {isActive && (
-                              <div className="w-2.5 h-2.5 rounded-full bg-white shadow-sm" />
-                            )}
-                          </div>
-                          <span className="text-[10px] font-semibold text-text-secondary">{color.name}</span>
-                        </motion.button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Custom Hex selector */}
-                  <div className="flex items-center gap-2.5 pt-4 border-t border-border/85">
-                    <div className="relative">
-                      <input
-                        type="color"
-                        value={formData.themeColor}
-                        onChange={(event) => setFormData({ ...formData, themeColor: event.target.value })}
-                        className="h-9.5 w-9.5 cursor-pointer rounded-full border border-border/50 bg-transparent shrink-0"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-[8px] font-bold uppercase tracking-wider text-text-tertiary block leading-none">Hex Code</span>
-                      <input
-                        type="text"
-                        maxLength={7}
-                        placeholder="#HEX"
-                        value={formData.themeColor}
-                        onChange={(event) => setFormData({ ...formData, themeColor: event.target.value })}
-                        style={{ borderLeftColor: formData.themeColor }}
-                        className="w-22 mt-0.5 px-2 py-1 text-[11px] font-mono rounded-lg border-l-2 border-y border-r border-border bg-surface text-text-primary uppercase focus:outline-none focus:ring-1 focus:ring-[var(--brand)] shadow-sm"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Real Design Tokens Live Component Preview */}
-                <div className="p-5 rounded-2xl border border-border bg-surface-secondary/45 space-y-4">
-                  <span className={typography.labelM}>Interactive Tokens Live Preview</span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Primary Button component preview */}
-                    <div className="space-y-1.5 text-left">
-                      <span className="text-[8px] text-text-tertiary uppercase block">Button component</span>
-                      <button 
-                        type="button" 
-                        style={{ color: formData.themeColor, borderColor: `${formData.themeColor}60` }}
-                        className="w-full h-10 border rounded-xl flex items-center justify-center font-bold text-xs bg-surface shadow-sm cursor-default"
-                      >
-                        Sample Action
-                      </button>
-                    </div>
-
-                    {/* Status Pill Component preview */}
-                    <div className="space-y-1.5 text-left">
-                      <span className="text-[8px] text-text-tertiary uppercase block">Status Pill</span>
-                      <div 
-                        style={{ color: formData.themeColor, backgroundColor: `${formData.themeColor}12`, borderColor: `${formData.themeColor}18` }}
-                        className="w-full h-10 border rounded-xl flex items-center justify-center font-bold text-xs uppercase tracking-wider cursor-default"
-                      >
-                        ✓ Ready
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Surface>
           </div>
 
           {/* ──────────────── RIGHT COLUMN: Catalog Explorer & Database Gateway (Span 5) ──────────────── */}
