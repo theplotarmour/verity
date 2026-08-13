@@ -1,38 +1,22 @@
 # UI System
 
-Verity UI is an operational workspace, not a landing page.
+Verity's UI is a premium, responsive operational workspace designed for maximum throughput and aesthetic excellence.
 
-## Layout
+## Layout & Aesthetics
 
-- Prefer dense, scannable layouts.
-- Keep cards at 8px radius or less unless existing components require otherwise.
-- Do not put cards inside cards.
-- Use full-width sections or unframed layouts for page structure.
-- Keep tables and queues optimized for repeated work.
-- Ensure text never overlaps or overflows controls.
+- **Fluid Geometry:** Use `rounded-[24px]` or `rounded-[32px]` for major containers, dashboards, and card widgets. Small buttons and active pill controls should use `rounded-full` or `rounded-[16px]`.
+- **Soft Layering:** Cards should not use hard borders unless required for specific contrast. Instead, use soft drop shadows (`shadow-[0_12px_40px_rgba(0,0,0,0.03)]`) and card-on-card grouping utilizing background shades (`bg-surface-elevated` or matching gradients).
+- **Responsive Dashboard Columns:** Dashboard widgets should stretch symmetrically (`items-stretch`) to form a cohesive grid, avoiding awkward alignment gaps.
+- **Symmetric Spacing:** Maintain generous padding (usually `p-6` or `p-8`) inside cards to let content breathe, keeping typographic contrast crisp.
 
-## Controls
+## Controls & Interaction
 
-- Use icons for common toolbar actions.
-- Use segmented controls for mode switching.
-- Use toggles/checkboxes for binary settings.
-- Use menus for option sets.
-- Use tabs for peer views.
-- Use tables for comparison and operational lists.
-- Use dialogs for contained confirmation or editing flows.
+- **Pill Segmented Controls:** Active mode selection, tabs, and filters should use rounded pill shapes (`rounded-full`) with active states filled in Scarlet Red (`bg-[var(--brand)] text-white`).
+- **Interactive Indicators:** Elements like online users, status signals, or checklist progress badges should use circular/dot indicators overlaying profile avatars.
+- **Action Prompts:** Use clean, minimal icons inside secondary action buttons, styled as circular action controls to keep screen clutter minimal.
 
-## States
+## Responsiveness & Viewports
 
-Each module surface needs:
+- **Desktop Layout:** Features sidebars with bounded scroll areas (`overflow-y-auto`) and twin-column information hubs that fill the viewport cleanly without causing primary layout shifts or global scrolling.
+- **Mobile Adaptability:** Layouts collapse into vertical stacks with fluid, full-width rounded cards that scale dynamically based on screen width.
 
-- empty state,
-- loading state,
-- unauthorized state,
-- disabled-module state,
-- read-only subscription state,
-- validation error state,
-- destructive-action confirmation.
-
-## Responsiveness
-
-Desktop should prioritize scanning and throughput. Mobile should prioritize role-specific tasks and fast action.
