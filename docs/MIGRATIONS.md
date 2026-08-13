@@ -39,9 +39,17 @@ not compare either against the actual schema. It cannot tell you the history is
 complete, only that it is not behind.
 
 The history is **not** complete. Everything added by `db push` after
-`20260728_domain_blueprints` exists in no migration — `MenuCategory` and `MenuItem`
-are the newest examples, and `grep -ri MenuCategory prisma/migrations/` returns
-nothing.
+`20260728_domain_blueprints` exists in no migration — the Restaurant OS tables
+(`MenuCategory`, `MenuItem`, `RestaurantTable`, `DiningOrder`, `DiningBill`), the
+`Appointment` booking table (2026-08-14), and the table-less counter columns on
+`DiningOrder` (`token`, `customerLabel`, nullable `tableId`; same date) are all
+db-push-only. `grep -ri MenuCategory prisma/migrations/` returns nothing.
+
+A "migration squash" to fold all of this into one migration was requested and
+**deliberately not done**, for the reason in the next paragraph: it replays into a
+shadow database and offers a reset, and on this live Supabase instance one accepted
+prompt is the whole dataset. `db push` remains the source of truth; the DB and
+`schema.prisma` are in sync.
 
 So `migrate dev` would still be unsafe, for a different reason than before: it
 replays the migration history into a shadow database, diffs that against the real

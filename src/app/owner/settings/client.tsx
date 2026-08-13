@@ -319,7 +319,7 @@ export function SettingsClient({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Upload Panel */}
                 <div className="space-y-4">
-                  <div className="flex flex-col items-center justify-center rounded-[22px] border border-dashed border-border bg-surface-secondary/20 p-6 text-center">
+                  <div className="flex flex-col items-center justify-center rounded-[24px] border border-dashed border-border bg-surface-secondary/20 p-6 text-center">
                     <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-border bg-background mb-3 shadow-inner">
                       {logoBase64 ? (
                         <img src={logoBase64} alt="Logo preview" className="h-full w-full object-contain" />

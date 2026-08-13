@@ -7,7 +7,7 @@ import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { guardModuleAction } from "@/platform/modules/guard";
 import { resolveAccess } from "@/platform/rbac/permissions";
-import { KITCHEN_QUEUE_STATES, type DiningBlocker } from "@/lib/dining";
+import { KITCHEN_QUEUE_STATES, orderLabel, type DiningBlocker } from "@/lib/dining";
 import { advanceOrder } from "./diningOrders";
 
 /**
@@ -51,6 +51,8 @@ export async function getKitchenQueue() {
       state: true,
       notes: true,
       createdAt: true,
+      token: true,
+      customerLabel: true,
       table: { select: { id: true, number: true } },
       items: {
         orderBy: { id: "asc" },
@@ -153,7 +155,7 @@ async function notifyPass(orderId: string) {
 
   const order = await prisma.diningOrder.findFirst({
     where: { id: orderId, factoryId: user.factoryId },
-    select: { id: true, table: { select: { number: true } } },
+    select: { id: true, token: true, customerLabel: true, table: { select: { number: true } } },
   });
   if (!order) return;
 
@@ -175,7 +177,7 @@ async function notifyPass(orderId: string) {
     event: "ORDER_READY",
     recipients: servers.map((s) => s.id),
     title: "Order ready to serve",
-    message: `Order #${shortOrderNumber(order.id)} at ${order.table.number} is ready to serve.`,
+    message: `Order #${shortOrderNumber(order.id)} at ${orderLabel(order)} is ready to serve.`,
     linkUrl: "/owner/serving",
     type: "ACTION_REQUIRED",
     actorId: user.id,

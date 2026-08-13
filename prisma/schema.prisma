@@ -277,6 +277,7 @@ model Factory {
   diningTables    RestaurantTable[]
   diningOrders    DiningOrder[]
   diningBills     DiningBill[]
+  appointments    Appointment[]
 
   @@index([organizationId])
 }
@@ -393,6 +394,7 @@ model User {
   offeredSwaps      ShiftSwap[]           @relation("SwapRecipient")
   payrollInputs     PayrollInput[]        @relation("PayrollInputUser")
   orderDrafts       OrderDraft[]          @relation("OrderDraftAuthor")
+  bookedAppointments Appointment[]        @relation("AppointmentStaff")
 }
 
 // ==========================================
@@ -2962,7 +2964,16 @@ enum TableState {
 model DiningOrder {
   id         String     @id @default(cuid())
   factoryId  String
-  tableId    String
+  /// The table the order sits on — null for a table-less QSR counter order,
+  /// which is identified by `token` (and optionally `customerLabel`) instead.
+  /// Nullable rather than a separate model so the kitchen, the bill and the
+  /// takings report read one order table, not two.
+  tableId    String?
+  /// Counter ticket number, unique within a factory's IST day. Null for table
+  /// orders, which are identified by the table.
+  token      Int?
+  /// A walk-up name to call out with the token, e.g. "Aisha". Optional.
+  customerLabel String?
   customerId String?
   notes      String?
   state      OrderState @default(NEW)
@@ -2970,7 +2981,10 @@ model DiningOrder {
   updatedAt  DateTime   @updatedAt
 
   items   DiningOrderItem[]
-  table   RestaurantTable   @relation(fields: [tableId], references: [id])
+  // Restrict, explicitly: a nullable FK defaults to SetNull, which would silently
+  // orphan a live order when its table is deleted. Deleting a table that still has
+  // orders stays refused, exactly as when tableId was required.
+  table   RestaurantTable?  @relation(fields: [tableId], references: [id], onDelete: Restrict)
   bill    DiningBill?
   factory Factory           @relation(fields: [factoryId], references: [id], onDelete: Cascade)
 
@@ -2978,6 +2992,8 @@ model DiningOrder {
   @@index([tableId])
   // "What is live on the floor" is the query the whole module runs constantly.
   @@index([factoryId, state])
+  // Next counter token for the day: max(token) scoped to factory + createdAt.
+  @@index([factoryId, createdAt])
 }
 
 enum OrderState {
@@ -3043,4 +3059,58 @@ enum PaymentMethod {
   UPI
   CARD
   OTHER
+}
+
+// ==========================================
+// BOOKING — Appointment scheduling (salons, spas, boutiques, service SMBs)
+// ==========================================
+
+/// A booked slot of a staff member's time against a customer and a service.
+///
+/// The `booking` module's one model. Deliberately flat: a salon books a named
+/// customer for a named service in a time window with an assigned staff member,
+/// and that is the whole record. No FK to a service catalogue — the smallest
+/// businesses this targets keep their price list in their heads, and a required
+/// catalogue would be a second screen to fill before the first booking. It can
+/// grow a `serviceId` later without touching what is here.
+model Appointment {
+  id            String            @id @default(cuid())
+  factoryId     String
+  factory       Factory           @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+
+  customerName  String
+  customerPhone String?
+  customerEmail String?
+
+  serviceName   String
+  /// Price of the service in integer paise — the same money convention the rest
+  /// of the platform uses (see DiningOrderItem.unitPrice). The strategy draft
+  /// wrote Float; paise keeps one arithmetic across billing and bookings.
+  pricePaise    Int               @default(0)
+
+  /// The staff member the slot belongs to. SetNull rather than Cascade: an
+  /// employee leaving must not delete the history of what they served.
+  staffId       String?
+  staff         User?             @relation("AppointmentStaff", fields: [staffId], references: [id], onDelete: SetNull)
+
+  startTime     DateTime
+  endTime       DateTime
+  status        AppointmentStatus @default(PENDING)
+  notes         String?
+
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([factoryId])
+  // "What is on the book for this day/week" — the query the calendar runs on
+  // every render, scoped to the tenant and ordered by when the slot starts.
+  @@index([factoryId, startTime])
+  @@index([staffId])
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
 }

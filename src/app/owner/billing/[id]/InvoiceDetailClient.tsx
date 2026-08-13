@@ -138,7 +138,7 @@ export function InvoiceDetailClient({
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div
           id="invoice-sheet"
-          className="mx-auto w-full max-w-3xl rounded-[20px] border border-border bg-surface p-8 shadow-[0_8px_30px_rgba(0,0,0,0.06)]"
+          className="mx-auto w-full max-w-3xl rounded-[24px] border border-border bg-surface p-8 shadow-[0_8px_30px_rgba(0,0,0,0.06)]"
         >
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>

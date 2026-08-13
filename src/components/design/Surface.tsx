@@ -18,7 +18,7 @@ export function Surface({
   return (
     <div
       className={cn(
-        "rounded-[22px] border border-border bg-surface shadow-[0_8px_30px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.4)] backdrop-blur-[20px] transition-all duration-200 relative",
+        "rounded-[24px] border border-border bg-surface shadow-[0_8px_30px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.4)] backdrop-blur-[20px] transition-all duration-200 relative",
         isFullscreen 
           ? "fixed inset-0 z-50 p-6 flex flex-col w-screen h-screen rounded-none border-none overflow-hidden bg-background" 
           : className

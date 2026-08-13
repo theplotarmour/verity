@@ -130,6 +130,20 @@ export const PACK_PRICE: Record<VerticalPackKey, number> = {
    * sits inside it either way, so the chosen number stands.
    */
   retail_os: 17_999 * RUPEE,
+  /*
+   * à la carte ₹23,500 → 23.4% off. hr + billing (Tier 1), sales + crm (Tier 2),
+   * booking (Tier 3, vertical), plus the platform fee. Band ₹17,625–₹18,800;
+   * ₹17,999 sits at 23.4%, matching Retail OS — a salon and a boutique paying
+   * near-identical money for a service bundle is a defensible line.
+   */
+  lifestyle_services: 17_999 * RUPEE,
+  /*
+   * à la carte ₹21,000 → 23.8% off. Restaurant OS without serving and without
+   * tables as the organising unit: hr + billing (Tier 1), menu + tables_orders +
+   * kitchen (Tier 2), plus the platform fee. Band ₹15,750–₹16,800; ₹15,999 is at
+   * 23.8%, a touch under Restaurant OS, which is right — it is the lighter bundle.
+   */
+  modern_qsr: 15_999 * RUPEE,
 };
 
 /** The discount band a pack must sit inside. Enforced by test, not by intent. */

@@ -24,10 +24,10 @@ export const components = {
   // Enforced Card layout structures
   card: {
     identity: "overflow-hidden rounded-[24px] border border-border/40 bg-surface/50 backdrop-blur-md p-6 shadow-[0_8px_30px_rgba(0,0,0,0.04)]",
-    metric: "rounded-[20px] border border-border bg-surface p-5 shadow-[0_4px_20px_rgba(0,0,0,0.02)] flex flex-col justify-between",
+    metric: "rounded-[24px] border border-border bg-surface p-5 shadow-[0_4px_20px_rgba(0,0,0,0.02)] flex flex-col justify-between",
     configuration: "rounded-[24px] border border-border bg-surface p-6 shadow-sm space-y-4",
     gateway: "rounded-[24px] border border-border/80 bg-surface/65 backdrop-blur-md p-6 hover:border-[var(--brand)]/30 hover:shadow-[0_12px_40px_rgba(0,0,0,0.08)] transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.04)]",
-    explorer: "rounded-[20px] border border-border bg-surface/50 p-4 hover:bg-surface-2/40 hover:border-border/80 transition-all duration-200 cursor-pointer flex items-center justify-between",
-    status: "rounded-[20px] border p-5 shadow-[0_8px_30px_rgba(0,0,0,0.03)]",
+    explorer: "rounded-[24px] border border-border bg-surface/50 p-4 hover:bg-surface-2/40 hover:border-border/80 transition-all duration-200 cursor-pointer flex items-center justify-between",
+    status: "rounded-[24px] border p-5 shadow-[0_8px_30px_rgba(0,0,0,0.03)]",
   },
 } as const;

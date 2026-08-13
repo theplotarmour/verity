@@ -38,7 +38,8 @@ export type ModuleKey =
   | "menu"
   | "tables_orders"
   | "kitchen"
-  | "serving";
+  | "serving"
+  | "booking";
 
 export interface ModuleDefinition {
   key: ModuleKey;
@@ -155,6 +156,7 @@ import { menuModule } from "./definitions/menu";
 import { tables_ordersModule } from "./definitions/tables_orders";
 import { kitchenModule } from "./definitions/kitchen";
 import { servingModule } from "./definitions/serving";
+import { bookingModule } from "./definitions/booking";
 
 const MODULES: ModuleDefinition[] = [
   coreModule,
@@ -177,6 +179,7 @@ const MODULES: ModuleDefinition[] = [
   tables_ordersModule,
   kitchenModule,
   servingModule,
+  bookingModule,
 ];
 
 const BY_KEY = new Map<ModuleKey, ModuleDefinition>(MODULES.map((m) => [m.key, m]));

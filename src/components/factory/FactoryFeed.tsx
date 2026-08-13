@@ -22,7 +22,7 @@ export function FactoryFeed({ initialEvents = [] }: { initialEvents?: FeedEvent[
   const items = events.length > 0 ? [...events, ...events, ...events] : [];
 
   return (
-    <div className="flex-shrink-0 w-full bg-surface border border-border rounded-[20px] shadow-sm select-none overflow-hidden transition-all duration-300">
+    <div className="flex-shrink-0 w-full bg-surface border border-border rounded-[24px] shadow-sm select-none overflow-hidden transition-all duration-300">
       {/* Desktop/Tablet Marquee Layout */}
       <div className="hidden sm:flex items-center h-[64px] px-5 py-3 relative">
         {/* Fixed Left Live Indicator */}

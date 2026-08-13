@@ -6,10 +6,48 @@ import {
   ACTIVE_ORDER_STATES,
   KITCHEN_QUEUE_STATES,
   istDayStart,
+  orderLabel,
   orderTotal,
 } from "@/lib/dining";
 import { Nothing, Panel } from "../shared";
 import { RestaurantFloor } from "../RestaurantFloor";
+
+/**
+ * Live table-less counter tickets — the QSR equivalent of the floor grid. Shows
+ * what is cooking and for whom, by token. Empty (and harmless) for a sit-down
+ * restaurant that takes no counter orders.
+ */
+export async function CounterQueueWidget({ factoryId }: WidgetProps) {
+  const tickets = await prisma.diningOrder.findMany({
+    where: { factoryId, tableId: null, state: { in: ACTIVE_ORDER_STATES } },
+    orderBy: { createdAt: "asc" },
+    take: 12,
+    select: { id: true, state: true, token: true, customerLabel: true },
+  });
+
+  return (
+    <Panel eyebrow="Counter" title="In the kitchen" className="w-full h-full">
+      {tickets.length === 0 ? (
+        <Nothing href="/owner/counter" cta="Open the counter">
+          No counter tickets cooking. Ring one up and it appears here by token.
+        </Nothing>
+      ) : (
+        <ol className="grid grid-cols-2 gap-2">
+          {tickets.map((t) => (
+            <li key={t.id} className="flex items-center justify-between gap-2 rounded-[16px] border border-border bg-surface-2 px-3 py-2">
+              <span className="min-w-0 truncate text-[13px] font-semibold text-text-primary">
+                {orderLabel(t)}
+              </span>
+              <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+                {t.state}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </Panel>
+  );
+}
 
 export interface WidgetProps {
   factoryId: string;
@@ -177,6 +215,8 @@ export async function RestaurantRecentOrdersWidget({ factoryId }: WidgetProps) {
       id: true,
       state: true,
       updatedAt: true,
+      token: true,
+      customerLabel: true,
       table: { select: { number: true } },
     },
   });
@@ -184,7 +224,7 @@ export async function RestaurantRecentOrdersWidget({ factoryId }: WidgetProps) {
   const feed = recent.map((order) => ({
     id: order.id,
     state: order.state,
-    table: order.table.number,
+    table: orderLabel(order),
     at: order.updatedAt.toISOString(),
   }));
 

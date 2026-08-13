@@ -23,7 +23,7 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <Card className={`flex flex-col rounded-2xl p-4 xl:p-5 ${className}`}>
+    <Card className={`flex flex-col rounded-[24px] p-4 xl:p-5 ${className}`}>
       <div className="mb-4 flex shrink-0 items-start justify-between gap-3 border-b border-border/60 pb-3">
         <div className="min-w-0">
           {eyebrow ? (

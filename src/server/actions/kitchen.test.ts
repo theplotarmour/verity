@@ -194,7 +194,7 @@ describe("kitchen and serving against the schema", () => {
         factoryId,
         userId,
         title,
-        message: `Order #${orderId.slice(-6).toUpperCase()} at ${order.table.number} is ready to serve.`,
+        message: `Order #${orderId.slice(-6).toUpperCase()} at ${order.table!.number} is ready to serve.`,
         type: "ACTION_REQUIRED",
         linkUrl: "/owner/serving",
       },
@@ -208,7 +208,7 @@ describe("kitchen and serving against the schema", () => {
     });
     expect(found).not.toBeNull();
     expect(found!.message).toContain("is ready to serve.");
-    expect(found!.message).toContain(order.table.number);
+    expect(found!.message).toContain(order.table!.number);
     expect(found!.type).toBe("ACTION_REQUIRED");
     expect(found!.linkUrl).toBe("/owner/serving");
   });

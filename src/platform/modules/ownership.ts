@@ -87,6 +87,8 @@ export const ROUTE_OWNERSHIP: Record<string, Ownership> = {
   "service-work-orders/page.tsx": "helpdesk",
   "service-work-orders/inspection/[id]/page.tsx": "helpdesk",
   "serving/page.tsx": "serving",
+  "counter/page.tsx": "tables_orders",
+  "booking/page.tsx": "booking",
   "sites/page.tsx": "sites",
   "sites/[id]/page.tsx": "sites",
 
@@ -173,6 +175,7 @@ export const ACTION_OWNERSHIP: Record<string, Ownership> = {
   "diningOrders.ts": "tables_orders",
   "kitchen.ts": "kitchen",
   "serving.ts": "serving",
+  "booking.ts": "booking",
   "franchise.ts": "sites",
 };
 

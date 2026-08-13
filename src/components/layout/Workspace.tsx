@@ -63,7 +63,7 @@ export function Workspace({
           hasSelection ? "hidden lg:flex" : "flex w-full",
         )}
       >
-        <div className="verity-glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-[20px]">
+        <div className="verity-glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px]">
           {/* The list scrolls inside itself; the page never does. */}
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{list}</div>
         </div>
@@ -77,7 +77,7 @@ export function Workspace({
         )}
       >
         {hasSelection ? (
-          <div className="verity-glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-[20px]">
+          <div className="verity-glass flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px]">
             {/* Back is mobile-only: on desktop the list never went away. */}
             <button
               type="button"

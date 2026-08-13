@@ -10,6 +10,7 @@ import { RetailFranchiseDashboard } from "@/components/dashboard/RetailFranchise
 import { RestaurantDashboard } from "@/components/dashboard/RestaurantDashboard";
 import { ProfessionalServicesDashboard } from "@/components/dashboard/ProfessionalServicesDashboard";
 import { RetailDashboard } from "@/components/dashboard/RetailDashboard";
+import { LifestyleServicesDashboard } from "@/components/dashboard/LifestyleServicesDashboard";
 
 /**
  * The dashboard is per-vertical.
@@ -170,6 +171,12 @@ export default async function OwnerDashboard() {
       return <ProfessionalServicesDashboard {...props} />;
     case "retail_os":
       return <RetailDashboard {...props} />;
+    case "lifestyle_services":
+      return <LifestyleServicesDashboard {...props} />;
+    // Table-less QSR shares the restaurant floor/kitchen/takings view — the
+    // widget path handles an entitled tenant; this case is the zero-widget fallback.
+    case "modern_qsr":
+      return <RestaurantDashboard {...props} />;
     case "auto_components":
     default:
       return <AutoComponentsDashboard {...props} />;

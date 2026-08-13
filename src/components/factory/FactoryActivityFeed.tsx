@@ -24,7 +24,7 @@ export function FactoryActivityFeed({ events = [] }: { events?: FeedEvent[] }) {
   const list = events.length > 0 ? events : staticEvents;
 
   return (
-    <div className="flex flex-col bg-surface border border-border rounded-[22px] p-5 shadow-[0_8px_30px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)]">
+    <div className="flex flex-col bg-surface border border-border rounded-[24px] p-5 shadow-[0_8px_30px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)]">
       <div className="flex items-center justify-between pb-3 border-b border-border mb-4 shrink-0">
         <div className="flex items-center gap-2">
           <span className="relative flex h-2 w-2">

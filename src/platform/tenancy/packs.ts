@@ -110,6 +110,35 @@ export const VERTICAL_PACKS: Record<
     label: "Retail OS",
     modules: ["core", "hr", "inventory", "billing", "sales", "crm", "procurement"],
   },
+  /*
+   * Salons, spas, boutiques — a person's time is the thing sold, and the day is
+   * run off the appointment book. `booking` is the spine; `crm` keeps the client
+   * history a repeat-visit business lives on; `billing` settles the visit.
+   * No `inventory` or `menu` — a stylist holds no stock and cooks nothing.
+   */
+  lifestyle_services: {
+    label: "Lifestyle Services",
+    modules: ["core", "hr", "billing", "sales", "crm", "booking"],
+  },
+  /*
+   * Table-less quick service — a counter, a queue, and instant payment. Same
+   * spine as `restaurant_ops` (menu → order → kitchen → bill) minus `tables` as
+   * the organising unit and minus `serving`: a token or a name replaces the
+   * table, and the customer collects rather than being served to a seat. Reuses
+   * the restaurant dashboard widgets, which `tables_orders` and `billing`
+   * already contribute, so no new dashboard case is needed.
+   */
+  modern_qsr: {
+    label: "Modern QSR",
+    modules: ["core", "hr", "menu", "tables_orders", "kitchen", "billing"],
+    // Counter-first ordering: a table-less QSR leads with its token queue and the
+    // day's takings, not a floor map it has no tables for.
+    dashboardWidgets: [
+      "counter_queue",
+      "restaurant_takings",
+      "restaurant_recent_orders",
+    ],
+  },
 };
 
 export type VerticalPackKey = keyof typeof VERTICAL_PACKS;

@@ -176,3 +176,24 @@ export function lineTotal(item: { quantity: number; unitPrice: number }): number
 export function orderTotal(items: Array<{ quantity: number; unitPrice: number }>): number {
   return items.reduce((sum, item) => sum + lineTotal(item), 0);
 }
+
+/**
+ * How an order is called out — the one place a table order and a table-less
+ * counter order agree on what to print on the ticket and the kitchen screen.
+ *
+ * A table order shows its table ("T01"); a counter order shows its token, with
+ * the walk-up name if one was taken ("#12 · Aisha"). Falls back to a short id
+ * only if somehow neither is set, so a ticket is never blank.
+ */
+export function orderLabel(order: {
+  table?: { number: string } | null;
+  token?: number | null;
+  customerLabel?: string | null;
+  id?: string;
+}): string {
+  if (order.table?.number) return order.table.number;
+  if (order.token != null) {
+    return order.customerLabel ? `#${order.token} · ${order.customerLabel}` : `#${order.token}`;
+  }
+  return order.id ? `#${order.id.slice(-4).toUpperCase()}` : "—";
+}

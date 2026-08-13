@@ -127,6 +127,8 @@ async function main() {
       // Restaurant OS.
       "kitchen.view", "kitchen.work", "serving.view", "serving.work",
       "invoice.view", "invoice.manage",
+      // Booking (salons, spas, service SMBs).
+      "booking.view", "booking.manage", "booking.staff",
     ],
     CO_OWNER: [
       "dashboard.view", "settings.access", "branding.access", "billing.access",
@@ -142,6 +144,8 @@ async function main() {
       // Restaurant OS.
       "kitchen.view", "kitchen.work", "serving.view", "serving.work",
       "invoice.view", "invoice.manage",
+      // Booking.
+      "booking.view", "booking.manage", "booking.staff",
     ],
     MANAGER: [
       "dashboard.view", "master_data.access", "team.manage", "team.assign_roles",
@@ -154,6 +158,8 @@ async function main() {
       // Restaurant OS.
       "kitchen.view", "kitchen.work", "serving.view", "serving.work",
       "invoice.view", "invoice.manage",
+      // Booking.
+      "booking.view", "booking.manage", "booking.staff",
     ],
     /*
      * Kitchen and serving grants ride on the existing floor archetypes rather

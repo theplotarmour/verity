@@ -8,7 +8,24 @@ export const tables_ordersModule = createModule({
     "Floor plan, table state, and the running order (KOT) attached to each — the spine the kitchen and the pass both read from.",
   requires: ["core","menu"],
   permissions: [],
+  navItems: [
+    {
+      href: "/owner/counter",
+      label: "Counter",
+      iconKey: "receipt",
+      group: "Production",
+      sortOrder: 0,
+    },
+  ],
   dashboardWidgets: [
+    {
+      key: "counter_queue",
+      title: "Counter queue",
+      requires: "dashboard.view",
+      size: "panel",
+      load: () => import("@/components/dashboard/widgets/RestaurantWidgets").then((m) => ({ default: m.CounterQueueWidget })),
+      sortOrder: 5,
+    },
     {
       key: "restaurant_metrics",
       title: "Restaurant Metrics",

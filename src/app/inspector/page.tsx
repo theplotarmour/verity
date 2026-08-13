@@ -73,7 +73,7 @@ export default async function InspectorInboxPage({
               const issuesCount = subs.filter((s: any) => s.passFail === 'FAIL').length;
               return (
                 <Link key={inspection.id} href={`/inspector/review/${inspection.id}`} className="block">
-                  <div className="flex flex-col gap-4 rounded-[20px] border border-border bg-surface p-4 transition hover:border-[var(--brand)]/35 hover:shadow-md">
+                  <div className="flex flex-col gap-4 rounded-[24px] border border-border bg-surface p-4 transition hover:border-[var(--brand)]/35 hover:shadow-md">
                     <div className="flex justify-between items-start">
                       <div>
                         <h3 className="text-base font-bold tracking-tight text-text-primary">

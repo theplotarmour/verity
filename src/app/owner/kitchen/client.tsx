@@ -9,6 +9,7 @@ import { Surface } from "@/components/design/Surface";
 import { PageHeader } from "@/components/design/PageHeader";
 import { toast } from "@/components/ui/toast";
 import { acceptOrder, markReady, startPreparing } from "@/server/actions/kitchen";
+import { orderLabel } from "@/lib/dining";
 import { cn } from "@/lib/utils";
 
 type QueueItem = {
@@ -24,7 +25,10 @@ export type QueueOrder = {
   notes: string | null;
   createdAt: string | Date;
   waitingMinutes: number;
-  table: { id: string; number: string };
+  // Null for a table-less counter ticket, which is called by its token instead.
+  table: { id: string; number: string } | null;
+  token?: number | null;
+  customerLabel?: string | null;
   items: QueueItem[];
 };
 
@@ -140,7 +144,7 @@ function Ticket({ order, canWork }: { order: QueueOrder; canWork: boolean }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-display text-xl font-bold tracking-[-0.03em] text-text-primary">
-            {order.table.number}
+            {orderLabel(order)}
           </p>
           <p className="mt-0.5 font-mono text-[10px] uppercase text-text-tertiary">
             #{order.id.slice(-6).toUpperCase()}

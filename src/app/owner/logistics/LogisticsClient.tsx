@@ -95,7 +95,7 @@ export default function LogisticsClient({ dispatches }: any) {
         ) : (
           <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-3">
             {rows.map((d: any) => (
-              <div key={d.id} className="rounded-[22px] border border-border bg-surface p-5 shadow-sm">
+              <div key={d.id} className="rounded-[24px] border border-border bg-surface p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-text-tertiary">{d.salesOrder?.soNumber}</p>

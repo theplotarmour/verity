@@ -18,7 +18,7 @@ export function Card({
     // through the class rather than utilities means the treatment is defined
     // once and every existing Card call site inherits it — there are far too
     // many to reskin by hand, and half of them would be missed.
-    <div className={cn("verity-glass overflow-hidden rounded-[20px] p-5", className)}>
+    <div className={cn("verity-glass overflow-hidden rounded-[24px] p-5", className)}>
       {children}
     </div>
   );

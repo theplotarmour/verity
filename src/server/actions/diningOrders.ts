@@ -6,9 +6,12 @@ import type { OrderState } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
+import type { PaymentMethod } from "@prisma/client";
 import {
   ACTIVE_ORDER_STATES,
   DINING_BLOCKERS,
+  GST_RATE,
+  istDayStart,
   isOrderCancellable,
   isOrderEditable,
   nextOrderState,
@@ -113,6 +116,130 @@ export async function createOrder(
   return { success: true, id: order.id };
 }
 
+/**
+ * Table-less QSR counter checkout.
+ *
+ * A counter customer pays first, then waits for their number — the opposite of
+ * the sit-down ladder, where the bill comes after SERVED. So this does not walk
+ * that ladder: it opens the order at NEW (a kitchen ticket) and raises a bill
+ * that is already PAID, in one transaction, and leaves the rest to the kitchen.
+ *
+ * Reuses everything the sit-down flow uses — the same menu resolution, the same
+ * price snapshot, the same tax, the same `DiningBill`. The only new idea is a
+ * per-day `token` instead of a table.
+ *
+ * Guarded on `tables_orders` alone, not billing: this is one atomic counter
+ * action owned by the orders module, and every pack that has table-less orders
+ * (`modern_qsr`) bundles billing. A second guard would name a neighbour's module,
+ * which the ownership tests forbid, and buys nothing — the transaction is the
+ * unit, entitled or not as a whole.
+ */
+export async function checkoutCounterOrder(
+  items: OrderItemInput[],
+  opts: { customerLabel?: string | null; paymentMethod: PaymentMethod; notes?: string | null }
+): Promise<ActionResult<{ orderId: string; billId: string; token: number; total: number }>> {
+  const user = await getOwnerUser();
+  if (!user) return { error: "Unauthorized" };
+  await guardModuleWrite("tables_orders");
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return { error: "An order needs at least one item" };
+  }
+  for (const item of items) {
+    const error = validateQuantity(item.quantity);
+    if (error) return { error };
+  }
+
+  const resolved = await resolveMenuItems(user.factoryId, items);
+  if ("error" in resolved) return resolved;
+
+  const subtotal = resolved.lines.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0);
+  const taxPaise = Math.round(subtotal * GST_RATE);
+  const total = subtotal + taxPaise;
+
+  const result = await prisma.$transaction(async (tx) => {
+    // Next token for the IST day. No unique constraint on `token`: a rare
+    // collision under two simultaneous counters is a cosmetic double-number, and
+    // a constraint that throws mid-service is worse than that.
+    const peak = await tx.diningOrder.aggregate({
+      _max: { token: true },
+      where: { factoryId: user.factoryId, createdAt: { gte: istDayStart() } },
+    });
+    const token = (peak._max.token ?? 0) + 1;
+
+    const order = await tx.diningOrder.create({
+      data: {
+        factoryId: user.factoryId,
+        tableId: null,
+        token,
+        customerLabel: clean(opts.customerLabel),
+        notes: clean(opts.notes),
+        state: "NEW",
+        items: { create: resolved.lines },
+      },
+      select: { id: true },
+    });
+
+    const bill = await tx.diningBill.create({
+      data: {
+        factoryId: user.factoryId,
+        orderId: order.id,
+        subtotal,
+        taxPaise,
+        total,
+        // Paid at the counter, now — that is what "instant bill" means.
+        paymentMethod: opts.paymentMethod,
+        paidAt: new Date(),
+      },
+      select: { id: true },
+    });
+
+    return { orderId: order.id, billId: bill.id, token };
+  });
+
+  revalidatePath("/owner/counter");
+  revalidatePath("/owner/kitchen");
+  revalidatePath("/owner/dashboard");
+  return { success: true, ...result, total };
+}
+
+/**
+ * Live counter tickets — table-less orders still working through the kitchen,
+ * oldest first. The QSR equivalent of the floor: what is cooking and for whom.
+ */
+export async function getCounterQueue() {
+  const user = await getOwnerUser();
+  if (!user) return [];
+  await guardModuleAction("tables_orders");
+
+  const orders = await prisma.diningOrder.findMany({
+    where: {
+      factoryId: user.factoryId,
+      tableId: null,
+      state: { in: ACTIVE_ORDER_STATES },
+    },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      state: true,
+      token: true,
+      customerLabel: true,
+      createdAt: true,
+      items: { select: { quantity: true, unitPrice: true } },
+    },
+  });
+
+  return orders.map((order) => ({
+    id: order.id,
+    state: order.state,
+    token: order.token,
+    customerLabel: order.customerLabel,
+    total: orderTotal(order.items),
+    itemCount: order.items.reduce((n, i) => n + i.quantity, 0),
+    at: order.createdAt.toISOString(),
+  }));
+}
+
 /** Add a line, while the ticket can still change. */
 export async function addItem(
   orderId: string,
@@ -213,7 +340,8 @@ export async function advanceOrder(
 
   await prisma.$transaction(async (tx) => {
     await tx.diningOrder.update({ where: { id: order.id }, data: { state: next } });
-    if (tableState) {
+    // No table to move for a counter order — `tableId` is null there.
+    if (tableState && order.tableId) {
       // Scoped by factory as well as id: tableId came off a row we already
       // confirmed is ours, and a query that does not say so is one refactor from
       // not being true.
@@ -257,10 +385,12 @@ export async function cancelOrder(orderId: string): Promise<ActionResult> {
 
   await prisma.$transaction(async (tx) => {
     await tx.diningOrder.update({ where: { id: order.id }, data: { state: "CANCELLED" } });
-    await tx.restaurantTable.updateMany({
-      where: { id: order.tableId, factoryId: user.factoryId },
-      data: { state: "AVAILABLE" },
-    });
+    if (order.tableId) {
+      await tx.restaurantTable.updateMany({
+        where: { id: order.tableId, factoryId: user.factoryId },
+        data: { state: "AVAILABLE" },
+      });
+    }
   });
 
   revalidatePath("/owner/tables");

@@ -6,6 +6,7 @@ import {
   ACTIVE_ORDER_STATES,
   KITCHEN_QUEUE_STATES,
   istDayStart,
+  orderLabel,
   orderTotal,
 } from "@/lib/dining";
 import { Nothing, Panel } from "./shared";
@@ -75,6 +76,8 @@ export async function RestaurantDashboard({
         id: true,
         state: true,
         updatedAt: true,
+        token: true,
+        customerLabel: true,
         table: { select: { number: true } },
       },
     }),
@@ -106,7 +109,7 @@ export async function RestaurantDashboard({
   const feed = recent.map((order) => ({
     id: order.id,
     state: order.state,
-    table: order.table.number,
+    table: orderLabel(order),
     at: order.updatedAt.toISOString(),
   }));
 

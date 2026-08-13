@@ -9,6 +9,7 @@ import { Surface } from "@/components/design/Surface";
 import { PageHeader } from "@/components/design/PageHeader";
 import { toast } from "@/components/ui/toast";
 import { markServed } from "@/server/actions/serving";
+import { orderLabel } from "@/lib/dining";
 import { cn } from "@/lib/utils";
 
 type ReadyItem = {
@@ -23,7 +24,10 @@ export type ReadyOrder = {
   notes: string | null;
   updatedAt: string | Date;
   readyForMinutes: number;
-  table: { id: string; number: string };
+  // Null for a table-less counter ticket, called by its token instead.
+  table: { id: string; number: string } | null;
+  token?: number | null;
+  customerLabel?: string | null;
   items: ReadyItem[];
 };
 
@@ -98,7 +102,7 @@ function ReadyCard({ order, canWork }: { order: ReadyOrder; canWork: boolean }) 
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-3">
             <p className="font-display text-xl font-bold tracking-[-0.03em] text-text-primary">
-              {order.table.number}
+              {orderLabel(order)}
             </p>
             <span
               className={cn(

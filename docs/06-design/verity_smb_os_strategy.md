@@ -2,6 +2,28 @@
 
 This document outlines the strategic pivot from Enterprise Franchise Modules to lightweight, high-utility modules tailored for **Modern QSRs, independent restaurants, salons, boutiques, and lifestyle businesses**.
 
+> **Status (2026-08-14): Phases 1–2 shipped.** The `booking` module (schema, registry,
+> guarded actions, calendar UI, dashboard widget) and the `lifestyle_services` and
+> `modern_qsr` packs are implemented, priced inside the 20–25% band, and live behind
+> module entitlement. The **table-less QSR checkout (§3B)** is now built too: a counter
+> POS at `/owner/counter`, orders identified by a per-day `token` (+ optional walk-up
+> name) instead of a table, and an instant paid bill (Cash/UPI/Card) rung up at the till.
+>
+> Deliberate design notes:
+> - `Appointment.price` is stored as **integer paise (`Int`)**, not the draft's `Float` —
+>   the money convention used everywhere else (`DiningOrderItem.unitPrice`).
+> - Table-less orders reuse `DiningOrder` with a **nullable `tableId`** plus `token` /
+>   `customerLabel`, not a second model — so the kitchen, the bill and the takings report
+>   still read one order table. The `table` relation is pinned `onDelete: Restrict` so a
+>   nullable FK cannot silently orphan a live order. A counter order is **paid up front**
+>   (bill created `PAID` at checkout) rather than walking the sit-down SERVED→BILLED→PAID
+>   ladder, which is the opposite order a counter actually settles in.
+> - `modern_qsr`'s dashboard leads with a **counter-queue widget** and takings, not the
+>   sit-down floor map.
+>
+> Still open from this brief: AI Assistant core (§3.2) and the migrations squash (§3.3 —
+> see note below, it conflicts with the `db push` policy).
+
 ---
 
 ## 1. Vertical Strategy Shift
@@ -88,15 +110,8 @@ We introduce/update three packs to target this market:
 
 ---
 
-## 4. UI/UX Refinements & Mockups
+## 4. UI/UX Refinements
 
 To capture this market, the UI/UX must adopt the premium aesthetic detailed in our design specifications:
 *   **Calendars:** Smooth, rounded calendar blocks (`rounded-[24px]`) to schedule appointments easily.
 *   **POS interface:** High-contrast checkout screen optimized for tablets and mobile devices.
-
-### Light Mode Layout Mockup
-![Verity Light Mode Booking OS Layout](file:///C:/Users/divyo/.gemini/antigravity/brain/3b9a615e-f260-4d21-ac9c-b67a35582c82/verity_light_mode_1786651002754.jpg)
-
-### Dark Mode Layout Mockup
-![Verity Dark Mode Booking OS Layout](file:///C:/Users/divyo/.gemini/antigravity/brain/3b9a615e-f260-4d21-ac9c-b67a35582c82/verity_dark_mode_1786651037149.jpg)
-

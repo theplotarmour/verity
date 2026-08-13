@@ -91,7 +91,7 @@ function DialogHost() {
         className="absolute inset-0 bg-black/45 backdrop-blur-md"
         onClick={() => close(isPrompt ? null : false)}
       />
-      <div className="relative w-full max-w-sm overflow-hidden rounded-[22px] border border-border bg-surface shadow-[0_30px_90px_rgba(0,0,0,0.25)]">
+      <div className="relative w-full max-w-sm overflow-hidden rounded-[24px] border border-border bg-surface shadow-[0_30px_90px_rgba(0,0,0,0.25)]">
         <div className="flex items-start gap-3 p-5">
           <span
             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${

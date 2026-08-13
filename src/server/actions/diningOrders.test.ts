@@ -11,6 +11,7 @@ import {
   isOrderCancellable,
   isOrderEditable,
   nextOrderState,
+  orderLabel,
   orderTotal,
 } from "@/lib/dining";
 
@@ -123,6 +124,22 @@ describe("order totals", () => {
   });
 });
 
+describe("order labelling", () => {
+  it("calls a table order by its table", () => {
+    expect(orderLabel({ table: { number: "T01" }, token: 5 })).toBe("T01");
+  });
+
+  it("calls a counter order by its token, with the name if there is one", () => {
+    expect(orderLabel({ table: null, token: 12 })).toBe("#12");
+    expect(orderLabel({ table: null, token: 12, customerLabel: "Aisha" })).toBe("#12 · Aisha");
+  });
+
+  it("never renders blank — falls back to a short id", () => {
+    expect(orderLabel({ table: null, token: null, id: "cku8w2abcd1234" })).toBe("#1234");
+    expect(orderLabel({})).toBe("—");
+  });
+});
+
 describe("dining orders against the schema", () => {
   let factoryId: string;
   let categoryId: string;
@@ -146,6 +163,7 @@ describe("dining orders against the schema", () => {
 
   afterAll(async () => {
     for (const id of cleanup.orders) {
+      await prisma.diningBill.deleteMany({ where: { orderId: id } });
       await prisma.diningOrderItem.deleteMany({ where: { orderId: id } });
       await prisma.diningOrder.delete({ where: { id } }).catch(() => undefined);
     }
@@ -328,6 +346,59 @@ describe("dining orders against the schema", () => {
       select: { state: true },
     });
     expect(row.state).toBe("AVAILABLE");
+  });
+
+  it("takes a table-less counter order, paid up front, and finds it by token not table", async () => {
+    if (!seeded) return;
+    const item = await makeMenuItem("Counter Combo", true, 150_00);
+
+    // What checkoutCounterOrder writes: an order with no table, a token, and a
+    // bill already settled.
+    const order = await prisma.diningOrder.create({
+      data: {
+        factoryId,
+        tableId: null,
+        token: 7,
+        customerLabel: "Aisha",
+        state: "NEW",
+        items: { create: [{ menuItemId: item.id, quantity: 2, unitPrice: item.price }] },
+        bill: {
+          create: {
+            factoryId,
+            subtotal: 300_00,
+            taxPaise: 15_00,
+            total: 315_00,
+            paymentMethod: "UPI",
+            paidAt: new Date(),
+          },
+        },
+      },
+      select: { id: true, tableId: true, token: true },
+    });
+    cleanup.orders.push(order.id);
+
+    expect(order.tableId).toBeNull();
+    expect(order.token).toBe(7);
+
+    // The counter queue's filter: table-less, still active. Scoped to this order's
+    // id as well, so a sibling test's counter ticket on the shared database cannot
+    // race in — the point is that this row satisfies the predicate, not which row
+    // the unfiltered query happens to return first.
+    const inQueue = await prisma.diningOrder.findFirst({
+      where: { id: order.id, factoryId, tableId: null, state: { in: ACTIVE_ORDER_STATES } },
+      select: { id: true, token: true, customerLabel: true, table: { select: { number: true } } },
+    });
+    expect(inQueue).not.toBeNull();
+    expect(inQueue!.table).toBeNull();
+    expect(orderLabel(inQueue!)).toBe("#7 · Aisha");
+
+    // And it is billed and paid, so it already counts toward the day's takings.
+    const bill = await prisma.diningBill.findUniqueOrThrow({
+      where: { orderId: order.id },
+      select: { total: true, paidAt: true },
+    });
+    expect(bill.total).toBe(315_00);
+    expect(bill.paidAt).not.toBeNull();
   });
 });
 

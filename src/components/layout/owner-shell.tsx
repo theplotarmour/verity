@@ -636,7 +636,7 @@ export function OwnerShell({
             centre. Tap targets stay 44px; the pill is chrome around them, not
             a reason to shrink them. */}
         <nav className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:hidden">
-          <div className="verity-glass flex h-16 items-stretch justify-around rounded-[22px] px-1">
+          <div className="verity-glass flex h-16 items-stretch justify-around rounded-[24px] px-1">
             {mobileNav.dashboard ? (
               <MobileTab item={mobileNav.dashboard} pathname={pathname} />
             ) : null}

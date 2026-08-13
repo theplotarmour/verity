@@ -1637,7 +1637,7 @@ export function OrdersClient({ data, factoryId, runningOrders, inspections = [],
                         ) : (
                           <div className="space-y-4">
                             {batchLines.map((line, index) => (
-                              <div key={line.id} className="rounded-[22px] border border-border bg-surface p-4 shadow-sm">
+                              <div key={line.id} className="rounded-[24px] border border-border bg-surface p-4 shadow-sm">
                                 <div className="flex items-center justify-between gap-3">
                                   {/* Variant is shown by the block's own search line below — no duplicate title */}
                                   <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-text-tertiary">Block {index + 1}</p>

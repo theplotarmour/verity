@@ -43,6 +43,8 @@ export async function getReadyOrders() {
       state: true,
       notes: true,
       updatedAt: true,
+      token: true,
+      customerLabel: true,
       table: { select: { id: true, number: true } },
       items: {
         orderBy: { id: "asc" },
