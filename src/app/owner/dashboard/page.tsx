@@ -8,6 +8,8 @@ import { FacilityManagementDashboard } from "@/components/dashboard/FacilityMana
 import { QsrFranchiseDashboard } from "@/components/dashboard/QsrFranchiseDashboard";
 import { RetailFranchiseDashboard } from "@/components/dashboard/RetailFranchiseDashboard";
 import { RestaurantDashboard } from "@/components/dashboard/RestaurantDashboard";
+import { ProfessionalServicesDashboard } from "@/components/dashboard/ProfessionalServicesDashboard";
+import { RetailDashboard } from "@/components/dashboard/RetailDashboard";
 
 /**
  * The dashboard is per-vertical.
@@ -48,6 +50,10 @@ export default async function OwnerDashboard() {
       return <RetailFranchiseDashboard {...props} />;
     case "restaurant_ops":
       return <RestaurantDashboard {...props} />;
+    case "professional_services":
+      return <ProfessionalServicesDashboard {...props} />;
+    case "retail_os":
+      return <RetailDashboard {...props} />;
     case "auto_components":
     default:
       return <AutoComponentsDashboard {...props} />;

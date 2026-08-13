@@ -119,6 +119,17 @@ export const PACK_PRICE: Record<VerticalPackKey, number> = {
    * near-identical money is a price list somebody can defend out loud.
    */
   restaurant_ops: 19_999 * RUPEE,
+  // à la carte ₹25,500 → 21.6% off. Same shape as Restaurant OS: two Tier 1
+  // modules, four Tier 2, plus the platform fee.
+  professional_services: 19_999 * RUPEE,
+  /*
+   * à la carte ₹23,500 → 23.4% off.
+   *
+   * Specified against ₹23,000, which counted hr + inventory + billing as ₹7,000;
+   * three Tier 1 modules are ₹7,500. The real band is ₹17,625–₹18,400 and ₹17,999
+   * sits inside it either way, so the chosen number stands.
+   */
+  retail_os: 17_999 * RUPEE,
 };
 
 /** The discount band a pack must sit inside. Enforced by test, not by intent. */

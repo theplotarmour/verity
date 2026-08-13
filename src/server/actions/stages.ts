@@ -12,6 +12,7 @@ import { receiveFinishedGoods } from "@/server/internal/stockMovements";
 import { publishChange } from "@/lib/server/live-bus";
 import { getSessionHomePath } from "@/lib/server/roleHome";
 import { HOLD_CAUSES, isUrgentHold, normalizeHoldCause, type HoldCause } from "@/lib/stage-holds";
+import { describeRange, isRanged, judgeReading } from "@/lib/checkpoint-range";
 
 type StageImagePayload = {
   dataUrl: string;
@@ -301,6 +302,8 @@ type ChecklistItemPayload = {
   /** Typed answer for TEXT / NUMBER / MEASUREMENT checkpoints. */
   value?: string;
   remarks?: string;
+  /** What was done about an out-of-range reading. Required when one breaches. */
+  correctiveAction?: string;
   images?: StageImagePayload[];
 };
 
@@ -381,6 +384,20 @@ export async function completeStage(jobCardId: string, payload: {
     if (cp.requireRemarks && !r?.remarks?.trim()) {
       return { error: `Checklist: "${cp.name}" needs a remark` };
     }
+    // A ranged reading is judged against its bounds, not against the tick. A
+    // breach has to be acknowledged in writing before the stage can complete: a
+    // recorded breach with no action is an audit finding rather than a record of
+    // one being handled.
+    if (isRanged(cp)) {
+      const verdict = judgeReading(r?.value, cp);
+      if (!verdict.ok && !r?.correctiveAction?.trim()) {
+        return {
+          error:
+            `Checklist: "${cp.name}" ${verdict.reason} (allowed ${describeRange(cp)}). ` +
+            "Record what you did about it.",
+        };
+      }
+    }
   }
 
   // A stage template can demand a walkthrough clip (e.g. Packing), the same way
@@ -424,8 +441,11 @@ export async function completeStage(jobCardId: string, payload: {
           checkpointId: cp.id,
           name: cp.name,
           inputType: (cp as any).inputType ?? "PASS_FAIL",
-          ok: !!r?.ok,
+          // Forced on a ranged checkpoint, never taken from the tick: the range
+          // decides, which is the whole reason for writing it down.
+          ok: isRanged(cp) ? judgeReading(r?.value, cp).ok : !!r?.ok,
           value: r?.value?.trim() || null,
+          correctiveAction: r?.correctiveAction?.trim() || null,
           remarks: r?.remarks?.trim() || null,
           images: await uploadImages(r?.images),
         };

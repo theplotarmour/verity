@@ -77,6 +77,30 @@ export const VERTICAL_PACKS: Record<string, { label: string; modules: ModuleKey[
     label: "Restaurant OS",
     modules: ["core", "hr", "menu", "tables_orders", "kitchen", "serving", "billing"],
   },
+  /*
+   * Agencies, consultancies, studios — businesses that sell people's time.
+   *
+   * `projects` and `finance` are what make it a different product from the
+   * others: the unit of work is an engagement with a budget, and the thing that
+   * decides whether the month was good is utilisation, not throughput. No
+   * `inventory` — a consultancy holds no stock, and shipping one would be a
+   * module nobody opens.
+   */
+  professional_services: {
+    label: "Professional Services",
+    modules: ["core", "hr", "billing", "projects", "crm", "sales", "finance"],
+  },
+  /*
+   * A single shop, not a chain.
+   *
+   * Distinct from `franchise_retail`, which carries `sites` because its unit is a
+   * network of outlets. One store is one place: the same `sites` machinery would
+   * be a hop in every query and a screen listing one row.
+   */
+  retail_os: {
+    label: "Retail OS",
+    modules: ["core", "hr", "inventory", "billing", "sales", "crm", "procurement"],
+  },
 };
 
 export type VerticalPackKey = keyof typeof VERTICAL_PACKS;

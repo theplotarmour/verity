@@ -1548,6 +1548,12 @@ model Checkpoint {
   /// This is what makes "Measurements" / "Material used" ordinary checkpoints an
   /// owner can add, rename or drop, instead of fields hardcoded into the form.
   inputType            String          @default("PASS_FAIL")
+  /// Acceptable range for a MEASUREMENT answer. Either bound may stand alone —
+  /// a minimum temperature with no ceiling is an ordinary food-safety rule.
+  /// Null on both means the checkpoint is not ranged and nothing is enforced.
+  minValue             Float?
+  maxValue             Float?
+
   /// Shown under the input as a hint, e.g. "e.g. Back panel 58 x 64 cm".
   placeholder          String?
   // A reference photo of the correct result, shown to the worker while they
@@ -1602,6 +1608,10 @@ model CheckpointSubmission {
   checkpointId       String
   checkpoint         Checkpoint @relation(fields: [checkpointId], references: [id], onDelete: Cascade)
   passFail           String?
+  /// What was done about an out-of-range reading. Required when a ranged
+  /// checkpoint breaches, because a recorded breach with no action is an audit
+  /// finding rather than a record of one being handled.
+  correctiveAction   String?
   /// The typed answer for non pass/fail checkpoints (text, number, measurement).
   value              String?
   remarks            String?

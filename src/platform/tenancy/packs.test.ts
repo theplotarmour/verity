@@ -31,6 +31,8 @@ const SUPPORTED_PACKS = [
   "franchise_qsr",
   "franchise_retail",
   "restaurant_ops",
+  "professional_services",
+  "retail_os",
 ];
 
 describe("vertical packs", () => {

@@ -27,6 +27,8 @@ const DASHBOARDS: Record<string, string> = {
   franchise_qsr: "QsrFranchiseDashboard.tsx",
   franchise_retail: "RetailFranchiseDashboard.tsx",
   restaurant_ops: "RestaurantDashboard.tsx",
+  professional_services: "ProfessionalServicesDashboard.tsx",
+  retail_os: "RetailDashboard.tsx",
 };
 
 /**
@@ -51,6 +53,11 @@ const MODEL_MODULE: Record<string, ModuleKey | null> = {
   department: "manufacturing",
 
   attendanceLog: "hr",
+  project: "projects",
+  task: "projects",
+  timesheetEntry: "projects",
+  deal: "crm",
+  serviceInvoice: "billing",
   shiftSchedule: "scheduling",
   site: "sites",
   ticket: "helpdesk",
@@ -68,6 +75,7 @@ const MODEL_MODULE: Record<string, ModuleKey | null> = {
   diningBill: "billing",
 
   salesOrder: "sales",
+  salesOrderItem: "sales",
   itemMaster: "inventory",
   stockLedgerEntry: "inventory",
   purchaseOrderItem: "procurement",
