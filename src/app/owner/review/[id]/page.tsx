@@ -10,7 +10,7 @@ import { OrderReviewDossier } from './OrderReviewDossier'
 import { OrderTimeline } from '@/components/factory/OrderTimeline'
 import { getProductionTimeline } from '@/server/actions/timeline'
 
-import { can } from '@/lib/permissions'
+import { resolveAccess } from '@/platform/rbac/permissions';
 
 export default async function OwnerReviewInspectionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -20,7 +20,8 @@ export default async function OwnerReviewInspectionPage({ params }: { params: Pr
     redirect('/');
   }
   await guardModulePage('quality');
-  if (!can(session.role, 'QC_QUEUE')) redirect('/unauthorized');
+  const access = await resolveAccess(session.userId);
+  if (!access?.permissions.has('quality.queue')) redirect('/unauthorized');
 
   const [inspection, review] = await Promise.all([
     getReviewData(id),

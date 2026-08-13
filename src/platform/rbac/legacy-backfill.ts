@@ -116,7 +116,7 @@ export const ROLE_REGISTRY_GRANTS: Record<SystemRole, RegistryKey[]> = {
    * WORKER_JOBS, none of which reaches a purchase order or a dispatch.
    */
   SUPERVISOR: [
-    "dashboard.view", "reports.view", "team.manage",
+    "dashboard.view", "reports.view",
     "quality.queue", "quality.inspect",
     "production.jobs", "production.supervise",
   ],
@@ -145,6 +145,11 @@ export const ROLE_REGISTRY_GRANTS: Record<SystemRole, RegistryKey[]> = {
  * should see why it is narrow before they widen it.
  */
 export const WITHHELD: Array<{ role: SystemRole; key: RegistryKey; why: string }> = [
+  {
+    role: "SUPERVISOR",
+    key: "team.manage",
+    why: "Supervisor holds MANAGE_TEAM today, but team.manage is a blanket over-grant. Lacks department-scoped equivalent, so we withhold it.",
+  },
   {
     role: "STORE_MANAGER",
     key: "purchase_order.create",

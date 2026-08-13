@@ -47,8 +47,6 @@ export interface NavContext {
   /** Registry permission keys this user holds. `undefined` means unknown → allow. */
   grantedPermissions?: string[];
   userRole: string;
-  /** Legacy permission check, injected so this module stays free of that import. */
-  can: (permission: string) => boolean;
 }
 
 export interface ResolvedNavItem extends ModuleNavItem {
@@ -66,13 +64,15 @@ export function allNavItems(): ResolvedNavItem[] {
 /**
  * The items this tenant and this user can actually reach.
  *
- * All four gates, in one place:
+ * Three gates, in one place:
  *  1. the owning module is entitled;
  *  2. the registry permission, when the item declares one, is held;
- *  3. the legacy permission passes;
- *  4. the store-manager carve-out.
+ *  3. the store-manager carve-out.
  */
 export function resolveNavItems(ctx: NavContext): ResolvedNavItem[] {
+  if (ctx.enabledModules === undefined) {
+    console.warn("WARNING: resolveNavItems called with undefined enabledModules. Defaulting to 'core' only.");
+  }
   const enabled = new Set<ModuleKey>(ctx.enabledModules ?? ["core"]);
   const held = ctx.grantedPermissions ? new Set(ctx.grantedPermissions) : null;
   const isStoreManager = ctx.userRole === "STORE_MANAGER";
@@ -85,10 +85,7 @@ export function resolveNavItems(ctx: NavContext): ResolvedNavItem[] {
       // 2. Registry grant, where the item has migrated to one.
       if (item.requires && held !== null && !held.has(item.requires)) return false;
 
-      // 3. Legacy permission union.
-      if (!ctx.can(item.permission)) return false;
-
-      // 4. Role scope.
+      // 3. Role scope.
       if (isStoreManager) return STORE_MANAGER_ALLOWED.includes(item.href);
       return item.href !== STORE_MANAGER_ONLY;
     })
@@ -130,4 +127,41 @@ export function activeNavItem(
   pathname: string,
 ): ResolvedNavItem | undefined {
   return items.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
+}
+
+import { type ModuleDashboardWidget } from "./registry";
+
+export interface ResolvedDashboardWidget extends ModuleDashboardWidget {
+  moduleKey: ModuleKey;
+}
+
+/** Every dashboard widget every module declares, before any filtering. */
+export function allDashboardWidgets(): ResolvedDashboardWidget[] {
+  return allModules().flatMap((mod) =>
+    (mod.dashboardWidgets ?? []).map((widget) => ({ ...widget, moduleKey: mod.key })),
+  );
+}
+
+/**
+ * The dashboard widgets this tenant and this user can actually reach.
+ *
+ * Gated by:
+ *  1. the owning module is entitled;
+ *  2. the registry permission, when the widget declares one, is held.
+ */
+export function resolveDashboardWidgets(ctx: NavContext): ResolvedDashboardWidget[] {
+  const enabled = new Set<ModuleKey>(ctx.enabledModules ?? ["core"]);
+  const held = ctx.grantedPermissions ? new Set(ctx.grantedPermissions) : null;
+
+  return allDashboardWidgets()
+    .filter((widget) => {
+      // 1. Module entitlement.
+      if (!enabled.has(widget.moduleKey)) return false;
+
+      // 2. Registry grant.
+      if (widget.requires && held !== null && !held.has(widget.requires)) return false;
+
+      return true;
+    })
+    .sort((a, b) => (a.sortOrder ?? 100) - (b.sortOrder ?? 100));
 }

@@ -198,9 +198,8 @@ export function OwnerShell({
       enabledModules,
       grantedPermissions,
       userRole,
-      can: (permission: string) => can(userRole, permission as Permission, permissionMatrix),
     }),
-    [enabledModules, grantedPermissions, userRole, permissionMatrix],
+    [enabledModules, grantedPermissions, userRole],
   );
 
   const navGroups = useMemo(

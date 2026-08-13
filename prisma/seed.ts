@@ -54,6 +54,29 @@ type BlueprintSeed = {
 };
 
 async function main() {
+  console.log("Cleaning database...");
+  const tableNames = [
+    "ImageEvidence", "CheckpointSubmission", "QualityApproval", "QualityReport", "ReworkRecord", 
+    "Inspection", "StageEntry", "JobCard", "WorkOrder", "ProductionPlan", "ProductionBatch", 
+    "Dispatch", "SalesOrderItem", "SalesOrder", "Deal", "PurchaseReceiptItem", "PurchaseReceipt", 
+    "PurchaseOrderItem", "PurchaseOrder", "PurchaseRequest", "StockLedgerEntry", "BinBalance", 
+    "MaterialReservation", "UOMConversion", "BOMItem", "BOM", "BlueprintRouteStep", "BlueprintVersion", 
+    "Blueprint", "ItemFieldValue", "ItemMaster", "Customer", "Supplier", "WarehouseBin", "WarehouseShelf", 
+    "WarehouseRack", "WarehouseZone", "Warehouse", "AttendanceLog", "LeaveApplication", "EmployeeProfile", 
+    "User", "RolePermission", "Role", "ModuleEntitlement", "Factory", "Organization", "ItemGroup", 
+    "SpecFieldOption", "SpecField", "RestaurantTable", "MenuCategory", "MenuItem", "DiningOrderItem", 
+    "DiningOrder", "DiningBill", "Notification", "AuditLog", "Department", "ChecklistTemplate"
+  ];
+  for (const table of tableNames) {
+    try {
+      await prisma.$executeRawUnsafe(`TRUNCATE TABLE "${table}" CASCADE;`);
+    } catch (e) {
+      try {
+        await (prisma as any)[table.charAt(0).toLowerCase() + table.slice(1)].deleteMany({});
+      } catch (err) {}
+    }
+  }
+
   console.log("Seeding Carxen client-trial workspace...");
 
   const factoryId = "fac_demo";
@@ -97,6 +120,9 @@ async function main() {
     CO_OWNER: [
       "dashboard.view", "settings.access", "master_data.access", "team.manage",
       "reports.view", "reports.export", "sales_order.view", "sales_order.create",
+      // Restaurant OS.
+      "kitchen.view", "kitchen.work", "serving.view", "serving.work",
+      "invoice.view", "invoice.manage",
     ],
     MANAGER: [
       "dashboard.view", "master_data.access", "team.manage", "reports.view",
@@ -824,6 +850,260 @@ async function main() {
   await mockOrder({ soNumber: "ORD-TRIAL06", customerIdx: 2, qty: 1, progress: "delivered", dispatchTo: "CUSTOMER" });
 
   console.log("Seed complete: departments, item master, catalog, and demo orders across the chain.");
+
+  // ── 16. Seed Kent's Kitchen Restaurant OS ───────────────────────────────────
+  console.log("Seeding Kent's Kitchen restaurant workspace...");
+
+  const kentsOrgId = "org_kents";
+  const kentsFacId = "fac_kents";
+
+  await prisma.organization.upsert({
+    where: { id: kentsOrgId },
+    update: {},
+    create: { id: kentsOrgId, name: "Kent's", slug: "kents" },
+  });
+
+  const kentsFactory = await prisma.factory.upsert({
+    where: { slug: "kents" },
+    update: {},
+    create: { id: kentsFacId, organizationId: kentsOrgId, name: "Kent's Kitchen", slug: "kents", logoUrl: null },
+  });
+
+  const restaurantModules = [
+    "core", "hr", "menu", "tables_orders", "kitchen", "serving", "billing"
+  ];
+  await prisma.moduleEntitlement.createMany({
+    data: restaurantModules.map((moduleKey) => ({ organizationId: kentsOrgId, moduleKey, enabled: true })),
+    skipDuplicates: true,
+  });
+
+  // Seed roles for Kent's organization
+  const kentsRoleIdByArchetype: Record<string, string> = {};
+  for (const [archetype, grants] of Object.entries(SEED_GRANTS)) {
+    const id = `role_${kentsOrgId}_${archetype}`;
+    await prisma.role.upsert({
+      where: { id },
+      update: {},
+      create: {
+        id,
+        organizationId: kentsOrgId,
+        name: ROLE_LABELS[archetype],
+        description: "Built-in role. Rename or copy it; it cannot be deleted.",
+        systemRole: archetype as any,
+        isSystem: true,
+        permissions: { create: grants.map((key) => ({ key })) },
+      },
+    });
+
+    await prisma.rolePermission.createMany({
+      data: grants.map((key) => ({ roleId: id, key })),
+      skipDuplicates: true,
+    });
+
+    kentsRoleIdByArchetype[archetype] = id;
+  }
+
+  // Seed restaurant staff
+  const kentsStaff: Array<[string, string, string]> = [
+    ["Kent", "9900000001", "OWNER"],
+    ["Sarah Manager", "9900000002", "MANAGER"],
+    ["Vikas Chef", "9900000003", "SUPERVISOR"],
+    ["Ravi Server", "9900000004", "WORKER"],
+  ];
+  for (const [name, phone, role] of kentsStaff) {
+    await prisma.user.create({
+      data: {
+        factoryId: kentsFacId,
+        name,
+        phone,
+        role: role as any,
+        roleId: kentsRoleIdByArchetype[role],
+        language: "en",
+        pinHash: hashPin("1234", kentsFacId),
+      },
+    });
+  }
+
+  // Seed tables
+  const tableNumbers = ["Table 1", "Table 2", "Table 3", "Table 4"];
+  const tableCapacities = [2, 4, 4, 6];
+  const tableStates = ["BILLING", "OCCUPIED", "OCCUPIED", "AVAILABLE"];
+  const kentsTables: Record<string, any> = {};
+
+  for (let i = 0; i < tableNumbers.length; i++) {
+    kentsTables[tableNumbers[i]] = await prisma.restaurantTable.create({
+      data: {
+        factoryId: kentsFacId,
+        number: tableNumbers[i],
+        capacity: tableCapacities[i],
+        state: tableStates[i] as any,
+      },
+    });
+  }
+
+  // Seed menu categories
+  const categories = ["Beverages", "Starters", "Mains", "Desserts"];
+  const kentsCategories: Record<string, any> = {};
+  for (let i = 0; i < categories.length; i++) {
+    kentsCategories[categories[i]] = await prisma.menuCategory.create({
+      data: {
+        factoryId: kentsFacId,
+        name: categories[i],
+        sortOrder: i,
+      },
+    });
+  }
+
+  // Seed menu items
+  const menuItemsList = [
+    { name: "Masala Chai", category: "Beverages", price: 4000 },
+    { name: "Filter Coffee", category: "Beverages", price: 5000 },
+    { name: "Mango Lassi", category: "Beverages", price: 12000 },
+    { name: "Paneer Tikka", category: "Starters", price: 25000 },
+    { name: "Hara Bhara Kabab", category: "Starters", price: 22000 },
+    { name: "Paneer Butter Masala", category: "Mains", price: 32000 },
+    { name: "Dal Makhani", category: "Mains", price: 28000 },
+    { name: "Butter Naan", category: "Mains", price: 6000 },
+    { name: "Gulab Jamun", category: "Desserts", price: 9000 },
+    { name: "Kulfi", category: "Desserts", price: 10000 },
+  ];
+  const kentsMenuItems: Record<string, any> = {};
+  for (const item of menuItemsList) {
+    kentsMenuItems[item.name] = await prisma.menuItem.create({
+      data: {
+        factoryId: kentsFacId,
+        name: item.name,
+        price: item.price,
+        categoryId: kentsCategories[item.category].id,
+        available: true,
+      },
+    });
+  }
+
+  // Seed live orders
+  const now = new Date();
+  
+  // 1. Table 2 - OCCUPIED - Preparing order
+  await prisma.diningOrder.create({
+    data: {
+      factoryId: kentsFacId,
+      tableId: kentsTables["Table 2"].id,
+      state: "PREPARING",
+      createdAt: now,
+      updatedAt: now,
+      items: {
+        create: [
+          { menuItemId: kentsMenuItems["Paneer Tikka"].id, quantity: 1, unitPrice: 25000 },
+          { menuItemId: kentsMenuItems["Mango Lassi"].id, quantity: 1, unitPrice: 12000 },
+          { menuItemId: kentsMenuItems["Paneer Butter Masala"].id, quantity: 1, unitPrice: 32000 },
+          { menuItemId: kentsMenuItems["Butter Naan"].id, quantity: 2, unitPrice: 6000 },
+        ],
+      },
+    },
+  });
+
+  // 2. Table 3 - OCCUPIED - Ready to serve order
+  await prisma.diningOrder.create({
+    data: {
+      factoryId: kentsFacId,
+      tableId: kentsTables["Table 3"].id,
+      state: "READY",
+      createdAt: new Date(now.getTime() - 20 * 60000), // 20 mins ago
+      updatedAt: now,
+      items: {
+        create: [
+          { menuItemId: kentsMenuItems["Filter Coffee"].id, quantity: 2, unitPrice: 5000 },
+          { menuItemId: kentsMenuItems["Hara Bhara Kabab"].id, quantity: 1, unitPrice: 22000 },
+        ],
+      },
+    },
+  });
+
+  // 3. Table 1 - BILLED - Billed but unpaid
+  const orderT1 = await prisma.diningOrder.create({
+    data: {
+      factoryId: kentsFacId,
+      tableId: kentsTables["Table 1"].id,
+      state: "BILLED",
+      createdAt: new Date(now.getTime() - 40 * 60000), // 40 mins ago
+      updatedAt: now,
+      items: {
+        create: [
+          { menuItemId: kentsMenuItems["Masala Chai"].id, quantity: 2, unitPrice: 4000 },
+          { menuItemId: kentsMenuItems["Gulab Jamun"].id, quantity: 1, unitPrice: 9000 },
+        ],
+      },
+    },
+  });
+
+  await prisma.diningBill.create({
+    data: {
+      factoryId: kentsFacId,
+      orderId: orderT1.id,
+      subtotal: 17000,
+      total: 17000,
+      paymentMethod: null,
+      paidAt: null,
+    },
+  });
+
+  // 4. Settled historical orders/bills for today to populate Takings
+  const methods = ["UPI", "CASH", "CARD", "UPI", "CASH"] as const;
+  const historicItems = [
+    [
+      { name: "Paneer Butter Masala", qty: 1, rate: 32000 },
+      { name: "Butter Naan", qty: 2, rate: 6000 },
+    ],
+    [
+      { name: "Dal Makhani", qty: 1, rate: 28000 },
+      { name: "Butter Naan", qty: 1, rate: 6000 },
+    ],
+    [
+      { name: "Mango Lassi", qty: 2, rate: 12000 },
+      { name: "Hara Bhara Kabab", qty: 1, rate: 22000 },
+    ],
+    [
+      { name: "Filter Coffee", qty: 2, rate: 5000 },
+      { name: "Kulfi", qty: 1, rate: 10000 },
+    ],
+    [
+      { name: "Gulab Jamun", qty: 2, rate: 9000 },
+      { name: "Masala Chai", qty: 1, rate: 4000 },
+    ],
+  ];
+
+  for (let i = 0; i < 5; i++) {
+    const total = historicItems[i].reduce((sum, item) => sum + item.qty * item.rate, 0);
+    const order = await prisma.diningOrder.create({
+      data: {
+        factoryId: kentsFacId,
+        tableId: kentsTables["Table 4"].id,
+        state: "SERVED",
+        createdAt: new Date(now.getTime() - (2 + i) * 3600000), // 2-6 hours ago
+        updatedAt: now,
+        items: {
+          create: historicItems[i].map((it) => ({
+            menuItemId: kentsMenuItems[it.name].id,
+            quantity: it.qty,
+            unitPrice: it.rate,
+          })),
+        },
+      },
+    });
+
+    await prisma.diningBill.create({
+      data: {
+        factoryId: kentsFacId,
+        orderId: order.id,
+        subtotal: total,
+        total,
+        paymentMethod: methods[i],
+        paidAt: new Date(now.getTime() - (2 + i) * 3600000 + 15 * 60000), // 15 mins after order
+      },
+    });
+  }
+
+  console.log("Kent's Kitchen restaurant workspace seed complete.");
 }
 
 main()

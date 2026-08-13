@@ -24,7 +24,7 @@ import { allModules, type ModuleKey } from "./registry";
 /** Allow everything, so a test can isolate one gate at a time. */
 const permissive = {
   userRole: "OWNER",
-  can: () => true,
+  grantedPermissions: undefined,
 };
 
 const ALL_MODULES = allModules().map((m) => m.key);
@@ -113,11 +113,11 @@ describe("permission gates", () => {
     expect(withGrant.map((i) => i.href)).not.toContain("/owner/sites");
   });
 
-  it("hides an item whose legacy permission fails", () => {
+  it("hides an item when its registry grant is not held", () => {
     const noReports = resolveNavItems({
       userRole: "OWNER",
       enabledModules: ALL_MODULES,
-      can: (p) => p !== "VIEW_REPORTS",
+      grantedPermissions: ["dashboard.view"], // reports.view is not granted, so Reports is hidden
     });
     expect(noReports.map((i) => i.href)).not.toContain("/owner/reports");
   });
@@ -132,7 +132,6 @@ describe("store manager scope", () => {
   const storeManager = {
     userRole: "STORE_MANAGER",
     enabledModules: ALL_MODULES,
-    can: () => true,
   };
 
   it("sees only order taking, dashboard and inventory", () => {
@@ -152,7 +151,7 @@ describe("store manager scope", () => {
 describe("order taking is store-manager only", () => {
   it("is hidden from every other role", () => {
     for (const userRole of ["OWNER", "CO_OWNER", "MANAGER", "SUPERVISOR", "WORKER"]) {
-      const hrefs = resolveNavItems({ userRole, enabledModules: ALL_MODULES, can: () => true }).map(
+      const hrefs = resolveNavItems({ userRole, enabledModules: ALL_MODULES }).map(
         (i) => i.href,
       );
       expect(hrefs, `${userRole} can see order taking`).not.toContain("/owner/order-taking");

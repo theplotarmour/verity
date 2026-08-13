@@ -312,17 +312,14 @@ production, QC or factory concepts reaching the portal.
 ## Sequencing
 
 ```
-Phase 0  Repair build          ← blocking, hours
-Phase 1  Guard coverage        ← depends on 0
-Phase 2  Blank tenant          ← depends on 1 (needs guards to prove blocking)
-Phase 3  Dashboard widgets     ← depends on 2 (needs the empty state)
-Phase 4  Kill legacy perms     ← depends on 3 (widgets must not inherit the lie)
-Phase 5  SDK pilot             ← depends on 4; NEEDS A DECISION vs PRD 03
+Phase 0  Repair build          ← done
+Phase 1  Guard coverage        ← done
+Phase 2  Blank tenant          ← in progress
+Phase 4  Kill legacy perms     ← in progress (pre-requisite for widgets/modules)
+Phase 3  Dashboard widgets     ← depends on 2 and 4
+Phase 5  SDK pilot             ← depends on 4; DECISION: internal SDK only, defer external
 Phase 6  VEDA extraction       ← depends on 5
 ```
-
-Phases 1 and 2 are the ones that change what Verity *is*. Everything after is
-consolidation.
 
 ---
 
@@ -356,11 +353,15 @@ These are not new; they have each already caused a defect in this repo.
 
 ---
 
-## Open decisions
+## Decisions Logged
 
-| # | Decision | Blocks |
-| --- | --- | --- |
-| 1 | Internal SDK now, or honour PRD 03's deferral in full? | Phase 5 |
-| 2 | Is `/owner/master-data` cross-module core config, or `inventory` data? | Phase 1 matrix |
-| 3 | Is `/owner/reports` core with per-section guards, or module-owned? | Phase 1 matrix |
-| 4 | Does a blank tenant get `hr` (people exist before modules do)? | Phase 2 default |
+| # | Decision | Status | Detail |
+| --- | --- | --- | --- |
+| 1 | Internal SDK now, or honour PRD 03's deferral in full? | **Resolved** | Internal `createModule()` shape and pilot harness only; defer external platform. |
+| 2 | Is `/owner/master-data` core config, or `inventory` data? | **Deferred** | Kept core/deferred for now until Phase 6 extraction. |
+| 3 | Is `/owner/reports` core with per-section guards, or module-owned? | **Deferred** | Kept core/deferred for now. |
+| 4 | Does a blank tenant get `hr`? | **Deferred** | Kept core/deferred for now. |
+| 5 | Manager `purchase_order` backfill | **Resolved** | Grant `purchase_order.create`. Added `ponytail:` comment identifying need for split when `purchase_order.view` is added. |
+| 6 | Co-Owner equivalence | **Resolved** | Mirror Owner permissions exactly to make them explicit and auditable. |
+| 7 | Supervisor team.manage backfill | **Resolved** | Do not grant `team.manage`. Rationale: lacks scoped alternative. Logged in WITHHELD. |
+

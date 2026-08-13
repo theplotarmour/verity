@@ -32,7 +32,10 @@ export const DEFAULT_MODULES: ModuleKey[] = [
  * `withDependencies()` fills in transitive requirements, so a pack lists only
  * what it actually cares about.
  */
-export const VERTICAL_PACKS: Record<string, { label: string; modules: ModuleKey[] }> = {
+export const VERTICAL_PACKS: Record<
+  string,
+  { label: string; modules: ModuleKey[]; dashboardWidgets?: string[] }
+> = {
   auto_components: {
     label: "Auto Components",
     modules: ["core", "hr", "inventory", "manufacturing", "quality", "procurement", "sales", "automotive"],
@@ -76,6 +79,12 @@ export const VERTICAL_PACKS: Record<string, { label: string; modules: ModuleKey[
   restaurant_ops: {
     label: "Restaurant OS",
     modules: ["core", "hr", "menu", "tables_orders", "kitchen", "serving", "billing"],
+    dashboardWidgets: [
+      "restaurant_metrics",
+      "restaurant_floor",
+      "restaurant_takings",
+      "restaurant_recent_orders",
+    ],
   },
   /*
    * Agencies, consultancies, studios — businesses that sell people's time.

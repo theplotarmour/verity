@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { createHmac } from "node:crypto";
 import { requireMaintenanceToken } from "@/lib/server/maintenanceGuard";
-import { provisionTenant } from "@/platform/tenancy/provision";
+import { DEFAULT_MODULES, provisionTenant } from "@/platform/tenancy/provision";
 
 function hashPassword(password: string) {
   const secretKey = process.env.JWT_SECRET || "fallback-secret-key-for-dev";
@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
         factoryId,
         name: "Verity Demo Factory",
         slug: "demo-factory",
+        modules: DEFAULT_MODULES,
       });
     }
 

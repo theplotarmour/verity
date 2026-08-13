@@ -74,7 +74,7 @@ export async function provisionTenant(
 ): Promise<ProvisionResult> {
   const { organizationId, factoryId, roleIdByArchetype } = await provisionCore(tx, {
     ...input,
-    modules: input.modules ?? DEFAULT_MODULES,
+    modules: input.modules ?? ["core"],
   });
   return { organizationId, factoryId, roleIdByArchetype };
 }
