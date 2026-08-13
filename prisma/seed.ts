@@ -108,25 +108,50 @@ async function main() {
       "dashboard.view", "settings.access", "branding.access", "billing.access",
       "master_data.access", "team.manage", "team.assign_roles",
       "org.transfer_ownership", "reports.view", "reports.export",
-      "product_type.manage", "sales_order.view", "sales_order.create",
-      "sales_order.delete", "sales_order.approve", "customer.manage",
+      "product_type.manage",
+      // sales
+      "sales_order.view", "sales_order.create", "sales_order.delete",
+      "sales_order.approve", "customer.manage", "dispatch.record",
+      // inventory
+      "item.view", "item.manage", "stock.view", "stock.adjust", "warehouse.manage",
+      // manufacturing
+      "bom.view", "bom.manage", "work_order.create", "work_order.release",
+      "production.jobs", "production.supervise",
+      // quality
+      "quality.queue", "quality.inspect", "quality.approve",
+      // procurement
+      "supplier.manage", "purchase_order.create", "purchase_order.approve",
+      "purchase_receipt.record",
+      // automotive
       "vehicle_catalog.manage", "fitment.manage",
-      // Restaurant OS. An owner who cooks is the normal case in a single
-      // location, not an edge one.
+      // Restaurant OS.
       "kitchen.view", "kitchen.work", "serving.view", "serving.work",
-      // `applyDiscount` gates on this, and without it nobody can discount a bill.
       "invoice.view", "invoice.manage",
     ],
     CO_OWNER: [
-      "dashboard.view", "settings.access", "master_data.access", "team.manage",
-      "reports.view", "reports.export", "sales_order.view", "sales_order.create",
+      "dashboard.view", "settings.access", "branding.access", "billing.access",
+      "master_data.access", "team.manage", "team.assign_roles",
+      "org.transfer_ownership", "reports.view", "reports.export",
+      "sales_order.view", "sales_order.create", "sales_order.delete",
+      "customer.manage", "dispatch.record",
+      "item.view", "stock.view", "stock.adjust",
+      "bom.view", "work_order.create", "work_order.release",
+      "production.jobs", "production.supervise",
+      "quality.queue", "quality.inspect",
+      "purchase_order.create", "purchase_receipt.record",
       // Restaurant OS.
       "kitchen.view", "kitchen.work", "serving.view", "serving.work",
       "invoice.view", "invoice.manage",
     ],
     MANAGER: [
-      "dashboard.view", "master_data.access", "team.manage", "reports.view",
-      "sales_order.view", "sales_order.create",
+      "dashboard.view", "master_data.access", "team.manage", "team.assign_roles",
+      "reports.view",
+      "sales_order.view", "sales_order.create", "customer.manage", "dispatch.record",
+      "item.view", "stock.view",
+      "bom.view", "work_order.create", "work_order.release", "production.supervise",
+      "quality.queue",
+      "purchase_order.create", "purchase_receipt.record",
+      // Restaurant OS.
       "kitchen.view", "kitchen.work", "serving.view", "serving.work",
       "invoice.view", "invoice.manage",
     ],
@@ -141,11 +166,22 @@ async function main() {
      * components worker never sees a kitchen queue.
      */
     SUPERVISOR: [
-      "dashboard.view", "reports.view", "quality.queue", "quality.inspect", "production.supervise",
+      "dashboard.view", "reports.view",
+      "quality.queue", "quality.inspect",
+      "production.jobs", "production.supervise",
+      // Restaurant OS.
       "kitchen.view", "kitchen.work", "serving.view", "serving.work",
     ],
-    WORKER: ["production.jobs", "kitchen.view", "kitchen.work", "serving.view", "serving.work"],
-    STORE_MANAGER: ["dashboard.view", "sales_order.view", "sales_order.create"],
+    WORKER: [
+      "production.jobs",
+      // Restaurant OS.
+      "kitchen.view", "kitchen.work", "serving.view", "serving.work"
+    ],
+    STORE_MANAGER: [
+      "dashboard.view",
+      "sales_order.view", "sales_order.create", "customer.manage",
+      "item.view", "stock.view",
+    ],
   };
   const ROLE_LABELS: Record<string, string> = {
     OWNER: "Owner", CO_OWNER: "Co-Owner", MANAGER: "Manager",
