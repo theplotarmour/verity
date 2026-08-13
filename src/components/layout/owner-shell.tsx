@@ -28,7 +28,7 @@ import {
 import { cn, formatDate } from "@/lib/utils";
 import { Badge, Button, Input } from "@/components/ui/primitives";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { Settings, Shield, Plus , Package, ShoppingCart, Wrench, FlaskConical, Database, Building2 } from "lucide-react";
+import { Settings, Shield, Plus , Package, ShoppingCart, Wrench, FlaskConical, Database, Building2, ChefHat, UtensilsCrossed } from "lucide-react";
 import { SystemRole } from "@prisma/client";
 import { can, Permission, type PermissionMatrix } from "@/lib/permissions";
 import type { ModuleKey } from "@/platform/modules/registry";
@@ -73,6 +73,8 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
   users: <Users className="h-4 w-4" />,
   factory: <Factory className="h-4 w-4" />,
   settings: <Settings className="h-4 w-4" />,
+  chef: <ChefHat className="h-4.5 w-4.5" />,
+  utensils: <UtensilsCrossed className="h-4.5 w-4.5" />,
 };
 
 /** A nav item with its icon resolved, which is all the shell renders. */

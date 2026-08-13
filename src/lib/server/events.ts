@@ -18,6 +18,9 @@ export const EVENTS = {
   // cannot absorb. The line is idle from this moment, so it is a supervisor's
   // problem within minutes, not at the end of the shift.
   STAGE_HELD: "STAGE_HELD",
+  // Food is cooked and under the lamp. Nobody on the floor is watching the kitchen
+  // screen, so the pass has to be told rather than noticing.
+  ORDER_READY: "ORDER_READY",
   REWORK_ASSIGNED: "REWORK_ASSIGNED",
   DISPATCH_COMPLETED: "DISPATCH_COMPLETED",
   LOW_STOCK: "LOW_STOCK",

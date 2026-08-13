@@ -447,7 +447,21 @@ const MODULES: ModuleDefinition[] = [
       "The kitchen display: tickets by station, fire and bump, and per-item timing so a " +
       "table's courses land together.",
     requires: ["core", "tables_orders"],
-    permissions: [],
+    permissions: [
+      { key: "kitchen.view", label: "See the kitchen queue", group: "Kitchen" },
+      { key: "kitchen.work", label: "Accept and cook tickets", group: "Kitchen" },
+    ],
+    navItems: [
+      {
+        href: "/owner/kitchen",
+        label: "Kitchen",
+        iconKey: "chef",
+        group: "Production",
+        permission: "QC_QUEUE",
+        requires: "kitchen.view",
+        sortOrder: 1,
+      },
+    ],
   },
   {
     key: "serving",
@@ -457,7 +471,21 @@ const MODULES: ModuleDefinition[] = [
       "The pass and the floor: what is ready to run, what has been delivered, and which " +
       "table is waiting on what.",
     requires: ["core", "tables_orders"],
-    permissions: [],
+    permissions: [
+      { key: "serving.view", label: "See the pass", group: "Serving" },
+      { key: "serving.work", label: "Mark orders served", group: "Serving" },
+    ],
+    navItems: [
+      {
+        href: "/owner/serving",
+        label: "Serving",
+        iconKey: "utensils",
+        group: "Production",
+        permission: "QC_QUEUE",
+        requires: "serving.view",
+        sortOrder: 2,
+      },
+    ],
   },
 ];
 

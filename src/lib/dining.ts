@@ -125,6 +125,18 @@ export const ACTIVE_ORDER_STATES: OrderState[] = ORDER_SEQUENCE.filter(
   (s) => !ORDER_FINAL.includes(s),
 );
 
+/**
+ * Tickets the kitchen still owes food for.
+ *
+ * Stops at PREPARING. READY means the food is cooked and sitting under the lamp —
+ * it belongs to the pass, and leaving it on the kitchen screen is how a dish gets
+ * cooked twice.
+ */
+export const KITCHEN_QUEUE_STATES: OrderState[] = ["NEW", "ACCEPTED", "PREPARING"];
+
+/** The pass: cooked, not yet carried. */
+export const SERVING_QUEUE_STATES: OrderState[] = ["READY"];
+
 /** Line total in paise, from the snapshotted unit price. */
 export function lineTotal(item: { quantity: number; unitPrice: number }): number {
   return item.quantity * item.unitPrice;
