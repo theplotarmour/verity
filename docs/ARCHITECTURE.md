@@ -39,3 +39,7 @@ Known gaps:
 - blank tenant behavior is not yet fully proven.
 
 Do not use this file as a completion claim. Use [VERITY_MODULE_PLATFORM_AUDIT_2026-08-13.md](./VERITY_MODULE_PLATFORM_AUDIT_2026-08-13.md) and [11-roadmap/immediate-priorities.md](./11-roadmap/immediate-priorities.md) for current blockers.
+
+For the sequenced plan that closes them — with per-phase exit criteria, the measured
+guard coverage, and the open decisions that block Phase 5 — see
+[VERITY_COMPLETION_PLAN.md](./VERITY_COMPLETION_PLAN.md).

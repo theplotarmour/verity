@@ -1,5 +1,10 @@
 # Verity Documentation
 
+> **Build status: `main` does not compile.** 122 TypeScript errors, from entitlement
+> guards inserted into function parameter type literals in five action files
+> (`0aa3ff4`, pushed). Fix this before anything else — see Phase 0 of
+> [VERITY_COMPLETION_PLAN.md](./VERITY_COMPLETION_PLAN.md).
+
 Verity is a module-driven business operating platform.
 
 It is not a fixed SaaS application with feature modules. It is a platform where Verity admins assemble, configure, version, and provision reusable business capabilities for each client tenant.
