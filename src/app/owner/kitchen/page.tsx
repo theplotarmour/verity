@@ -12,9 +12,12 @@ import { KitchenClient } from "./client";
  * owner cooks is the normal case, and a role check would lock them out of their own
  * kitchen.
  */
+import { guardModulePage } from "@/platform/modules/guard";
+
 export default async function KitchenPage() {
   const user = await getOwnerUser();
   if (!user) redirect("/onboarding");
+  await guardModulePage("kitchen");
 
   const access = await resolveAccess(user.id);
   if (!access?.permissions.has("kitchen.view")) redirect("/unauthorized");

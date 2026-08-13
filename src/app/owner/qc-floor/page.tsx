@@ -5,9 +5,12 @@ import { QCFloorClient } from './client'
 import { canUser } from "@/lib/server/permissions";
 import { jobCardInclude, toWorkerJob } from '@/lib/server/jobCardAdapter'
 
+import { guardModulePage } from "@/platform/modules/guard";
+
 export default async function QCFloorPage() {
   const dbUser = await getOwnerUser();
   if (!dbUser) redirect('/onboarding');
+  await guardModulePage("quality");
   if (!(await canUser(dbUser, 'QC_QUEUE'))) redirect('/unauthorized');
 
   const factoryId = dbUser.factoryId;

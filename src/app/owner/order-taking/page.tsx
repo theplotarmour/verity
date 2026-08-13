@@ -6,9 +6,12 @@ import { canUser } from "@/lib/server/permissions";
 
 // A dedicated order-taking page for store managers (and other order takers):
 // create customer orders only, no production/pending management visible.
+import { guardModulePage } from "@/platform/modules/guard";
+
 export default async function OrderTakingPage() {
   const dbUser = await getOwnerUser();
   if (!dbUser) redirect("/onboarding");
+  await guardModulePage("sales");
   if (!(await canUser(dbUser, "CREATE_ORDER"))) redirect("/unauthorized");
 
   const factoryId = dbUser.factoryId;

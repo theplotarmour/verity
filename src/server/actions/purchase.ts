@@ -1,11 +1,13 @@
 "use server";
 
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getOwnerUser } from "@/lib/server/owner";
 import { SPEC_SUMMARY_INCLUDE, specSummary, loadRefLabels } from "@/server/queries/spec";
 
 export async function createPurchaseOrder(data: {
+  await guardModuleWrite("procurement");
   supplierId: string;
   items: { materialId: string, quantity: number, rate: number }[];
   expectedDate?: string;
@@ -39,6 +41,7 @@ export async function createPurchaseOrder(data: {
 // order for the procurement history and writes negative stock-ledger entries so
 // raw-material stock drops accordingly.
 export async function returnMaterials(data: {
+  await guardModuleAction("procurement");
   supplierId: string;
   items: { materialId: string; quantity: number; rate: number }[];
   reason?: string;
@@ -115,6 +118,7 @@ export async function returnMaterials(data: {
 }
 
 export async function getPurchaseOrders() {
+  await guardModuleAction("procurement");
   const user = await getOwnerUser();
   if (!user) return [];
   
@@ -158,6 +162,7 @@ export async function getPurchaseOrders() {
 }
 
 export async function getSuppliers() {
+  await guardModuleAction("procurement");
   const user = await getOwnerUser();
   if (!user) return [];
   return prisma.supplier.findMany({ where: { factoryId: user.factoryId }, orderBy: { name: "asc" } });
@@ -178,6 +183,7 @@ type SupplierInput = {
 };
 
 export async function createSupplier(data: SupplierInput) {
+  await guardModuleWrite("procurement");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   if (!data.name?.trim()) return { error: "Name is required" };
@@ -187,6 +193,7 @@ export async function createSupplier(data: SupplierInput) {
 }
 
 export async function updateSupplier(id: string, data: SupplierInput) {
+  await guardModuleWrite("procurement");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   const existing = await prisma.supplier.findFirst({ where: { id, factoryId: user.factoryId } });
@@ -197,6 +204,7 @@ export async function updateSupplier(id: string, data: SupplierInput) {
 }
 
 export async function deleteSupplier(id: string) {
+  await guardModuleWrite("procurement");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   const poCount = await prisma.purchaseOrder.count({ where: { supplierId: id, factoryId: user.factoryId } });
@@ -208,6 +216,7 @@ export async function deleteSupplier(id: string) {
 
 // Full supplier profile + derived performance for the vendor drawer.
 export async function getSupplierDetail(id: string) {
+  await guardModuleAction("procurement");
   const user = await getOwnerUser();
   if (!user) return null;
   const factoryId = user.factoryId;
@@ -285,6 +294,7 @@ export async function getSupplierDetail(id: string) {
 
 // Approve a submitted PO (Manager+ gate). SUBMITTED/DRAFT → APPROVED.
 export async function approvePurchaseOrder(id: string) {
+  await guardModuleAction("procurement");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   if (!["OWNER", "CO_OWNER", "MANAGER"].includes(user.role)) return { error: "Only a manager or owner can approve" };
@@ -312,6 +322,7 @@ export async function approvePurchaseOrder(id: string) {
 }
 
 export async function updatePurchaseOrderStatus(id: string, status: string) {
+  await guardModuleWrite("procurement");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   await prisma.purchaseOrder.update({
@@ -324,6 +335,7 @@ export async function updatePurchaseOrderStatus(id: string, status: string) {
 }
 
 export async function deletePurchaseOrder(id: string) {
+  await guardModuleWrite("procurement");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   await prisma.purchaseOrder.delete({ where: { id, factoryId: user.factoryId } });
@@ -332,6 +344,7 @@ export async function deletePurchaseOrder(id: string) {
 }
 
 export async function updatePurchaseOrder(id: string, data: {
+  await guardModuleWrite("procurement");
   supplierId?: string;
   items?: { materialId: string; quantity: number; rate: number }[];
 }) {
@@ -377,6 +390,7 @@ async function ensureRawBin(factoryId: string) {
 export async function receivePurchaseOrder(
   id: string,
   lines: {
+  await guardModuleWrite("procurement");
     materialId: string;
     quantity: number;
     rate: number;
@@ -540,6 +554,7 @@ export async function receivePurchaseOrder(
 // Convenience: receive every remaining (unreceived) quantity at PO rate in one shot.
 // Backs the "Confirm Delivery" button on the Inventory raw-material tab.
 export async function confirmPurchaseDelivery(id: string) {
+  await guardModuleWrite("procurement");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   const po = await prisma.purchaseOrder.findFirst({
@@ -555,6 +570,7 @@ export async function confirmPurchaseDelivery(id: string) {
 }
 
 export async function getPendingDeliveries() {
+  await guardModuleAction("procurement");
   const user = await getOwnerUser();
   if (!user) return [];
   return prisma.purchaseOrder.findMany({
@@ -568,6 +584,7 @@ export async function getPendingDeliveries() {
 // quantity that lifts them back to safetyStock (fallback minStockLevel), plus the
 // most recent supplier that quoted the material. Feeds the Purchase page card.
 export async function getReorderSuggestions() {
+  await guardModuleAction("procurement");
   const user = await getOwnerUser();
   if (!user) return [];
   const factoryId = user.factoryId;
@@ -627,6 +644,7 @@ export async function getReorderSuggestions() {
 // per item (skips items with an existing unread low-stock note). Routes through
 // emitEvent so email/WhatsApp fire when configured.
 export async function notifyLowStock() {
+  await guardModuleAction("procurement");
   const user = await getOwnerUser();
   if (!user) return { notified: 0 };
   const factoryId = user.factoryId;

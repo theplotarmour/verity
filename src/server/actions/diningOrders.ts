@@ -271,6 +271,7 @@ export async function cancelOrder(orderId: string): Promise<ActionResult> {
 export async function getOrder(orderId: string) {
   const user = await getOwnerUser();
   if (!user) return null;
+  await guardModuleAction("tables_orders");
 
   const order = await prisma.diningOrder.findFirst({
     where: { id: orderId, factoryId: user.factoryId },

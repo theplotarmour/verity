@@ -7,9 +7,12 @@ import { getItemFormData } from "@/server/actions/items";
 import InventoryClient from "./InventoryClient";
 import { getStockableItems } from "@/server/queries/spec";
 
+import { guardModulePage } from "@/platform/modules/guard";
+
 export default async function InventoryPage() {
   const dbUser = await getOwnerUser();
   if (!dbUser) redirect("/");
+  await guardModulePage("inventory");
 
   // Adjustment history is reachable from the Raw tab's movement ledger
   // (transactionType ADJUSTMENT) and no longer fetched as its own dataset —

@@ -46,6 +46,7 @@ export type TableInput = { number: string; capacity: number };
 export async function listTables() {
   const user = await getOwnerUser();
   if (!user) return [];
+  await guardModuleAction("tables_orders");
 
   const tables = await prisma.restaurantTable.findMany({
     where: { factoryId: user.factoryId },

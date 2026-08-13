@@ -57,6 +57,7 @@ const clean = (value: string | null | undefined) => value?.trim() || null;
 export async function listMenu() {
   const user = await getOwnerUser();
   if (!user) return [];
+  await guardModuleAction("menu");
 
   return prisma.menuCategory.findMany({
     where: { factoryId: user.factoryId },

@@ -1,5 +1,6 @@
 "use server";
 
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { revalidatePath } from "next/cache";
@@ -34,6 +35,7 @@ async function resolveOrderItem(salesOrderId: string) {
 // packing and sealing — so a verified passport alone is not enough. Stock
 // matched to a READY order is the one exception: its goods already exist.
 export async function getDispatchableOrders() {
+  await guardModuleAction("sales");
   const user = await getOwnerUser();
   if (!user) return [];
 
@@ -99,6 +101,7 @@ export async function getDispatchableOrders() {
 }
 
 export async function getDispatchDestinations() {
+  await guardModuleAction("sales");
   const user = await getOwnerUser();
   if (!user) return [];
   return prisma.warehouse.findMany({
@@ -108,6 +111,7 @@ export async function getDispatchDestinations() {
 }
 
 export async function createDispatch(data: {
+  await guardModuleWrite("sales");
   salesOrderId: string;
   destinationType: "WAREHOUSE" | "STORE" | "CUSTOMER";
   destinationWarehouseId?: string;
@@ -195,6 +199,7 @@ export async function createDispatch(data: {
 }
 
 export async function getDispatches() {
+  await guardModuleAction("sales");
   const user = await getOwnerUser();
   if (!user) return [];
   return prisma.dispatch.findMany({
@@ -216,6 +221,7 @@ export async function getDispatches() {
 }
 
 export async function confirmDelivery(dispatchId: string) {
+  await guardModuleWrite("sales");
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   const factoryId = user.factoryId;

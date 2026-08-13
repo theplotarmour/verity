@@ -8,6 +8,8 @@ import { jobCardBatchLabel } from "@/lib/server/jobCardAdapter";
 import { revalidatePath } from "next/cache";
 import { QC_FAIL_THRESHOLD, isFailingQcScore, qcAuditScore } from "@/lib/qc-score";
 
+import { guardModuleWrite } from "@/platform/modules/guard";
+
 /**
  * Alert the owner and every active supervisor that an audit scored below the pass
  * mark.
@@ -23,6 +25,7 @@ import { QC_FAIL_THRESHOLD, isFailingQcScore, qcAuditScore } from "@/lib/qc-scor
 export async function reportQcAuditScore(inspectionId: string) {
   const session = await getActiveSessionUser();
   if (!session) return { error: "Unauthorized" };
+  await guardModuleWrite("quality");
   const { factoryId } = session;
 
   try {
@@ -88,6 +91,7 @@ export async function reportQcAuditScore(inspectionId: string) {
 export async function passQC(jobCardId: string) {
   const owner = await getOwnerUser();
   if (!owner) return { error: "Unauthorized" };
+  await guardModuleWrite("quality");
 
   try {
     // Scoped by factory: an id is guessable, and without this filter a QC pass

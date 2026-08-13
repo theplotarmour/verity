@@ -1,11 +1,13 @@
 "use server";
 
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { revalidatePath } from "next/cache";
 import { createStockEntry } from "@/server/actions/inventory";
 
 export async function planSalesOrder(orderId: string) {
+  await guardModuleWrite("manufacturing");
   const owner = await getOwnerUser();
   if (!owner) return { error: "Unauthorized" };
 
@@ -60,6 +62,7 @@ export async function planSalesOrder(orderId: string) {
 }
 
 export async function releasePlanToWorkOrder(planId: string) {
+  await guardModuleWrite("manufacturing");
   const owner = await getOwnerUser();
   if (!owner) return { error: "Unauthorized" };
 
@@ -120,6 +123,7 @@ export async function releasePlanToWorkOrder(planId: string) {
 // ==========================================
 
 export async function getActiveWorkOrders() {
+  await guardModuleAction("manufacturing");
   const user = await getOwnerUser();
   if (!user) throw new Error("Unauthorized");
 
@@ -154,6 +158,7 @@ export async function getActiveWorkOrders() {
 }
 
 export async function createProductionTask(data: {
+  await guardModuleWrite("manufacturing");
   workOrderId: string;
   departmentId: string;
   assignedToId?: string;
@@ -184,6 +189,7 @@ export async function createProductionTask(data: {
 }
 
 export async function updateTaskStatus(id: string, status: string) {
+  await guardModuleWrite("manufacturing");
   const user = await getOwnerUser();
   if (!user) throw new Error("Unauthorized");
 
@@ -204,6 +210,7 @@ export async function updateTaskStatus(id: string, status: string) {
 }
 
 export async function getAllProductionTasks() {
+  await guardModuleAction("manufacturing");
   const user = await getOwnerUser();
   if (!user) throw new Error("Unauthorized");
 
@@ -237,12 +244,14 @@ export async function getAllProductionTasks() {
 }
 
 export async function getDepartments() {
+  await guardModuleAction("manufacturing");
   const user = await getOwnerUser();
   if (!user) return [];
   return prisma.department.findMany({ where: { factoryId: user.factoryId } });
 }
 
 export async function updateWorkOrderStatus(id: string, status: string) {
+  await guardModuleWrite("manufacturing");
   const user = await getOwnerUser();
   if (!user) throw new Error("Unauthorized");
 
@@ -256,6 +265,7 @@ export async function updateWorkOrderStatus(id: string, status: string) {
 }
 
 export async function getCompletedWorkOrders() {
+  await guardModuleAction("manufacturing");
   const user = await getOwnerUser();
   if (!user) throw new Error("Unauthorized");
 
@@ -283,6 +293,7 @@ export async function getCompletedWorkOrders() {
 }
 
 export async function completeWorkOrder(id: string, warehouseId: string) {
+  await guardModuleAction("manufacturing");
   const user = await getOwnerUser();
   if (!user) throw new Error("Unauthorized");
 

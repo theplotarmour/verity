@@ -1,5 +1,6 @@
 "use server";
 
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { revalidatePath } from "next/cache";
@@ -39,6 +40,7 @@ async function nextCustomerCode(factoryId: string) {
 }
 
 export async function listCustomers(search?: string, tag?: string) {
+  await guardModuleAction("sales");
   const owner = await getOwnerUser();
   if (!owner) return [];
   const q = (search ?? "").trim();
@@ -64,6 +66,7 @@ export async function listCustomers(search?: string, tag?: string) {
 }
 
 export async function getCustomer(id: string) {
+  await guardModuleAction("sales");
   const owner = await getOwnerUser();
   if (!owner) return null;
   return prisma.customer.findFirst({
@@ -81,6 +84,7 @@ export async function getCustomer(id: string) {
 }
 
 export async function createCustomer(input: CustomerInput) {
+  await guardModuleWrite("sales");
   const owner = await getOwnerUser();
   if (!owner) return { error: "Unauthorized" };
   if (!input.name?.trim()) return { error: "Customer name is required." };
@@ -113,6 +117,7 @@ export async function createCustomer(input: CustomerInput) {
 }
 
 export async function updateCustomer(id: string, input: CustomerInput) {
+  await guardModuleWrite("sales");
   const owner = await getOwnerUser();
   if (!owner) return { error: "Unauthorized" };
   const existing = await prisma.customer.findFirst({ where: { id, factoryId: owner.factoryId }, select: { id: true } });
@@ -149,6 +154,7 @@ export async function updateCustomer(id: string, input: CustomerInput) {
 // A customer with orders is never hard-deleted (it would orphan production
 // history). Deletion is only allowed when the customer has no orders.
 export async function deleteCustomer(id: string) {
+  await guardModuleWrite("sales");
   const owner = await getOwnerUser();
   if (!owner) return { error: "Unauthorized" };
   const customer = await prisma.customer.findFirst({
@@ -173,6 +179,7 @@ export async function deleteCustomer(id: string) {
  * normal case when someone exports, edits one column and sends it back.
  */
 export async function importCustomersCsv(rows: Array<Record<string, string>>) {
+  await guardModuleAction("sales");
   const owner = await getOwnerUser();
   if (!owner) return { error: "Unauthorized" };
   const factoryId = owner.factoryId;

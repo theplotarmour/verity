@@ -1,12 +1,14 @@
 "use server";
 
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { resolveOrderItem } from "./orderItemResolver";
 import { itemsInRootCategory } from "@/lib/server/categoryItems";
 import { revalidatePath } from "next/cache";
 
-export async function createSalesOrder(customerId: string, items: { productVariantId: string; quantity: number; unitPrice: number }[]) {
+export async function createSalesOrder(customerId: string, items: {
+  await guardModuleWrite("sales"); productVariantId: string; quantity: number; unitPrice: number }[]) {
   const owner = await getOwnerUser();
   if (!owner) return { error: "Unauthorized" };
 
@@ -43,6 +45,7 @@ export async function createSalesOrder(customerId: string, items: { productVaria
 }
 
 export async function createCustomer(name: string, companyName?: string, phone?: string) {
+  await guardModuleWrite("sales");
   const owner = await getOwnerUser();
   if (!owner) return { error: "Unauthorized" };
 
@@ -62,6 +65,7 @@ export async function createCustomer(name: string, companyName?: string, phone?:
 }
 
 export async function approveSalesOrder(orderId: string) {
+  await guardModuleAction("sales");
   const owner = await getOwnerUser();
   if (!owner) return { error: "Unauthorized" };
   
@@ -90,6 +94,7 @@ import { resolveOrderTemplate } from "@/lib/server/templates";
 import { publishChange } from "@/lib/server/live-bus";
 
 export async function getMasterData() {
+  await guardModuleAction("sales");
   const dbUser = await getOwnerUser();
   if (!dbUser) throw new Error("Unauthorized");
 
@@ -175,6 +180,7 @@ export async function getMasterData() {
 }
 
 export async function createOrder(data: {
+  await guardModuleWrite("sales");
   /**
    * The customer chosen from the master list. When present the order is booked
    * against exactly that account and no name matching happens at all — which is
@@ -607,6 +613,7 @@ export async function createOrder(data: {
 // the floor yet), and the order id / number is kept intact. The vehicle is
 // resolved by id and never created, so editing can't spawn a duplicate model.
 export async function updateOrder(orderId: string, data: {
+  await guardModuleWrite("sales");
   customerName?: string;
   customerPhone?: string;
   vehicleBrandId?: string;
@@ -722,6 +729,7 @@ export async function updateOrder(orderId: string, data: {
 }
 
 export async function releaseDrafts(orderIds: string[], scheduledFor?: string | null) {
+  await guardModuleWrite("sales");
   const dbUser = await getOwnerUser();
   if (!dbUser) throw new Error("Unauthorized");
   // Only manager/owner move drafts into production; a store manager can create
@@ -857,6 +865,7 @@ export async function releaseDrafts(orderIds: string[], scheduledFor?: string | 
 export async function createBatchOrders(
   lines: Array<Parameters<typeof createOrder>[0]>
 ) {
+  await guardModuleWrite("sales");
   const dbUser = await getOwnerUser();
   if (!dbUser) throw new Error("Unauthorized");
   if (!lines || lines.length === 0) return { error: "Batch has no lines." };
@@ -879,6 +888,7 @@ export async function createBatchOrders(
 }
 
 export async function getRunningOrders() {
+  await guardModuleAction("sales");
   const dbUser = await getOwnerUser();
   if (!dbUser) throw new Error("Unauthorized");
 
@@ -896,6 +906,7 @@ export async function getRunningOrders() {
 }
 
 export async function updateOrderAssignments(orderId: string, assignedWorkerId: string, inspectorId: string) {
+  await guardModuleWrite("sales");
   const dbUser = await getOwnerUser();
   if (!dbUser) throw new Error("Unauthorized");
 

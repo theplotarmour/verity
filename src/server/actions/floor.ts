@@ -1,5 +1,6 @@
 "use server";
 
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import prisma from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { getOwnerUser } from "@/lib/server/owner";
@@ -84,6 +85,7 @@ function shapeJob(jc: any) {
 
 // Floor overview: one card per department with its live workload and roster.
 export async function getFloorOverview() {
+  await guardModuleAction("manufacturing");
   const owner = await getOwnerUser();
   if (!owner) return [];
   const factoryId = owner.factoryId;
@@ -127,6 +129,7 @@ export async function getFloorOverview() {
 
 // Full live status for one department: every active job and the whole roster.
 export async function getDepartmentFloor(departmentId: string) {
+  await guardModuleAction("manufacturing");
   const owner = await getOwnerUser();
   if (!owner) return null;
   const factoryId = owner.factoryId;
@@ -172,6 +175,7 @@ export async function getDepartmentFloor(departmentId: string) {
 }
 
 export async function startJobCard(jobCardId: string) {
+  await guardModuleAction("manufacturing");
   const owner = await getOwnerUser();
   if (!owner) return { error: "Unauthorized" };
 
@@ -192,6 +196,7 @@ export async function startJobCard(jobCardId: string) {
 }
 
 export async function completeJobCard(jobCardId: string) {
+  await guardModuleAction("manufacturing");
   const owner = await getOwnerUser();
   if (!owner) return { error: "Unauthorized" };
 

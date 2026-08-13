@@ -4,10 +4,12 @@ import { redirect } from "next/navigation"
 import prisma from '@/lib/prisma'
 import { jobCardInclude, toWorkerJob } from '@/lib/server/jobCardAdapter'
 import { getOwnerUser } from '@/lib/server/owner'
+import { guardModulePage } from "@/platform/modules/guard";
 
 export default async function OwnerOrdersPage() {
   const dbUser = await getOwnerUser();
   if (!dbUser) redirect('/onboarding');
+  await guardModulePage("manufacturing");
   
   const factoryId = dbUser.factoryId;
 

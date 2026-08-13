@@ -4,8 +4,12 @@ import { getOwnerUser } from "@/lib/server/owner";
 import { canUser } from "@/lib/server/permissions";
 import { CustomersClient } from "./CustomersClient";
 
+import { guardModulePage } from "@/platform/modules/guard";
+
 export default async function CustomersPage() {
   const dbUser = await getOwnerUser();
+  if (!dbUser) redirect("/onboarding");
+  await guardModulePage("sales");
   // Booking an order is what a customer is for, so that is the right gate.
   if (!(await canUser(dbUser, "CREATE_ORDER"))) redirect("/unauthorized");
 

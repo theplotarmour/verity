@@ -93,11 +93,11 @@ describe("module entitlement gate", () => {
     expect(items.map((i) => i.href)).toContain("/owner/settings");
   });
 
-  it("shows everything when entitlements are unknown", () => {
-    // Degrade to the pre-module behaviour rather than to an empty nav. A caller
-    // that has not been updated must not lock its users out.
+  it("shows only core when entitlements are unknown", () => {
+    // Defaults to "core" to prevent entitlement leaks.
     const unknown = resolveNavItems(permissive);
-    expect(unknown.length).toBe(allNavItems().length - 1); // minus order-taking, see below
+    const coreItems = allNavItems().filter((i) => i.moduleKey === "core");
+    expect(unknown.map((i) => i.href).sort()).toEqual(coreItems.map((i) => i.href).sort());
   });
 });
 

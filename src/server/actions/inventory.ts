@@ -1,5 +1,6 @@
 "use server";
 
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { revalidatePath } from "next/cache";
@@ -14,6 +15,7 @@ import { ensureDefaultBin } from "@/server/internal/stockMovements";
 // Their callers import them from @/server/internal/stockMovements.
 
 export async function dispatchOrder(orderId: string) {
+  await guardModuleAction("inventory");
   const owner = await getOwnerUser();
   if (!owner) return { error: "Unauthorized" };
 
@@ -47,6 +49,7 @@ export async function dispatchOrder(orderId: string) {
 }
 
 export async function getMaterials() {
+  await guardModuleAction("inventory");
   const user = await getOwnerUser();
   if (!user) return [];
   const groupIds = await stockableGroupIds(user.factoryId);
@@ -90,12 +93,14 @@ async function stockableGroupIds(factoryId: string): Promise<Set<string>> {
 }
 
 export async function getWarehouses() {
+  await guardModuleAction("inventory");
   const user = await getOwnerUser();
   if (!user) return [];
   return prisma.warehouse.findMany({ where: { factoryId: user.factoryId } });
 }
 
 export async function createStockEntry(data: {
+  await guardModuleWrite("inventory");
   transactionType: "RECEIPT" | "ISSUE" | "TRANSFER" | "ADJUSTMENT";
   warehouseId: string;
   materialId?: string;
@@ -177,6 +182,7 @@ export async function createStockEntry(data: {
 }
 
 export async function getStockLedger() {
+  await guardModuleAction("inventory");
   const user = await getOwnerUser();
   if (!user) return [];
 
@@ -203,6 +209,7 @@ export async function getStockLedger() {
 // warehouse, with a mandatory reason + remark. Writes an ADJUSTMENT ledger
 // entry, moves the bin balance, and records an audit-log trail.
 export async function adjustStock(data: {
+  await guardModuleWrite("inventory");
   materialId: string;
   warehouseId: string;
   quantityChange: number; // signed: negative removes stock
@@ -266,6 +273,7 @@ export async function adjustStock(data: {
 
 // Manual-adjustment history (audit trail) for the Inventory adjustments tab.
 export async function getStockAdjustments() {
+  await guardModuleWrite("inventory");
   const user = await getOwnerUser();
   if (!user) return [];
   const entries = await prisma.stockLedgerEntry.findMany({
@@ -296,6 +304,7 @@ export async function getStockAdjustments() {
 // Retained as an empty stub: the inventory page still requests it, but the
 // legacy ProductVariant catalogue is retired and the UI no longer reads it.
 export async function getProductVariants(): Promise<never[]> {
+  await guardModuleAction("inventory");
   return [];
 }
 
@@ -306,6 +315,7 @@ export async function getProductVariants(): Promise<never[]> {
 
 // Aggregated view for the five-tab inventory screen.
 export async function getInventoryOverview() {
+  await guardModuleAction("inventory");
   const user = await getOwnerUser();
   if (!user) return null;
   const factoryId = user.factoryId;
@@ -535,6 +545,7 @@ export async function getInventoryOverview() {
 // work order. Expected = BOM qty × target × (1 + waste). Issued = ACTIVE/CONSUMED
 // reservation quantity for the work order.
 export async function getMaterialVariance() {
+  await guardModuleAction("inventory");
   const user = await getOwnerUser();
   if (!user) return [];
   const factoryId = user.factoryId;
@@ -604,6 +615,7 @@ function round2(n: number) {
 // which batch to consume: supplier, first receipt date, and QC state. Batches
 // are FIFO-ordered (oldest receipt first), which is the default issue order.
 export async function getItemBatches(itemId?: string) {
+  await guardModuleAction("inventory");
   const user = await getOwnerUser();
   if (!user) return [];
 
@@ -689,6 +701,7 @@ export async function getItemBatches(itemId?: string) {
 // status change, not a stock movement: the total on the shelf is unchanged, so
 // the ledger entry nets to zero and only the bucket split moves.
 export async function setStockQcStatus(data: {
+  await guardModuleWrite("inventory");
   materialId: string;
   warehouseId: string;
   quantity: number;

@@ -73,14 +73,14 @@ export function allNavItems(): ResolvedNavItem[] {
  *  4. the store-manager carve-out.
  */
 export function resolveNavItems(ctx: NavContext): ResolvedNavItem[] {
-  const enabled = ctx.enabledModules ? new Set<ModuleKey>(ctx.enabledModules) : null;
+  const enabled = new Set<ModuleKey>(ctx.enabledModules ?? ["core"]);
   const held = ctx.grantedPermissions ? new Set(ctx.grantedPermissions) : null;
   const isStoreManager = ctx.userRole === "STORE_MANAGER";
 
   return allNavItems()
     .filter((item) => {
       // 1. Module entitlement. `core` is always on, so its items always pass.
-      if (enabled !== null && !enabled.has(item.moduleKey)) return false;
+      if (!enabled.has(item.moduleKey)) return false;
 
       // 2. Registry grant, where the item has migrated to one.
       if (item.requires && held !== null && !held.has(item.requires)) return false;

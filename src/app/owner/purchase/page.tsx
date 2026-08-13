@@ -5,9 +5,12 @@ import { getMaterials } from "@/server/actions/inventory";
 import PurchaseClient from "./PurchaseClient";
 import { getPurchasableItems } from "@/server/queries/spec";
 
+import { guardModulePage } from "@/platform/modules/guard";
+
 export default async function PurchasePage() {
   const dbUser = await getOwnerUser();
   if (!dbUser) redirect("/");
+  await guardModulePage("procurement");
 
   const [orders, suppliers, materials, reorderSuggestions, purchasableItems] = await Promise.all([
     getPurchaseOrders(),
