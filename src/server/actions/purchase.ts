@@ -7,13 +7,13 @@ import { getOwnerUser } from "@/lib/server/owner";
 import { SPEC_SUMMARY_INCLUDE, specSummary, loadRefLabels } from "@/server/queries/spec";
 
 export async function createPurchaseOrder(data: {
-  await guardModuleWrite("procurement");
   supplierId: string;
   items: { materialId: string, quantity: number, rate: number }[];
   expectedDate?: string;
 }) {
   const user = await getOwnerUser();
   if (!user) throw new Error("Unauthorized");
+  await guardModuleWrite("procurement");
 
   const poCount = await prisma.purchaseOrder.count({ where: { factoryId: user.factoryId } });
 
@@ -41,13 +41,16 @@ export async function createPurchaseOrder(data: {
 // order for the procurement history and writes negative stock-ledger entries so
 // raw-material stock drops accordingly.
 export async function returnMaterials(data: {
-  await guardModuleAction("procurement");
   supplierId: string;
   items: { materialId: string; quantity: number; rate: number }[];
   reason?: string;
 }) {
   const user = await getOwnerUser();
   if (!user) throw new Error("Unauthorized");
+  // Write, not Action: this books a RETURNED purchase order and writes negative
+  // stock-ledger entries. It was tagged as a read, which would have let a
+  // read-only workspace move stock.
+  await guardModuleWrite("procurement");
   const factoryId = user.factoryId;
 
   if (!data.items.length || data.items.some((i) => !i.materialId || i.quantity <= 0)) {
@@ -344,12 +347,12 @@ export async function deletePurchaseOrder(id: string) {
 }
 
 export async function updatePurchaseOrder(id: string, data: {
-  await guardModuleWrite("procurement");
   supplierId?: string;
   items?: { materialId: string; quantity: number; rate: number }[];
 }) {
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
+  await guardModuleWrite("procurement");
   const po = await prisma.purchaseOrder.findFirst({ where: { id, factoryId: user.factoryId } });
   if (!po) return { error: "Purchase order not found" };
   if (po.status === "COMPLETED") return { error: "Delivered orders cannot be edited" };
@@ -390,7 +393,6 @@ async function ensureRawBin(factoryId: string) {
 export async function receivePurchaseOrder(
   id: string,
   lines: {
-  await guardModuleWrite("procurement");
     materialId: string;
     quantity: number;
     rate: number;
@@ -404,6 +406,7 @@ export async function receivePurchaseOrder(
 ) {
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
+  await guardModuleWrite("procurement");
   const factoryId = user.factoryId;
 
   const po = await prisma.purchaseOrder.findFirst({

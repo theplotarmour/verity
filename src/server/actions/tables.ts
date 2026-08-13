@@ -5,7 +5,7 @@ import type { TableState } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
-import { guardModuleWrite } from "@/platform/modules/guard";
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import {
   ACTIVE_ORDER_STATES,
   DINING_BLOCKERS,

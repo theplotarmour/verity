@@ -111,7 +111,6 @@ export async function getDispatchDestinations() {
 }
 
 export async function createDispatch(data: {
-  await guardModuleWrite("sales");
   salesOrderId: string;
   destinationType: "WAREHOUSE" | "STORE" | "CUSTOMER";
   destinationWarehouseId?: string;
@@ -125,6 +124,7 @@ export async function createDispatch(data: {
 }) {
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
+  await guardModuleWrite("sales");
   const factoryId = user.factoryId;
 
   const order = await prisma.salesOrder.findFirst({

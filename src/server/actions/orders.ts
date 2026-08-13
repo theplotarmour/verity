@@ -8,9 +8,10 @@ import { itemsInRootCategory } from "@/lib/server/categoryItems";
 import { revalidatePath } from "next/cache";
 
 export async function createSalesOrder(customerId: string, items: {
-  await guardModuleWrite("sales"); productVariantId: string; quantity: number; unitPrice: number }[]) {
+  productVariantId: string; quantity: number; unitPrice: number }[]) {
   const owner = await getOwnerUser();
   if (!owner) return { error: "Unauthorized" };
+  await guardModuleWrite("sales");
 
   try {
     // Generate a simple SO Number
@@ -180,7 +181,6 @@ export async function getMasterData() {
 }
 
 export async function createOrder(data: {
-  await guardModuleWrite("sales");
   /**
    * The customer chosen from the master list. When present the order is booked
    * against exactly that account and no name matching happens at all — which is
@@ -239,6 +239,7 @@ export async function createOrder(data: {
 }) {
   const dbUser = await getOwnerUser();
   if (!dbUser) throw new Error("Unauthorized");
+  await guardModuleWrite("sales");
   // Store managers may only book on-ordered (customer) productions.
   if (dbUser.role === "STORE_MANAGER" && !data.onOrdered) {
     return { error: "Store managers can only create on-ordered (customer) productions." };
@@ -613,7 +614,6 @@ export async function createOrder(data: {
 // the floor yet), and the order id / number is kept intact. The vehicle is
 // resolved by id and never created, so editing can't spawn a duplicate model.
 export async function updateOrder(orderId: string, data: {
-  await guardModuleWrite("sales");
   customerName?: string;
   customerPhone?: string;
   vehicleBrandId?: string;
@@ -635,6 +635,7 @@ export async function updateOrder(orderId: string, data: {
 }) {
   const dbUser = await getOwnerUser();
   if (!dbUser) return { error: "Unauthorized" };
+  await guardModuleWrite("sales");
   const factoryId = dbUser.factoryId;
 
   const order = await prisma.salesOrder.findFirst({

@@ -158,13 +158,13 @@ export async function getActiveWorkOrders() {
 }
 
 export async function createProductionTask(data: {
-  await guardModuleWrite("manufacturing");
   workOrderId: string;
   departmentId: string;
   assignedToId?: string;
 }) {
   const user = await getOwnerUser();
   if (!user) throw new Error("Unauthorized");
+  await guardModuleWrite("manufacturing");
 
   const wo = await prisma.workOrder.findUnique({ where: { id: data.workOrderId, factoryId: user.factoryId } });
   if (!wo) throw new Error("Work order not found");

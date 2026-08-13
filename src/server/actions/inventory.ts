@@ -100,7 +100,6 @@ export async function getWarehouses() {
 }
 
 export async function createStockEntry(data: {
-  await guardModuleWrite("inventory");
   transactionType: "RECEIPT" | "ISSUE" | "TRANSFER" | "ADJUSTMENT";
   warehouseId: string;
   materialId?: string;
@@ -111,6 +110,7 @@ export async function createStockEntry(data: {
 }) {
   const user = await getOwnerUser();
   if (!user) throw new Error("Unauthorized");
+  await guardModuleWrite("inventory");
 
   // Stock moves against an ItemMaster row directly now.
   const itemId = data.materialId ?? null;
@@ -209,7 +209,6 @@ export async function getStockLedger() {
 // warehouse, with a mandatory reason + remark. Writes an ADJUSTMENT ledger
 // entry, moves the bin balance, and records an audit-log trail.
 export async function adjustStock(data: {
-  await guardModuleWrite("inventory");
   materialId: string;
   warehouseId: string;
   quantityChange: number; // signed: negative removes stock
@@ -218,6 +217,7 @@ export async function adjustStock(data: {
 }) {
   const user = await getOwnerUser();
   if (!user) throw new Error("Unauthorized");
+  await guardModuleWrite("inventory");
 
   const remark = data.remark?.trim();
   if (!remark) return { error: "A remark is required for every adjustment." };
@@ -701,7 +701,6 @@ export async function getItemBatches(itemId?: string) {
 // status change, not a stock movement: the total on the shelf is unchanged, so
 // the ledger entry nets to zero and only the bucket split moves.
 export async function setStockQcStatus(data: {
-  await guardModuleWrite("inventory");
   materialId: string;
   warehouseId: string;
   quantity: number;
@@ -711,6 +710,7 @@ export async function setStockQcStatus(data: {
 }) {
   const user = await getOwnerUser();
   if (!user) throw new Error("Unauthorized");
+  await guardModuleWrite("inventory");
 
   const remark = data.remark?.trim();
   if (!remark) return { error: "A remark is required when changing QC status." };

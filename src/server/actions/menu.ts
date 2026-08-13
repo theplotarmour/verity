@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
-import { guardModuleWrite } from "@/platform/modules/guard";
+import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import { MENU_BLOCKERS, type MenuBlocker } from "@/lib/menu";
 
 /**
