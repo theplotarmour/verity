@@ -82,6 +82,10 @@ export async function POST(request: Request) {
 
     let reply = firstChoice?.content ?? "";
     const toolsUsed: string[] = [];
+    // Write proposals a tool produced — surfaced so the client can render an
+    // approve/cancel diff. Nothing here has been written; approval is a separate
+    // guarded call.
+    const proposals: unknown[] = [];
 
     // One bounded tool round: the model asks for data, we fetch it tenant-scoped,
     // it answers. A second round is deliberately not run — it is the difference
@@ -104,6 +108,19 @@ export async function POST(request: Request) {
           parsed,
         );
         toolsUsed.push(call.function.name);
+
+        // A tool that returned a `{ proposal }` is asking for approval, not
+        // reporting data. Hoist it for the client; the model still gets the
+        // result so it can describe the change in words.
+        if (
+          "result" in outcome &&
+          outcome.result &&
+          typeof outcome.result === "object" &&
+          "proposal" in outcome.result
+        ) {
+          proposals.push((outcome.result as { proposal: unknown }).proposal);
+        }
+
         messages.push({
           role: "tool",
           tool_call_id: call.id,
@@ -118,7 +135,7 @@ export async function POST(request: Request) {
 
     if (tokens > 0) await recordAssistantTokens(budget.organizationId, tokens);
 
-    return NextResponse.json({ reply, model, tokens, toolsUsed });
+    return NextResponse.json({ reply, model, tokens, toolsUsed, proposals });
   } catch (error) {
     console.error("Assistant call failed", error);
     return NextResponse.json({ error: "The assistant is unavailable right now." }, { status: 502 });

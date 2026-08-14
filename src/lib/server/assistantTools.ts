@@ -25,6 +25,23 @@ import { formatMenuPrice } from "@/lib/menu";
  * through a guarded server action, never through this file.
  */
 
+/**
+ * A write the owner must approve before it happens (R4).
+ *
+ * A `propose_*` tool is still a **read**: it looks up the current value and
+ * returns the old→new diff. Nothing is written until the owner clicks Approve,
+ * which calls a guarded server action that re-reads and re-validates from the
+ * session — the proposal below is a preview, never the source of truth for the
+ * write.
+ */
+export interface PriceChangeProposal {
+  kind: "menu_price";
+  itemId: string;
+  itemName: string;
+  oldPricePaise: number;
+  newPricePaise: number;
+}
+
 export interface AssistantTool {
   name: string;
   /** The module a tenant must be entitled to for this tool to run. */
@@ -166,6 +183,45 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
           status: r.status,
         })),
       };
+    },
+  },
+  {
+    name: "propose_price_change",
+    module: "menu",
+    description:
+      "Prepare (but DO NOT apply) a change to a menu item's price. Returns the current and proposed price for the owner to approve. Use when the user asks to change, raise or drop an item's price. The change only happens after the owner approves it on screen.",
+    parameters: {
+      type: "object",
+      properties: {
+        itemName: { type: "string", description: "The menu item's name, as shown on the menu." },
+        newPrice: { type: "number", description: "The proposed new price in rupees (not paise)." },
+      },
+      required: ["itemName", "newPrice"],
+    },
+    async run(factoryId, args) {
+      const itemName = String(args.itemName ?? "").trim();
+      const newRupees = Number(args.newPrice);
+      if (!itemName) return { error: "Which item?" };
+      if (!Number.isFinite(newRupees) || newRupees <= 0) {
+        return { error: "A positive new price in rupees is required." };
+      }
+
+      const item = await prisma.menuItem.findFirst({
+        where: { factoryId, name: { equals: itemName, mode: "insensitive" } },
+        select: { id: true, name: true, price: true },
+      });
+      if (!item) return { found: false, itemName };
+
+      const proposal: PriceChangeProposal = {
+        kind: "menu_price",
+        itemId: item.id,
+        itemName: item.name,
+        oldPricePaise: item.price,
+        newPricePaise: Math.round(newRupees * 100),
+      };
+      // The `proposal` key is the signal the route hoists into the response for
+      // the client to render as an Approve/Cancel diff. Nothing is written here.
+      return { proposal };
     },
   },
 ];

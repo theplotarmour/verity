@@ -171,6 +171,8 @@ export const ACTION_OWNERSHIP: Record<string, Ownership> = {
   "billing.ts": "billing",
   "diningBilling.ts": "billing",
   "menu.ts": "menu",
+  "assistantProposals.ts": "menu", // applying an approved assistant price change
+
   "tables.ts": "tables_orders",
   "diningOrders.ts": "tables_orders",
   "kitchen.ts": "kitchen",

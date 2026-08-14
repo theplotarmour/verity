@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
+import prisma from "@/lib/prisma";
 import { getModule } from "@/platform/modules/registry";
 import {
   ASSISTANT_TOOLS,
@@ -72,6 +73,13 @@ describe("assistantToolSpecs", () => {
     expect(names).not.toContain("upcoming_appointments");
   });
 
+  it("offers the price-change proposal tool only where menu is entitled (R4)", () => {
+    expect(assistantToolSpecs(["menu"]).map((t) => t.function.name)).toContain("propose_price_change");
+    expect(assistantToolSpecs(["booking"]).map((t) => t.function.name)).not.toContain(
+      "propose_price_change",
+    );
+  });
+
   it("offers the booking tool only when booking is entitled", () => {
     const salon = assistantToolSpecs(["booking"]);
     expect(salon.map((t) => t.function.name)).toEqual(["upcoming_appointments"]);
@@ -87,5 +95,69 @@ describe("assistantToolSpecs", () => {
       expect(typeof spec.function.name).toBe("string");
       expect(spec.function.parameters.type).toBe("object");
     }
+  });
+});
+
+/**
+ * R4 apply — the write the Approve button triggers.
+ *
+ * The action guards, re-reads scoped to the session's factory, then writes with a
+ * factory-scoped `updateMany`. This pins the load-bearing half of that: the same
+ * write aimed at another tenant's row matches nothing. The action itself needs a
+ * session, so it is tested through the query it relies on, the same way the dining
+ * action tests do.
+ */
+describe("applying a price change is factory-scoped", () => {
+  let factoryId: string;
+  let itemId: string;
+  let categoryId: string;
+  let seeded = false;
+  const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+
+  beforeAll(async () => {
+    const factory = await prisma.factory.findFirst({ where: { slug: "kents" }, select: { id: true } });
+    if (!factory) return;
+    factoryId = factory.id;
+    const category = await prisma.menuCategory.create({
+      data: { factoryId, name: `Assistant test ${suffix}` },
+      select: { id: true },
+    });
+    categoryId = category.id;
+    const item = await prisma.menuItem.create({
+      data: { factoryId, categoryId, name: `Proposal Chai ${suffix}`, price: 5000 },
+      select: { id: true },
+    });
+    itemId = item.id;
+    seeded = true;
+  });
+
+  afterAll(async () => {
+    if (!seeded) return;
+    await prisma.menuItem.deleteMany({ where: { categoryId } });
+    await prisma.menuCategory.delete({ where: { id: categoryId } }).catch(() => undefined);
+    await prisma.$disconnect();
+  });
+
+  it("writes the new price on the owning factory", async () => {
+    if (!seeded) return;
+    const { count } = await prisma.menuItem.updateMany({
+      where: { id: itemId, factoryId },
+      data: { price: 6000 },
+    });
+    expect(count).toBe(1);
+    const row = await prisma.menuItem.findUniqueOrThrow({ where: { id: itemId }, select: { price: true } });
+    expect(row.price).toBe(6000);
+  });
+
+  it("changes nothing when the same write is aimed at another tenant", async () => {
+    if (!seeded) return;
+    const { count } = await prisma.menuItem.updateMany({
+      where: { id: itemId, factoryId: "some-other-factory" },
+      data: { price: 999_00 },
+    });
+    expect(count).toBe(0);
+    const row = await prisma.menuItem.findUniqueOrThrow({ where: { id: itemId }, select: { price: true } });
+    // Still the value the owning-factory write set, untouched by the foreign one.
+    expect(row.price).toBe(6000);
   });
 });
