@@ -219,5 +219,27 @@ export async function setAppointmentStatus(
 
   revalidatePath("/owner/booking");
   revalidatePath("/owner/dashboard");
+
+  // Publish the milestone on the platform bus. Best-effort and after the write:
+  // a reaction (core records it to the activity trail) must not roll back a status
+  // change if it fails, so this is fired outside the transaction and its result is
+  // not awaited into the return path.
+  try {
+    const { emit } = await import("@/platform/events/bus");
+    const { registerReactions } = await import("@/platform/events/reactions");
+    registerReactions();
+    const appt = await prisma.appointment.findUnique({
+      where: { id },
+      select: { customerName: true },
+    });
+    await emit(`appointment.${status.toLowerCase()}`, {
+      factoryId: user.factoryId,
+      appointmentId: id,
+      customerName: appt?.customerName ?? "",
+    });
+  } catch (error) {
+    console.error("appointment event emit failed", error);
+  }
+
   return { success: true };
 }
