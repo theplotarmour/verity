@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 
+import type { ModuleKey } from "@/platform/modules/registry";
 import { getActiveSessionUser } from "@/lib/server/session-user";
 import { buildAssistantContext, contextToPrompt } from "@/lib/server/assistantContext";
 import { checkAssistantBudget, recordAssistantTokens } from "@/lib/server/assistantBudget";
 import { groqClient, isGroqConfigured, routeModel, type TaskType } from "@/lib/server/groq";
+import { assistantToolSpecs, runAssistantTool } from "@/lib/server/assistantTools";
 
 /**
  * The assistant.
@@ -57,23 +59,66 @@ export async function POST(request: Request) {
   const context = await buildAssistantContext(session.factoryId, body.route ?? "/owner/dashboard");
   const model = routeModel(body.taskType === "analytical" ? "analytical" : "operational");
 
+  // Only the tools this tenant is entitled to. `factoryId` is never a tool
+  // parameter — the executor takes it from the session below, not from the model.
+  const tools = assistantToolSpecs(context.modules.map((m) => m.key as ModuleKey));
+
   try {
-    const completion = await groqClient().chat.completions.create({
+    const client = groqClient();
+    const messages: Array<Record<string, unknown>> = [
+      { role: "system", content: `${SYSTEM_PROMPT}\n\n${contextToPrompt(context)}` },
+      { role: "user", content: message },
+    ];
+
+    const first = await client.chat.completions.create({
       model,
-      messages: [
-        { role: "system", content: `${SYSTEM_PROMPT}\n\n${contextToPrompt(context)}` },
-        { role: "user", content: message },
-      ],
+      messages: messages as never,
+      ...(tools.length > 0 ? { tools, tool_choice: "auto" as const } : {}),
     });
 
-    const tokens = completion.usage?.total_tokens ?? 0;
+    let tokens = first.usage?.total_tokens ?? 0;
+    const firstChoice = first.choices[0]?.message;
+    const toolCalls = firstChoice?.tool_calls ?? [];
+
+    let reply = firstChoice?.content ?? "";
+    const toolsUsed: string[] = [];
+
+    // One bounded tool round: the model asks for data, we fetch it tenant-scoped,
+    // it answers. A second round is deliberately not run — it is the difference
+    // between an assistant and an agent, and the budget is a shared token pool.
+    if (toolCalls.length > 0) {
+      messages.push({ role: "assistant", content: firstChoice?.content ?? "", tool_calls: toolCalls });
+
+      for (const call of toolCalls) {
+        let parsed: Record<string, unknown> = {};
+        try {
+          parsed = JSON.parse(call.function.arguments || "{}");
+        } catch {
+          parsed = {};
+        }
+        // factoryId + organizationId come from the SESSION, never the model.
+        const outcome = await runAssistantTool(
+          call.function.name,
+          session.factoryId,
+          budget.organizationId,
+          parsed,
+        );
+        toolsUsed.push(call.function.name);
+        messages.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: JSON.stringify("error" in outcome ? { error: outcome.error } : outcome.result),
+        });
+      }
+
+      const second = await client.chat.completions.create({ model, messages: messages as never });
+      tokens += second.usage?.total_tokens ?? 0;
+      reply = second.choices[0]?.message?.content ?? reply;
+    }
+
     if (tokens > 0) await recordAssistantTokens(budget.organizationId, tokens);
 
-    return NextResponse.json({
-      reply: completion.choices[0]?.message?.content ?? "",
-      model,
-      tokens,
-    });
+    return NextResponse.json({ reply, model, tokens, toolsUsed });
   } catch (error) {
     console.error("Assistant call failed", error);
     return NextResponse.json({ error: "The assistant is unavailable right now." }, { status: 502 });
