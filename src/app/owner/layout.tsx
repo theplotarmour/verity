@@ -25,6 +25,16 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
   const enabledModules = access?.modules ?? (await entitledModules(factory.organizationId));
   const grantedPermissions = access ? [...access.permissions] : [];
 
+  // Send a genuinely un-provisioned tenant to onboarding. The signal is "still in
+  // SETUP AND has no modules beyond core" — deliberately not `onboardingStatus` or
+  // a resolved pack alone: live tenants run entirely off entitlements with
+  // `industry` left null and the status never advanced past SETUP, and bouncing
+  // them here would brick every configured workspace. `/onboarding` sits outside
+  // this layout, so this can only fire once, never in a loop.
+  if (factory.onboardingStatus === "SETUP" && !enabledModules.some((m) => m !== "core")) {
+    redirect("/onboarding");
+  }
+
   const settings = (factory?.settings as any) || {};
   const themeColor = settings.themeColor || BRAND_ACCENT;
   // Nav visibility follows the factory's own permission matrix, not the code defaults.

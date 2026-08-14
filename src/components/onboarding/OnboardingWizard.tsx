@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Sparkles, ArrowRight, Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Sparkles, Loader2, Check } from "lucide-react";
 
 import { Button } from "@/components/ui/primitives";
+import { toast } from "@/components/ui/toast";
+import { adoptPack } from "@/server/actions/onboarding";
 
 type Suggestion = { packKey: string; label: string; modules: string[] } | null;
 
@@ -17,10 +20,28 @@ type Suggestion = { packKey: string; label: string; modules: string[] } | null;
  * here is a link there rather than a silent write.
  */
 export function OnboardingWizard() {
+  const router = useRouter();
   const [description, setDescription] = useState("");
   const [state, setState] = useState<"idle" | "thinking" | "done" | "none">("idle");
   const [suggestion, setSuggestion] = useState<Suggestion>(null);
   const [error, setError] = useState<string | null>(null);
+  const [adopting, setAdopting] = useState(false);
+
+  const use = (packKey: string) => {
+    setAdopting(true);
+    void adoptPack(packKey).then((res) => {
+      if ("error" in res) {
+        toast.error(res.error);
+        setAdopting(false);
+        return;
+      }
+      toast.success("Workspace set up. Welcome aboard.");
+      // Onboarding is now LIVE with the pack's modules, so the owner guard lets
+      // the dashboard through instead of bouncing back here.
+      router.push("/owner/dashboard");
+      router.refresh();
+    });
+  };
 
   const ask = () => {
     if (!description.trim()) return;
@@ -84,12 +105,19 @@ export function OnboardingWizard() {
               </span>
             ))}
           </div>
-          <Link
-            href="/owner/settings"
-            className="mt-3 inline-flex items-center gap-1 text-[13px] font-semibold text-[var(--brand)] hover:underline"
-          >
-            Set this up in Settings <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
+          <div className="mt-4 flex items-center gap-3">
+            <Button disabled={adopting} onClick={() => use(suggestion.packKey)}>
+              {adopting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Check className="mr-1.5 h-4 w-4" />}
+              {adopting ? "Setting up…" : "Use this pack"}
+            </Button>
+            <button
+              type="button"
+              onClick={() => setState("idle")}
+              className="text-[13px] font-medium text-text-secondary hover:text-text-primary"
+            >
+              Try again
+            </button>
+          </div>
         </div>
       ) : state === "none" ? (
         <div className="mt-5 rounded-[16px] border border-border bg-surface-2 p-4 text-sm text-text-secondary">

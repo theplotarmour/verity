@@ -532,10 +532,11 @@ select {
 
 .guide-prose pre {
   padding: 1rem 1.1rem;
-  border-radius: 14px;
+  border-radius: 20px;
   border: 1px solid var(--border);
   background: var(--surface);
   overflow-x: auto;
+  box-shadow: var(--shadow-card);
 }
 
 .guide-prose pre code {
@@ -563,8 +564,9 @@ select {
 .guide-table-scroll {
   overflow-x: auto;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 20px;
   background: var(--surface);
+  box-shadow: var(--shadow-card);
 }
 
 .guide-prose table {

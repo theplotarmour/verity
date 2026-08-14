@@ -208,7 +208,7 @@ function Contents({
           <div
             key={h.id}
             className={cn(
-              "flex items-start gap-2 rounded-xl transition-colors",
+              "flex items-start gap-2 rounded-[16px] transition-colors",
               isActive ? "bg-[var(--brand)]/8" : "hover:bg-surface-2/70",
               h.level === 3 && "ml-3",
             )}

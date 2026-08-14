@@ -29,7 +29,8 @@ import {
 import { cn } from "@/lib/utils";
 import { Avatar, Badge, Input } from "@/components/ui/primitives";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { Settings, Plus , Package, ShoppingCart, Wrench, FlaskConical, Database, Building2, ChefHat, UtensilsCrossed } from "lucide-react";
+import { Settings, Plus , Package, ShoppingCart, Wrench, FlaskConical, Database, Building2, ChefHat, UtensilsCrossed, Sparkles } from "lucide-react";
+import { AssistantPanel } from "@/components/assistant/AssistantPanel";
 import { SystemRole } from "@prisma/client";
 import { can, Permission, type PermissionMatrix } from "@/lib/permissions";
 import type { ModuleKey } from "@/platform/modules/registry";
@@ -128,6 +129,7 @@ export function OwnerShell({
   // The mobile Operations sheet. Closed on navigation, below.
   const [opsOpen, setOpsOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement | null>(null);
   const profileRef = useRef<HTMLDivElement | null>(null);
 
@@ -509,6 +511,15 @@ export function OwnerShell({
                 />
               </form>
 
+              <button
+                type="button"
+                onClick={() => setAssistantOpen(true)}
+                className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-text-secondary transition hover:bg-accent-soft hover:text-[var(--brand)]"
+                aria-label="Open assistant"
+              >
+                <Sparkles className="h-4 w-4" />
+              </button>
+
               <div className="relative shrink-0" ref={notifRef}>
                 <button
                   type="button"
@@ -585,6 +596,13 @@ export function OwnerShell({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setAssistantOpen(true)}
+              aria-label="Open assistant"
+              className="p-2 border border-[var(--brand)]/30 rounded-xl bg-transparent text-[var(--brand)] hover:bg-[var(--brand)]/5 hover:border-[var(--brand)]/50 transition-all duration-200"
+            >
+              <Sparkles className="h-4 w-4" />
+            </button>
             <ThemeToggle />
             <button
               onClick={handleLogout}
@@ -751,6 +769,8 @@ export function OwnerShell({
             </div>
         ) : null}
       </div>
+
+      <AssistantPanel open={assistantOpen} onClose={() => setAssistantOpen(false)} />
     </>
   );
 }

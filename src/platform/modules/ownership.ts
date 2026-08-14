@@ -106,6 +106,7 @@ export const ACTION_OWNERSHIP: Record<string, Ownership> = {
   "auth.ts": "core",
   "hq.ts": "core", // guarded by requireHqAction, which is stricter than a module
   "modules.ts": "core", // the installer itself
+  "onboarding.ts": "core", // adopting a vertical pack for your own workspace
   "permissions.ts": "core",
   "notifications.ts": "core",
   "storage.ts": "core",
