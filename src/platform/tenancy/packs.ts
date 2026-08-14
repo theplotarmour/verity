@@ -39,6 +39,17 @@ export const VERTICAL_PACKS: Record<
   auto_components: {
     label: "Auto Components",
     modules: ["core", "hr", "inventory", "manufacturing", "quality", "procurement", "sales", "automotive"],
+    // The floor, read top to bottom: the numbers, then where the work is, then the
+    // detail panels, then the queue you work once you have read the floor.
+    dashboardWidgets: [
+      "factory_metrics",
+      "production_funnel",
+      "floor_progress",
+      "factory_signals",
+      "quality_pareto",
+      "factory_feed",
+      "operational_warnings",
+    ],
   },
   facility_management: {
     label: "Facility Management",

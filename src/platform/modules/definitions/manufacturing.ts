@@ -57,4 +57,65 @@ export const manufacturingModule = createModule({
     "sortOrder": 3
   }
 ],
+  // The auto-components floor, as widgets rather than a hardcoded page — so a
+  // manufacturing tenant renders through the same engine every other vertical
+  // uses. Gated on dashboard.view (the owner has it); a worker never sees them.
+  dashboardWidgets: [
+    {
+      key: "factory_metrics",
+      title: "Production metrics",
+      requires: "dashboard.view",
+      size: "wide",
+      load: () => import("@/components/dashboard/widgets/ManufacturingWidgets").then((m) => ({ default: m.FactoryMetricsWidget })),
+      sortOrder: 10,
+    },
+    {
+      key: "production_funnel",
+      title: "Where the work is",
+      requires: "dashboard.view",
+      size: "panel",
+      load: () => import("@/components/dashboard/widgets/ManufacturingWidgets").then((m) => ({ default: m.ProductionFunnelWidget })),
+      sortOrder: 20,
+    },
+    {
+      key: "floor_progress",
+      title: "Floor progress",
+      requires: "dashboard.view",
+      size: "panel",
+      load: () => import("@/components/dashboard/widgets/ManufacturingWidgets").then((m) => ({ default: m.FloorProgressWidget })),
+      sortOrder: 25,
+    },
+    {
+      key: "factory_signals",
+      title: "Factory signals",
+      requires: "dashboard.view",
+      size: "panel",
+      load: () => import("@/components/dashboard/widgets/ManufacturingWidgets").then((m) => ({ default: m.FactorySignalsWidget })),
+      sortOrder: 30,
+    },
+    {
+      key: "quality_pareto",
+      title: "Where quality fails",
+      requires: "dashboard.view",
+      size: "panel",
+      load: () => import("@/components/dashboard/widgets/ManufacturingWidgets").then((m) => ({ default: m.QualityParetoWidget })),
+      sortOrder: 40,
+    },
+    {
+      key: "factory_feed",
+      title: "Recent events",
+      requires: "dashboard.view",
+      size: "panel",
+      load: () => import("@/components/dashboard/widgets/ManufacturingWidgets").then((m) => ({ default: m.FactoryFeedWidget })),
+      sortOrder: 50,
+    },
+    {
+      key: "operational_warnings",
+      title: "Operational warnings",
+      requires: "dashboard.view",
+      size: "panel",
+      load: () => import("@/components/dashboard/widgets/ManufacturingWidgets").then((m) => ({ default: m.OperationalWarningsWidget })),
+      sortOrder: 60,
+    },
+  ],
 });
