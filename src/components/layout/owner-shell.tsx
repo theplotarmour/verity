@@ -323,7 +323,7 @@ export function OwnerShell({
           // size — the state flipped, the labels changed, and the box stayed
           // 60px until the transition was removed. A nav that snaps is better
           // than a nav stuck at the wrong width.
-          className="flex shrink-0 flex-col overflow-hidden border-r border-border bg-surface"
+          className="flex shrink-0 flex-col overflow-hidden rounded-[24px] border border-white/10 dark:bg-[#0B0B0C]/40 bg-white/50 backdrop-blur-md m-4 mr-0 shadow-lg"
         >
           {/* Identity. The whole block is the way home. */}
           <div className="flex shrink-0 items-center gap-2.5 px-3 py-3">
@@ -416,7 +416,7 @@ export function OwnerShell({
 
           {/* Account, pinned. Theme, notifications and logout sit behind the
               overflow rather than as three more permanent controls. */}
-          <div className="shrink-0 border-t border-border p-2" ref={profileRef}>
+          <div className="shrink-0 border-t border-white/10 p-2" ref={profileRef}>
             <div className="relative flex items-center gap-2">
               <span
                 className={cn(
@@ -483,14 +483,14 @@ export function OwnerShell({
           </div>
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          {/* Content. min-h-0 so a Workspace child can own its own scrolling
-              rather than growing the page. The topbar rides inside this scroll
-              container on purpose — it is a thin utility row, not chrome, and
-              pinning it would spend 40px of every screen holding a search box
-              nobody is looking at. */}
-          <main className="flex min-h-0 flex-1 flex-col overflow-y-auto min-w-0 scrollbar-none">
-            <div className="flex h-10 shrink-0 items-center gap-3 border-b border-border px-4">
+        <div className="flex min-w-0 flex-1 flex-col rounded-[24px] border border-white/10 dark:bg-black/20 bg-white/30 backdrop-blur-md m-4 ml-3 overflow-hidden shadow-2xl">
+        {/* Content. min-h-0 so a Workspace child can own its own scrolling
+            rather than growing the page. The topbar rides inside this scroll
+            container on purpose — it is a thin utility row, not chrome, and
+            pinning it would spend 40px of every screen holding a search box
+            nobody is looking at. */}
+        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto min-w-0 scrollbar-none">
+          <div className="flex h-12 shrink-0 items-center gap-3 border-b border-white/10 px-4 bg-white/[0.02] dark:bg-black/10">
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
