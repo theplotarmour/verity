@@ -323,7 +323,7 @@ export function OwnerShell({
           // size — the state flipped, the labels changed, and the box stayed
           // 60px until the transition was removed. A nav that snaps is better
           // than a nav stuck at the wrong width.
-          className="flex shrink-0 flex-col overflow-hidden rounded-[24px] border border-white/10 dark:bg-[#0B0B0C]/40 bg-white/50 backdrop-blur-md m-4 mr-0 shadow-lg"
+          className="flex shrink-0 flex-col overflow-hidden rounded-[24px] verity-glass m-4 mr-0"
         >
           {/* Identity. The whole block is the way home. */}
           <div className="flex shrink-0 items-center gap-2.5 px-3 py-3">
@@ -483,7 +483,7 @@ export function OwnerShell({
           </div>
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col rounded-[24px] border border-white/10 dark:bg-black/20 bg-white/30 backdrop-blur-md m-4 ml-3 overflow-hidden shadow-2xl">
+        <div className="flex min-w-0 flex-1 flex-col rounded-[24px] verity-glass m-4 ml-3 overflow-hidden">
         {/* Content. min-h-0 so a Workspace child can own its own scrolling
             rather than growing the page. The topbar rides inside this scroll
             container on purpose — it is a thin utility row, not chrome, and
