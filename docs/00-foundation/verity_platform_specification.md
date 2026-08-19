@@ -1,62 +1,113 @@
 # Verity Platform Specification
 
-This specification serves as the single source of truth for the Verity Operating System. It defines the layout conventions, the composition model, the internal-only monorepo module framework, and the implementation guidelines.
+This specification serves as the single source of truth for the Verity Operating System. It defines the platform's core architecture, compositional system builder model, dynamic layout conventions, and the role-specific experience layers.
 
 ---
 
-## 1. Core Architecture Model
+## 1. Platform Core Definition
 
-Verity is a modular platform built to assemble tailored operating systems for diverse business verticals (e.g., cafes, salons, clinics, field logistics) from reusable, core capabilities. 
+> **Verity is not a multi-module ERP where modules are independently enabled. Verity is a configurable business-system construction platform where reusable capabilities, workflows, roles, interfaces and data models are composed into client-specific operating systems. A module is only complete when its business lifecycle, role-specific experiences, permissions, events, workflows, dashboard capabilities and integrations are defined. Packs are preconfigured compositions of these capabilities, and every client system is dynamically generated from that composition.**
 
-### Internal Monorepo Module Framework (Simplification)
-Verity does **not** expose a public-facing Developer SDK or module uploader. Development is strictly internal, team-driven, and managed directly within the central monorepo.
-*   **No Packaging/Distribution Overhead:** All modules reside statically in `src/platform/modules/definitions/` and are registered in `src/platform/modules/registry.ts`.
-*   **Static Type Checks:** Permissions, navigation items, and lazy-loaded dashboard widgets are validated at compilation time via TypeScript, avoiding runtime dynamic resolution risks.
+### Streamlined Development Model (No External SDK)
+Verity does **not** support external developers or a third-party SDK uploader. Development is managed strictly within the primary monorepo by the core team.
+*   **Static Definition & Registration:** Modules are defined in `src/platform/modules/definitions/` and registered in `src/platform/modules/registry.ts`.
+*   **Zero-Boilerplate Configuration:** New capabilities contribute directly to core data tables and RBAC structures without modifying shared layout pages.
 
-### Composition Taxonomy
+---
+
+## 2. Dynamic Workflow Composition Engine
+
+Capabilities in Verity do not exist as isolated CRUD pages. They must compose into continuous, multi-module business workflows coordinated by the **Decoupled Event Bus** (`src/platform/events/bus.ts`).
+
+### Reference Composition Flows
+
+#### 1. Service/Lifestyle OS Workflow
+For salons, clinics, and appointment-based services:
 ```text
-MODULES (e.g. scheduling, crm) ──> CAPABILITIES ──> PACKS (e.g. lifestyle_services) ──> CLIENT WORKSPACE
+Appointment Booking (Customer Portal)
+       │
+       ▼ (Event: appointment.booked)
+Scheduling (Staff Calendar Allocation)
+       │
+       ▼ (Event: attendance.check_in)
+People (Stylist / Professional Assignment)
+       │
+       ▼ (Event: service.completed)
+Billing (Invoice Generation & Payment Checkout)
+       │
+       ▼ (Event: transaction.completed)
+Customer CRM (Spend Profile & Preferences Updated)
+       │
+       ▼ (Event: crm.updated)
+Notifications (SMS / WhatsApp Notification Confirmation)
 ```
-1.  **Modules:** The building blocks declaring permissions, sidebar navigation routes, and dashboard widgets.
-2.  **Packs:** Statically defined module bundles (e.g. `modern_qsr` includes core, menu, tables_orders, kitchen, serving, crm). Adopting a pack configures tenant entitlements instantly.
-3.  **Client Workspace:** The runtime environment active for a specific tenant organization, styled according to their vertical pack.
+
+#### 2. Facility / Field Maintenance Workflow
+For property management and field service operations:
+```text
+Helpdesk (Ticket Creation via Customer Portal)
+       │
+       ▼ (Event: ticket.created)
+Work Order (Job Assignment & Tasks Checklist)
+       │
+       ▼ (Event: work_order.dispatched)
+Scheduling (Technician Dispatch Calendar)
+       │
+       ▼ (Event: attendance.arrival)
+Employee (On-Site Mobile Updates & Checklist)
+       │
+       ▼ (Event: asset.repaired)
+Asset (Preventive Logs & Condition Ledger Updated)
+       │
+       ▼ (Event: stock.depleted)
+Inventory (Spare Parts Auto-Decrement)
+       │
+       ▼ (Event: inventory.updated)
+Billing (Contract SLA Validation & Invoicing)
+```
 
 ---
 
-## 2. Design System: Clean Minimal Glassmorphism
+## 3. Generative Role-Specific UX Layer (The Four Worlds)
 
-Verity uses a premium, highly responsive glassmorphic surface language that is identical in both light and dark modes.
+The client experience is not a generic layout with toggled menu buttons. The UI is dynamically generated from the active pack composition, presenting unique interfaces to each of the **Four Worlds**:
 
-### Surface Treatment (`.verity-glass`)
-*   **Frosted Glass Backdrop:** Applied globally using `backdrop-filter: blur(20px) saturate(140%)` for both light and dark themes. Opaque paper backgrounds are avoided.
-*   **Theme Tokens:**
-    *   **Light Mode:** Translucent white backgrounds (`rgba(255, 255, 255, 0.65)`) paired with thin silver borders (`#AEAEB8` or `rgba(0, 0, 0, 0.06)`) and subtle drop shadows.
-    *   **Dark Mode:** Translucent charcoal backgrounds (`rgba(255, 255, 255, 0.035)`) paired with thin steel borders (`rgba(255, 255, 255, 0.26)`) and soft deep-shadow elevation.
-*   **Contrast Safety (WCAG 1.4.11):** All card borders and interface controls must maintain a minimum contrast ratio of 3:1 against their backdrops. Card outline borders must maintain at least 2:1 contrast.
+### World 1: Customer (Mobile-First White-Label)
+*   **Purpose:** Discovery, visual menus, slots, and transactions.
+*   **Design:** Wholly white-labeled with client-defined colors (`--brand` accent) and asset logos.
+*   **Key Views:** `/book` (slot selector), `/menu` (digital visual catalog), and `/my-bookings` (status & reschedule options).
 
-### Layout Geometry
-*   **High Radii:** All cards, dialog sheets, and main panels must use `rounded-[24px]` or `rounded-[32px]`. Inputs and controls use `rounded-[16px]` or `rounded-full`.
-*   **Symmetric stretch (`items-stretch`):** Adjacent cards in dashboard grids must stretch to equal height.
-*   **Bounded Viewports:** Avoid global page scrollbars. Bounding main components to standard viewport heights (e.g. `h-[520px]`) and using independent inner container scrolling (`overflow-y-auto`) is mandatory.
+### World 2: Employee (Action-First Deskless)
+*   **Purpose:** Frictionless shift execution. Zero business analytics, zero layout choices.
+*   **Design:** Large, touch-friendly bump buttons and compact lists formatted for floor tablets or mobile viewports.
+*   **Key Views:** `/worker/my-day` (clock-in/out, task sheets) and `/worker/kds` (kitchen/station display queue).
+
+### World 3: Manager / Owner (Operational Command Center)
+*   **Purpose:** Resource allocation and exception handling.
+*   **Design:** Dense metrics dashboard with symmetric, stretchable grids and scroll-bounded panels. Includes the **Attention Section** for anomalous event notifications.
+*   **Key Views:** `/owner/dashboard` and `/owner/settings` (modular controls).
+
+### World 4: Verity HQ Admin (Control Plane System Builder)
+*   **Purpose:** Dynamic workspace generation and deployment.
+*   **Design:** A visual control room for constructing client operating environments:
+    ```text
+    [HQ System Builder Console]
+    
+    CLIENT ORG: AlienKind Cafe
+    
+    1. Active Modules:  [✓] People  [✓] Menu  [✓] Kitchen  [✓] Tables
+    2. Role Matrix:     [✓] Owner   [✓] Server [✓] Cook
+    3. Workflow Hook:   Tables -> Menu -> Kitchen -> Serving -> Billing
+    4. Brand Identity:  Logo: alien_logo.png | Accent: #00FFCC | Domain: alienkind.verity.ai
+    
+    [ Deploy Config to Tenant ]
+    ```
 
 ---
 
-## 3. The Four Worlds UX Shells
+## 4. Design & Glassmorphism Guidelines
 
-The client front-end is divided into four context-isolated shells:
-
-1.  **Customer Shell (Mobile-First):** White-labeled discoverability. Focuses on booking slots (`/book`) and ordering from menus (`/menu`).
-2.  **Employee Shell (Action-First):** Simplified floor operations. Focuses on tasks (`/worker/my-day`), rosters (`/worker/schedule`), and preparation display queues (`/worker/kds`).
-3.  **Owner Shell (Command Center):** Tactical management. Focuses on metrics dashboards (`/owner/dashboard`), alert centers, schedules, and billing controls.
-4.  **HQ Admin Shell (Control Plane):** Global portfolio governance. Focuses on tenant MRR, module toggles, and system template definitions (`/verity/*`).
-
----
-
-## 4. Operational Execution Roadmap
-
-1.  **Phase 1: Design System (Completed):** Integrated the unified light/dark glassmorphic variables, floating app shell panels, and `.verity-glass` cards.
-2.  **Phase 2: Role Shells:** Segregating the routes cleanly into Customer, Employee, and Owner layouts.
-3.  **Phase 3: Event Engine:** Wiring the prisma event bus to automatically trigger downstream actions (e.g. `booking.completed` -> `billing.trigger`).
-4.  **Phase 4: Restaurant OS:** Building interactive, draggable floor layout grids and KDS bump stations.
-5.  **Phase 5: Lifestyle OS:** Implementing staff booking utilization schedules and walk-in check-in queues.
-6.  **Phase 6: HQ Control:** Enhancing portfolio-level billing trackers and provisioning templates.
+All interfaces must respect the unified glassmorphism system:
+*   **Surface:** `.verity-glass` cards with `backdrop-filter: blur(20px)` active on both light (`rgba(255,255,255,0.65)`) and dark (`rgba(255,255,255,0.035)`) modes.
+*   **Geometry:** High corner rounded profiles (`rounded-[24px]` / `rounded-[32px]`) for structural panels.
+*   **Contrast Safety:** Controls must clear the WCAG 3:1 contrast floor, while decorative card borders must remain visible (contrast ratio of 2:1 or higher).
