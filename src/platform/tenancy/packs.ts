@@ -12,7 +12,7 @@ import { type ModuleKey, withDependencies } from "@/platform/modules/registry";
 
 /** Modules a new tenant starts with unless told otherwise. */
 export const DEFAULT_MODULES: ModuleKey[] = [
-  "core", "inventory", "manufacturing", "quality", "procurement", "sales", "hr",
+  "core", "inventory", "quality", "procurement", "sales", "hr",
 ];
 
 /**
@@ -22,12 +22,13 @@ export const DEFAULT_MODULES: ModuleKey[] = [
  * ("what kind of business are you?") instead of twenty they cannot ("do you
  * want the assets module?").
  *
- * **Deliberately four.** There were twenty-two, each a plausible bundle nobody
+ * **Deliberately three.** There were twenty-two, each a plausible bundle nobody
  * had sold to. A pack is a promise that the product is *tuned* for that
  * business — it decides the dashboard a tenant lands on — and twenty-two of
- * those promises could not be kept. These four have a named prospect or a built
- * dashboard behind them. Adding a fifth is cheap; it should follow a customer,
- * not precede one.
+ * those promises could not be kept. `auto_components` was the fourth survivor
+ * until the MES layer it stood on was withdrawn; a pack whose modules no longer
+ * exist is a promise that cannot be kept either. Adding a fourth back is cheap;
+ * it should follow a customer, not precede one.
  *
  * `withDependencies()` fills in transitive requirements, so a pack lists only
  * what it actually cares about.
@@ -36,21 +37,6 @@ export const VERTICAL_PACKS: Record<
   string,
   { label: string; modules: ModuleKey[]; dashboardWidgets?: string[] }
 > = {
-  auto_components: {
-    label: "Auto Components",
-    modules: ["core", "hr", "inventory", "manufacturing", "quality", "procurement", "sales", "automotive"],
-    // The floor, read top to bottom: the numbers, then where the work is, then the
-    // detail panels, then the queue you work once you have read the floor.
-    dashboardWidgets: [
-      "factory_metrics",
-      "production_funnel",
-      "floor_progress",
-      "factory_signals",
-      "quality_pareto",
-      "factory_feed",
-      "operational_warnings",
-    ],
-  },
   facility_management: {
     label: "Facility Management",
     modules: ["core", "hr", "sites", "scheduling", "helpdesk", "assets", "quality", "procurement", "billing"],
@@ -115,15 +101,23 @@ const RETIRED_PACKS: Record<string, VerticalPackKey> = {
   professional_services: "facility_management",
   digital_creative: "facility_management",
   events_hospitality: "facility_management",
-  garments_textiles: "auto_components",
-  furniture_manufacturing: "auto_components",
-  engineering_fabrication: "auto_components",
-  packaging: "auto_components",
-  electronics: "auto_components",
-  food_beverage: "auto_components",
-  jewellery: "auto_components",
-  footwear_leather: "auto_components",
-  printing: "auto_components",
+  /*
+   * The manufacturing keys, including `auto_components` itself. The MES layer -
+   * blueprints, routing, work orders, job cards, stage capture - was withdrawn
+   * along with the `manufacturing` and `automotive` modules, so there is no
+   * pack that makes a shop floor any more. They resolve to the retail pack
+   * because what survives for these tenants is a catalogue, stock and orders.
+   */
+  auto_components: "franchise_retail",
+  garments_textiles: "franchise_retail",
+  furniture_manufacturing: "franchise_retail",
+  engineering_fabrication: "franchise_retail",
+  packaging: "franchise_retail",
+  electronics: "franchise_retail",
+  food_beverage: "franchise_retail",
+  jewellery: "franchise_retail",
+  footwear_leather: "franchise_retail",
+  printing: "franchise_retail",
 };
 
 const slugify = (value: string) =>
@@ -174,8 +168,8 @@ export function verticalPackOptions(): { key: string; label: string; modules: Mo
  * The modules a pack resolves to, or the defaults if the key means nothing.
  * Goes through `resolvePackKey`, so a retired key still resolves to the pack
  * that replaced it rather than silently collapsing to DEFAULT_MODULES — which
- * would quietly hand a facility-management tenant the manufacturing bundle and
- * no sites module.
+ * would quietly hand a facility-management tenant the default bundle and no
+ * sites module.
  */
 export function modulesForPack(packKey: string | null | undefined): ModuleKey[] {
   const resolved = resolvePackKey(packKey);

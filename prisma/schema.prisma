@@ -37,97 +37,13 @@ enum ItemType {
   SERVICE
 }
 
-// The owner-defined item tree: six seeded roots (Raw Material, Semi-Finished,
-// Finished Good, Consumable, Packaging, Trading Goods) with any depth of
-// subgroups beneath them. A group carries the spec fields its items answer and
-// the templates that turn those answers into a name and a code.
-model ItemGroup {
-  id                String              @id @default(cuid())
-  factoryId         String
-  parentId          String?
-  parent            ItemGroup?          @relation("ItemGroupTree", fields: [parentId], references: [id], onDelete: Restrict)
-  children          ItemGroup[]         @relation("ItemGroupTree")
-  name              String
-  // Feeds {group} in code templates, e.g. "SC" for Seat Cover.
-  shortCode         String?
-  // Root groups define the type; children inherit it at read time.
-  itemType          ItemType
-  nameTemplate      String?
-  codeTemplate      String?
-  /// Per-group headers for the three built-in columns. Null means "use the
-  /// default word". The row's identity columns cannot be hidden; the alias can,
-  /// because record sheets reuse that slot for their own meaning.
-  codeLabel         String?
-  nameLabel         String?
-  aliasLabel        String?
-  aliasHidden       Boolean             @default(false)
-  isProducible      Boolean             @default(false)
-  isPurchasable     Boolean             @default(false)
-  isSalable         Boolean             @default(false)
-  hasBOM            Boolean             @default(false)
-  hasQC             Boolean             @default(false)
-  hasRouting        Boolean             @default(false)
-  hasCAD            Boolean             @default(false)
-  /// Whether this category's items are physically stocked and bought — i.e. do
-  /// they need units, conversions and an alias at all. Vehicles, Brands, Designs
-  /// and Colours are attributes, not stock: their SKU form hides Identity &
-  /// Units, and the BOM component search skips them.
-  hasInventoryUnits Boolean             @default(true)
-  /// Which BOM editor this category's items get, and what the wizard's BOM
-  /// button writes.
-  ///
-  /// This used to be inferred — isProducible AND stocked AND not bought meant
-  /// "recipe", a category nothing referenced meant "neither" — which was a
-  /// guess about the factory's intent dressed up as a rule. A factory that
-  /// wants recipes on its raw materials, or ingredients on a semi-finished
-  /// good, now says so instead of fighting the inference.
-  ///
-  /// OFF          no BOM editor at all
-  /// RECIPE       an assembly recipe of its own, plus per-SKU overrides
-  /// INGREDIENTS  components it hands to whatever picks it
-  ///
-  /// Nullable, and null does NOT mean OFF — it means "inherit from my parent",
-  /// resolved by `resolveBomMode`. A factory that sets RECIPE on "Seat Covers"
-  /// wants it on "Seat Covers > Bucket" too, and previously had to set it on
-  /// every child and keep them in step. Existing rows hold an explicit OFF and
-  /// are unaffected; only categories created after this can inherit.
-  bomMode           BomMode?
-  /// A checklist any category can carry, not only producible ones — and not
-  /// only for QC. Cutting and Packing run one too.
-  /// Many-to-many: a category runs one checklist per department, so "Seat Cover"
-  /// is on the Cutting list and the Stitching list at the same time. A single FK
-  /// here meant ticking it on one template silently unticked it everywhere else.
-  defaultChecklists ChecklistTemplate[] @relation("ItemGroupDefaultChecklist")
-  /// Ordered departments copied into BlueprintRouteStep at item creation:
-  /// [{ departmentId, estimatedTimeMins }]. A list, not a table —
-  /// BlueprintRouteStep already carries the real per-step shape.
-  defaultRouteJson  Json?
-  // Root groups render as a tab in the Master Data Studio.
-  isSheet           Boolean             @default(false)
-  /// Seeded roots the backend depends on (Finished Good, Raw Material, ...).
-  /// They may be renamed for the factory's own vocabulary, but never deleted and
-  /// never retyped: order booking, stock and production all key off their type.
-  isSystem          Boolean             @default(false)
-  sortOrder         Int                 @default(0)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-
-  specFields       SpecField[]
-  referencedBy     SpecField[]       @relation("SpecFieldTarget")
-  items            ItemMaster[]
-  bomTemplateLines BomTemplateLine[]
-
-  @@unique([factoryId, parentId, name])
-  @@index([factoryId])
-}
-
 enum SpecFieldKind {
   VALUE
   OPTION
   REFERENCE
 }
 
-/// What a REFERENCE field points at. ITEM_GROUP resolves to ItemMaster rows in
+/// What a REFERENCE field points at. ITEM_GROUP resolves to Product rows in
 /// that group; every other value resolves to an attribute master.
 enum SpecRefTarget {
   ITEM_GROUP
@@ -143,80 +59,6 @@ enum SpecRefTarget {
   EMPLOYEE
   DEPARTMENT
   MACHINE
-}
-
-// One field on a group's spec sheet. Inherited by every descendant group, so
-// "GSM" defined on Fabric is answered by Leatherite and Suede items too.
-model SpecField {
-  id         String        @id @default(cuid())
-  factoryId  String
-  groupId    String
-  group      ItemGroup     @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  name       String
-  /// Token used in name/code templates, e.g. "brand" for {brand}.
-  key        String
-  kind       SpecFieldKind
-  /// VALUE only. Reuses the existing FieldType enum.
-  valueType  FieldType?
-  /// VALUE only. Rendered after the value: 4 + "HDR" -> "4HDR".
-  unitSuffix String?
-
-  /// REFERENCE only.
-  refTarget          SpecRefTarget?
-  targetGroupId      String?
-  targetGroup        ItemGroup?     @relation("SpecFieldTarget", fields: [targetGroupId], references: [id], onDelete: Restrict)
-  includeDescendants Boolean        @default(true)
-  /// REFERENCE only. Which column of the target category this picks from.
-  ///
-  /// Null keeps the original behaviour: pick a whole record, shown by its name.
-  /// Set means the dropdown offers that column's values instead — a Seat Cover
-  /// linking to Vehicle > Car and showing its Brand column offers Tata and
-  /// Maruti, not the vehicles themselves.
-  ///
-  /// Restrict, not SetNull: silently falling back to the record list would put
-  /// every vehicle in a dropdown that has only ever shown brands, and the owner
-  /// would have no idea why.
-  targetFieldId      String?
-  targetField        SpecField?     @relation("SpecFieldColumn", fields: [targetFieldId], references: [id], onDelete: Restrict)
-  displayedBy        SpecField[]    @relation("SpecFieldColumn")
-  dependsOnFieldId   String?
-  dependsOn          SpecField?     @relation("SpecFieldDeps", fields: [dependsOnFieldId], references: [id], onDelete: SetNull)
-  dependents         SpecField[]    @relation("SpecFieldDeps")
-
-  isRequired Boolean   @default(false)
-  sortOrder  Int       @default(0)
-  /// Soft delete. Archived fields keep their stored answers.
-  archivedAt DateTime?
-  createdAt  DateTime  @default(now())
-
-  options                     SpecFieldOption[]
-  values                      ItemFieldValue[]
-  bomLines                    BomTemplateLine[] @relation("BomTemplateSourceField")
-  bomTemplateQuantityFrom     BomTemplateLine[] @relation("BomTemplateQuantityFrom")
-  bomTemplateQuantityVia      BomTemplateLine[] @relation("BomTemplateQuantityVia")
-  bomContributionSlots        BomContribution[] @relation("BomContributionSource")
-  bomContributionQuantityFrom BomContribution[] @relation("BomContributionQuantityFrom")
-
-  @@unique([groupId, key])
-  @@index([factoryId])
-}
-
-model SpecFieldOption {
-  id        String    @id @default(cuid())
-  fieldId   String
-  field     SpecField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
-  /// Stored identity.
-  value     String
-  /// Shown in the dropdown and printed by the name template.
-  label     String
-  /// Printed by the code template, e.g. "DB".
-  shortCode String?
-  sortOrder Int       @default(0)
-
-  values        ItemFieldValue[]
-  contributions BomContribution[]
-
-  @@unique([fieldId, value])
 }
 
 enum QCStatus {
@@ -333,7 +175,6 @@ model WorkflowStage {
   updatedAt      DateTime @updatedAt
 
   factory  Factory   @relation(fields: [factoryId], references: [id], onDelete: Restrict)
-  jobCards JobCard[]
   roleId   String?
 
   @@index([factoryId])
@@ -367,7 +208,6 @@ model User {
 
   employeeProfile EmployeeProfile?
   notifications   Notification[]
-  jobCards        JobCard[]
   inspectedOrders SalesOrder[]     @relation("OrderInspector")
 
   // A worker/inspector belongs to one department (the stage they staff). Role
@@ -425,8 +265,6 @@ model Department {
   createdAt        DateTime @default(now())
 
   members        User[]               @relation("DepartmentMembers")
-  jobCards       JobCard[]
-  routeSteps     BlueprintRouteStep[]
   /// Checklist templates dedicated to this department.
   ownedTemplates ChecklistTemplate[]  @relation("DepartmentTemplates")
 
@@ -535,7 +373,7 @@ model Approval {
 // INVENTORY ENGINE (Material Movement)
 // ==========================================
 
-model ItemMaster {
+model Product {
   id              String               @id @default(cuid())
   factoryId       String
   name            String
@@ -569,16 +407,10 @@ model ItemMaster {
 
   // Spec engine. The group supplies the fields this item answers, the name and
   // code templates, and (later) the BOM template.
-  groupId           String?
-  group             ItemGroup?        @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  manufacturingType ManufacturingType @default(BUY)
-  /// Stable hash of (groupId, all answers). The item's real identity.
-  specHash          String?
 
   conversions               UOMConversion[]
   stockLedgerEntries        StockLedgerEntry[]
   binBalances               BinBalance[]
-  bomItems                  BOMItem[]             @relation("MaterialUsed")
   purchaseOrderItems        PurchaseOrderItem[]
   salesOrders               SalesOrder[]          @relation("OrderMaterial")
   salesOrdersAsColour       SalesOrder[]          @relation("OrderColour")
@@ -586,187 +418,18 @@ model ItemMaster {
   salesOrdersAsVehicleBrand SalesOrder[]          @relation("OrderVehicleBrand")
   salesOrdersAsVehicleModel SalesOrder[]          @relation("OrderVehicleModel")
   reservations              MaterialReservation[] @relation("ReservedMaterial")
-  specValues                ItemFieldValue[]
-  referencedBy              ItemFieldValue[]      @relation("SpecItemRef")
-  bomTemplateLines          BomTemplateLine[]     @relation("BomTemplateItem")
-  bomContributedBy          BomContribution[]     @relation("BomContributionOwner")
-  bomContributesTo          BomContribution[]     @relation("BomContributionComponent")
-  bomOverrides              ItemBomOverride[]     @relation("ItemBomOverrideOwner")
-  bomOverriddenIn           ItemBomOverride[]     @relation("ItemBomOverrideComponent")
-  blueprint                 Blueprint?
   salesOrdersAsItem         SalesOrder[]          @relation("OrderItem")
   salesOrderLines           SalesOrderItem[]      @relation("SalesOrderLineItem")
 
   @@unique([factoryId, itemCode])
-  @@unique([factoryId, specHash])
   @@index([factoryId])
-  @@index([groupId])
-}
-
-/// Decides whether an item has a BOM. Not derivable from ItemType: a
-/// consumable is bought, a semi-finished is made, some items are both.
-enum ManufacturingType {
-  MAKE
-  BUY
-  BOTH
-}
-
-// One answer to one spec field. Normalized rather than a JSON blob so that
-// "every item using Leatherite Beige" is a join, and so item references carry a
-// real foreign key.
-model ItemFieldValue {
-  id        String     @id @default(cuid())
-  factoryId String
-  itemId    String
-  item      ItemMaster @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  fieldId   String
-  field     SpecField  @relation(fields: [fieldId], references: [id], onDelete: Cascade)
-
-  valueText   String?
-  valueNumber Float?
-  valueBool   Boolean?
-
-  optionId String?
-  option   SpecFieldOption? @relation(fields: [optionId], references: [id], onDelete: Restrict)
-
-  /// REFERENCE to another item. Real FK — these become BOM lines.
-  valueItemId String?
-  valueItem   ItemMaster? @relation("SpecItemRef", fields: [valueItemId], references: [id], onDelete: Restrict)
-
-  /// REFERENCE to an attribute master (vehicle/design/colour). No FK is possible
-  /// because the target table varies by SpecField.refTarget.
-  valueRefId String?
-
-  @@unique([itemId, fieldId])
-  @@index([valueItemId])
-  @@index([factoryId, fieldId])
-}
-
-// A line in a group's BOM recipe. The component is either a fixed item or
-// whatever item was answered in a reference field — which is what lets filling
-// the spec produce the bill of materials.
-model BomTemplateLine {
-  id        String    @id @default(cuid())
-  factoryId String
-  groupId   String
-  group     ItemGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-
-  /// Fixed component.
-  itemId String?
-  item   ItemMaster? @relation("BomTemplateItem", fields: [itemId], references: [id], onDelete: Restrict)
-
-  /// Component taken from a reference field's answer.
-  sourceFieldId String?
-  sourceField   SpecField? @relation("BomTemplateSourceField", fields: [sourceFieldId], references: [id], onDelete: Cascade)
-
-  quantity     Float   @default(1)
-  /// When set, quantity comes from the named source instead of the fixed value.
-  /// Supported: "design.fabricConsumption".
-  quantityFrom String?
-  wastePercent Float   @default(0)
-  sortOrder    Int     @default(0)
-
-  quantityFromFieldId String?
-  quantityFromField   SpecField? @relation("BomTemplateQuantityFrom", fields: [quantityFromFieldId], references: [id], onDelete: SetNull)
-
-  quantityViaFieldId String?
-  quantityViaField   SpecField? @relation("BomTemplateQuantityVia", fields: [quantityViaFieldId], references: [id], onDelete: SetNull)
-
-  @@index([factoryId])
-  @@index([groupId])
-}
-
-/// A component brought in by *choosing a value*, rather than by belonging to a
-/// category.
-///
-/// This is SAP's object dependency, minus the rule language: instead of writing
-/// a condition on a BOM line, the owner attaches the component to the value that
-/// requires it. Picking the design "ERGO FIT Vertex" on any finished good brings
-/// its piping and thread along, entered once and reused across every vehicle.
-///
-/// Deliberately not restricted to designs. If a fabric turns out to need a
-/// backing sheet, the owner attaches it to that fabric and it composes in — being
-/// wrong about which kinds of value carry components is a likelier failure than
-/// the owner misusing the freedom.
-model BomContribution {
-  id        String @id @default(cuid())
-  factoryId String
-
-  /// Exactly one of these owns the contribution — enforced in the action, since
-  /// the DB cannot express "exactly one of three".
-  /// A chosen option, e.g. "With Armrest".
-  optionId    String?
-  option      SpecFieldOption? @relation(fields: [optionId], references: [id], onDelete: Cascade)
-  /// A referenced master record, e.g. a Design.
-  refId       String?
-  /// A specific item, e.g. the fabric Suede Grey.
-  ownerItemId String?
-  ownerItem   ItemMaster?      @relation("BomContributionOwner", fields: [ownerItemId], references: [id], onDelete: Cascade)
-
-  /// The component it brings: either a fixed item...
-  componentItemId String?
-  componentItem   ItemMaster? @relation("BomContributionComponent", fields: [componentItemId], references: [id], onDelete: Restrict)
-  /// ...or whatever was answered in this field — the "[fabric slot]".
-  sourceFieldId   String?
-  sourceField     SpecField?  @relation("BomContributionSource", fields: [sourceFieldId], references: [id], onDelete: Cascade)
-
-  quantity     Float   @default(1)
-  quantityFrom String?
-  wastePercent Float   @default(0)
-  sortOrder    Int     @default(0)
-
-  quantityFromFieldId String?
-  quantityFromField   SpecField? @relation("BomContributionQuantityFrom", fields: [quantityFromFieldId], references: [id], onDelete: SetNull)
-
-  @@index([factoryId])
-  @@index([optionId])
-  @@index([refId])
-  @@index([ownerItemId])
-}
-
-/// One item's departure from what its category and contributions produce.
-///
-/// Separate from BomTemplateLine because an override can *remove* an inherited
-/// line, and "a template line that means delete something" would be a trap on a
-/// table whose other rows mean the opposite.
-model ItemBomOverride {
-  id        String @id @default(cuid())
-  factoryId String
-
-  itemId String
-  item   ItemMaster @relation("ItemBomOverrideOwner", fields: [itemId], references: [id], onDelete: Cascade)
-
-  componentItemId String
-  componentItem   ItemMaster @relation("ItemBomOverrideComponent", fields: [componentItemId], references: [id], onDelete: Restrict)
-
-  /// Drop this component for this item, whatever the recipe says.
-  removed Boolean @default(false)
-
-  quantity     Float @default(1)
-  wastePercent Float @default(0)
-  sortOrder    Int   @default(0)
-
-  @@unique([itemId, componentItemId])
-  @@index([factoryId])
-}
-
-// Owner-defined custom field that applies to every item. Values are stored in
-// ItemMaster.customFields keyed by this id.
-model ItemFieldDefinition {
-  id        String   @id @default(cuid())
-  factoryId String
-  name      String
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-
-  @@index([factoryId])
-}
+  }
 
 model MaterialCategory {
   id            String                @id @default(cuid())
   factoryId     String
   name          String
-  materials     ItemMaster[]
+  materials     Product[]
   subcategories MaterialSubcategory[]
 
   @@unique([factoryId, name])
@@ -778,7 +441,7 @@ model MaterialSubcategory {
   categoryId String
   category   MaterialCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   name       String
-  items      ItemMaster[]
+  items      Product[]
 
   @@unique([factoryId, categoryId, name])
   @@index([factoryId])
@@ -787,7 +450,7 @@ model MaterialSubcategory {
 model UOMConversion {
   id               String     @id @default(cuid())
   itemId           String
-  item             ItemMaster @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  item             Product @relation(fields: [itemId], references: [id], onDelete: Cascade)
   fromUOM          String
   toUOM            String
   conversionFactor Float
@@ -850,7 +513,7 @@ model StockLedgerEntry {
   factoryId        String
   transactionType  String // RECEIPT, ISSUE, TRANSFER, ADJUSTMENT
   itemId           String
-  item             ItemMaster   @relation(fields: [itemId], references: [id])
+  item             Product   @relation(fields: [itemId], references: [id])
   binId            String
   bin              WarehouseBin @relation(fields: [binId], references: [id])
   quantityChange   Float
@@ -876,7 +539,7 @@ model BinBalance {
   id             String       @id @default(cuid())
   factoryId      String
   itemId         String
-  item           ItemMaster   @relation(fields: [itemId], references: [id])
+  item           Product   @relation(fields: [itemId], references: [id])
   binId          String
   bin            WarehouseBin @relation(fields: [binId], references: [id])
   stockAvailable Float        @default(0)
@@ -894,16 +557,13 @@ model MaterialReservation {
   id               String     @id @default(cuid())
   factoryId        String
   itemId           String
-  item             ItemMaster @relation("ReservedMaterial", fields: [itemId], references: [id])
+  item             Product @relation("ReservedMaterial", fields: [itemId], references: [id])
   quantity         Float
   productionPlanId String?
-  workOrderId      String?
-  workOrder        WorkOrder? @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
   status           String     @default("ACTIVE") // ACTIVE, CONSUMED, CANCELLED
   createdAt        DateTime   @default(now())
 
   @@index([factoryId])
-  @@index([workOrderId])
 }
 
 model Dispatch {
@@ -934,66 +594,11 @@ model Dispatch {
 // ==========================================
 
 // Retired: ProductCategory / Product / ProductVariant. Production keys on the
-// finished-good ItemMaster and its ItemGroup now.
+// finished-good Product and its ItemGroup now.
 
 // ==========================================
 // BLUEPRINT ENGINE (The DNA)
 // ==========================================
-
-model Blueprint {
-  id              String     @id @default(cuid())
-  factoryId       String
-  // The blueprint now hangs off the item: production is planned against what is
-  // made, and what is made is an item.
-  itemId          String     @unique
-  item            ItemMaster @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  activeVersionId String? // Points to BlueprintVersion.id
-
-  versions BlueprintVersion[]
-}
-
-model BlueprintVersion {
-  id                String             @id @default(cuid())
-  blueprintId       String
-  blueprint         Blueprint          @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
-  versionNumber     Int
-  name              String // e.g. "V1 - Standard Routing"
-  estimatedTimeMins Float              @default(0)
-  qcTemplateId      String?
-  qcTemplate        ChecklistTemplate? @relation(fields: [qcTemplateId], references: [id])
-  isActive          Boolean            @default(false)
-  createdAt         DateTime           @default(now())
-
-  bom             BOM?
-  routeSteps      BlueprintRouteStep[]
-  documents       FactoryDocument[]
-  productionPlans ProductionPlan[]
-  salesOrderItems SalesOrderItem[]
-
-  @@unique([blueprintId, versionNumber])
-}
-
-model BlueprintRouteStep {
-  id                 String           @id @default(cuid())
-  blueprintVersionId String
-  blueprintVersion   BlueprintVersion @relation(fields: [blueprintVersionId], references: [id], onDelete: Cascade)
-  departmentId       String
-  department         Department       @relation(fields: [departmentId], references: [id])
-  sequence           Int
-  estimatedTimeMins  Float            @default(0)
-  requiredSkills     String[]
-  instructions       String?          @db.Text
-}
-
-model FactoryDocument {
-  id                 String           @id @default(cuid())
-  blueprintVersionId String
-  blueprintVersion   BlueprintVersion @relation(fields: [blueprintVersionId], references: [id], onDelete: Cascade)
-  title              String
-  fileUrl            String
-  documentType       String // DRAWING, VIDEO, GUIDE
-  createdAt          DateTime         @default(now())
-}
 
 // ==========================================
 // VEHICLE FITMENT ENGINE
@@ -1051,7 +656,7 @@ model PurchaseOrderItem {
   purchaseOrderId String
   purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   materialId      String
-  material        ItemMaster    @relation(fields: [materialId], references: [id])
+  material        Product    @relation(fields: [materialId], references: [id])
   quantity        Float
   rate            Float         @default(0)
   receivedQty     Float         @default(0) // cumulative qty received across GRNs
@@ -1093,119 +698,6 @@ model PurchaseInvoice {
 // ==========================================
 // MANUFACTURING ENGINE
 // ==========================================
-
-model BOM {
-  id                 String           @id @default(cuid())
-  factoryId          String
-  blueprintVersionId String           @unique
-  blueprintVersion   BlueprintVersion @relation(fields: [blueprintVersionId], references: [id], onDelete: Cascade)
-  items              BOMItem[]
-}
-
-model BOMItem {
-  id           String     @id @default(cuid())
-  bomId        String
-  bom          BOM        @relation(fields: [bomId], references: [id], onDelete: Cascade)
-  itemId       String
-  item         ItemMaster @relation("MaterialUsed", fields: [itemId], references: [id])
-  quantity     Float
-  wastePercent Float      @default(0)
-}
-
-model ProductionPlan {
-  id                 String           @id @default(cuid())
-  factoryId          String
-  salesOrderId       String?
-  salesOrder         SalesOrder?      @relation(fields: [salesOrderId], references: [id])
-  blueprintVersionId String
-  blueprintVersion   BlueprintVersion @relation(fields: [blueprintVersionId], references: [id])
-  quantity           Float
-  priority           String           @default("NORMAL") // URGENT, NORMAL, LOW
-  status             String           @default("PENDING") // PENDING, RELEASED, CANCELLED
-  targetStartDate    DateTime?
-  createdAt          DateTime         @default(now())
-
-  workOrders WorkOrder[]
-}
-
-model WorkOrder {
-  id               String         @id @default(cuid())
-  factoryId        String
-  woNumber         String         @unique
-  productionPlanId String
-  productionPlan   ProductionPlan @relation(fields: [productionPlanId], references: [id])
-  status           String         @default("PLANNED") // PLANNED, IN_PROGRESS, COMPLETED
-  targetQty        Float
-  producedQty      Float          @default(0)
-  startDate        DateTime?
-  endDate          DateTime?
-
-  jobCards     JobCard[]
-  reservations MaterialReservation[]
-}
-
-model JobCard {
-  id            String         @id @default(cuid())
-  factoryId     String
-  workOrderId   String
-  workOrder     WorkOrder      @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
-  departmentId  String
-  department    Department     @relation(fields: [departmentId], references: [id])
-  sequence      Int
-  status        String         @default("WAITING") // WAITING, IN_PROGRESS, ON_HOLD, BLOCKED, QC_PENDING, REWORK_REQUIRED, COMPLETED
-  stageId       String? // Workflow stage this card executes (null on legacy single-card orders)
-  stage         WorkflowStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
-  reworkReason  String? // Pinned QC rejection reason while status is REWORK_REQUIRED
-  assignedToId  String?
-  assignedTo    User?          @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
-  createdAt     DateTime       @default(now())
-  targetQty     Float
-  completedQty  Float          @default(0)
-  timeSpentMins Float          @default(0)
-  startedAt     DateTime?
-  completedAt   DateTime?
-
-  inspection   Inspection?
-  stageEntries StageEntry[]
-
-  // The QC/checklist template this card ran, pinned at creation so the order
-  // review shows exactly which template each department used (product-based:
-  // mats and seat covers resolve to different templates). Null on legacy cards.
-  templateId String?
-  template   ChecklistTemplate? @relation("JobCardTemplate", fields: [templateId], references: [id], onDelete: SetNull)
-
-  @@index([factoryId])
-  @@index([workOrderId])
-}
-
-// A stage submission: what the operator captured when working a stage card.
-// One row per submission attempt, so rework history is preserved.
-model StageEntry {
-  id               String   @id @default(cuid())
-  factoryId        String
-  jobCardId        String
-  jobCard          JobCard  @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
-  submittedById    String?
-  beforeImages     Json? // array of public URLs
-  afterImages      Json? // array of public URLs
-  measurements     String?
-  materialNotes    String?
-  remarks          String?
-  // Department stage-checklist results when the stage carries a template:
-  // [{ checkpointId, name, ok, value, remarks, images: [publicUrl] }]
-  checklist        Json?
-  // Walkthrough video for stages whose template asks for one (e.g. Packing).
-  // QC records its clip on the Inspection; a department stage has none, so the
-  // clip lives here.
-  videoUrl         String?
-  videoPath        String?
-  videoDurationSec Int?
-  outcome          String   @default("SUBMITTED") // SUBMITTED, APPROVED, REWORK
-  createdAt        DateTime @default(now())
-
-  @@index([jobCardId])
-  @@index([factoryId])
-}
 
 // ==========================================
 // CRM & SALES ENGINE
@@ -1290,7 +782,7 @@ model SalesOrder {
   // Restrict, not SetNull: an order silently losing the item it was placed
   // for is worse than a refused delete, and every other reference (BOM, stock)
   // already refuses.
-  item   ItemMaster? @relation("OrderItem", fields: [itemId], references: [id], onDelete: Restrict)
+  item   Product? @relation("OrderItem", fields: [itemId], references: [id], onDelete: Restrict)
 
   // Denormalised copies of the item's spec, kept because dashboard, floor,
   // reports, labels and CAD read them directly for display. They are written
@@ -1298,14 +790,14 @@ model SalesOrder {
   // it — but they are a display cache, NOT a second source of truth. Never
   // branch production logic on these; read `item` instead.
   materialId            String?
-  material              ItemMaster?      @relation("OrderMaterial", fields: [materialId], references: [id], onDelete: SetNull)
+  material              Product?      @relation("OrderMaterial", fields: [materialId], references: [id], onDelete: SetNull)
   designId              String?
-  design                ItemMaster?      @relation("OrderDesign", fields: [designId], references: [id], onDelete: SetNull)
+  design                Product?      @relation("OrderDesign", fields: [designId], references: [id], onDelete: SetNull)
   // Colours are ordinary items in an ordinary category now, so the order points
-  // at ItemMaster like it does for material. The column name stays `colorId` —
+  // at Product like it does for material. The column name stays `colorId` —
   // renaming it would touch every caller for no gain.
   colorId               String?
-  color                 ItemMaster?      @relation("OrderColour", fields: [colorId], references: [id], onDelete: SetNull)
+  color                 Product?      @relation("OrderColour", fields: [colorId], references: [id], onDelete: SetNull)
   // Legacy ProductType id, kept as a bare column; the ProductType table is gone.
   productTypeId         String?
   inspectorId           String?
@@ -1331,9 +823,9 @@ model SalesOrder {
   // (shared) product variant, so two orders of the same product type showed
   // each other's vehicle. These columns give every order its own identity.
   vehicleBrandId        String?
-  vehicleBrand          ItemMaster?      @relation("OrderVehicleBrand", fields: [vehicleBrandId], references: [id], onDelete: SetNull)
+  vehicleBrand          Product?      @relation("OrderVehicleBrand", fields: [vehicleBrandId], references: [id], onDelete: SetNull)
   vehicleModelId        String?
-  vehicleModel          ItemMaster?      @relation("OrderVehicleModel", fields: [vehicleModelId], references: [id], onDelete: SetNull)
+  vehicleModel          Product?      @relation("OrderVehicleModel", fields: [vehicleModelId], references: [id], onDelete: SetNull)
   vehicleYear           String?
   seatType              String?
   hasArmrest            Boolean          @default(false)
@@ -1344,7 +836,6 @@ model SalesOrder {
 
   customer    Customer         @relation(fields: [customerId], references: [id])
   items       SalesOrderItem[]
-  plans       ProductionPlan[]
   dispatches  Dispatch[]
   productType ProductType?     @relation(fields: [productTypeId], references: [id])
 }
@@ -1396,13 +887,11 @@ model SalesOrderItem {
   // The finished good this line produces — the source of truth now that
   // Product / ProductVariant are being retired.
   itemId             String?
-  item               ItemMaster?       @relation("SalesOrderLineItem", fields: [itemId], references: [id], onDelete: Restrict)
+  item               Product?       @relation("SalesOrderLineItem", fields: [itemId], references: [id], onDelete: Restrict)
   // Legacy sales-variant id, kept as a bare column; the ProductVariant table is
   // gone. Order lines resolve through itemId.
   productVariantId   String?
   quantity           Float
-  blueprintVersionId String?
-  blueprintVersion   BlueprintVersion? @relation(fields: [blueprintVersionId], references: [id])
   unitPrice          Float
 }
 
@@ -1494,15 +983,12 @@ model ChecklistTemplate {
   ownerDepartment   Department?         @relation("DepartmentTemplates", fields: [ownerDepartmentId], references: [id], onDelete: SetNull)
 
   sections             TemplateSection[]
-  jobCards             JobCard[]         @relation("JobCardTemplate")
-  defaultForItemGroups ItemGroup[]       @relation("ItemGroupDefaultChecklist")
 
   /// Service work orders that run this checklist on completion. A checklist is
   /// stage-shaped, so it serves a site visit as readily as a production stage.
   serviceWorkOrders  ServiceWorkOrder[]  @relation("ServiceWOChecklist")
   serviceInspections ServiceInspection[] @relation("ServiceInspectionChecklist")
 
-  blueprintVersions BlueprintVersion[]
 
   @@index([factoryId])
   @@index([parentTemplateId])
@@ -1565,119 +1051,10 @@ model Checkpoint {
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
 
-  submissions        CheckpointSubmission[]
   serviceSubmissions ServiceCheckpointSubmission[]
 
   @@index([factoryId])
   @@index([sectionId])
-}
-
-model Inspection {
-  id          String    @id @default(cuid())
-  factoryId   String
-  jobCardId   String    @unique
-  jobCard     JobCard   @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
-  status      QCStatus  @default(IN_PROGRESS)
-  startedAt   DateTime?
-  submittedAt DateTime?
-  approvedAt  DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  // A short walkthrough video of the finished piece (30–60s), captured during
-  // QC. Photos prove individual checkpoints; the video proves the whole item
-  // and is the strongest evidence in a customer dispute.
-  videoUrl          String?
-  videoPath         String?
-  videoDurationSec  Float?
-  videoUploadedAt   DateTime?
-  videoUploadedById String?
-
-  submissions   CheckpointSubmission[]
-  approval      QualityApproval?
-  report        QualityReport?
-  reworkRecords ReworkRecord[]
-
-  @@index([factoryId])
-  @@index([factoryId, status])
-}
-
-model CheckpointSubmission {
-  id                 String     @id @default(cuid())
-  factoryId          String
-  inspectionId       String
-  inspection         Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
-  checkpointId       String
-  checkpoint         Checkpoint @relation(fields: [checkpointId], references: [id], onDelete: Cascade)
-  passFail           String?
-  /// What was done about an out-of-range reading. Required when a ranged
-  /// checkpoint breaches, because a recorded breach with no action is an audit
-  /// finding rather than a record of one being handled.
-  correctiveAction   String?
-  /// The typed answer for non pass/fail checkpoints (text, number, measurement).
-  value              String?
-  remarks            String?
-  completedAt        DateTime?
-  verificationStatus String?
-  inspectorComment   String?
-  verifiedAt         DateTime?
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
-
-  evidences ImageEvidence[]
-
-  @@index([factoryId])
-  @@index([inspectionId])
-}
-
-model ImageEvidence {
-  id           String               @id @default(cuid())
-  factoryId    String
-  submissionId String
-  submission   CheckpointSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  storageKey   String
-  publicUrl    String
-  mimeType     String
-  uploadedById String? // who captured this evidence photo
-  createdAt    DateTime             @default(now())
-}
-
-model QualityApproval {
-  id           String     @id @default(cuid())
-  factoryId    String
-  inspectionId String     @unique
-  inspection   Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
-  inspectorId  String
-  status       String
-  comments     String?
-  createdAt    DateTime   @default(now())
-}
-
-model QualityReport {
-  id               String     @id @default(cuid())
-  factoryId        String
-  inspectionId     String     @unique
-  inspection       Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
-  verificationCode String     @unique
-  pdfUrl           String?
-  generatedAt      DateTime   @default(now())
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
-
-  @@index([factoryId])
-  @@index([verificationCode])
-}
-
-model ReworkRecord {
-  id           String     @id @default(cuid())
-  factoryId    String
-  inspectionId String
-  inspection   Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
-  defectCode   String
-  workerId     String
-  comments     String?    @db.Text
-  resolvedAt   DateTime?
-  createdAt    DateTime   @default(now())
 }
 
 // ==========================================
