@@ -58,12 +58,12 @@ Implements the multi-step scheduling flow:
 Implements the digital catalog menu:
 *   *Category Carousel:* Horizontal swipe categories.
 *   *Product Card Grid:* Translucent `.verity-glass` grids.
-*   *Cart & Table Checkout:* Simple local cart that posts items to the active table order and emits `order.received`.
+*   *Cart & External Checkout:* Simple local cart that posts items to the `ingestExternalOrder` backend action, which books a `DRAFT` `SalesOrder` and enqueues `ORDER_RECEIVED` in a single transaction.
 
 #### [MODIFY] [worker dashboard](file:///D:/Code/verity/src/app/worker/page.tsx)
 Refactors the worker shell into a touch-optimized mobile experience:
 *   Hides all analytics, sidebar panels, and settings.
-*   Renders a clear "My Day" view displaying current shift details, checklist tasks, and order bump queues (KDS).
+*   Renders a clear "My Day" view displaying current shift details, checklist tasks, and assigned service visits.
 
 ---
 

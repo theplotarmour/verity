@@ -59,16 +59,15 @@ A digital menu card for restaurant dining tables (using QR codes) or retail stor
     *   Clicking a card slides up a glassmorphic sheet showing the description, allergen tags, and price.
 3.  **Step 3: Simple Cart & Checkout**
     *   Allows adding items to a local cart.
-    *   For dining tables (e.g., Table 4): Checkout submits the items directly to the table's active order, creating a `DiningOrderItem` and notifying the Employee KDS station.
+    *   Checkout submits the items to the `ingestExternalOrder` backend action, which books a `DRAFT` `SalesOrder` and enqueues `ORDER_RECEIVED` in a single transaction.
 
 ---
 
 ## 4. Database Schema Scoping
 
 Both portals read directly from the tenant-scoped database relations:
-*   **Tenancy Scoping:** All queries are filtered by `factoryId` derived from the subdomain request (e.g., `client-subdomain.verity.ai`).
+*   **Tenancy Scoping:** All queries are filtered by `factoryId` derived from the path context (e.g., `/c/[clientSlug]/`).
 *   **Required Relations:**
-    *   `Service`: `{ id, name, description, duration, price, categoryId }`
-    *   `Appointment`: `{ id, customerName, customerPhone, customerEmail, startTime, endTime, employeeId }`
-    *   `Product` (replaces ItemMaster): `{ id, name, description, price, sku, categoryId }`
+    *   `Product` (replaces ItemMaster): `{ id, name, description, price, sku, itemType, categoryId }` (Services are stored as `Product` rows with `itemType = SERVICE`).
+    *   `Appointment`: `{ id, customerName, customerPhone, customerEmail, startTime, endTime, staffId, serviceName, pricePaise }` (Appointments store the service name and price in flat fields to avoid catalog coupling).
     *   `Shift`: `{ id, employeeId, date, startTime, endTime }`
