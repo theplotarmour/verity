@@ -27,13 +27,14 @@ This roadmap registers the completed work history and immediate development prio
 
 Our primary objective is to make Verity a pristine core shell, and then build/add business capabilities module-by-module.
 
-### Task 1: Manufacturing Purge
-*   **Action:** Delete the legacy Veda MES code files, libraries (`src/lib/spec/`), and database tables.
-*   **Result:** A completely clean core that is 100% free of hardcoded automotive or fabric-cutting legacy parameters.
+### Task 1: Manufacturing Purge — **done**
+*   Deleted the Veda MES code, `src/lib/spec/`, and 24 database tables. The `manufacturing` and `automotive` modules and the `auto_components` pack went with them.
+*   `ItemMaster` was renamed to `Product` rather than dropped: inventory, purchasing and sales run on those rows. Only the spec and BOM attachments went.
+*   `item-units.ts` and `ItemFieldDefinition` were named in the purge list and kept: units and owner-defined catalogue columns are not MES.
+*   The migration is `prisma/migrations/20260820000000_purge_veda_legacy`. Apply with `npx prisma migrate deploy`.
 
-### Task 2: Dynamic Sidebar Navigation
-*   **Action:** Refactor `resolveNavGroups()` in `navigation.ts` to dynamically calculate group header visibility and sort orders from the active module definitions instead of referencing a hardcoded static array.
-*   **Result:** Complete elimination of cross-module leakage in the shell layout.
+### Task 2: Dynamic Sidebar Navigation — **done**
+*   `resolveNavGroups()` derives groups from the items the active modules contribute. `NAV_GROUP_ORDER` is now an ordering preference, not a whitelist — an unlisted group renders after the listed ones instead of vanishing.
 
 ### Task 3: B2C Customer Portal Rollout
 *   **Action:** Build the mobile-first customer portals under `/book` (service booking calendar and slot selector) and `/menu` (food/retail visual menus).
@@ -44,6 +45,6 @@ Our primary objective is to make Verity a pristine core shell, and then build/ad
 ## 3. Future Module Expansions
 
 Once the core is fully cleansed and the Customer portal is operational, we will roll out the remaining business modules client-by-client:
-1.  **QSR Cafe Operations:** A table-less cafe POS checkout screen, worker KDS order bump screens, and menu catalog adjustments.
+1.  **QSR Cafe Operations:** A table-less cafe POS checkout screen, worker KDS order bump screens, and menu catalog adjustments. (The first attempt at these — the `menu`, `tables_orders`, `kitchen` and `serving` modules — was withdrawn as unsold; rebuild behind a customer.)
 2.  **Salon & Clinic Services:** Staff appointment calendar rosters, walk-in check-in queue dashboards, and retail CRM profile tags.
 3.  **Facility Management:** Site cleaner checklists, site ticket logs, and asset ledger trackers.

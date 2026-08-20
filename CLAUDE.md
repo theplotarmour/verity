@@ -1,8 +1,7 @@
 # Verity — Claude Code Project Memory
 
 ## What this is
-Verity is a **multi-tenant Franchise Operating System** built on Next.js 15 / Prisma / Supabase. It targets four B2B business verticals:
-- `auto_components` — Custom automotive upholstery manufacturers (Carxen and competitors)
+Verity is a **multi-tenant Franchise Operating System** built on Next.js 15 / Prisma / Supabase. It targets three B2B business verticals:
 - `facility_management` — Multi-site cleaning, security, and maintenance firms
 - `franchise_qsr` — Quick-service restaurant franchise networks
 - `franchise_retail` — Retail franchise store networks
@@ -10,8 +9,9 @@ Verity is a **multi-tenant Franchise Operating System** built on Next.js 15 / Pr
 ## Core Rules (always apply)
 - **Ponytail (lazy senior dev)**: Before writing code, ask if it already exists. Fewest files wins. No boilerplate.
 - **Multi-tenant security**: Every DB query MUST be scoped by `factoryId`. Never trust `factoryId` from client payload — derive from session.
+- **No manufacturing**: the MES layer (blueprints, routing, production plans, work orders, job cards, stage capture, the BOM and spec engines) was withdrawn along with the `manufacturing` and `automotive` modules and the `auto_components` pack. `ItemMaster` is now `Product`, a plain catalogue. Do not reintroduce a shop floor without a customer asking for one.
 - **No duplicated logic**: If a helper exists in two places, delete one and import the other. This is AUDIT.md §6 — the source of our 3 recurring bugs.
-- **Pack keys are strict**: Only 4 active packs (`auto_components`, `facility_management`, `franchise_qsr`, `franchise_retail`). See `src/platform/packs.ts`. `booking` and `crm` belong to no pack — enable them per tenant from the HQ builder.
+- **Pack keys are strict**: Only 3 active packs (`facility_management`, `franchise_qsr`, `franchise_retail`). See `src/platform/packs.ts`. `booking` and `crm` belong to no pack — enable them per tenant from the HQ builder.
 - **Workflows are declared, not implied**: a composed chain lives in `src/platform/events/workflows.ts` and is wired in `reactions.ts`. `reactions.test.ts` fails if a declared step has no listener. Publish through `publish()`, never `emit()` directly.
 - **No default PINs**: `provisionClient` generates a random PIN. Never hardcode `"1234"`.
 - **Phones are canonical**: Always use `phoneKey()` from `src/lib/phone.ts` when comparing phone numbers.

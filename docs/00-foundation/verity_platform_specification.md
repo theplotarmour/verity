@@ -21,18 +21,25 @@ Capabilities in Verity do not exist as isolated CRUD pages. They must compose in
 
 ### Vertical Packs
 
-Four packs are active. They are the only valid pack keys; anything else is a
+Three packs are active. They are the only valid pack keys; anything else is a
 retired key that `resolvePackKey()` maps forward onto one of these.
 
 | Key | Vertical |
 | --- | --- |
-| `auto_components` | Custom automotive upholstery manufacturing |
 | `facility_management` | Multi-site cleaning, security and maintenance |
 | `franchise_qsr` | Quick-service restaurant franchise networks |
 | `franchise_retail` | Retail franchise store networks |
 
 `booking` and `crm` belong to no pack. They are composition modules, enabled per
 tenant from the HQ builder.
+
+`auto_components` was a fourth pack, bundling `manufacturing` and `automotive`.
+The MES layer underneath it — blueprints and routing, production plans, work
+orders, job cards, stage capture, the BOM and spec engines — was withdrawn, and
+those modules with it. The key maps forward to `franchise_retail` in
+`RETIRED_PACKS`, because what survives for such a tenant is a catalogue, stock
+and orders. `ItemMaster` became `Product`: an item catalogue is not MES, a bill
+of materials is.
 
 ### Reference Composition Flows
 
