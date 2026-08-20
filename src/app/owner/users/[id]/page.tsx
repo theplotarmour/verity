@@ -1,5 +1,4 @@
 import prisma from "@/lib/prisma";
-import { jobCardInclude, toWorkerJob } from "@/lib/server/jobCardAdapter";
 import { getOwnerUser } from "@/lib/server/owner";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
@@ -42,41 +41,20 @@ export default async function EmployeeProfilePage({
   const isWorker = user.role === "WORKER";
   const isInspector = user.role === "SUPERVISOR";
 
-  // Old page listed the user's Orders; the equivalent unit of work is now
-  // the JobCard. Map each assigned job card into the legacy order shape.
-  const assignedJobCards = await prisma.jobCard.findMany({
-    where: { factoryId: owner.factoryId, assignedToId: user.id },
-    include: { ...jobCardInclude, inspection: { select: { status: true } } },
-    orderBy: { createdAt: "desc" },
-    take: 20,
-  });
-
-  const orders = assignedJobCards.map((jobCard) => {
-    const job = toWorkerJob(jobCard);
-    return {
-      ...job.order,
-      id: jobCard.id,
-      createdAt: jobCard.createdAt,
-      quantity: jobCard.targetQty,
-      status: jobCard.status,
-      batches: [{ ...jobCard, batchNumber: job.batchNumber, inspection: (jobCard as any).inspection }],
-    };
-  });
+  /*
+   * This listed the work assigned to the user, as job cards mapped into the
+   * legacy order shape, and derived an accuracy figure from how many of their
+   * batches QC approved. Job cards and inspections went with the manufacturing
+   * module, and nothing else assigns work to a person, so the list is empty and
+   * accuracy is not computed rather than being derived from something else.
+   */
+  const orders: never[] = [];
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  const todayOrders = orders.filter(
-    (o: any) => new Date(o.createdAt) >= todayStart
-  );
-
-  const approvedBatches = orders
-    .flatMap((o: any) => o.batches)
-    .filter((b: any) => b.inspection?.status === "APPROVED").length;
-
-  const totalBatches = orders.flatMap((o: any) => o.batches).length;
-  const accuracy =
-    totalBatches > 0 ? Math.round((approvedBatches / totalBatches) * 100) : 0;
+  const todayOrders: never[] = [];
+  const accuracy = 0;
 
   const roleLabel =
     user.role === "OWNER"
@@ -210,7 +188,7 @@ export default async function EmployeeProfilePage({
                 {
                   icon: BadgeCheck,
                   label: "Approved",
-                  value: approvedBatches,
+                  value: 0,
                   color: "text-success",
                 },
                 {

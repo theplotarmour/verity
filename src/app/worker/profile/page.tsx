@@ -19,9 +19,9 @@ export default async function WorkerProfilePage() {
   if (!user) redirect('/')
   const dict = getDictionary(user.language || session.language)
 
-  const assignmentsCount = await prisma.jobCard.count({
-    where: { assignedToId: session.userId, factoryId: session.factoryId }
-  })
+  // Job cards were what a worker was assigned; they went with the
+  // manufacturing module, and nothing replaced them.
+  const assignmentsCount = 0
 
   const owner = await prisma.user.findFirst({
     where: { role: 'OWNER', factoryId: session.factoryId }

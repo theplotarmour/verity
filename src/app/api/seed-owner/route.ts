@@ -13,12 +13,13 @@ export async function GET(request: NextRequest) {
     });
 
     if (!factory) {
-      // Carxen runs the automotive vertical pack on top of the default modules.
+      // Carxen ran the automotive vertical pack; that module went with the MES
+      // layer, so the seed tenant starts on the default modules alone.
       const { factoryId } = await provisionTenant({
         name: "Carxen",
         slug: "carxen",
         onboardingStatus: "COMPLETED",
-        modules: [...DEFAULT_MODULES, "automotive"],
+        modules: [...DEFAULT_MODULES],
       });
       factory = await prisma.factory.findUniqueOrThrow({ where: { id: factoryId } });
     }

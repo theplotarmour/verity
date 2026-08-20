@@ -8,7 +8,7 @@ import { ArrowLeft, Check, X } from "lucide-react";
 import { Button, Card, Input } from "@/components/ui/primitives";
 import { toast } from "@/components/ui/toast";
 import { StatusPill, TextArea, formatDay } from "@/components/service/kit";
-import { CheckpointPhoto } from "@/components/spec/CheckpointPhoto";
+import { CheckpointPhoto } from "@/components/quality/CheckpointPhoto";
 import {
   recordServiceCheckpoint,
   resolveServiceInspection,

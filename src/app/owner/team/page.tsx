@@ -3,32 +3,17 @@ import { redirect } from 'next/navigation';
 import prisma from '@/lib/prisma';
 import { TeamClient } from './client';
 import { canUser } from "@/lib/server/permissions";
-import { jobCardInclude, toWorkerJob } from '@/lib/server/jobCardAdapter';
 
 export default async function TeamPage() {
   const dbUser = await getOwnerUser();
   if (!dbUser) redirect('/');
   if (!(await canUser(dbUser, 'MANAGE_TEAM'))) redirect('/unauthorized');
 
-  const [users, activeJobCards, jobCardCounts, departments] = await Promise.all([
+  const [users, departments] = await Promise.all([
     prisma.user.findMany({
       where: { factoryId: dbUser.factoryId },
       include: { department: { select: { name: true } } },
       orderBy: { name: 'asc' },
-    }),
-    prisma.jobCard.findMany({
-      where: {
-        factoryId: dbUser.factoryId,
-        assignedToId: { not: null },
-        status: { in: ['WAITING', 'IN_PROGRESS', 'QC_PENDING', 'REWORK_REQUIRED'] },
-      },
-      include: jobCardInclude,
-      orderBy: { createdAt: 'desc' },
-    }),
-    prisma.jobCard.groupBy({
-      by: ['assignedToId'],
-      where: { factoryId: dbUser.factoryId, assignedToId: { not: null } },
-      _count: { id: true },
     }),
     prisma.department.findMany({
       where: { factoryId: dbUser.factoryId, active: true },
@@ -37,31 +22,19 @@ export default async function TeamPage() {
     }),
   ]);
 
-  const countMap = new Map(jobCardCounts.map((c) => [c.assignedToId, c._count.id]));
-  const activeByUser = new Map<string, any>();
-  for (const jobCard of activeJobCards) {
-    if (jobCard.assignedToId && !activeByUser.has(jobCard.assignedToId)) {
-      activeByUser.set(jobCard.assignedToId, toWorkerJob(jobCard));
-    }
-  }
-
-  // TeamClient consumes the old workerOrders/inspectorOrders shape; feed it
-  // the active job card mapped through the legacy adapter.
-  const members = users.map((user) => {
-    const active = activeByUser.get(user.id);
-    const activeOrders = active
-      ? [{ id: active.id, itemName: active.order.itemName ?? active.order.productName ?? '' }]
-      : [];
-    return {
-      ...user,
-      workerOrders: user.role === 'WORKER' ? activeOrders : [],
-      inspectorOrders: user.role === 'SUPERVISOR' ? activeOrders : [],
-      _count: {
-        workerOrders: user.role === 'WORKER' ? (countMap.get(user.id) ?? 0) : 0,
-        inspectorOrders: user.role === 'SUPERVISOR' ? (countMap.get(user.id) ?? 0) : 0,
-      },
-    };
-  });
+  /*
+   * Each member used to show the job card they were working and a lifetime
+   * count of cards assigned. Job cards went with the manufacturing module, and
+   * nothing else in the platform assigns a unit of work to a person, so the
+   * columns are empty rather than filled with a different number that happens
+   * to be available.
+   */
+  const members = users.map((user) => ({
+    ...user,
+    workerOrders: [],
+    inspectorOrders: [],
+    _count: { workerOrders: 0, inspectorOrders: 0 },
+  }));
 
   return (
     <TeamClient

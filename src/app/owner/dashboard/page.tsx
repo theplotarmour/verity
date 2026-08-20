@@ -21,9 +21,8 @@ import { resolvePackKey, VERTICAL_PACKS } from "@/platform/tenancy/packs";
  * tenants, a display label on older ones, and whatever sales typed on the rest.
  * Normalising in one place is what stops this switch from being a lottery.
  *
- * Auto components is the fallback's fallback, not a default anyone was assigned:
- * it is the original dashboard, so a tenant with no recognisable pack sees what
- * they saw before rather than an empty page.
+ * Facility management is the fallback's fallback, so a tenant with no
+ * recognisable pack still lands on a dashboard rather than an empty page.
  */
 import { entitledModules } from "@/platform/modules/entitlements";
 import Link from "next/link";
@@ -150,10 +149,6 @@ export default async function OwnerDashboard() {
   };
 
   switch (resolvePackKey(factory?.industry)) {
-    case "facility_management": {
-      const { FacilityManagementDashboard } = await import("@/components/dashboard/FacilityManagementDashboard");
-      return <FacilityManagementDashboard {...props} />;
-    }
     case "franchise_qsr": {
       const { QsrFranchiseDashboard } = await import("@/components/dashboard/QsrFranchiseDashboard");
       return <QsrFranchiseDashboard {...props} />;
@@ -162,10 +157,15 @@ export default async function OwnerDashboard() {
       const { RetailFranchiseDashboard } = await import("@/components/dashboard/RetailFranchiseDashboard");
       return <RetailFranchiseDashboard {...props} />;
     }
-    case "auto_components":
     default: {
-      const { AutoComponentsDashboard } = await import("@/components/dashboard/AutoComponentsDashboard");
-      return <AutoComponentsDashboard {...props} />;
+      /*
+       * Facility management is the fallback because it is the least
+       * product-specific of the three: sites, people and tickets, with no
+       * catalogue or outlet network assumed. The auto-components dashboard that
+       * used to sit here went with the manufacturing module.
+       */
+      const { FacilityManagementDashboard } = await import("@/components/dashboard/FacilityManagementDashboard");
+      return <FacilityManagementDashboard {...props} />;
     }
   }
 }

@@ -629,20 +629,13 @@ export function OwnerShell({
           </div>
         </main>
 
-        {/* Floating action. Production-only: it deep-links to the production
-            board, which a service tenant does not have. */}
-        {can(userRole, "CREATE_ORDER", permissionMatrix) &&
-          (!enabledModules || enabledModules.includes("manufacturing")) && (
-            <Link
-              href="/owner/production?new=true"
-              aria-label="New production order"
-              // Sits above the dock, using the same max() the dock does — with
-              // the bare env() it would tuck under the pill on a notched phone.
-              className="fixed bottom-[calc(4rem+max(0.5rem,env(safe-area-inset-bottom))+0.75rem)] right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand)] text-white shadow-[0_8px_24px_-6px_var(--brand)] transition active:scale-95"
-            >
-              <Plus className="h-6 w-6" />
-            </Link>
-          )}
+        {/*
+         * The floating action deep-linked to /owner/production?new=true and was
+         * gated on the manufacturing module. Both went with the MES layer, so
+         * there is no single "new thing" every remaining vertical shares - a
+         * QSR outlet, a facility contract and a retail store each start
+         * somewhere different. Removed rather than repointed at a guess.
+         */}
 
         {/* The dock. Fixed, not absolute: on iOS the URL bar collapsing changes
             the container height mid-scroll, and an absolutely positioned bar

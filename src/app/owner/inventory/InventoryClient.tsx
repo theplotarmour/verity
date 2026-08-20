@@ -15,7 +15,7 @@ import { Surface } from "@/components/design/Surface";
 import { Badge, Button, Input, Select, EmptyState } from "@/components/ui/primitives";
 import { useRouter } from "next/navigation";
 import dayjs from "dayjs";
-import { SpecCombobox } from "@/components/spec/SpecCombobox";
+import { ItemCombobox } from "@/components/catalog/ItemCombobox";
 import { ITEM_TYPE_LABELS } from "@/lib/item-constants";
 type Tab = "overview" | "raw" | "production" | "dispatch" | "warehouses" | "stores";
 
@@ -657,7 +657,7 @@ export default function InventoryClient({ overview, ledger, warehouses, material
                   decides how it is handled, so there is nothing to declare up
                   front. */}
               <Field label="Item">
-                <SpecCombobox
+                <ItemCombobox
                   options={itemOptions}
                   value={formData.itemId || null}
                   onChange={(id) => setFormData({ ...formData, itemId: id ?? "" })}

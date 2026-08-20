@@ -9,10 +9,11 @@ import { STOCK_STATUS_FIELD, type StockStatus } from "@/lib/stock-status";
 import { ensureDefaultBin } from "@/server/internal/stockMovements";
 import { round2 } from "@/platform/billing/service-invoice";
 
-// issueMaterialsForWorkOrder and receiveFinishedGoods deliberately are NOT
-// re-exported from here: re-exporting them from a "use server" module would
-// publish them as endpoints again, which is the whole thing the move avoided.
-// Their callers import them from @/server/internal/stockMovements.
+// issueMaterialsForWorkOrder and receiveFinishedGoods lived in
+// @/server/internal/stockMovements and were deliberately never re-exported
+// from here, because re-exporting them from a "use server" module would
+// publish them as endpoints again. Both walked a BOM against a work order and
+// went with the manufacturing module; ensureDefaultBin is what remains.
 
 export async function dispatchOrder(orderId: string) {
   await guardModuleAction("inventory");
