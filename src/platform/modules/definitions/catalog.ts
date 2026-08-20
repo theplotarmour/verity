@@ -14,6 +14,13 @@ export const catalogModule = createModule({
    * row, no duplicated write path.
    */
   requires: ["core", "inventory"],
+  /*
+   * Deliberately in no pack, for the same reason `booking` is in none: adding
+   * it to the QSR and retail bundles pushed both past the published 20–25%
+   * pack discount band, and repricing two live packs is a commercial decision,
+   * not a side effect of shipping a module. Enabled per tenant from the HQ
+   * builder until someone prices the bundles again.
+   */
   permissions: [
     { key: "catalog.view", label: "View the customer catalogue", group: "Catalogue" },
     {

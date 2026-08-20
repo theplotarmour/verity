@@ -76,6 +76,7 @@ export const ROUTE_OWNERSHIP: Record<string, Ownership> = {
   "service-work-orders/page.tsx": "helpdesk",
   "service-work-orders/inspection/[id]/page.tsx": "helpdesk",
   "booking/page.tsx": "booking",
+  "catalog/page.tsx": "catalog",
   "sites/page.tsx": "sites",
   "sites/[id]/page.tsx": "sites",
 
@@ -130,6 +131,14 @@ export const ACTION_OWNERSHIP: Record<string, Ownership> = {
   "billing.ts": "billing",
 
   "booking.ts": "booking",
+  "catalog.ts": "catalog",
+  /*
+   * The public portals. Not module-owned in the guard's sense: they take no
+   * session, so there is nothing for `guardModuleAction` to read a tenant from.
+   * `resolvePortalTenant` is their guard, and it re-checks the entitlement on
+   * every call from the slug in the URL.
+   */
+  "portal.ts": "public",
   "franchise.ts": "sites",
 };
 

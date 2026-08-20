@@ -5,6 +5,7 @@ import type { ServiceWOStatus, TicketPriority, TicketStatus } from "@prisma/clie
 
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
+import { getUserSession } from "@/lib/server/auth";
 import { createWithDocNumber, formatDocNumber } from "@/lib/server/numbering";
 import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import { hasModule } from "@/platform/modules/entitlements";
@@ -584,13 +585,27 @@ export async function updateServiceWorkOrder(woId: string, input: ServiceWorkOrd
   return { success: true };
 }
 
-export async function setServiceWorkOrderStatus(woId: string, status: ServiceWOStatus) {
-  await guardModuleWrite("helpdesk");
-  const user = await getOwnerUser();
-  if (!user) return { error: "Unauthorized" };
-
+/**
+ * Move one service work order to a status, and everything that follows from it.
+ *
+ * Extracted so the owner-side action and the technician's own screen run the
+ * same transition. Two copies of this would mean a visit completed from the
+ * floor opening no inspection, or raising no billing milestone — which is the
+ * kind of divergence nobody notices until a month-end invoice is short.
+ *
+ * Takes `factoryId` and the actor explicitly because it is not an endpoint: its
+ * two callers have already established who is asking and what they may touch.
+ */
+async function applyServiceWorkOrderStatus(
+  factoryId: string,
+  actorUserId: string,
+  woId: string,
+  status: ServiceWOStatus,
+  /** Extra scoping for the technician path: only their own visit. */
+  extraWhere: { assignedToId?: string } = {},
+) {
   const wo = await prisma.serviceWorkOrder.findFirst({
-    where: { id: woId, factoryId: user.factoryId },
+    where: { id: woId, factoryId, ...extraWhere },
     select: {
       id: true,
       woNumber: true,
@@ -623,19 +638,20 @@ export async function setServiceWorkOrderStatus(woId: string, status: ServiceWOS
   if (status === "COMPLETED" && wo.checklistId && !wo.inspection) {
     await prisma.serviceInspection.create({
       data: {
-        factoryId: user.factoryId,
+        factoryId,
         serviceWorkOrderId: wo.id,
         // Copied, not joined: the site's inspection history should survive the
         // work order later being re-pointed elsewhere.
         siteId: wo.siteId,
         checklistId: wo.checklistId,
-        inspectedById: user.id,
+        inspectedById: actorUserId,
       },
     });
   }
 
   revalidateHelpdeskPaths(wo.ticketId ?? undefined);
   if (wo.siteId) revalidatePath(`/owner/sites/${wo.siteId}`);
+  revalidatePath("/worker");
 
   // The two transitions other modules care about. Dispatch is what a technician
   // needs telling about; completion is what the asset ledger and the month's
@@ -647,7 +663,7 @@ export async function setServiceWorkOrderStatus(woId: string, status: ServiceWOS
     : null;
   if (milestone) {
     await publish(milestone, {
-      factoryId: user.factoryId,
+      factoryId,
       workOrderId: wo.id,
       woNumber: wo.woNumber,
       title: wo.title,
@@ -656,6 +672,13 @@ export async function setServiceWorkOrderStatus(woId: string, status: ServiceWOS
   }
 
   return { success: true };
+}
+
+export async function setServiceWorkOrderStatus(woId: string, status: ServiceWOStatus) {
+  await guardModuleWrite("helpdesk");
+  const user = await getOwnerUser();
+  if (!user) return { error: "Unauthorized" };
+  return applyServiceWorkOrderStatus(user.factoryId, user.id, woId, status);
 }
 
 export async function assignServiceWorkOrder(woId: string, assignedToId: string | null) {
@@ -701,4 +724,145 @@ export async function deleteServiceWorkOrder(woId: string) {
 
   revalidateHelpdeskPaths();
   return { success: true };
+}
+
+export interface MyServiceJob {
+  id: string;
+  woNumber: string;
+  title: string;
+  status: ServiceWOStatus;
+  priority: TicketPriority;
+  siteName: string | null;
+  scheduledAt: string | null;
+}
+
+/**
+ * The visits assigned to the signed-in person, for the Employee shell.
+ *
+ * Session-scoped rather than owner-scoped: the caller is a technician, and
+ * `getOwnerUser` would refuse them. `assignedToId` comes from the session for
+ * the same reason `factoryId` does — a worker asking for someone else's round
+ * is not a request this answers.
+ *
+ * Open work only. A closed visit belongs in a history screen, not in the list
+ * of what is left to do today.
+ */
+export async function getMyServiceJobs(): Promise<MyServiceJob[]> {
+  const session = await getUserSession();
+  if (!session) return [];
+
+  const factory = await prisma.factory.findUnique({
+    where: { id: session.factoryId },
+    select: { organizationId: true },
+  });
+  if (!factory || !(await hasModule(factory.organizationId, "helpdesk"))) return [];
+
+  const rows = await prisma.serviceWorkOrder.findMany({
+    where: {
+      factoryId: session.factoryId,
+      assignedToId: session.userId,
+      status: { notIn: CLOSED_WO_STATES },
+    },
+    select: {
+      id: true,
+      woNumber: true,
+      title: true,
+      status: true,
+      priority: true,
+      scheduledAt: true,
+      site: { select: { name: true } },
+    },
+    // Scheduled work first and soonest, then anything undated.
+    orderBy: [{ scheduledAt: "asc" }, { createdAt: "asc" }],
+    take: 25,
+  });
+
+  return rows.map((r) => ({
+    id: r.id,
+    woNumber: r.woNumber,
+    title: r.title,
+    status: r.status,
+    priority: r.priority,
+    siteName: r.site?.name ?? null,
+    scheduledAt: r.scheduledAt?.toISOString() ?? null,
+  }));
+}
+
+/** One assigned visit, in full, for the technician working it. */
+export async function getMyServiceJob(woId: string) {
+  const session = await getUserSession();
+  if (!session) return null;
+
+  const factory = await prisma.factory.findUnique({
+    where: { id: session.factoryId },
+    select: { organizationId: true },
+  });
+  if (!factory || !(await hasModule(factory.organizationId, "helpdesk"))) return null;
+
+  // `assignedToId` in the where clause, not checked after the read: a
+  // technician requesting a colleague's job id should get "not found", not a
+  // redacted view of it.
+  const wo = await prisma.serviceWorkOrder.findFirst({
+    where: { id: woId, factoryId: session.factoryId, assignedToId: session.userId },
+    select: {
+      id: true,
+      woNumber: true,
+      title: true,
+      description: true,
+      category: true,
+      status: true,
+      priority: true,
+      scheduledAt: true,
+      site: { select: { name: true, address: true } },
+      customer: { select: { name: true } },
+      checklist: { select: { name: true } },
+    },
+  });
+  if (!wo) return null;
+
+  return {
+    id: wo.id,
+    woNumber: wo.woNumber,
+    title: wo.title,
+    description: wo.description,
+    category: wo.category,
+    status: wo.status,
+    priority: wo.priority,
+    scheduledAt: wo.scheduledAt?.toISOString() ?? null,
+    siteName: wo.site?.name ?? null,
+    siteAddress: wo.site?.address ?? null,
+    customerName: wo.customer?.name ?? null,
+    checklistName: wo.checklist?.name ?? null,
+  };
+}
+
+/**
+ * A technician moving their own visit along.
+ *
+ * The same transition the owner screen runs — one implementation, so completing
+ * from the floor opens the inspection and raises the billing milestone exactly
+ * as completing from the desk does. What differs is only the scope: the where
+ * clause carries `assignedToId`, so this can never touch a colleague's round.
+ *
+ * Deliberately not the full status set. A technician starts and finishes work;
+ * cancelling a customer's visit is a decision for the desk.
+ */
+export async function setMyServiceJobStatus(
+  woId: string,
+  status: "IN_PROGRESS" | "COMPLETED",
+) {
+  const session = await getUserSession();
+  if (!session) return { error: "Unauthorized" };
+
+  const factory = await prisma.factory.findUnique({
+    where: { id: session.factoryId },
+    select: { organizationId: true },
+  });
+  if (!factory || !(await hasModule(factory.organizationId, "helpdesk"))) {
+    return { error: "The Helpdesk module is not enabled." };
+  }
+
+  return applyServiceWorkOrderStatus(session.factoryId, session.userId, woId, status, {
+    assignedToId: session.userId,
+  });
 }
