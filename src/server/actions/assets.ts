@@ -8,6 +8,7 @@ import { getOwnerUser } from "@/lib/server/owner";
 import { createWithDocNumber, formatDocNumber } from "@/lib/server/numbering";
 import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import { hasModule } from "@/platform/modules/entitlements";
+import { publish } from "@/platform/events/publish";
 
 /**
  * Assets — the register, and what has been done to each thing on it.
@@ -378,6 +379,17 @@ export async function logMaintenance(input: {
   });
 
   revalidateAssetPaths(input.assetId);
+
+  // Maintenance is the point where an asset's condition changes, which is what
+  // a spare-parts decrement and a preventive-schedule roll both hang off. The
+  // asset module does not know who listens.
+  await publish("asset.maintenance_logged", {
+    factoryId,
+    assetId: asset.id,
+    type: input.type.trim(),
+    performedAt: performedAt.toISOString(),
+  });
+
   return { success: true };
 }
 

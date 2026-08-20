@@ -26,6 +26,16 @@ export const EVENTS = {
   LOW_STOCK: "LOW_STOCK",
   PO_APPROVED: "PO_APPROVED",
   PO_RECEIVED: "PO_RECEIVED",
+  // --- Composed workflow milestones -----------------------------------------
+  // Raised by event *reactions* rather than by the action that did the work. A
+  // ticket arriving, a job being dispatched, a visit finishing and an
+  // appointment being served are the points where one module's work becomes
+  // another's queue, and the person who has to act on that is not the person
+  // who caused it.
+  TICKET_CREATED: "TICKET_CREATED",
+  WORK_ORDER_DISPATCHED: "WORK_ORDER_DISPATCHED",
+  WORK_ORDER_COMPLETED: "WORK_ORDER_COMPLETED",
+  APPOINTMENT_COMPLETED: "APPOINTMENT_COMPLETED",
 } as const;
 export type EventKey = keyof typeof EVENTS;
 

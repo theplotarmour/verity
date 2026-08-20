@@ -5,9 +5,14 @@ import type { InvoiceStatus, PayrollStatus } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
-import { createWithDocNumber } from "@/lib/server/numbering";
 import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import { hasModule } from "@/platform/modules/entitlements";
+import {
+  draftServiceInvoice,
+  priceLines,
+  round2,
+  type LineItemInput,
+} from "@/platform/billing/service-invoice";
 
 /**
  * Billing — the bridge from operations to money.
@@ -36,34 +41,6 @@ function toCalendarDate(value: string | Date): Date | null {
   const parsed = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
   return new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate()));
-}
-
-export interface LineItemInput {
-  description: string;
-  quantity: number;
-  unitPrice: number;
-  taxRate?: number;
-}
-
-/** Money is rounded once, here, so a total never disagrees with its lines. */
-function round2(n: number): number {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
-}
-
-function priceLines(lines: LineItemInput[]) {
-  const priced = lines
-    .filter((l) => l.description?.trim())
-    .map((l) => {
-      const quantity = Number(l.quantity) || 0;
-      const unitPrice = Number(l.unitPrice) || 0;
-      const taxRate = Number(l.taxRate) || 0;
-      const amount = round2(quantity * unitPrice);
-      return { description: l.description.trim(), quantity, unitPrice, taxRate, amount };
-    });
-
-  const subtotal = round2(priced.reduce((sum, l) => sum + l.amount, 0));
-  const taxAmount = round2(priced.reduce((sum, l) => sum + (l.amount * l.taxRate) / 100, 0));
-  return { priced, subtotal, taxAmount, total: round2(subtotal + taxAmount) };
 }
 
 // --- Invoices --------------------------------------------------------------
@@ -239,47 +216,20 @@ export async function createInvoice(input: {
   if (!user) return { error: "Unauthorized" };
   if (!input.customerId) return { error: "Pick a customer." };
 
-  const factoryId = user.factoryId;
-  const customer = await prisma.customer.findFirst({
-    where: { id: input.customerId, factoryId },
-    select: { id: true },
-  });
-  if (!customer) return { error: "Customer not found." };
-
-  const { priced, subtotal, taxAmount, total } = priceLines(input.lineItems ?? []);
-  if (priced.length === 0) return { error: "Add at least one line item." };
-
-  // Numbering is per financial year in the way Indian invoicing expects, and
-  // the sequence counts only that year's invoices so it restarts cleanly.
-  const year = new Date().getFullYear();
-  const prefix = `INV-${year}`;
-  const yearStart = new Date(Date.UTC(year, 0, 1));
-  const base = (await prisma.serviceInvoice.count({
-    where: { factoryId, issueDate: { gte: yearStart } },
-  })) + 1;
-
   try {
-    const invoice = await createWithDocNumber(
-      (attempt) => `${prefix}-${String(base + attempt).padStart(5, "0")}`,
-      (invoiceNumber) =>
-        prisma.serviceInvoice.create({
-          data: {
-            factoryId,
-            invoiceNumber,
-            customerId: customer.id,
-            siteId: input.siteId || null,
-            dueDate: parseDate(input.dueDate),
-            notes: input.notes?.trim() || null,
-            subtotal,
-            taxAmount,
-            total,
-            lineItems: { create: priced },
-          },
-          select: { id: true },
-        }),
-    );
+    // Session and entitlement are settled above; the write itself is shared with
+    // the event reactions that raise a draft off a completed visit.
+    const id = await draftServiceInvoice({
+      factoryId: user.factoryId,
+      customerId: input.customerId,
+      siteId: input.siteId ?? null,
+      dueDate: parseDate(input.dueDate),
+      notes: input.notes ?? null,
+      lineItems: input.lineItems ?? [],
+    });
+    if (!id) return { error: "Customer not found, or no priced line items." };
     revalidateBillingPaths();
-    return { success: true, id: invoice.id };
+    return { success: true, id };
   } catch {
     return { error: "Could not create the invoice." };
   }

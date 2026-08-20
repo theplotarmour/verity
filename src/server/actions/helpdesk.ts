@@ -8,6 +8,7 @@ import { getOwnerUser } from "@/lib/server/owner";
 import { createWithDocNumber, formatDocNumber } from "@/lib/server/numbering";
 import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import { hasModule } from "@/platform/modules/entitlements";
+import { publish } from "@/platform/events/publish";
 
 /**
  * Helpdesk — tickets and the service work orders dispatched from them.
@@ -255,10 +256,21 @@ export async function createTicket(input: TicketInput) {
             reportedById: user.id,
             slaDueAt,
           },
-          select: { id: true },
+          select: { id: true, ticketNumber: true, subject: true },
         }),
     );
     revalidateHelpdeskPaths();
+
+    // A ticket is the head of the maintenance workflow: it becomes somebody's
+    // job, and the owner side has to be told it exists rather than discovering
+    // it on the list screen. Published after the write, never inside it.
+    await publish("ticket.created", {
+      factoryId,
+      ticketId: ticket.id,
+      ticketNumber: ticket.ticketNumber,
+      subject: ticket.subject,
+    });
+
     return { success: true, id: ticket.id };
   } catch {
     return { error: "Could not create the ticket." };
@@ -581,10 +593,13 @@ export async function setServiceWorkOrderStatus(woId: string, status: ServiceWOS
     where: { id: woId, factoryId: user.factoryId },
     select: {
       id: true,
+      woNumber: true,
+      title: true,
       startedAt: true,
       ticketId: true,
       siteId: true,
       checklistId: true,
+      assignedToId: true,
       inspection: { select: { id: true } },
     },
   });
@@ -621,6 +636,25 @@ export async function setServiceWorkOrderStatus(woId: string, status: ServiceWOS
 
   revalidateHelpdeskPaths(wo.ticketId ?? undefined);
   if (wo.siteId) revalidatePath(`/owner/sites/${wo.siteId}`);
+
+  // The two transitions other modules care about. Dispatch is what a technician
+  // needs telling about; completion is what the asset ledger and the month's
+  // billing are built from. Every other status is an internal step and stays
+  // inside helpdesk.
+  const milestone =
+    status === "COMPLETED" ? "work_order.completed"
+    : status === "IN_PROGRESS" ? "work_order.dispatched"
+    : null;
+  if (milestone) {
+    await publish(milestone, {
+      factoryId: user.factoryId,
+      workOrderId: wo.id,
+      woNumber: wo.woNumber,
+      title: wo.title,
+      assignedToId: wo.assignedToId,
+    });
+  }
+
   return { success: true };
 }
 
