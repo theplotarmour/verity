@@ -40,7 +40,6 @@ describe("ingestExternalOrder", () => {
         data: {
           factoryId: other.id,
           itemType: "FINISHED_PRODUCT",
-          manufacturingType: "MAKE",
           name: `Foreign Tenant Item ${sku}`,
           sku,
           itemCode: sku,

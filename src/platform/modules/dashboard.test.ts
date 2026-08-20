@@ -41,7 +41,6 @@ describe("dashboard widget registry", () => {
     });
     expect(resolved.length).toBeGreaterThan(0);
     const keys = resolved.map((w) => w.key);
-    expect(keys).toContain("factory_metrics");
     expect(keys).toContain("booking_upcoming");
   });
 });

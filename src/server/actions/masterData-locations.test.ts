@@ -91,7 +91,6 @@ describe("location structure blockers", () => {
       data: {
         factoryId,
         itemType: "RAW_MATERIAL",
-        manufacturingType: "BUY",
         name: `Location test ${label}`,
         sku,
         itemCode: sku,

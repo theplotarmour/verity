@@ -22,7 +22,6 @@ import { withDependencies, type ModuleKey } from "@/platform/modules/registry";
  */
 
 const DASHBOARDS: Record<string, string> = {
-  auto_components: "AutoComponentsDashboard.tsx",
   facility_management: "FacilityManagementDashboard.tsx",
   franchise_qsr: "QsrFranchiseDashboard.tsx",
   franchise_retail: "RetailFranchiseDashboard.tsx",
@@ -45,9 +44,12 @@ const MODEL_MODULE: Record<string, ModuleKey | null> = {
   // so the warnings queue needs no entitlement of its own.
   notification: null,
 
-  // The funnel buckets by department, and a department is a station on a
-  // production route — the same module that owns job cards.
-  department: "manufacturing",
+  // A department groups people, and every tenant has them - a restaurant's
+  // kitchen, a facility firm's crews. It was owned by manufacturing while a
+  // department was also a station on a production route; that route went with
+  // the MES layer, and Department hangs off Factory, so it needs no
+  // entitlement of its own.
+  department: null,
 
   attendanceLog: "hr",
   project: "projects",
@@ -68,7 +70,7 @@ const MODEL_MODULE: Record<string, ModuleKey | null> = {
 
   salesOrder: "sales",
   salesOrderItem: "sales",
-  itemMaster: "inventory",
+  product: "inventory",
   stockLedgerEntry: "inventory",
   purchaseOrderItem: "procurement",
   purchaseOrder: "procurement",
@@ -111,7 +113,9 @@ describe("dashboards only show what their pack entitles", () => {
     // Guards the guard: an unmapped model throws above, but only if the scan
     // still finds it.
     const all = Object.values(DASHBOARDS).flatMap(modelsQueriedBy);
-    expect(all.length).toBeGreaterThan(15);
+    // Was 15, when there were four dashboards. Auto components went with the
+    // MES layer; this is a tripwire for a broken scan, not a target.
+    expect(all.length).toBeGreaterThan(10);
     for (const model of all) {
       expect(MODEL_MODULE, `prisma.${model} is unmapped`).toHaveProperty(model);
     }

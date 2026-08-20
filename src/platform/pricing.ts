@@ -98,8 +98,6 @@ export const TRIAL = {
  * being a discount.
  */
 export const PACK_PRICE: Record<VerticalPackKey, number> = {
-  // à la carte ₹32,500 → 23.1% off
-  auto_components: 24_999 * RUPEE,
   // à la carte ₹32,500 → 21.5% off
   facility_management: 25_499 * RUPEE,
   // à la carte ₹26,000 → 23.1% off

@@ -39,8 +39,10 @@ const ACTION_FILES = readdirSync(ACTIONS_DIR).filter(
 describe("the ownership matrix is complete", () => {
   it("finds the surfaces it is meant to classify", () => {
     // Guards the guard: a broken walk makes every assertion below vacuous.
-    expect(PAGES.length).toBeGreaterThan(30);
-    expect(ACTION_FILES.length).toBeGreaterThan(40);
+    // The floors dropped with the MES layer, which took twenty-odd action files
+    // and a dozen routes; they are a tripwire for a broken walk, not a target.
+    expect(PAGES.length).toBeGreaterThan(25);
+    expect(ACTION_FILES.length).toBeGreaterThan(30);
   });
 
   it("classifies every owner page", () => {
