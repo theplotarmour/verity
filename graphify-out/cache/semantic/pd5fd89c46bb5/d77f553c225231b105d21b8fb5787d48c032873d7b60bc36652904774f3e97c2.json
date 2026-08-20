@@ -1,1 +1,0 @@
-{"nodes": [{"id": "asset:src/app/icon.png", "label": "app icon.png", "type": "asset", "confidence": "EXTRACTED", "source_file": "src/app/icon.png", "source_location": "src/app/icon.png:1", "description": "Next.js app-router favicon convention file."}], "edges": [], "hyperedges": []}
