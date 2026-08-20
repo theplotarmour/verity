@@ -5,6 +5,8 @@ import { phoneKey } from "@/lib/phone";
 import { publish } from "@/platform/events/publish";
 import { freeSlots, isSlotFree, istWallClock, normaliseSlotRules } from "@/lib/slots";
 import { resolvePortalTenant } from "@/server/internal/portal";
+import { ingestExternalOrder } from "@/server/internal/orderIngest";
+import { hasModule } from "@/platform/modules/entitlements";
 import { LIVE_APPOINTMENT_STATUSES } from "@/lib/booking";
 
 /**
@@ -237,4 +239,89 @@ export async function createPortalBooking(
   });
 
   return { success: true, id: created.id };
+}
+
+export interface PortalCartLine {
+  itemId: string;
+  quantity: number;
+}
+
+export interface PortalOrderInput {
+  slug: string;
+  customerName: string;
+  customerPhone: string;
+  /** Table number, pickup name, seat — whatever the shop identifies an order by. */
+  reference?: string;
+  lines: PortalCartLine[];
+}
+
+/**
+ * Place an order from the public menu portal.
+ *
+ * Routed through `ingestExternalOrder`, which is the platform's one way for an
+ * order to arrive from outside: it books a DRAFT SalesOrder and enqueues the
+ * ORDER_RECEIVED webhook in the same transaction. A customer tapping "order" on
+ * a menu is exactly the case that path exists for, and a second write path
+ * would mean an order from the portal behaving differently from the same order
+ * from a storefront integration.
+ *
+ * DRAFT is the point. A public page may propose work; somebody in the shop
+ * decides it happens.
+ */
+export async function createPortalOrder(
+  input: PortalOrderInput,
+): Promise<PortalResult<{ soNumber: string }>> {
+  const tenant = await resolvePortalTenant(input.slug, "catalog");
+  if (!tenant) return { error: "This menu is not available." };
+  // Reading a menu needs `catalog`; recording an order needs the module that
+  // owns SalesOrder.
+  if (!(await hasModule(tenant.organizationId, "sales"))) {
+    return { error: "This shop is not taking online orders." };
+  }
+
+  const customerName = input.customerName?.trim();
+  const phone = input.customerPhone?.trim();
+  if (!customerName) return { error: "Please enter your name." };
+  if (!phone || phoneKey(phone).length < 8) {
+    return { error: "Please enter a phone number we can reach you on." };
+  }
+
+  const wanted = new Map<string, number>();
+  for (const line of input.lines ?? []) {
+    const qty = Math.floor(Number(line.quantity));
+    if (!line.itemId || !Number.isFinite(qty) || qty <= 0) continue;
+    // Cap per line so a tampered payload cannot book ten thousand coffees.
+    wanted.set(line.itemId, Math.min((wanted.get(line.itemId) ?? 0) + qty, 99));
+  }
+  if (wanted.size === 0) return { error: "Your order is empty." };
+
+  // Prices come from the catalogue, never from the cart. The client sends which
+  // rows and how many; what they cost is ours to say.
+  const items = await prisma.product.findMany({
+    where: {
+      id: { in: [...wanted.keys()] },
+      factoryId: tenant.factoryId,
+      isPublished: true,
+      status: "ACTIVE",
+      itemType: "FINISHED_PRODUCT",
+    },
+    select: { id: true, pricePaise: true },
+  });
+  if (items.length === 0) return { error: "Those items are no longer available." };
+
+  const result = await ingestExternalOrder(tenant.factoryId, {
+    customer: { name: customerName, phone },
+    orderType: "RETAIL",
+    remarks: input.reference?.trim() ? `Portal order · ${input.reference.trim()}` : "Portal order",
+    lines: items.map((item) => ({
+      itemId: item.id,
+      quantity: wanted.get(item.id) ?? 1,
+      // SalesOrderItem.unitPrice is a rupee float, the sales module's existing
+      // convention. The catalogue stores paise, so the conversion happens here,
+      // once, at the boundary between the two.
+      unitPrice: item.pricePaise / 100,
+    })),
+  });
+
+  return { success: true, soNumber: result.soNumber };
 }
