@@ -286,9 +286,6 @@ DROP TABLE "WorkOrder";
 -- DropTable
 DROP TABLE "_ItemGroupDefaultChecklist";
 
--- DropEnum
-DROP TYPE "ManufacturingType";
-
 -- RenameTable: ItemMaster becomes Product.
 --
 -- A rename rather than the drop-and-create `prisma migrate diff` generates: the
@@ -313,6 +310,9 @@ ALTER TABLE "Product" DROP CONSTRAINT IF EXISTS "ItemMaster_groupId_fkey";
 ALTER TABLE "Product" DROP COLUMN IF EXISTS "groupId";
 ALTER TABLE "Product" DROP COLUMN IF EXISTS "specHash";
 ALTER TABLE "Product" DROP COLUMN IF EXISTS "manufacturingType";
+
+-- DropEnum
+DROP TYPE "ManufacturingType";
 
 -- AddForeignKey
 ALTER TABLE "UOMConversion" ADD CONSTRAINT "UOMConversion_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "Product"("id") ON DELETE CASCADE ON UPDATE CASCADE;
