@@ -4,7 +4,6 @@ import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getOwnerUser } from "@/lib/server/owner";
-import { SPEC_SUMMARY_INCLUDE, specSummary, loadRefLabels } from "@/server/queries/spec";
 
 export async function createPurchaseOrder(data: {
   supplierId: string;
@@ -131,35 +130,24 @@ export async function getPurchaseOrders() {
       supplier: true,
       items: {
         include: {
-          material: {
-            include: {
-              group: { select: { name: true } },
-              specValues: { include: SPEC_SUMMARY_INCLUDE },
-              conversions: true,
-            },
-          },
+          material: { include: { conversions: true } },
         },
       },
     },
     orderBy: { orderDate: 'desc' }
   });
 
-  // A vendor slip has to say what was ordered, not just its name — the supplier
-  // cannot ship "Leatherite" without the GSM and width.
-  const refIds = orders.flatMap((o) =>
-    o.items.flatMap((i) => i.material.specValues.map((v) => v.valueRefId))
-  ).filter((x): x is string => Boolean(x));
-  const refLabels = await loadRefLabels(refIds);
-
+  /*
+   * A vendor slip used to spell out the item's spec - the supplier cannot ship
+   * "Leatherite" without the GSM and width. Those answers went with the spec
+   * engine, so the slip carries the item name and its units, and nothing that
+   * would be invented.
+   */
   return orders.map((o) => ({
     ...o,
     items: o.items.map((i) => ({
       ...i,
-      material: {
-        ...i.material,
-        groupName: i.material.group?.name ?? null,
-        spec: specSummary(i.material.specValues, refLabels),
-      },
+      material: { ...i.material, groupName: null, spec: null },
     })),
   }));
 }

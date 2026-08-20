@@ -27,20 +27,18 @@ export async function getDepartmentsData() {
       where: { factoryId: user.factoryId },
       orderBy: [{ active: "desc" }, { sortOrder: "asc" }],
       include: {
-        // Every checklist dedicated to this department, with the categories it
-        // covers — so the settings page answers "what actually runs here?"
-        // without opening the builder to find out.
+        /*
+         * Every checklist dedicated to this department, so the settings page
+         * answers "what actually runs here?" without opening the builder. The
+         * per-category coverage it also listed came from item groups, which
+         * went with the spec engine.
+         */
         ownedTemplates: {
           where: { status: "active" },
-          select: {
-            id: true,
-            name: true,
-            defaultForItemGroups: { select: { id: true, name: true } },
-          },
+          select: { id: true, name: true },
           orderBy: { name: "asc" },
         },
         members: { select: { id: true, name: true, role: true }, orderBy: { name: "asc" } },
-        _count: { select: { jobCards: true } },
       },
     }),
     prisma.user.findMany({
@@ -158,16 +156,12 @@ export async function deleteDepartment(id: string) {
   const owner = await getOwnerUser();
   if (!owner) return { error: "Unauthorized" };
 
-  const activeCards = await prisma.jobCard.count({
-    where: { departmentId: id, status: { notIn: ["COMPLETED"] } },
-  });
-  if (activeCards > 0) {
-    // Can't remove a stage that still has live work — deactivate instead so it
-    // leaves the chain but its history stays intact.
-    await prisma.department.update({ where: { id }, data: { active: false } });
-    revalidateDeptPaths();
-    return { success: true, deactivated: true };
-  }
+  /*
+   * A department with live job cards used to be deactivated rather than
+   * deleted, so its history survived. Job cards went with the manufacturing
+   * module, and no other record points at a department, so a delete is now
+   * safe outright.
+   */
 
   // Detach roster + any historical cards before deleting the row.
   await prisma.user.updateMany({ where: { departmentId: id }, data: { departmentId: null } });
