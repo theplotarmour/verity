@@ -555,8 +555,8 @@
     "semantic_hash": "f2be705885f4074482de166d0bef790a"
   },
   "src/app/worker/page.tsx": {
-    "mtime": 1787210017.7192678,
-    "ast_hash": "070b30e52ee19ad49f49558863d1590c",
+    "mtime": 1787225948.1423297,
+    "ast_hash": "c25e3c9db8eb03a8346fe23e36d44649",
     "semantic_hash": ""
   },
   "src/app/worker/profile/WorkerSettingsClient.tsx": {
@@ -685,8 +685,8 @@
     "semantic_hash": "50975bbcbc5b2ff4743922ff5b703edf"
   },
   "src/components/layout/owner-shell.tsx": {
-    "mtime": 1787210161.6664078,
-    "ast_hash": "33f2b75b95d67ca4dfdc54b555767f5a",
+    "mtime": 1787225350.7522461,
+    "ast_hash": "3cbb225d0892f00abd72439345f98456",
     "semantic_hash": ""
   },
   "src/components/layout/responsive.tsx": {
@@ -1080,8 +1080,8 @@
     "semantic_hash": "93402a28188283df935d75319ebaa47d"
   },
   "src/platform/modules/registry.ts": {
-    "mtime": 1787207040.5675652,
-    "ast_hash": "463ac3cf361359e3dcf86ef385b28d45",
+    "mtime": 1787225360.177814,
+    "ast_hash": "78c3567ebbddfe2454f12cb5cdacf4a4",
     "semantic_hash": ""
   },
   "src/platform/product/descriptor.ts": {
@@ -1585,8 +1585,8 @@
     "semantic_hash": ""
   },
   "src/server/actions/helpdesk.ts": {
-    "mtime": 1787183888.1140158,
-    "ast_hash": "8e1b950d93e13d4a6341cffdff0b03d9",
+    "mtime": 1787226004.7339954,
+    "ast_hash": "85229d468ddf4cddfad7f2d78bb34af9",
     "semantic_hash": ""
   },
   "src/server/actions/projects.ts": {
@@ -2090,8 +2090,8 @@
     "semantic_hash": ""
   },
   "src/platform/modules/ownership.ts": {
-    "mtime": 1787210692.4295213,
-    "ast_hash": "badf151f3c4cabfca5fa8f468d4323c5",
+    "mtime": 1787226107.4979186,
+    "ast_hash": "d240caafc8420d77a978d695c9dd579e",
     "semantic_hash": ""
   },
   "src/platform/modules/permission-scope.test.ts": {
@@ -2135,7 +2135,7 @@
     "semantic_hash": ""
   },
   "src/platform/tenancy/packs.ts": {
-    "mtime": 1787207074.9559388,
+    "mtime": 1787226257.4237993,
     "ast_hash": "5a54aa5223386bb85bd063f4ba020410",
     "semantic_hash": ""
   },
@@ -2260,8 +2260,8 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1787211517.7659502,
-    "ast_hash": "65e59b59126e1354f212b3c7906fc61b",
+    "mtime": 1787226366.0361004,
+    "ast_hash": "c12bbb6b497b2c51e72ff4ec80d11aed",
     "semantic_hash": ""
   },
   "docs/00-foundation/verity_platform_specification.md": {
@@ -2270,8 +2270,8 @@
     "semantic_hash": ""
   },
   "docs/README.md": {
-    "mtime": 1787205803.6263466,
-    "ast_hash": "9d10582660782d42428594d473065408",
+    "mtime": 1787213600.7641373,
+    "ast_hash": "6e66b3bef7bca883b1c2075d1f5dc459",
     "semantic_hash": ""
   },
   "public/logo.png": {
@@ -2280,8 +2280,8 @@
     "semantic_hash": ""
   },
   "prisma/migrations/20260820000000_purge_veda_legacy/migration.sql": {
-    "mtime": 1787211464.6158068,
-    "ast_hash": "69bda7a7423b3e0b8b486c18d914b589",
+    "mtime": 1787212012.2401671,
+    "ast_hash": "a13fcd04d4a3c1792e2f26dbb13f2935",
     "semantic_hash": ""
   },
   "src/components/catalog/ItemCombobox.tsx": {
@@ -2325,8 +2325,103 @@
     "semantic_hash": ""
   },
   "docs/03-roadmap/roadmaps.md": {
-    "mtime": 1787211517.7659502,
-    "ast_hash": "d9d38c78d9e944593d5ad4f3f2e771d3",
+    "mtime": 1787226352.32717,
+    "ast_hash": "dee78fe9c00a4918de4f38f8c6855ef8",
+    "semantic_hash": ""
+  },
+  "prisma/migrations/20260820010000_catalog_portal_fields/migration.sql": {
+    "mtime": 1787225306.5896075,
+    "ast_hash": "3142f7c7b33fe9316adbb0d69dee8a5a",
+    "semantic_hash": ""
+  },
+  "src/app/c/[clientSlug]/book/client.tsx": {
+    "mtime": 1787225661.2716024,
+    "ast_hash": "acc8227ef55df91d067c716723aabd9e",
+    "semantic_hash": ""
+  },
+  "src/app/c/[clientSlug]/book/page.tsx": {
+    "mtime": 1787225618.2515502,
+    "ast_hash": "321ac7a187ecbc1c05e4098c3462d914",
+    "semantic_hash": ""
+  },
+  "src/app/c/[clientSlug]/layout.tsx": {
+    "mtime": 1787225708.5810018,
+    "ast_hash": "57328fa3875fa1bfd9fd80e18cf1160a",
+    "semantic_hash": ""
+  },
+  "src/app/c/[clientSlug]/menu/client.tsx": {
+    "mtime": 1787225854.447094,
+    "ast_hash": "64bcd42a3886cb7c4418e68bf6680eb7",
+    "semantic_hash": ""
+  },
+  "src/app/c/[clientSlug]/menu/page.tsx": {
+    "mtime": 1787225778.4249117,
+    "ast_hash": "783ec3ebee407da0763ebfaae558a927",
+    "semantic_hash": ""
+  },
+  "src/app/owner/catalog/client.tsx": {
+    "mtime": 1787225444.916438,
+    "ast_hash": "9a9baf12157762c0c454fa469a7cfce4",
+    "semantic_hash": ""
+  },
+  "src/app/owner/catalog/page.tsx": {
+    "mtime": 1787225398.1762495,
+    "ast_hash": "8b85f5f8d200254835f6d0ddeec1ac41",
+    "semantic_hash": ""
+  },
+  "src/app/worker/jobs/[id]/client.tsx": {
+    "mtime": 1787226077.5821364,
+    "ast_hash": "ab4157beeaa2c00a6b633a94a2292792",
+    "semantic_hash": ""
+  },
+  "src/app/worker/jobs/[id]/page.tsx": {
+    "mtime": 1787226024.2379036,
+    "ast_hash": "3c6f40d6816074a2881c0c4744b0730e",
+    "semantic_hash": ""
+  },
+  "src/lib/slots.test.ts": {
+    "mtime": 1787226153.426092,
+    "ast_hash": "48a3abcfcecbc79f384d104277a3a425",
+    "semantic_hash": ""
+  },
+  "src/lib/slots.ts": {
+    "mtime": 1787225554.2360654,
+    "ast_hash": "4ceb4b88efa4a64c3a3a44c6362b2c5e",
+    "semantic_hash": ""
+  },
+  "src/platform/modules/definitions/catalog.ts": {
+    "mtime": 1787226267.174992,
+    "ast_hash": "c510ab40328e729ba658f9dbf6b7032d",
+    "semantic_hash": ""
+  },
+  "src/server/actions/catalog.ts": {
+    "mtime": 1787225384.997842,
+    "ast_hash": "c6a668694d48616d5e37c0bc8142d877",
+    "semantic_hash": ""
+  },
+  "src/server/actions/portal.ts": {
+    "mtime": 1787225758.5967295,
+    "ast_hash": "0246b6761fbd202d4fbb1c920958b539",
+    "semantic_hash": ""
+  },
+  "src/server/internal/portal.ts": {
+    "mtime": 1787225493.3883197,
+    "ast_hash": "2f48cb7c2a3b945879202eb7dd5e6a8b",
+    "semantic_hash": ""
+  },
+  "docs/00-foundation/customer_portal_specification.md": {
+    "mtime": 1787212880.7796545,
+    "ast_hash": "47c1011fd43de2a1da35f398342d2472",
+    "semantic_hash": ""
+  },
+  "docs/implementation_plan.md": {
+    "mtime": 1787226352.3261373,
+    "ast_hash": "c98413181eb6191b9d408abf4dccda12",
+    "semantic_hash": ""
+  },
+  "docs/product_readiness_audit.md": {
+    "mtime": 1787213595.733549,
+    "ast_hash": "7bbe74723ce356b9fc5020e3d17ed743",
     "semantic_hash": ""
   }
 }

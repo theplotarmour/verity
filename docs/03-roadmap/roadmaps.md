@@ -36,9 +36,15 @@ Our primary objective is to make Verity a pristine core shell, and then build/ad
 ### Task 2: Dynamic Sidebar Navigation — **done**
 *   `resolveNavGroups()` derives groups from the items the active modules contribute. `NAV_GROUP_ORDER` is now an ordering preference, not a whitelist — an unlisted group renders after the listed ones instead of vanishing.
 
-### Task 3: B2C Customer Portal Rollout
-*   **Action:** Build the mobile-first customer portals under `/book` (service booking calendar and slot selector) and `/menu` (food/retail visual menus).
-*   **Result:** Delivering the first version of the Customer World.
+### Task 3: B2C Customer Portal Rollout — **done**
+*   Built at `/c/[clientSlug]/book` and `/c/[clientSlug]/menu`. Path routing rather than subdomains: a subdomain needs a DNS record and a wildcard certificate per tenant before anything renders.
+*   The portal layout injects the tenant's accent as `--brand`, with a WCAG luminance check choosing `--brand-contrast`, so a pale accent still produces readable buttons. No Verity branding below that line.
+*   `server/internal/portal.ts` is the trust boundary: the slug from the URL is the only tenant input accepted, and the module entitlement is re-checked on every call.
+*   Slot maths is in `src/lib/slots.ts` — pure, tested, and shared by the grid and the write path, so the two cannot disagree about what "taken" means.
+
+### Task 4: Customer Catalogue
+*   The `catalog` module owns the customer-facing columns on `Product` — price, picture, description, published — while `inventory` keeps owning the item itself. Two screens over one row, one write path.
+*   `Product.pricePaise` and `Product.isPublished` were added for it. Publishing refuses a zero price rather than defaulting one.
 
 ---
 

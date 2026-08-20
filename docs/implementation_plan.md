@@ -15,7 +15,28 @@ Before beginning execution, please review these key architecture decisions:
 
 ## 2. Proposed Changes
 
-### Phase A: Composable Platform Alpha (Current Priority)
+### Phase A: Composable Platform Alpha — **built**
+
+All five items below are implemented. Three needed a decision the plan could
+not have anticipated, because the MES purge and the restaurant-pack withdrawal
+landed between the plan being written and it being executed:
+
+*   **The menu portal posts to `ingestExternalOrder`, not to a table order.**
+    `tables_orders` was withdrawn. That path is the platform's existing way for
+    an order to arrive from outside — a DRAFT `SalesOrder` plus the
+    `ORDER_RECEIVED` webhook in one transaction — which is what "emits
+    `order.received`" meant.
+*   **My Day shows assigned service visits, not a KDS queue.** The `kitchen`
+    module was withdrawn with the restaurant pack.
+*   **`catalog` is in no pack.** Adding it to the QSR and retail bundles pushed
+    both past the published 20–25% pack discount band. Repricing two live packs
+    is a commercial decision, so it is enabled per tenant from the HQ builder,
+    exactly like `booking`.
+
+Two schema additions were needed: `Product.pricePaise` and
+`Product.isPublished`. Products carried a valuation method and a tax rate but
+no sale price, because nothing customer-facing read the table until now.
+Migration: `prisma/migrations/20260820010000_catalog_portal_fields`.
 
 #### [NEW] [catalog definition](file:///D:/Code/verity/src/platform/modules/definitions/catalog.ts)
 Registers the `catalog` module in the static registry:

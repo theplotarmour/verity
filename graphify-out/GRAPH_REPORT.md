@@ -1,65 +1,65 @@
 # Graph Report - verity  (2026-08-20)
 
 ## Corpus Check
-- 458 files · ~339,382 words
+- 477 files · ~352,401 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2514 nodes · 6071 edges · 215 communities (131 shown, 84 thin omitted)
+- 2654 nodes · 6353 edges · 226 communities (139 shown, 87 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 20 edges (avg confidence: 0.6)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `2981d232`
+- Built from commit: `b7a97063`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- getOwnerUser
+- masterData.ts
 - 00000000000000_baseline/migration.sql
 - 20260727000000_init/migration.sql
-- outbox.ts
+- actions/helpdesk.ts
 - hashPin
 - hq.ts
 - owner.ts
-- ClientDetailClient.tsx
-- ItemCombobox.tsx
+- Product Readiness Audit: Verity Composable Operating Platform
+- hasModule
 - pricing.ts
 - guardModuleWrite
-- orderIngest.ts
-- ServiceWorkOrdersClient.tsx
+- orderItemResolver.ts
+- BillingClient.tsx
 - packs.ts
 - ProjectDetailClient.tsx
-- prisma.ts
+- context.ts
 - registry.ts
-- profile/page.tsx
+- WorkerSettingsClient.tsx
 - ModuleKey
 - entitlements.ts
 - seed-carxen.ts
 - allModules
-- 1. Accomplished Phases
-- BillingClient.tsx
+- 2. Immediate Priorities: Cleansing & Core Furnishing
+- Phase A: Composable Platform Alpha — **built**
 - getUserSession
 - guardModuleAction
-- getActiveSessionUser
+- upload.ts
 - primitives.tsx
 - owner-shell.tsx
 - booking/client.tsx
 - 3. The Four Worlds UX Shells
 - "Product"
-- serviceQuality.ts
+- actions/booking.ts
 - descriptor.ts
 - server/auth.ts
-- PurchaseClient.tsx
+- getOwnerUser
 - bom-mode.ts
 - seed_demo_items.mts
 - reactions.ts
 - FacilityManagementDashboard.tsx
 - cn
 - Architecture Manifesto
-- actions/departments.ts
-- seed-owner/route.ts
-- Input
+- DepartmentsClient.tsx
+- provision.ts
+- actions/portal.ts
 - dashboard.test.ts
 - schema.ts
 - InventoryClient.tsx
@@ -69,7 +69,7 @@
 - lib/types.ts
 - phoneKey
 - domains.ts
-- api-keys.ts
+- integrations.ts
 - mock_seed.mjs
 - verify-seed.mts
 - actions/scheduling.ts
@@ -77,7 +77,7 @@
 - devDependencies
 - live-bus.ts
 - orders.ts
-- ItemsTree.tsx
+- book/client.tsx
 - FactoryFeed.tsx
 - Verity User Guide
 - groq-sdk
@@ -86,7 +86,7 @@
 - assistant/route.ts
 - anomalies.ts
 - scripts
-- settings/client.tsx
+- actions/auth.ts
 - backfill_fabric_answers.mts
 - itemUnits.ts
 - backfill_item_blueprints.mts
@@ -94,9 +94,9 @@
 - Documentation Pillars
 - compilerOptions
 - seed_designs.ts
-- root-providers.tsx
+- markdown.ts
 - gen_rls_migration.mjs
-- DepartmentsClient.tsx
+- Input
 - "Blueprint"
 - "BlueprintRouteStep"
 - "BlueprintVersion"
@@ -107,7 +107,7 @@
 - backfill-role-permissions.ts
 - "CheckpointSubmission"
 - "FactoryDocument"
-- itemSearch.ts
+- prisma.ts
 - "ImageEvidence"
 - language-provider.tsx
 - "Inspection"
@@ -127,7 +127,7 @@
 - vercel.json
 - repair-legacy-pin-hashes.ts
 - "JobCard"
-- url-guard.ts
+- worker/page.tsx
 - db_state.mjs
 - seed_group_defaults.mjs
 - seed_seatcover_spec.mjs
@@ -162,10 +162,10 @@
 - eslint.config.mjs
 - bus.ts
 - @fontsource/noto-sans-devanagari
-- shopify/route.ts
+- actions/notifications.ts
 - gsap
 - Verity — Claude Code Project Memory
-- jose
+- BookingWidgets.tsx
 - "QualityReport"
 - next
 - next-themes
@@ -173,9 +173,15 @@
 - "StageEntry"
 - "WorkOrder"
 - react
+- internal/portal.ts
 - @sentry/nextjs
+- tally/route.ts
+- assistantTools.ts
 - tailwindcss-animate
 - @types/papaparse
+- Customer Portal Specification (B2C World 1)
+- getActiveSessionUser
+- VerityLogo.tsx
 - postcss.config.mjs
 - backfill_bom_mode.mts
 - seed_bom_templates.mjs
@@ -187,10 +193,14 @@
 - prod.mts
 - progress.mts
 - strays.mts
+- useLanguage
+- OrderSpecCard.tsx
+- @aws-sdk/s3-request-presigner
 - app icon.png
 - Original MasterSheetView snapshot
 - Item tree root groups snippet
-- customers.ts
+- CustomersTree.tsx
+- "Product"
 - "Supplier"
 - "Warehouse"
 - clsx
@@ -201,51 +211,52 @@
 - "User"
 
 ## God Nodes (most connected - your core abstractions)
-1. `getOwnerUser` - 283 edges
-2. `guardModuleWrite()` - 108 edges
+1. `getOwnerUser` - 288 edges
+2. `guardModuleWrite()` - 110 edges
 3. `cn()` - 80 edges
-4. `guardModuleAction()` - 66 edges
-5. `Button()` - 50 edges
-6. `getUserSession()` - 44 edges
-7. `guardModulePage()` - 42 edges
-8. `ModuleKey` - 42 edges
-9. `Input()` - 35 edges
-10. `toast` - 33 edges
+4. `guardModuleAction()` - 68 edges
+5. `Button()` - 52 edges
+6. `getUserSession()` - 48 edges
+7. `guardModulePage()` - 44 edges
+8. `ModuleKey` - 43 edges
+9. `hasModule()` - 42 edges
+10. `Input()` - 36 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `entitledModules()` --calls--> `getModule()`  [EXTRACTED]
-  scripts/backfill-role-grants.ts → src/platform/modules/registry.ts
-- `entitledModules()` --calls--> `withDependencies()`  [EXTRACTED]
-  scripts/backfill-role-grants.ts → src/platform/modules/registry.ts
 - `main()` --calls--> `hashPin()`  [EXTRACTED]
   scripts/onboard_jmd_impex.ts → src/lib/server/hash.ts
 - `Trial` --references--> `ModuleKey`  [EXTRACTED]
   scripts/provision-trial.ts → src/platform/modules/registry.ts
 - `describeSpecDetails()` --indirect_call--> `v()`  [INFERRED]
   src/lib/server/specUtils.ts → scripts/seed_all_specs.mjs
+- `main()` --calls--> `allModules()`  [EXTRACTED]
+  scripts/setup-operator-org.ts → src/platform/modules/registry.ts
+- `main()` --calls--> `withDependencies()`  [EXTRACTED]
+  scripts/setup-operator-org.ts → src/platform/modules/registry.ts
 
 ## Import Cycles
-- 3-file cycle: `src/platform/modules/definitions/booking.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/booking.ts`
-- 3-file cycle: `src/platform/modules/definitions/core.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/core.ts`
 - 3-file cycle: `src/platform/modules/definitions/projects.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/projects.ts`
-- 3-file cycle: `src/platform/modules/definitions/procurement.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/procurement.ts`
-- 3-file cycle: `src/platform/modules/definitions/crm.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/crm.ts`
-- 3-file cycle: `src/platform/modules/definitions/billing.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/billing.ts`
-- 3-file cycle: `src/platform/modules/definitions/quality.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/quality.ts`
+- 3-file cycle: `src/platform/modules/definitions/sites.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/sites.ts`
+- 3-file cycle: `src/platform/modules/definitions/inventory.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/inventory.ts`
 - 3-file cycle: `src/platform/modules/definitions/assets.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/assets.ts`
+- 3-file cycle: `src/platform/modules/definitions/billing.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/billing.ts`
+- 3-file cycle: `src/platform/modules/definitions/booking.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/booking.ts`
+- 3-file cycle: `src/platform/modules/definitions/catalog.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/catalog.ts`
+- 3-file cycle: `src/platform/modules/definitions/core.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/core.ts`
+- 3-file cycle: `src/platform/modules/definitions/crm.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/crm.ts`
 - 3-file cycle: `src/platform/modules/definitions/finance.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/finance.ts`
 - 3-file cycle: `src/platform/modules/definitions/helpdesk.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/helpdesk.ts`
 - 3-file cycle: `src/platform/modules/definitions/hr.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/hr.ts`
-- 3-file cycle: `src/platform/modules/definitions/inventory.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/inventory.ts`
+- 3-file cycle: `src/platform/modules/definitions/procurement.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/procurement.ts`
+- 3-file cycle: `src/platform/modules/definitions/quality.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/quality.ts`
 - 3-file cycle: `src/platform/modules/definitions/sales.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/sales.ts`
 - 3-file cycle: `src/platform/modules/definitions/scheduling.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/scheduling.ts`
-- 3-file cycle: `src/platform/modules/definitions/sites.ts -> src/platform/modules/sdk.ts -> src/platform/modules/registry.ts -> src/platform/modules/definitions/sites.ts`
 
-## Communities (215 total, 84 thin omitted)
+## Communities (226 total, 87 thin omitted)
 
-### Community 0 - "getOwnerUser"
-Cohesion: 0.09
-Nodes (52): EmployeeProfilePage(), DEFAULT_MATERIAL_CATEGORY, FABRIC_CATEGORY, itemsInRootCategory(), getOwnerUser, guardDelete(), addCatalogItem(), addColor() (+44 more)
+### Community 0 - "masterData.ts"
+Cohesion: 0.05
+Nodes (74): Category, emptyForm(), Field(), FieldDef, Form, Item, ItemsTree(), DEFAULT_MATERIAL_CATEGORY (+66 more)
 
 ### Community 1 - "00000000000000_baseline/migration.sql"
 Cohesion: 0.05
@@ -255,113 +266,109 @@ Nodes (82): "Agreement", "Approval", "Attachment", "AttendanceLog", "AuditLog", 
 Cohesion: 0.05
 Nodes (81): "Agreement", "Approval", "Attachment", "AttendanceLog", "AuditLog", "BinBalance", "Blueprint", "BlueprintRouteStep" (+73 more)
 
-### Community 3 - "outbox.ts"
-Cohesion: 0.20
-Nodes (13): dynamic, json(), POST(), runtime, validate(), touchApiKey(), backoffMs(), Client (+5 more)
+### Community 3 - "actions/helpdesk.ts"
+Cohesion: 0.11
+Nodes (28): Comment, STATUSES, Ticket, TicketDetailClient(), WorkOrder, Job, timeFmt, addTicketComment() (+20 more)
 
 ### Community 4 - "hashPin"
-Cohesion: 0.09
-Nodes (46): main(), prisma, STAGES, SettingsClient(), IntegrationsClient(), OwnerIntegrationsPage(), OwnerSettingsPage(), PermissionMatrixCard() (+38 more)
+Cohesion: 0.12
+Nodes (35): main(), prisma, STAGES, SettingsClient(), OwnerSettingsPage(), PermissionMatrixCard(), ROLE_LABELS, ROLES (+27 more)
 
 ### Community 5 - "hq.ts"
-Cohesion: 0.14
-Nodes (33): ClientsClient(), IntegrationsPanel(), HqClientDetailPage(), HqClientsPage(), requireHqAction(), provisionTenant(), systemRoleId(), acceptAgreement() (+25 more)
+Cohesion: 0.09
+Nodes (45): BLANK, Client, ClientsClient(), Issued, Pack, Brand, Factory, Module (+37 more)
 
 ### Community 6 - "owner.ts"
+Cohesion: 0.09
+Nodes (37): AssetDetailPage(), AssetsPage(), InvoiceDetailPage(), TicketDetailPage(), HelpdeskPage(), Item, ItemLabelSheet(), InventoryLabelsPage() (+29 more)
+
+### Community 7 - "Product Readiness Audit: Verity Composable Operating Platform"
 Cohesion: 0.10
-Nodes (36): AssetDetailPage(), AssetsPage(), InvoiceDetailPage(), BillingPage(), CustomersPage(), TicketDetailPage(), HelpdeskPage(), Item (+28 more)
+Nodes (20): 1. Product Maturity Dashboard, 1. The Manager Test, 2. Module Operational Gap Matrix, 2. The Deskless Worker Test, 3. Deep-Dive Module Gaps, 3. The B2C Customer Test, 4. Platform Engine & Control Plane Gaps, 5. The Composable System Test Protocol (+12 more)
 
-### Community 7 - "ClientDetailClient.tsx"
-Cohesion: 0.12
-Nodes (22): BLANK, Client, Issued, Pack, Brand, ClientDetailClient(), Factory, Module (+14 more)
-
-### Community 8 - "ItemCombobox.tsx"
+### Community 8 - "hasModule"
 Cohesion: 0.22
-Nodes (10): FreeTextInput(), ItemCombobox(), Props, ItemSelect(), Props, ItemOption, AnchorRect, computeDropdownPlacement() (+2 more)
+Nodes (18): BillingPage(), DraftInvoiceInput, draftServiceInvoice(), LineItemInput, priceLines(), round2(), hasModule(), buildInvoiceFromWork() (+10 more)
 
 ### Community 9 - "pricing.ts"
 Cohesion: 0.09
 Nodes (36): TenantBillingPage(), ChargeLine, GeneratedInvoice, generateInvoice(), intendedLines(), monthPeriod(), nextInvoiceNumber(), PLATFORM_LINE (+28 more)
 
 ### Community 10 - "guardModuleWrite"
-Cohesion: 0.06
-Nodes (79): ProjectDetailClient(), createWithDocNumber(), formatDocNumber(), DraftInvoiceInput, draftServiceInvoice(), LineItemInput, priceLines(), round2() (+71 more)
+Cohesion: 0.11
+Nodes (45): ProjectDetailClient(), createWithDocNumber(), formatDocNumber(), guardModuleWrite(), AssetInput, createAsset(), createMaintenanceSchedule(), deleteAsset() (+37 more)
 
-### Community 11 - "orderIngest.ts"
-Cohesion: 0.27
-Nodes (8): prisma, enqueueWebhook(), OrderSpec, resolveOrderItem(), ingestExternalOrder(), IngestResult, matchItemByName(), ingest()
+### Community 11 - "orderItemResolver.ts"
+Cohesion: 0.50
+Nodes (3): prisma, OrderSpec, resolveOrderItem()
 
-### Community 12 - "ServiceWorkOrdersClient.tsx"
+### Community 12 - "BillingClient.tsx"
 Cohesion: 0.06
-Nodes (73): AssetRow, AssetsClient(), BLANK, STATUSES, Asset, AssetDetailClient(), Log, Schedule (+65 more)
+Nodes (78): AssetRow, AssetsClient(), BLANK, STATUSES, Asset, AssetDetailClient(), Log, Schedule (+70 more)
 
 ### Community 13 - "packs.ts"
-Cohesion: 0.13
-Nodes (27): checkDashboardRouting(), fail(), main(), pass(), prisma, reportIngestCoverage(), ROUTE, PackSuggestion (+19 more)
+Cohesion: 0.11
+Nodes (28): checkDashboardRouting(), fail(), main(), pass(), prisma, reportIngestCoverage(), ROUTE, DASHBOARDS (+20 more)
 
 ### Community 14 - "ProjectDetailClient.tsx"
 Cohesion: 0.11
-Nodes (14): BLANK_TASK, BLANK_TIME, PRIORITIES, Project, PROJECT_STATUSES, Tab, TABS, TASK_STATUSES (+6 more)
-
-### Community 15 - "prisma.ts"
-Cohesion: 0.22
-Nodes (4): POOL_LIMIT, pooledUrl(), prismaClientSingleton(), TenantContext
+Nodes (13): BLANK_TASK, BLANK_TIME, PRIORITIES, Project, PROJECT_STATUSES, Tab, TABS, TASK_STATUSES (+5 more)
 
 ### Community 16 - "registry.ts"
 Cohesion: 0.12
-Nodes (20): assetsModule, billingModule, bookingModule, coreModule, crmModule, financeModule, helpdeskModule, hrModule (+12 more)
+Nodes (20): assetsModule, billingModule, bookingModule, catalogModule, coreModule, crmModule, financeModule, helpdeskModule (+12 more)
 
-### Community 17 - "profile/page.tsx"
-Cohesion: 0.20
-Nodes (11): dynamic, WorkerProfilePage(), WorkerSettingsClient(), LogoutButton(), NotificationPrefsCard(), SectionHeading(), changeOwnPin(), getNotificationSettings() (+3 more)
+### Community 17 - "WorkerSettingsClient.tsx"
+Cohesion: 0.35
+Nodes (7): WorkerSettingsClient(), NotificationPrefsCard(), changeOwnPin(), getNotificationSettings(), supportedLanguages, updateNotificationSettings(), updateUserLanguage()
 
 ### Community 18 - "ModuleKey"
-Cohesion: 0.08
-Nodes (28): entitledModules(), main(), prisma, hashPin(), main(), prisma, Trial, TRIALS (+20 more)
+Cohesion: 0.09
+Nodes (26): hashPin(), main(), prisma, Trial, TRIALS, CLIENT_OWNER, hashPin(), main() (+18 more)
 
 ### Community 19 - "entitlements.ts"
-Cohesion: 0.19
-Nodes (23): Entry, inflight, invalidate(), store, disableModule(), enableModules(), entitledModules, requireModule() (+15 more)
+Cohesion: 0.10
+Nodes (41): entitledModules(), main(), prisma, OnboardingPage(), OwnerDashboard(), OwnerLayout(), OnboardingWizard(), Suggestion (+33 more)
 
 ### Community 20 - "seed-carxen.ts"
 Cohesion: 0.11
 Nodes (42): cleanStructure(), COLOURS, created, Ctx, CUSTOMERS, DEFAULT_ROUTE, DEPARTMENTS, DESIGNS (+34 more)
 
 ### Community 21 - "allModules"
-Cohesion: 0.26
-Nodes (14): isLegacyPermissionActive(), isRegistryPermissionActive(), LEGACY_PERMISSION_MODULE, legacyPermissionModule(), registryPermissionModule(), ScopedPermissionGroup, scopedPermissionGroups(), scopedPermissionKeys() (+6 more)
+Cohesion: 0.25
+Nodes (15): isLegacyPermissionActive(), isRegistryPermissionActive(), LEGACY_PERMISSION_MODULE, legacyPermissionModule(), registryPermissionModule(), ScopedPermissionGroup, scopedPermissionGroups(), scopedPermissionKeys() (+7 more)
 
-### Community 22 - "1. Accomplished Phases"
-Cohesion: 0.18
-Nodes (10): 1. Accomplished Phases, 2. Immediate Priorities: Cleansing & Core Furnishing, 3. Future Module Expansions, Development & Product Roadmaps, Phase 1: Composable Platform Base, Phase 2: Decoupled Workflow Bus, Phase 3: Global Glassmorphic UI, Task 1: Manufacturing Purge — **done** (+2 more)
+### Community 22 - "2. Immediate Priorities: Cleansing & Core Furnishing"
+Cohesion: 0.17
+Nodes (11): 1. Accomplished Phases, 2. Immediate Priorities: Cleansing & Core Furnishing, 3. Future Module Expansions, Development & Product Roadmaps, Phase 1: Composable Platform Base, Phase 2: Decoupled Workflow Bus, Phase 3: Global Glassmorphic UI, Task 1: Manufacturing Purge — **done** (+3 more)
 
-### Community 23 - "BillingClient.tsx"
-Cohesion: 0.22
-Nodes (9): BillingClient(), BLANK_LINE, INVOICE_STATUSES, InvoiceRow, Line, monthBounds(), PAYROLL_STATUSES, PayrollRow (+1 more)
+### Community 23 - "Phase A: Composable Platform Alpha — **built**"
+Cohesion: 0.10
+Nodes (19): 1. User Review Required, 2. Proposed Changes, 3. Verification Plan, Composable System Tests, Implementation Plan — Complete Launch Ready State, [MODIFY] [HQ builder](file:///D:/Code/verity/src/app/verity/clients/[id]/ClientDetailClient.tsx), [MODIFY] [module resolver](file:///D:/Code/verity/src/platform/modules/registry.ts), [MODIFY] [worker dashboard](file:///D:/Code/verity/src/app/worker/page.tsx) (+11 more)
 
 ### Community 24 - "getUserSession"
-Cohesion: 0.23
-Nodes (13): GET(), POST(), getUserSession(), addCheckpointAction(), addSectionAction(), deleteCheckpointAction(), deleteQCTemplate(), deleteSectionAction() (+5 more)
+Cohesion: 0.17
+Nodes (16): dynamic, GET(), runtime, GET(), POST(), getUserSession(), addCheckpointAction(), addSectionAction() (+8 more)
 
 ### Community 25 - "guardModuleAction"
-Cohesion: 0.15
-Nodes (25): InventoryPage(), LogisticsClient(), LogisticsPage(), STOCK_STATUS_FIELD, STOCK_STATUS_LABEL, STOCK_STATUSES, StockStatus, guardModuleAction() (+17 more)
+Cohesion: 0.13
+Nodes (26): InventoryClient(), InventoryPage(), STOCK_STATUS_FIELD, STOCK_STATUS_LABEL, STOCK_STATUSES, StockStatus, guardModuleAction(), createDispatch() (+18 more)
 
-### Community 26 - "getActiveSessionUser"
-Cohesion: 0.06
-Nodes (35): dynamic, GET(), runtime, POST(), StorageDiagnosticsPage(), relativeTime(), WarningRow, WarningsQueue() (+27 more)
+### Community 26 - "upload.ts"
+Cohesion: 0.14
+Nodes (15): StorageDiagnosticsPage(), STORAGE_ALLOWED_EXTENSIONS, STORAGE_ALLOWED_MIME_TYPES, STORAGE_BUCKET, STORAGE_MAX_BYTES, VIDEO_ALLOWED_EXTENSIONS, VIDEO_ALLOWED_MIME_TYPES, VIDEO_MAX_BYTES (+7 more)
 
 ### Community 27 - "primitives.tsx"
-Cohesion: 0.10
-Nodes (14): BLANK, SiteRow, STATUSES, AddEmployeeForm(), RemoveEmployeeButton(), ResetPinButton(), LaunchOutletDialog(), Button() (+6 more)
+Cohesion: 0.06
+Nodes (26): Checkpoint, Inspection, ServiceInspectionClient(), ApiKey, Delivery, Endpoint, AddEmployeeForm(), RemoveEmployeeButton() (+18 more)
 
 ### Community 28 - "owner-shell.tsx"
-Cohesion: 0.11
-Nodes (26): AssistantPanel(), Message, MobileTab(), NAV_ICONS, NotificationItem, OwnerShell(), ShellNavItem, withIcon() (+18 more)
+Cohesion: 0.12
+Nodes (24): AssistantPanel(), Message, MobileTab(), NAV_ICONS, NotificationItem, OwnerShell(), ShellNavItem, withIcon() (+16 more)
 
 ### Community 29 - "booking/client.tsx"
-Cohesion: 0.08
-Nodes (39): BookingCard(), BookingClient(), dateFmt, dayKeyFmt, instantOf(), keyOf(), NewBookingSheet(), shiftKey() (+31 more)
+Cohesion: 0.14
+Nodes (17): BookingCard(), BookingClient(), dateFmt, dayKeyFmt, instantOf(), keyOf(), NewBookingSheet(), shiftKey() (+9 more)
 
 ### Community 30 - "3. The Four Worlds UX Shells"
 Cohesion: 0.20
@@ -371,21 +378,21 @@ Nodes (9): 1. Customer Portal (Mobile-First White-Label), 1. Glassmorphism Token
 Cohesion: 0.25
 Nodes (8): "BinBalance", "MaterialReservation", "Product", "PurchaseOrderItem", "SalesOrder", "SalesOrderItem", "StockLedgerEntry", "UOMConversion"
 
-### Community 32 - "serviceQuality.ts"
-Cohesion: 0.43
-Nodes (6): ServiceInspectionPage(), getServiceInspection(), recordServiceCheckpoint(), resolveServiceInspection(), revalidateInspectionPaths(), submitServiceInspection()
+### Community 32 - "actions/booking.ts"
+Cohesion: 0.19
+Nodes (14): BookingPage(), APPOINTMENT_STATUSES, bookingDayRange(), bookingWeekRange(), istDayStart(), LIVE_APPOINTMENT_STATUSES, ActionResult, appointmentsInRange() (+6 more)
 
 ### Community 33 - "descriptor.ts"
 Cohesion: 0.08
 Nodes (26): contrast(), CSS, relativeLuminance(), token(), DescriptorSpec, DescriptorValues, FieldSpec, FieldValue (+18 more)
 
 ### Community 34 - "server/auth.ts"
-Cohesion: 0.12
-Nodes (21): POST(), HomeClient(), TAP_SPRING, HomePage(), clearUserSession(), createUserSession(), decrypt(), encodedKey (+13 more)
+Cohesion: 0.17
+Nodes (12): POST(), clearUserSession(), createUserSession(), decrypt(), encodedKey, encrypt(), getUserSessionFromRequest(), SessionPayload (+4 more)
 
-### Community 35 - "PurchaseClient.tsx"
-Cohesion: 0.14
-Nodes (23): PurchasePage(), PurchaseClient(), approvePurchaseOrder(), confirmPurchaseDelivery(), createPurchaseOrder(), createSupplier(), deletePurchaseOrder(), deleteSupplier() (+15 more)
+### Community 35 - "getOwnerUser"
+Cohesion: 0.13
+Nodes (31): PurchasePage(), PurchaseClient(), ServiceWorkOrdersPage(), EmployeeProfilePage(), getOwnerUser, getServiceWorkOrdersData(), approveSalesOrder(), getMasterData() (+23 more)
 
 ### Community 36 - "bom-mode.ts"
 Cohesion: 0.36
@@ -396,28 +403,28 @@ Cohesion: 0.24
 Nodes (19): emitEvent(), ownerRecipients(), EventPayload, appointmentInvoiceMarker(), AppointmentPayload, auditAppointment(), billAppointment(), billWorkOrder() (+11 more)
 
 ### Community 39 - "FacilityManagementDashboard.tsx"
-Cohesion: 0.20
-Nodes (12): FacilityManagementDashboard(), BarRow(), FunnelStage, hoursLabel(), Nothing(), Panel(), StatRow(), Tone (+4 more)
+Cohesion: 0.24
+Nodes (10): FacilityManagementDashboard(), BarRow(), FunnelStage, hoursLabel(), Nothing(), Panel(), StatRow(), Tone (+2 more)
 
 ### Community 40 - "cn"
 Cohesion: 0.06
-Nodes (34): UserWithStats, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, FactoryActivityFeed() (+26 more)
+Nodes (36): TeamClient(), UserWithStats, Table, TableBody, TableCell, TableHead, TableHeader, TableRow (+28 more)
 
 ### Community 41 - "Architecture Manifesto"
 Cohesion: 0.29
 Nodes (6): 1. Composable Module Pattern, 2. Decoupled Event Bus Workflows, 3. Tenancy & Isolation Scoping, Architecture Manifesto, Composition Rules, Static Registrations
 
-### Community 42 - "actions/departments.ts"
-Cohesion: 0.19
-Nodes (16): DepartmentModal(), DepartmentsClient(), RosterModal(), DepartmentsPage(), Db, DEFAULT_DEPARTMENTS, DEFAULT_NAMES, ensureFactoryDepartments() (+8 more)
+### Community 42 - "DepartmentsClient.tsx"
+Cohesion: 0.14
+Nodes (21): DepartmentModal(), DepartmentsClient(), Dept, Member, ROSTER_ROLES, RosterModal(), Template, UserRow (+13 more)
 
-### Community 43 - "seed-owner/route.ts"
-Cohesion: 0.52
-Nodes (4): GET(), hashPassword(), GET(), requireMaintenanceToken()
+### Community 43 - "provision.ts"
+Cohesion: 0.22
+Nodes (15): GET(), hashPassword(), GET(), requireMaintenanceToken(), DEFAULT_MODULES, ProvisionResult, provisionTenant(), ROLE_LABELS (+7 more)
 
-### Community 44 - "Input"
-Cohesion: 0.11
-Nodes (13): ApiKey, Delivery, Endpoint, CustomerOption, Customer, Field(), Form, TAG_OPTIONS (+5 more)
+### Community 44 - "actions/portal.ts"
+Cohesion: 0.21
+Nodes (15): BookedRange, DEFAULT_SLOT_RULES, freeSlots(), isSlotFree(), istWallClock(), normaliseSlotRules(), SlotRules, at() (+7 more)
 
 ### Community 45 - "dashboard.test.ts"
 Cohesion: 0.50
@@ -428,8 +435,8 @@ Cohesion: 0.33
 Nodes (7): CsvField, csvHeader(), csvOptionSheet(), csvSampleRow(), FIXED, parseCsvRow(), fields
 
 ### Community 48 - "InventoryClient.tsx"
-Cohesion: 0.08
-Nodes (21): InventoryClient(), NewLocation(), STOCK_MODAL_COPY, StockModalType, Tab, TABS, ADJUSTMENT_TYPES, createDispatch() (+13 more)
+Cohesion: 0.07
+Nodes (25): NewLocation(), STOCK_MODAL_COPY, StockModalType, Tab, TABS, FreeTextInput(), ItemCombobox(), Props (+17 more)
 
 ### Community 49 - "seed.ts"
 Cohesion: 0.28
@@ -444,44 +451,44 @@ Cohesion: 0.08
 Nodes (24): AppData, AssignmentDraft, AssignmentStatus, AuditLog, BootstrapPayload, Checkpoint, CheckpointResponse, Customer (+16 more)
 
 ### Community 53 - "phoneKey"
-Cohesion: 0.07
-Nodes (30): main(), prisma, Contents(), GuideClient(), GuidePage(), metadata, OnboardingPage(), HqLayout() (+22 more)
+Cohesion: 0.18
+Nodes (14): main(), prisma, HqLayout(), parsePhoneList(), phoneKey(), samePhone(), allowlist(), Denial (+6 more)
 
 ### Community 54 - "domains.ts"
 Cohesion: 0.50
 Nodes (3): MASTER_DATA_DOMAIN_LABELS, MASTER_DATA_DOMAINS, MasterDataDomainId
 
-### Community 55 - "api-keys.ts"
-Cohesion: 0.24
-Nodes (15): headers(), hashToken(), IssuedKey, issueKeyMaterial(), MAX_SKEW_SECONDS, safeEqual(), SignatureVerdict, signPayload() (+7 more)
+### Community 55 - "integrations.ts"
+Cohesion: 0.06
+Nodes (64): dynamic, handled(), POST(), runtime, dynamic, json(), POST(), runtime (+56 more)
 
 ### Community 56 - "mock_seed.mjs"
 Cohesion: 0.11
 Nodes (13): colorNames, customerNames, designSpec, ensureVariant(), fabricItems, firstNames, item(), lastNames (+5 more)
 
 ### Community 58 - "actions/scheduling.ts"
-Cohesion: 0.19
-Nodes (18): isoDay(), SchedulingClient(), dynamic, WorkerHome(), dynamic, WorkerSchedulePage(), getDictionary(), enforceRole() (+10 more)
+Cohesion: 0.21
+Nodes (16): SchedulingPage(), isoDay(), SchedulingClient(), dynamic, WorkerSchedulePage(), copyWeek(), deleteSchedule(), getMySchedule() (+8 more)
 
 ### Community 59 - "events.ts"
-Cohesion: 0.22
-Nodes (8): escapeHtml(), EventKey, EVENTS, Prefs, sendEmail(), sendWhatsApp(), WHATSAPP_EVENTS, notifyLowStock()
+Cohesion: 0.25
+Nodes (7): escapeHtml(), EventKey, EVENTS, Prefs, sendEmail(), sendWhatsApp(), WHATSAPP_EVENTS
 
 ### Community 60 - "devDependencies"
 Cohesion: 0.07
 Nodes (27): eslint, eslint-config-next, devDependencies, eslint, eslint-config-next, @playwright/test, prisma, tailwindcss (+19 more)
 
 ### Community 61 - "live-bus.ts"
-Cohesion: 0.28
-Nodes (7): dynamic, GET(), runtime, channel(), g, LiveChange, subscribeChange()
+Cohesion: 0.50
+Nodes (4): channel(), g, LiveChange, subscribeChange()
 
 ### Community 62 - "orders.ts"
-Cohesion: 0.14
-Nodes (18): publishChange(), salesOrderInclude, toLegacyOrder(), Db, DEFAULT_STAGES, recordTimeline(), allocateFinishedStock(), approveSalesOrder() (+10 more)
+Cohesion: 0.16
+Nodes (16): publishChange(), salesOrderInclude, toLegacyOrder(), Db, DEFAULT_STAGES, recordTimeline(), allocateFinishedStock(), assessOnOrderStock() (+8 more)
 
-### Community 63 - "ItemsTree.tsx"
-Cohesion: 0.09
-Nodes (30): Category, emptyForm(), Field(), FieldDef, Form, Item, ItemsTree(), deriveItemType() (+22 more)
+### Community 63 - "book/client.tsx"
+Cohesion: 0.15
+Nodes (9): BookClient(), dayKeyFmt, dayLabelFmt, labelOf(), nextDays(), Service, Staff, Step (+1 more)
 
 ### Community 65 - "Verity User Guide"
 Cohesion: 0.33
@@ -489,35 +496,35 @@ Nodes (6): Module Entitlements, Phone + 4-digit PIN login, Site, Verity Platform
 
 ### Community 67 - "dependencies"
 Cohesion: 0.07
-Nodes (29): @aws-sdk/client-s3, @aws-sdk/s3-request-presigner, @fontsource/inter, idb, lucide-react, dependencies, @aws-sdk/client-s3, @aws-sdk/s3-request-presigner (+21 more)
+Nodes (29): @aws-sdk/client-s3, @fontsource/inter, idb, jose, lucide-react, dependencies, @aws-sdk/client-s3, @fontsource/inter (+21 more)
 
 ### Community 68 - "worker/layout.tsx"
-Cohesion: 0.11
-Nodes (20): contentType, size, contentType, size, OwnerLayout(), WorkerLayout(), InstallPromptBanner(), AutoRefresh() (+12 more)
+Cohesion: 0.06
+Nodes (33): contentType, size, contrastOn(), PortalLayout(), contentType, size, metadata, viewport (+25 more)
 
 ### Community 69 - "assistant/route.ts"
-Cohesion: 0.12
-Nodes (25): POST(), SYSTEM_PROMPT, ASSISTANT_TOKEN_CAP, BudgetVerdict, checkAssistantBudget(), recordAssistantTokens(), AssistantContext, buildAssistantContext() (+17 more)
+Cohesion: 0.24
+Nodes (13): POST(), SYSTEM_PROMPT, ASSISTANT_TOKEN_CAP, BudgetVerdict, checkAssistantBudget(), recordAssistantTokens(), contextToPrompt(), assistantToolSpecs() (+5 more)
 
 ### Community 70 - "anomalies.ts"
-Cohesion: 0.14
+Cohesion: 0.12
 Nodes (19): GET(), dynamic, GET(), runtime, dynamic, GET(), runtime, Anomaly (+11 more)
 
 ### Community 71 - "scripts"
 Cohesion: 0.12
 Nodes (16): scripts, build, build:analyze, db:migrate, db:reset, db:sync, dev, lint (+8 more)
 
-### Community 72 - "settings/client.tsx"
-Cohesion: 0.24
-Nodes (6): ConfirmDialog(), ConfirmDialogProps, components, layouts, tokens, typography
+### Community 72 - "actions/auth.ts"
+Cohesion: 0.28
+Nodes (9): HomeClient(), TAP_SPRING, HomePage(), legacyHashPin(), getSessionDepartment(), getSessionHomePath(), signingSecret(), authenticateUser() (+1 more)
 
 ### Community 74 - "itemUnits.ts"
 Cohesion: 0.27
 Nodes (8): NormalisedUnits, normaliseUnit(), normaliseUnits(), UnitInput, getItemUnits(), ItemUnits, listUsedUnits(), setItemUnits()
 
 ### Community 77 - "Documentation Pillars"
-Cohesion: 0.29
-Nodes (6): 1. [Platform Core Specification](file:///D:/Code/verity/docs/00-foundation/verity_platform_specification.md), 2. [Architecture Manifesto](file:///D:/Code/verity/docs/01-architecture/manifesto.md), 3. [Design System Guide](file:///D:/Code/verity/docs/02-design/design_system.md), 4. [Development & Product Roadmaps](file:///D:/Code/verity/docs/03-roadmap/roadmaps.md), Documentation Pillars, Verity Documentation Index
+Cohesion: 0.20
+Nodes (9): 1. [Platform Core Specification](file:///D:/Code/verity/docs/00-foundation/verity_platform_specification.md), 2. [Architecture Manifesto](file:///D:/Code/verity/docs/01-architecture/manifesto.md), 3. [Design System Guide](file:///D:/Code/verity/docs/02-design/design_system.md), 4. [Development & Product Roadmaps](file:///D:/Code/verity/docs/03-roadmap/roadmaps.md), 5. [Customer Portal Specification](file:///D:/Code/verity/docs/00-foundation/customer_portal_specification.md), 6. [Product Readiness Audit](file:///D:/Code/verity/docs/product_readiness_audit.md), 7. [Launch Implementation Plan](file:///D:/Code/verity/docs/implementation_plan.md), Documentation Pillars (+1 more)
 
 ### Community 78 - "compilerOptions"
 Cohesion: 0.06
@@ -527,17 +534,17 @@ Nodes (34): dom, dom.iterable, esnext, **/*.mts, .next/dev/types/**/*.ts, next-e
 Cohesion: 0.16
 Nodes (13): BOM_BY_FAMILY, CATALOGUE, CODE_PREFIX, COMMON_FINISHING, FABRIC_CONSUMPTION, ItemSpec, Line, main() (+5 more)
 
-### Community 81 - "root-providers.tsx"
-Cohesion: 0.13
-Nodes (12): metadata, viewport, InstallAction(), BeforeInstallPromptEvent, PwaContext, PwaContextValue, PwaProvider(), usePwa() (+4 more)
+### Community 81 - "markdown.ts"
+Cohesion: 0.22
+Nodes (11): Contents(), GuideClient(), GuidePage(), metadata, escapeHtml(), GuideHeading, inline(), isTableDivider() (+3 more)
 
 ### Community 83 - "gen_rls_migration.mjs"
 Cohesion: 0.21
 Nodes (11): byName, counts, emit(), models, out, p(), parentLink(), parentLinkShallow() (+3 more)
 
-### Community 84 - "DepartmentsClient.tsx"
-Cohesion: 0.10
-Nodes (12): Dept, Member, ROSTER_ROLES, Template, UserRow, MemberWithStats, TeamClient(), PageHeader() (+4 more)
+### Community 84 - "Input"
+Cohesion: 0.15
+Nodes (8): MemberWithStats, PageHeader(), Sheet(), Surface(), CustomerOption, OrderFlow(), Badge(), Input()
 
 ### Community 88 - "guard-coverage.test.ts"
 Cohesion: 0.24
@@ -547,13 +554,13 @@ Nodes (8): ACTION_FILES, ACTIONS_DIR, OWNER_DIR, PAGES, ACTION_OWNERSHIP, Owners
 Cohesion: 0.25
 Nodes (6): APPLY, prisma, AMBIGUOUS, RegistryKey, ROLE_REGISTRY_GRANTS, WITHHELD
 
-### Community 95 - "itemSearch.ts"
-Cohesion: 0.33
-Nodes (4): countFinishedGoods(), ItemSearchResult, PRODUCIBLE_WHERE, searchFinishedGoods()
+### Community 95 - "prisma.ts"
+Cohesion: 0.09
+Nodes (20): CatalogPage(), POOL_LIMIT, pooledUrl(), prismaClientSingleton(), ActionResult, CatalogRow, CatalogUpdate, getCatalog() (+12 more)
 
 ### Community 97 - "language-provider.tsx"
 Cohesion: 0.19
-Nodes (13): LanguageContext, LanguageContextValue, LanguageProvider(), useLanguage(), BottomNav(), BottomNavItem, BottomNavProps, InspectorNav() (+5 more)
+Nodes (12): dynamic, WorkerProfilePage(), LogoutButton(), LanguageContext, LanguageContextValue, LanguageProvider(), SectionHeading(), dictionaries (+4 more)
 
 ### Community 99 - "tenant-isolation.test.ts"
 Cohesion: 0.28
@@ -603,9 +610,9 @@ Nodes (5): bom1, crons, framework, regions, $schema
 Cohesion: 0.47
 Nodes (5): current(), main(), prisma, SEEDED_PINS, stale()
 
-### Community 115 - "url-guard.ts"
-Cohesion: 0.54
-Nodes (6): assertDeliverable(), checkWebhookUrl(), isBlockedAddress(), isBlockedIPv4(), isBlockedIPv6(), UrlVerdict
+### Community 115 - "worker/page.tsx"
+Cohesion: 0.19
+Nodes (12): JobClient(), dynamic, WorkerJobPage(), dayFmt, dayKeyFmt, dynamic, PRIORITY_STYLE, timeFmt (+4 more)
 
 ### Community 116 - "db_state.mjs"
 Cohesion: 0.40
@@ -628,39 +635,71 @@ Cohesion: 0.50
 Nodes (3): configuration, p, records
 
 ### Community 153 - "bus.ts"
-Cohesion: 0.18
-Nodes (12): __clearListeners(), emit(), EmitResult, EventListener, listenerCount(), on(), PlatformEvent, Registration (+4 more)
+Cohesion: 0.24
+Nodes (10): __clearListeners(), emit(), EmitResult, EventListener, listenerCount(), on(), PlatformEvent, Registration (+2 more)
 
-### Community 155 - "shopify/route.ts"
-Cohesion: 0.19
-Nodes (14): dynamic, handled(), POST(), runtime, verifyShopifySignature(), IngestLine, attributes(), customerName() (+6 more)
+### Community 155 - "actions/notifications.ts"
+Cohesion: 0.22
+Nodes (7): relativeTime(), WarningRow, WarningsQueue(), WARNINGS_QUEUE_LIMIT, dismissAllNotifications(), dismissNotification(), listUnreadWarnings()
 
 ### Community 157 - "Verity — Claude Code Project Memory"
 Cohesion: 0.22
 Nodes (8): Core Rules (always apply), Design System, graphify, Headless API Layer, Key Files, Skills active in this project, Verity — Claude Code Project Memory, What this is
 
-### Community 207 - "customers.ts"
-Cohesion: 0.20
-Nodes (14): BLANK, CustomerRow, CustomersClient(), CustomersTree(), emptyForm(), row(), createCustomer(), CustomerInput (+6 more)
+### Community 158 - "BookingWidgets.tsx"
+Cohesion: 0.21
+Nodes (8): MenuClient(), MenuItem, CatalogClient(), timeFmt, UpcomingBookingsWidget(), WidgetProps, formatPaise(), createPortalOrder()
+
+### Community 166 - "internal/portal.ts"
+Cohesion: 0.33
+Nodes (9): BookPortalPage(), dynamic, dynamic, MenuPortalPage(), getPortalStaff(), PortalTenant, publishedCatalog(), resolvePortalTenant() (+1 more)
+
+### Community 168 - "tally/route.ts"
+Cohesion: 0.38
+Nodes (8): dynamic, GET(), runtime, csvField(), TALLY_COLUMNS, tallyDate(), TallyRow, toTallyCsv()
+
+### Community 169 - "assistantTools.ts"
+Cohesion: 0.25
+Nodes (8): ASSISTANT_TOOLS, AssistantTool, BY_NAME, runAssistantTool(), stripTenantKeys(), TENANT_KEYS, TENANT_KEYS, ToolRunResult
+
+### Community 172 - "Customer Portal Specification (B2C World 1)"
+Cohesion: 0.22
+Nodes (8): 1. White-Label Brand Engine, 2. Service Booking Flow (`/book`), 3. Digital Menu / Catalog Flow (`/menu`), 4. Database Schema Scoping, Customer Portal Specification (B2C World 1), Flow Steps:, Flow Steps:, Styling Alphas & Variables
+
+### Community 173 - "getActiveSessionUser"
+Cohesion: 0.36
+Nodes (5): POST(), CheckpointPhoto(), getActiveSessionUser, StorageUploadInput, uploadStorageImage()
+
+### Community 174 - "VerityLogo.tsx"
+Cohesion: 0.31
+Nodes (3): CircularMarqueeLoader(), CircularMarqueeLoaderProps, VerityLogo()
+
+### Community 187 - "useLanguage"
+Cohesion: 0.42
+Nodes (6): useLanguage(), BottomNav(), BottomNavItem, BottomNavProps, InspectorNav(), WorkerNav()
+
+### Community 207 - "CustomersTree.tsx"
+Cohesion: 0.16
+Nodes (18): BLANK, CustomerRow, CustomersClient(), CustomersPage(), Customer, CustomersTree(), emptyForm(), Field() (+10 more)
 
 ## Knowledge Gaps
-- **697 isolated node(s):** `extends`, `next/core-web-vitals`, `@typescript-eslint/no-explicit-any`, `@typescript-eslint/no-unused-vars`, `@next/next/no-img-element` (+692 more)
+- **760 isolated node(s):** `extends`, `next/core-web-vitals`, `@typescript-eslint/no-explicit-any`, `@typescript-eslint/no-unused-vars`, `@next/next/no-img-element` (+755 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **84 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **87 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `getOwnerUser` connect `getOwnerUser` to `hashPin`, `owner.ts`, `pricing.ts`, `guardModuleWrite`, `packs.ts`, `BillingClient.tsx`, `getUserSession`, `guardModuleAction`, `getActiveSessionUser`, `primitives.tsx`, `booking/client.tsx`, `serviceQuality.ts`, `server/auth.ts`, `PurchaseClient.tsx`, `actions/departments.ts`, `InventoryClient.tsx`, `phoneKey`, `actions/scheduling.ts`, `events.ts`, `orders.ts`, `ItemsTree.tsx`, `worker/layout.tsx`, `itemUnits.ts`, `customers.ts`, `itemSearch.ts`?**
-  _High betweenness centrality (0.080) - this node is a cross-community bridge._
-- **Why does `cn()` connect `cn` to `language-provider.tsx`, `server/auth.ts`, `hashPin`, `owner.ts`, `ClientDetailClient.tsx`, `settings/client.tsx`, `ServiceWorkOrdersClient.tsx`, `Input`, `customers.ts`, `DepartmentsClient.tsx`, `phoneKey`, `getActiveSessionUser`, `primitives.tsx`, `owner-shell.tsx`, `ItemsTree.tsx`?**
-  _High betweenness centrality (0.039) - this node is a cross-community bridge._
-- **Why does `Button()` connect `primitives.tsx` to `PurchaseClient.tsx`, `hashPin`, `worker/layout.tsx`, `FacilityManagementDashboard.tsx`, `settings/client.tsx`, `cn`, `ServiceWorkOrdersClient.tsx`, `Input`, `ProjectDetailClient.tsx`, `InventoryClient.tsx`, `profile/page.tsx`, `root-providers.tsx`, `DepartmentsClient.tsx`, `BillingClient.tsx`, `actions/scheduling.ts`, `booking/client.tsx`, `ItemsTree.tsx`?**
-  _High betweenness centrality (0.015) - this node is a cross-community bridge._
+- **Why does `getOwnerUser` connect `getOwnerUser` to `masterData.ts`, `actions/helpdesk.ts`, `hashPin`, `owner.ts`, `hasModule`, `pricing.ts`, `guardModuleWrite`, `BillingClient.tsx`, `packs.ts`, `entitlements.ts`, `getUserSession`, `guardModuleAction`, `upload.ts`, `primitives.tsx`, `booking/client.tsx`, `actions/booking.ts`, `DepartmentsClient.tsx`, `InventoryClient.tsx`, `integrations.ts`, `actions/scheduling.ts`, `orders.ts`, `worker/layout.tsx`, `actions/auth.ts`, `itemUnits.ts`, `CustomersTree.tsx`, `Input`, `prisma.ts`?**
+  _High betweenness centrality (0.070) - this node is a cross-community bridge._
+- **Why does `cn()` connect `cn` to `masterData.ts`, `hashPin`, `hq.ts`, `owner.ts`, `actions/auth.ts`, `actions/notifications.ts`, `BillingClient.tsx`, `VerityLogo.tsx`, `CustomersTree.tsx`, `useLanguage`, `markdown.ts`, `Input`, `primitives.tsx`, `owner-shell.tsx`?**
+  _High betweenness centrality (0.036) - this node is a cross-community bridge._
+- **Why does `ModuleKey` connect `ModuleKey` to `hashPin`, `hq.ts`, `assistant/route.ts`, `reactions.ts`, `owner.ts`, `assistantTools.ts`, `pricing.ts`, `provision.ts`, `internal/portal.ts`, `packs.ts`, `registry.ts`, `entitlements.ts`, `allModules`, `guard-coverage.test.ts`, `owner-shell.tsx`?**
+  _High betweenness centrality (0.017) - this node is a cross-community bridge._
 - **What connects `extends`, `next/core-web-vitals`, `@typescript-eslint/no-explicit-any` to the rest of the system?**
-  _697 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `getOwnerUser` be split into smaller, more focused modules?**
-  _Cohesion score 0.08959899749373433 - nodes in this community are weakly interconnected._
+  _760 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `masterData.ts` be split into smaller, more focused modules?**
+  _Cohesion score 0.050140056022408966 - nodes in this community are weakly interconnected._
 - **Should `00000000000000_baseline/migration.sql` be split into smaller, more focused modules?**
   _Cohesion score 0.0526006464883926 - nodes in this community are weakly interconnected._
 - **Should `20260727000000_init/migration.sql` be split into smaller, more focused modules?**
