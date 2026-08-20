@@ -25,3 +25,11 @@ Welcome to the documentation for the **Verity Composable Operating Platform**. T
 ### 5. [Customer Portal Specification](file:///D:/Code/verity/docs/00-foundation/customer_portal_specification.md)
 *   **Location:** `docs/00-foundation/customer_portal_specification.md`
 *   **Contents:** Mobile-first scheduler layout, whitelabel brand colors, slot-picker rules, and customer catalog menu routes.
+
+### 6. [Product Readiness Audit](file:///D:/Code/verity/docs/product_readiness_audit.md)
+*   **Location:** `docs/product_readiness_audit.md`
+*   **Contents:** Detailed operational audit of every module, missing employee/owner experience gaps, and the launch maturity scorecard.
+
+### 7. [Launch Implementation Plan](file:///D:/Code/verity/docs/implementation_plan.md)
+*   **Location:** `docs/implementation_plan.md`
+*   **Contents:** Concrete engineering execution steps for Phase A (B2C Portals, Worker Dashboard), Phase B (Workflows), and Phase C (GA launch).
