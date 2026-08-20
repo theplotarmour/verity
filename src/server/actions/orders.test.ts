@@ -5,7 +5,7 @@ import prisma from "@/lib/prisma";
  * Characterisation tests for the order → blueprint → production chain.
  *
  * These capture what the system does *today*, not what it should do. Their job
- * is to fail loudly while ItemMaster and ProductVariant are being unified, so a
+ * is to fail loudly while Product and ProductVariant are being unified, so a
  * refactor of the 2,300-line order studio cannot quietly break order booking.
  *
  * They read the seeded database rather than calling the server actions, because
@@ -117,7 +117,7 @@ describe("order and blueprint shape", () => {
 
   it("a producible item inherits QC, route and BOM from its group", async () => {
     if (!seeded) return;
-    const item = await prisma.itemMaster.findFirst({
+    const item = await prisma.product.findFirst({
       where: {
         factoryId,
         manufacturingType: "MAKE",
@@ -144,7 +144,7 @@ describe("order and blueprint shape", () => {
 
   it("spec-created items carry a unique identity hash", async () => {
     if (!seeded) return;
-    const items = await prisma.itemMaster.findMany({
+    const items = await prisma.product.findMany({
       where: { factoryId, specHash: { not: null } },
       select: { specHash: true },
     });

@@ -18,7 +18,7 @@ export default async function InventoryLabelsPage({
   const { ids } = await searchParams;
   const only = ids?.split(",").map((s) => s.trim()).filter(Boolean);
 
-  const items = await prisma.itemMaster.findMany({
+  const items = await prisma.product.findMany({
     where: {
       factoryId: dbUser.factoryId,
       itemType: "RAW_MATERIAL",

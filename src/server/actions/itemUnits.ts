@@ -14,7 +14,7 @@ export type ItemUnits = {
 
 export async function getItemUnits(itemId: string): Promise<ItemUnits | null> {
   const user = await getOwnerUser();
-  const item = await prisma.itemMaster.findFirst({
+  const item = await prisma.product.findFirst({
     where: { id: itemId, factoryId: user.factoryId },
     select: {
       defaultUOM: true,
@@ -50,7 +50,7 @@ export async function setItemUnits(input: {
   factor?: number | null;
 }) {
   const user = await getOwnerUser();
-  const item = await prisma.itemMaster.findFirst({
+  const item = await prisma.product.findFirst({
     where: { id: input.itemId, factoryId: user.factoryId },
     select: { id: true, defaultUOM: true, secondaryUOM: true },
   });
@@ -63,7 +63,7 @@ export async function setItemUnits(input: {
   const { primaryUOM: primary, secondaryUOM: secondary, factor } = checked.units;
 
   await prisma.$transaction(async (tx) => {
-    await tx.itemMaster.update({
+    await tx.product.update({
       where: { id: item.id },
       data: { defaultUOM: primary, secondaryUOM: secondary },
     });
@@ -85,7 +85,7 @@ export async function setItemUnits(input: {
 /** Units the owner has already used, so the pickers suggest rather than dictate. */
 export async function listUsedUnits() {
   const user = await getOwnerUser();
-  const rows = await prisma.itemMaster.findMany({
+  const rows = await prisma.product.findMany({
     where: { factoryId: user.factoryId },
     select: { defaultUOM: true, secondaryUOM: true },
     distinct: ["defaultUOM"],

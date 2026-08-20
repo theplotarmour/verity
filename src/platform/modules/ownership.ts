@@ -71,13 +71,11 @@ export const ROUTE_OWNERSHIP: Record<string, Ownership> = {
   "billing/page.tsx": "billing",
   "billing/[id]/page.tsx": "billing",
   "customers/page.tsx": "sales",
-  "floor/page.tsx": "manufacturing",
   "helpdesk/page.tsx": "helpdesk",
   "helpdesk/[id]/page.tsx": "helpdesk",
   "inventory/page.tsx": "inventory",
   "logistics/page.tsx": "sales",
   "order-taking/page.tsx": "sales",
-  "production/page.tsx": "manufacturing",
   "projects/page.tsx": "projects",
   "projects/[id]/page.tsx": "projects",
   "purchase/page.tsx": "procurement",
@@ -90,9 +88,6 @@ export const ROUTE_OWNERSHIP: Record<string, Ownership> = {
   "sites/[id]/page.tsx": "sites",
 
   // ---- module-owned, guarded in this pass ----
-  "floor/[id]/page.tsx": "manufacturing",
-  "production/label/[id]/page.tsx": "manufacturing",
-  "settings/blueprint/[itemId]/page.tsx": "manufacturing",
   "inventory/labels/page.tsx": "inventory",
   "review/[id]/page.tsx": "quality",
 };
@@ -136,19 +131,8 @@ export const ACTION_OWNERSHIP: Record<string, Ownership> = {
   "reports.ts": "deferred",
 
   // ---- module-owned ----
-  "production.ts": "manufacturing",
-  "stages.ts": "manufacturing",
-  "stage-video.ts": "manufacturing",
-  "worker.ts": "manufacturing",
-  "assignments.ts": "manufacturing",
-  "history.ts": "manufacturing",
-  "cad.ts": "manufacturing",
   // Not "use server" — see its header. Its callers in itemBom.ts are guarded.
   "itemBlueprint.ts": "internal",
-  "itemBom.ts": "manufacturing",
-  "bomTemplates.ts": "manufacturing",
-  "bomContributions.ts": "manufacturing",
-  "floor.ts": "manufacturing",
 
   "qc.ts": "quality",
   "qc-templates.ts": "quality",

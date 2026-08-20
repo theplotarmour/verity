@@ -83,15 +83,13 @@ export async function approveSalesOrder(orderId: string) {
 }
 
 // ==========================================
-// Legacy order flow (approved V1 UI), ported onto the
-// SalesOrder -> ProductionPlan -> WorkOrder -> JobCard chain.
+// The order flow behind the approved V1 UI. It used to continue into a
+// ProductionPlan -> WorkOrder -> JobCard chain; that chain went with the
+// manufacturing module, so an order now ends at the SalesOrder and its lines.
 // ==========================================
 
-import { salesOrderInclude, toLegacyOrder } from "@/lib/server/jobCardAdapter";
-import { issueMaterialsForWorkOrder } from "@/server/internal/stockMovements";
+import { salesOrderInclude, toLegacyOrder } from "@/lib/server/orderShape";
 import { recordTimeline } from "@/lib/server/stages";
-import { ensureFactoryDepartments } from "@/lib/server/departments";
-import { resolveOrderTemplate } from "@/lib/server/templates";
 import { publishChange } from "@/lib/server/live-bus";
 
 export async function getMasterData() {
@@ -113,14 +111,11 @@ export async function getMasterData() {
     // Legacy Product table is retired; the studio searches finished goods
     // directly through searchFinishedGoods.
     Promise.resolve([] as any[]),
-    // Only fabrics are directly selectable in the studio. Other raw materials
-    // (foam, thread, zips...) are consumed via the BOM, never picked here.
-    //
-    // Scoped by item *group*, not the legacy MaterialCategory table: that table
-    // is empty since the spec engine took over, so this filter was silently
-    // returning nothing and the fabric picker rendered blank.
-    prisma.itemMaster.findMany({
-      where: { factoryId, itemType: "RAW_MATERIAL", status: "ACTIVE", group: { name: "Fabric" } },
+    // Raw materials the studio can pick. This used to be narrowed to the
+    // "Fabric" item group; groups went with the spec engine, so the filter is
+    // now the item type alone.
+    prisma.product.findMany({
+      where: { factoryId, itemType: "RAW_MATERIAL", status: "ACTIVE" },
       orderBy: { name: 'asc' },
     }),
     Promise.resolve([]),
@@ -149,18 +144,14 @@ export async function getMasterData() {
     }),
   ]);
 
-  // Finished goods are no longer shipped with this payload: the production
-  // studio searches them directly through searchFinishedGoods, so sending the
-  // whole catalogue on every page load was several hundred rows nothing read.
+  // Finished goods are not shipped with this payload: the studio searches them
+  // directly through searchFinishedGoods, so sending the whole catalogue on
+  // every page load was several hundred rows nothing read.
   //
-  // Producible categories, for the fallback builder's product stage. The old
-  // Product and ProductType tables are empty since the spec engine took over,
-  // so sourcing the list from them left the builder with no product to pick.
-  const finishedGoodGroups = await prisma.itemGroup.findMany({
-    where: { factoryId, isProducible: true, parentId: { not: null } },
-    select: { name: true },
-    orderBy: { name: 'asc' },
-  });
+  // The producible-category list came from the spec engine's item groups and
+  // has no successor. Empty rather than removed, because the UI already guards
+  // on length and the payload shape is read in several clients.
+  const finishedGoodGroups: { name: string }[] = [];
 
   return {
     finishedGoodGroups,
@@ -198,7 +189,7 @@ export async function createOrder(data: {
   vehicleModelId?: string;
   vehicleYear?: string;
   /**
-   * The finished-good ItemMaster being ordered — the master-data path. When
+   * The finished-good Product being ordered — the master-data path. When
    * given it wins over productVariantId: the item is what production is
    * planned against.
    */
@@ -280,7 +271,7 @@ export async function createOrder(data: {
     const productVariantId: string | null = data.productVariantId || null;
 
     if (data.itemId) {
-      const chosen = await tx.itemMaster.findFirst({
+      const chosen = await tx.product.findFirst({
         where: { id: data.itemId, factoryId },
         select: { id: true },
       });
@@ -342,29 +333,17 @@ export async function createOrder(data: {
       });
     }
 
-    // Last resort: a bare production with nothing resolvable still needs an item
-    // for the blueprint to key on, so mint a backing finished good. No Product
-    // or ProductVariant is created.
+    /*
+     * An order line has to point at a catalogue item. When nothing resolved,
+     * mint a plain finished good rather than refusing the order - the operator
+     * is mid-sale, and a missing catalogue row is our problem, not theirs.
+     */
     if (!orderedItemId) {
-      // Prefer a category the owner actually marked producible; fall back to the
-      // finished-goods root for factories that have not flagged one.
-      const fgGroup =
-        (await tx.itemGroup.findFirst({
-          where: { factoryId, isProducible: true, parentId: { not: null } },
-          select: { id: true },
-          orderBy: { sortOrder: "asc" },
-        })) ??
-        (await tx.itemGroup.findFirst({
-          where: { factoryId, itemType: "FINISHED_PRODUCT", parentId: null },
-          select: { id: true },
-        }));
       const sku = `PROD-STD-${Date.now().toString(36).toUpperCase()}`;
-      const backing = await tx.itemMaster.create({
+      const backing = await tx.product.create({
         data: {
           factoryId,
-          groupId: fgGroup?.id ?? null,
           itemType: "FINISHED_PRODUCT",
-          manufacturingType: "MAKE",
           name: "General Production Standard",
           sku,
           itemCode: sku,
@@ -373,17 +352,6 @@ export async function createOrder(data: {
       });
       orderedItemId = backing.id;
     }
-
-    // QC checklist resolution, now that the ordered item is known. Optional:
-    // prefer the item's category default checklist, then a product-tagged or
-    // factory-wide active template. A null template means no QC checkpoints —
-    // the QC-stage card is completed manually.
-    const orderedGroupId = orderedItemId
-      ? (await tx.itemMaster.findUnique({ where: { id: orderedItemId }, select: { groupId: true } }))?.groupId ?? null
-      : null;
-    // Template resolves off the item's category default now; the legacy
-    // product-tagged tier is no longer consulted.
-    const template = await resolveOrderTemplate(tx, factoryId, null, orderedGroupId);
 
     const salesOrder = await tx.salesOrder.create({
       data: {
@@ -430,158 +398,14 @@ export async function createOrder(data: {
       }
     });
 
-    // Self-heal a blueprint + active version for the ordered item if none
-    // exists. Blueprints are keyed directly on the finished-good item now.
-    const producedItemId = orderedItemId!;
-    let blueprint = await tx.blueprint.findUnique({
-      where: { itemId: producedItemId },
-      include: { versions: true }
-    });
-    if (!blueprint) {
-      blueprint = await tx.blueprint.create({
-        data: { factoryId, itemId: producedItemId },
-        include: { versions: true }
-      });
-    }
-    let blueprintVersion = blueprint.versions.find((v) => v.isActive) ?? blueprint.versions[0];
-    if (!blueprintVersion) {
-      blueprintVersion = await tx.blueprintVersion.create({
-        data: {
-          blueprintId: blueprint.id,
-          versionNumber: 1,
-          name: "V1 - Standard",
-          qcTemplateId: template?.id ?? null,
-          isActive: true,
-        }
-      });
-      await tx.blueprint.update({
-        where: { id: blueprint.id },
-        data: { activeVersionId: blueprintVersion.id }
-      });
-    }
-
-    // Production chain
-    const productionPlan = await tx.productionPlan.create({
-      data: {
-        factoryId,
-        salesOrderId: salesOrder.id,
-        blueprintVersionId: blueprintVersion.id,
-        quantity: data.quantity,
-        status: 'RELEASED',
-      }
-    });
-
-    const workOrder = await tx.workOrder.create({
-      data: {
-        factoryId,
-        woNumber: orderNumber,
-        productionPlanId: productionPlan.id,
-        status: 'DRAFT',
-        targetQty: data.quantity,
-      }
-    });
-
-    // One job card per department (CAD → Cutting → Stitching → QC → Packing by
-    // default). Departments ARE the production chain, ordered by sortOrder. All
-    // cards stay BLOCKED while the order sits in Draft; releasing the draft
-    // unblocks the first stage.
-    const stages = await ensureFactoryDepartments(tx, factoryId);
-    // Store managers only take orders — they never staff them. Any assignment
-    // in the payload is ignored; the order lands unstaffed in the owner's Pending
-    // queue for the owner to assign before release.
-    const canStaff = dbUser.role !== "STORE_MANAGER";
-    // Person assigned to each department for this order (QC → its supervisor).
-    const assignmentByDept = canStaff
-      ? new Map((data.assignments ?? []).map((a) => [a.departmentId, a.userId]))
-      : new Map<string, string>();
-    const stageCards = [];
-    for (let i = 0; i < stages.length; i++) {
-      const dept = stages[i] as any;
-      const assignedToId = canStaff ? (assignmentByDept.get(dept.id) ?? data.assignedWorkerId ?? null) : null;
-      // The checklist this card runs, resolved the same way the worker screen
-      // resolves it: the template owned by this department that covers the
-      // ordered item's category, else that department's universal one. The old
-      // department-level pin is gone, so there is nothing to fall back to.
-      const cardTemplateId = dept.isQcStage
-        ? template?.id ?? null
-        : (
-            await tx.checklistTemplate.findFirst({
-              where: {
-                factoryId,
-                status: "active",
-                ownerDepartmentId: dept.id,
-                ...(orderedGroupId
-                  ? { defaultForItemGroups: { some: { id: orderedGroupId } } }
-                  : { defaultForItemGroups: { none: {} } }),
-              },
-              orderBy: { updatedAt: "desc" },
-              select: { id: true },
-            })
-          )?.id ??
-          (
-            await tx.checklistTemplate.findFirst({
-              where: {
-                factoryId,
-                status: "active",
-                ownerDepartmentId: dept.id,
-                defaultForItemGroups: { none: {} },
-              },
-              orderBy: { updatedAt: "desc" },
-              select: { id: true },
-            })
-          )?.id ??
-          null;
-      stageCards.push(await tx.jobCard.create({
-        data: {
-          factoryId,
-          workOrderId: workOrder.id,
-          departmentId: dept.id,
-          sequence: i + 1,
-          status: 'BLOCKED',
-          assignedToId,
-          targetQty: data.quantity,
-          templateId: cardTemplateId,
-        }
-      }));
-    }
-    const jobCard = stageCards[0];
-    const qcIndex = stages.findIndex((s) => s.isQcStage);
-    const qcCard = qcIndex >= 0 ? stageCards[qcIndex] : jobCard;
-
-    // The inspection (QC checklist) lives on the QC-stage card.
-    const inspection = await tx.inspection.create({
-      data: {
-        factoryId,
-        jobCardId: qcCard.id,
-        status: 'PENDING'
-      }
-    });
-
     await recordTimeline(tx, {
       factoryId,
-      workOrderId: workOrder.id,
+      salesOrderId: salesOrder.id,
       eventType: 'CREATED',
-      title: `Production order ${orderNumber} created (Draft)`,
-      description: `Route: ${stages.map((s) => s.name).join(' → ')}`,
+      title: `Order ${orderNumber} created (Draft)`,
       actorId: dbUser.id,
       metadata: { orderNumber, quantity: data.quantity },
     });
-
-    // Generate checklist submissions
-    const submissions = [];
-    for (const section of (template?.sections || [])) {
-      for (const checkpoint of section.checkpoints) {
-        submissions.push({
-          factoryId,
-          inspectionId: inspection.id,
-          checkpointId: checkpoint.id,
-        });
-      }
-    }
-
-    if (submissions.length > 0) {
-      await tx.checkpointSubmission.createMany({ data: submissions });
-    }
 
     // Audit log
     const roleLabel = dbUser.role === 'OWNER' ? 'Owner' : dbUser.role === 'CO_OWNER' ? 'Co-Owner' : 'Manager';
@@ -599,7 +423,7 @@ export async function createOrder(data: {
     // Worker notification and material issuance happen at RELEASE time
     // (releaseDrafts), not while the order sits in Draft.
 
-    return { salesOrder, workOrderId: workOrder.id, blueprintVersionId: blueprintVersion.id };
+    return { salesOrder };
   }, { timeout: 30000, maxWait: 10000 });
 
   publishChange(factoryId, "ORDER_CREATED", dbUser.id);
@@ -642,7 +466,6 @@ export async function updateOrder(orderId: string, data: {
     where: { id: orderId, factoryId },
     include: {
       items: true,
-      plans: { include: { workOrders: { include: { jobCards: true } } } },
     },
   });
   if (!order) return { error: "Production not found" };
@@ -686,39 +509,12 @@ export async function updateOrder(orderId: string, data: {
         },
       });
 
-      // Vehicle shown on the passport is also mirrored as a fitment on the
-      // variant (legacy compatibility); repoint it.
-      // Quantity flows down the whole draft chain so the plan, work order and
-      // job cards agree with the order.
       if (qty != null) {
         for (const item of order.items) {
           await tx.salesOrderItem.update({ where: { id: item.id }, data: { quantity: qty } });
         }
-        for (const plan of order.plans) {
-          await tx.productionPlan.update({ where: { id: plan.id }, data: { quantity: qty } });
-          for (const wo of plan.workOrders) {
-            await tx.workOrder.update({ where: { id: wo.id }, data: { targetQty: qty } });
-            for (const jc of wo.jobCards) {
-              await tx.jobCard.update({ where: { id: jc.id }, data: { targetQty: qty } });
-            }
-          }
-        }
       }
 
-      // Owner staffs the pending order: assign each department's job cards to the
-      // chosen worker. This is how an order taken by a store manager (with no
-      // workers) gets staffed before it's released to the floor.
-      if (data.assignments && data.assignments.length > 0) {
-        const byDept = new Map(data.assignments.filter((a) => a.userId).map((a) => [a.departmentId, a.userId]));
-        for (const plan of order.plans) {
-          for (const wo of plan.workOrders) {
-            for (const jc of wo.jobCards) {
-              const userId = jc.departmentId ? byDept.get(jc.departmentId) : undefined;
-              if (userId) await tx.jobCard.update({ where: { id: jc.id }, data: { assignedToId: userId } });
-            }
-          }
-        }
-      }
     }, { timeout: 30000, maxWait: 10000 });
 
     revalidatePath("/owner/production");
@@ -745,13 +541,7 @@ export async function releaseDrafts(orderIds: string[], scheduledFor?: string | 
 
   const orders = await prisma.salesOrder.findMany({
     where: { id: { in: ids }, factoryId, status: 'DRAFT' },
-    include: {
-      plans: {
-        include: {
-          workOrders: { include: { jobCards: { include: { stage: true }, orderBy: { sequence: 'asc' } } } },
-        },
-      },
-    },
+    select: { id: true, soNumber: true },
   });
   if (orders.length === 0) return { error: "No matching draft orders found" };
 
@@ -774,41 +564,15 @@ export async function releaseDrafts(orderIds: string[], scheduledFor?: string | 
         data: { status: 'IN_PRODUCTION', productionBatchId: batch.id, scheduledFor: schedule },
       });
 
-      for (const plan of order.plans) {
-        for (const wo of plan.workOrders) {
-          await tx.workOrder.update({
-            where: { id: wo.id },
-            data: { status: 'IN_PROGRESS', startDate: new Date() },
-          });
-
-          const firstCard = wo.jobCards[0];
-          if (firstCard && firstCard.status === 'BLOCKED') {
-            await tx.jobCard.update({ where: { id: firstCard.id }, data: { status: 'WAITING' } });
-            if (firstCard.assignedToId) {
-              await tx.notification.create({
-                data: {
-                  factoryId,
-                  userId: firstCard.assignedToId,
-                  title: 'New Production Job Assigned',
-                  message: `Order ${order.soNumber} (${batchNumber}) is released. First step: ${firstCard.stage?.name ?? 'Production'}.`,
-                  type: 'INFO',
-                  linkUrl: firstCard.stage?.isQcStage ? `/worker/inspection/${firstCard.id}` : `/worker/stage/${firstCard.id}`,
-                },
-              });
-            }
-          }
-
-          await recordTimeline(tx, {
-            factoryId,
-            workOrderId: wo.id,
-            eventType: 'STATUS_CHANGED',
-            title: `Released to production (${batchNumber})`,
-            description: orders.length > 1 ? `Clubbed with ${orders.length - 1} other order${orders.length > 2 ? 's' : ''}` : undefined,
-            actorId: dbUser.id,
-            metadata: { batchNumber, orderIds: ids },
-          });
-        }
-      }
+      await recordTimeline(tx, {
+        factoryId,
+        salesOrderId: order.id,
+        eventType: 'STATUS_CHANGED',
+        title: `Released (${batchNumber})`,
+        description: orders.length > 1 ? `Clubbed with ${orders.length - 1} other order${orders.length > 2 ? 's' : ''}` : undefined,
+        actorId: dbUser.id,
+        metadata: { batchNumber, orderIds: ids },
+      });
     }
 
     await tx.auditLog.create({
@@ -822,33 +586,6 @@ export async function releaseDrafts(orderIds: string[], scheduledFor?: string | 
       },
     });
   }, { timeout: 30000, maxWait: 10000 });
-
-  // Material issuance per released work order (BOM + spec BOMs from Master Data).
-  for (const order of orders) {
-    for (const plan of order.plans) {
-      for (const wo of plan.workOrders) {
-        try {
-          await issueMaterialsForWorkOrder({
-            factoryId,
-            workOrderId: wo.id,
-            blueprintVersionId: plan.blueprintVersionId,
-            quantity: plan.quantity,
-            designId: order.designId || null,
-            fabricItemId: order.materialId || null,
-          });
-        } catch (error) {
-          console.error(`Material issuance failed for ${wo.woNumber}:`, error);
-        }
-      }
-    }
-  }
-
-  try {
-    const { notifyLowStock } = await import("@/server/actions/purchase");
-    await notifyLowStock();
-  } catch (error) {
-    console.error("Low-stock check failed:", error);
-  }
 
   publishChange(factoryId, "DRAFTS_RELEASED", dbUser.id);
   revalidatePath("/owner/production");
@@ -913,18 +650,12 @@ export async function updateOrderAssignments(orderId: string, assignedWorkerId: 
 
   const order = await prisma.salesOrder.findFirst({
     where: { id: orderId, factoryId: dbUser.factoryId },
-    include: { plans: { include: { workOrders: { include: { jobCards: true } } } } }
+    select: { id: true, soNumber: true },
   });
 
   if (!order) {
     return { error: "Order not found" };
   }
-
-  const jobCardIds = order.plans.flatMap((p) => p.workOrders.flatMap((wo) => wo.jobCards.map((jc) => jc.id)));
-  await prisma.jobCard.updateMany({
-    where: { id: { in: jobCardIds } },
-    data: { assignedToId: assignedWorkerId }
-  });
 
   await prisma.salesOrder.update({
     where: { id: orderId },
@@ -949,11 +680,13 @@ export async function updateOrderAssignments(orderId: string, assignedWorkerId: 
 }
 
 
-// Exact-spec stock matcher for On-Ordered production. A prior production
-// qualifies when: same spec fingerprint, passport verified, still
-// undispatched, unclaimed, and quantity covers the request.
-// How many units of matching, verified, undispatched finished stock exist for
-// this spec — the pool a partial order could draw from.
+// Exact-spec stock matcher for On-Ordered production. A prior order qualifies
+// when it shares the spec fingerprint and is still undispatched and unclaimed.
+//
+// It used to also require a passed QC inspection. That signal came from the job
+// card chain and went with it; the remaining filters are the ones that still
+// mean something, and an operator seeing a match that was never inspected is a
+// smaller problem than one who sees no matches at all.
 async function assessOnOrderStock(factoryId: string, data: any): Promise<number> {
   const specWhere = {
     factoryId,
@@ -970,9 +703,8 @@ async function assessOnOrderStock(factoryId: string, data: any): Promise<number>
       ...specWhere,
       dispatches: { none: {} },
       fulfilledFromOrderId: null,
-      plans: { some: { workOrders: { some: { jobCards: { some: { inspection: { report: { isNot: null } } } } } } } },
     },
-    include: { items: true, plans: true },
+    include: { items: true },
   });
   const claimed = new Set(
     (await prisma.salesOrder.findMany({ where: { factoryId, fulfilledFromOrderId: { not: null } }, select: { fulfilledFromOrderId: true } }))
@@ -980,7 +712,7 @@ async function assessOnOrderStock(factoryId: string, data: any): Promise<number>
   );
   return candidates
     .filter((c) => !claimed.has(c.id))
-    .reduce((sum, c) => sum + (c.items[0]?.quantity ?? c.plans[0]?.quantity ?? 0), 0);
+    .reduce((sum, c) => sum + (c.items[0]?.quantity ?? 0), 0);
 }
 
 // Issue `qty` of matching finished goods out of stock for a split order — the
@@ -1022,17 +754,9 @@ async function fulfillFromMatchingStock(
       ...specWhere,
       dispatches: { none: {} },
       fulfilledFromOrderId: null,
-      plans: {
-        some: {
-          workOrders: {
-            some: { jobCards: { some: { inspection: { report: { isNot: null } } } } },
-          },
-        },
-      },
     },
     include: {
       items: true,
-      plans: { include: { workOrders: { include: { jobCards: true } } } },
     },
     orderBy: { orderDate: "asc" },
   });
@@ -1047,7 +771,7 @@ async function fulfillFromMatchingStock(
 
   const source = candidates.find((c) => {
     if (claimedIds.has(c.id)) return false;
-    const qty = c.items[0]?.quantity ?? c.plans[0]?.quantity ?? 0;
+    const qty = c.items[0]?.quantity ?? 0;
     return qty >= data.quantity;
   });
   if (!source) return null;

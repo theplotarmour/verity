@@ -91,7 +91,7 @@ export async function RetailFranchiseDashboard({
   );
   const trackedItems =
     balances.size > 0
-      ? await prisma.itemMaster.findMany({
+      ? await prisma.product.findMany({
           where: {
             factoryId,
             id: { in: [...balances.keys()] },

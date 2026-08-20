@@ -59,7 +59,7 @@ describe("location structure blockers", () => {
       await prisma.warehouse.delete({ where: { id } }).catch(() => undefined);
     }
     for (const id of cleanup.items) {
-      await prisma.itemMaster.delete({ where: { id } }).catch(() => undefined);
+      await prisma.product.delete({ where: { id } }).catch(() => undefined);
     }
     await prisma.$disconnect();
   });
@@ -87,7 +87,7 @@ describe("location structure blockers", () => {
 
   async function makeItem(label: string) {
     const sku = `LOCTEST-${label}-${Date.now().toString(36)}`;
-    const item = await prisma.itemMaster.create({
+    const item = await prisma.product.create({
       data: {
         factoryId,
         itemType: "RAW_MATERIAL",

@@ -61,7 +61,7 @@ export async function searchFinishedGoods(query: string, limit = 40): Promise<It
   const user = await getOwnerUser();
   const words = query.trim().split(/\s+/).filter(Boolean);
 
-  const items = await prisma.itemMaster.findMany({
+  const items = await prisma.product.findMany({
     where: {
       factoryId: user.factoryId,
       ...PRODUCIBLE_WHERE,
@@ -146,7 +146,7 @@ export async function searchFinishedGoods(query: string, limit = 40): Promise<It
 /** How many finished goods exist, so an empty search can say why it is empty. */
 export async function countFinishedGoods() {
   const user = await getOwnerUser();
-  return prisma.itemMaster.count({
+  return prisma.product.count({
     where: {
       factoryId: user.factoryId,
       ...PRODUCIBLE_WHERE,

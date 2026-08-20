@@ -38,11 +38,11 @@ export async function ensureFactoryStages(db: Db, factoryId: string) {
   return db.workflowStage.findMany({ where: { factoryId }, orderBy: { sortOrder: "asc" } });
 }
 
-// Single write-path for the production timeline (PRD module 4). Events hang
-// off the WorkOrder so an order's full history is one query.
+// Single write-path for the order timeline. Events hang off the SalesOrder so
+// an order's full history is one query.
 export async function recordTimeline(db: Db, params: {
   factoryId: string;
-  workOrderId: string;
+  salesOrderId: string;
   eventType: "CREATED" | "UPDATED" | "APPROVED" | "REJECTED" | "STATUS_CHANGED" | "COMMENT_ADDED" | "FILE_ATTACHED";
   title: string;
   description?: string;
@@ -52,8 +52,8 @@ export async function recordTimeline(db: Db, params: {
   await db.timelineEvent.create({
     data: {
       factoryId: params.factoryId,
-      entityType: "WorkOrder",
-      entityId: params.workOrderId,
+      entityType: "SalesOrder",
+      entityId: params.salesOrderId,
       eventType: params.eventType,
       title: params.title,
       description: params.description,

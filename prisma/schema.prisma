@@ -425,6 +425,20 @@ model Product {
   @@index([factoryId])
   }
 
+/// Owner-defined custom columns on the item catalogue. Not part of the spec
+/// engine that went with the MES layer - these are free-text fields a tenant
+/// adds to their own items, and their values live in `Product.customFields`
+/// keyed by this row's id.
+model ItemFieldDefinition {
+  id        String   @id @default(cuid())
+  factoryId String
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([factoryId])
+}
+
 model MaterialCategory {
   id            String                @id @default(cuid())
   factoryId     String

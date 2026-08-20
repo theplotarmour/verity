@@ -41,7 +41,7 @@ export default async function OwnerSettingsPage() {
     prisma.supplier.findMany({ where: { factoryId: dbUser.factoryId }, orderBy: { name: "asc" } }),
     prisma.warehouse.findMany({ where: { factoryId: dbUser.factoryId }, include: { zones: true }, orderBy: { name: "asc" } }),
     Promise.resolve([] as any[]),
-    prisma.itemMaster.findMany({ where: { factoryId: dbUser.factoryId, itemType: "RAW_MATERIAL" }, include: { category: true }, orderBy: { name: "asc" } }).then((items) => items.map((item) => ({ ...item, unit: item.defaultUOM }))),
+    prisma.product.findMany({ where: { factoryId: dbUser.factoryId, itemType: "RAW_MATERIAL" }, include: { category: true }, orderBy: { name: "asc" } }).then((items) => items.map((item) => ({ ...item, unit: item.defaultUOM }))),
     Promise.resolve([]),
     // Colours are items in the Colour category now, not their own table.
     itemsInRootCategory(dbUser.factoryId, "Colour"),

@@ -424,7 +424,7 @@ export async function receivePurchaseOrder(
   // purchase unit is converted here — including the rate, because 3 rolls at
   // ₹5000 a roll is 150 metres at ₹100 a metre, and valuing it at ₹5000 a metre
   // would overstate inventory fifty-fold.
-  const items = await prisma.itemMaster.findMany({
+  const items = await prisma.product.findMany({
     where: { factoryId, id: { in: entered.map((l) => l.materialId) } },
     select: {
       id: true,
@@ -593,7 +593,7 @@ export async function getReorderSuggestions() {
   const factoryId = user.factoryId;
 
   const [materials, ledgerSums, lastLines] = await Promise.all([
-    prisma.itemMaster.findMany({
+    prisma.product.findMany({
       where: { factoryId, itemType: "RAW_MATERIAL" },
       include: { conversions: true },
     }),

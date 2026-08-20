@@ -49,7 +49,7 @@ const BLANK = {
  * They used to be managed as a tab in the Master Data Studio, which meant the
  * studio needed a `domainType` marker and a pile of branches to stop item-shaped
  * actions — delete, CSV import, inline cell edit — from firing at a table that
- * is not ItemMaster. A customer is a counterparty, not a thing the factory
+ * is not Product. A customer is a counterparty, not a thing the factory
  * makes; giving it its own screen is what lets the studio become uniform.
  *
  * Suppliers already live in Purchase, warehouses in Settings and staff in Team.

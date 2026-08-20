@@ -48,7 +48,7 @@ export async function itemsInRootCategory(
     }
   }
 
-  return prisma.itemMaster.findMany({
+  return prisma.product.findMany({
     where: { factoryId, groupId: { in: [...ids] }, status: "ACTIVE" },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
@@ -65,7 +65,7 @@ async function uniqueSku(name: string): Promise<string> {
     `ITEM-${Date.now().toString(36).toUpperCase()}`;
   let candidate = base;
   for (let i = 2; ; i++) {
-    const clash = await prisma.itemMaster.findUnique({
+    const clash = await prisma.product.findUnique({
       where: { sku: candidate },
       select: { id: true },
     });
@@ -95,7 +95,7 @@ export async function createItemInRootCategory(
   });
   if (!root) return null;
 
-  return prisma.itemMaster.create({
+  return prisma.product.create({
     data: {
       factoryId,
       groupId: root.id,

@@ -53,7 +53,7 @@ export async function getMaterials() {
   const user = await getOwnerUser();
   if (!user) return [];
   const groupIds = await stockableGroupIds(user.factoryId);
-  return prisma.itemMaster.findMany({
+  return prisma.product.findMany({
     where: { factoryId: user.factoryId, groupId: { in: [...groupIds] } },
     orderBy: { name: "asc" },
   });
@@ -112,7 +112,7 @@ export async function createStockEntry(data: {
   if (!user) throw new Error("Unauthorized");
   await guardModuleWrite("inventory");
 
-  // Stock moves against an ItemMaster row directly now.
+  // Stock moves against an Product row directly now.
   const itemId = data.materialId ?? null;
   if (!itemId) throw new Error("A material item is required");
 
@@ -228,7 +228,7 @@ export async function adjustStock(data: {
   const validType = ADJUSTMENT_TYPES.some((t) => t.value === data.adjustmentType);
   if (!validType) return { error: "Select an adjustment type." };
 
-  const item = await prisma.itemMaster.findFirst({ where: { id: data.materialId, factoryId: user.factoryId }, select: { id: true, name: true } });
+  const item = await prisma.product.findFirst({ where: { id: data.materialId, factoryId: user.factoryId }, select: { id: true, name: true } });
   if (!item) return { error: "Material not found." };
 
   const bin = await ensureDefaultBin(user.factoryId, data.warehouseId);
@@ -321,7 +321,7 @@ export async function getInventoryOverview() {
   const factoryId = user.factoryId;
 
   const [rawMaterials, reservations, balances, warehouses, activeWorkOrders] = await Promise.all([
-    prisma.itemMaster.findMany({
+    prisma.product.findMany({
       // Physical stock only — items under the Raw Material and Semi-Finished
       // roots. Reference categories (Vehicles/Brands/Models, Designs, Colours)
       // are RAW_MATERIAL-typed too but are not stock, so they are excluded by
@@ -770,7 +770,7 @@ export async function setStockQcStatus(data: {
         factoryId: user.factoryId,
         actorUserId: user.id,
         action: `Stock moved ${data.from} -> ${data.to}`,
-        entityType: "ItemMaster",
+        entityType: "Product",
         entityId: data.materialId,
         metadata: { quantity: data.quantity, from: data.from, to: data.to, remark },
       },

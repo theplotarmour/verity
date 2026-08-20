@@ -75,7 +75,7 @@ export async function resolveOrderItem(
   const refIds = [spec.vehicleBrandId, spec.vehicleModelId, spec.designId, spec.colorId, spec.materialId]
     .filter((id): id is string => !!id);
   if (refIds.length) {
-    const refItems = await prisma.itemMaster.findMany({
+    const refItems = await prisma.product.findMany({
       where: { id: { in: refIds }, factoryId },
       select: { id: true, groupId: true },
     });

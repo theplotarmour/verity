@@ -74,7 +74,7 @@ export default function InventoryClient({ overview, ledger, warehouses, material
     batchNumber: "",
   });
 
-  // Stock is recorded against an ItemMaster row whatever its type; the old
+  // Stock is recorded against an Product row whatever its type; the old
   // MATERIAL / PRODUCT toggle existed only because finished goods used to live
   // in a different table.
   const itemOptions = useMemo(
@@ -140,7 +140,7 @@ export default function InventoryClient({ overview, ledger, warehouses, material
       await createStockEntry({
         transactionType: stockModalType,
         warehouseId: isRawSelected ? factoryWarehouseId : formData.warehouseId,
-        // Always an ItemMaster id now — createStockEntry resolves it directly.
+        // Always an Product id now — createStockEntry resolves it directly.
         materialId: formData.itemId,
         batchNumber: formData.batchNumber || undefined,
         quantityChange: stockModalType === "ISSUE" ? -Math.abs(formData.quantityChange) : Math.abs(formData.quantityChange)

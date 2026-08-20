@@ -59,7 +59,7 @@ export default async function SearchPage({
       },
       take: 20,
     }),
-    prisma.itemMaster.findMany({
+    prisma.product.findMany({
       where: { factoryId, itemType: "RAW_MATERIAL", OR: [
         { name: { contains: query, mode: "insensitive" } },
         { sku: { contains: query, mode: "insensitive" } },
@@ -70,7 +70,7 @@ export default async function SearchPage({
     // thing in the factory — the sellable catalogue — was the one thing the
     // search bar could not find. Every word must match, in any order, so
     // "swift beige" narrows the way it does in the production studio.
-    prisma.itemMaster.findMany({
+    prisma.product.findMany({
       where: {
         factoryId,
         itemType: "FINISHED_PRODUCT",
