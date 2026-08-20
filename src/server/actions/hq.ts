@@ -635,13 +635,15 @@ export async function getClientDetail(factoryId: string) {
       setupFee: true,
       monthlyFee: true,
       createdAt: true,
+      logoUrl: true,
+      settings: true,
       organizationId: true,
       organization: { select: { name: true, currency: true, timezone: true } },
     },
   });
   if (!factory) return null;
 
-  const [users, modules] = await Promise.all([
+  const [users, modules, roles] = await Promise.all([
     prisma.user.findMany({
       where: { factoryId },
       select: {
@@ -656,11 +658,28 @@ export async function getClientDetail(factoryId: string) {
       orderBy: [{ role: "asc" }, { name: "asc" }],
     }),
     getTenantModules(factory.organizationId),
+    // The role matrix. A module list says what the workspace *has*; this says who
+    // can reach it, which is the other half of a composed system and was the
+    // half an operator had to open the tenant's own settings to see.
+    prisma.role.findMany({
+      where: { organizationId: factory.organizationId },
+      select: {
+        id: true,
+        name: true,
+        systemRole: true,
+        isSystem: true,
+        _count: { select: { users: true, permissions: true } },
+      },
+      orderBy: [{ isSystem: "desc" }, { name: "asc" }],
+    }),
   ]);
+
+  const settings = (factory.settings ?? {}) as Record<string, unknown>;
 
   return {
     factory: {
       ...factory,
+      settings: undefined,
       industry: packLabel(factory.industry),
       createdAt: factory.createdAt.toISOString(),
     },
@@ -670,7 +689,124 @@ export async function getClientDetail(factoryId: string) {
       locked: !!u.lockedUntil && u.lockedUntil > new Date(),
     })),
     modules,
+    roles: roles.map((r) => ({
+      id: r.id,
+      name: r.name,
+      systemRole: r.systemRole,
+      isSystem: r.isSystem,
+      userCount: r._count.users,
+      permissionCount: r._count.permissions,
+    })),
+    brand: {
+      logoUrl: factory.logoUrl,
+      // The tenant's accent, the one the worker and owner shells paint `--brand`
+      // with. Null means "not chosen" rather than "black": the shells fall back
+      // to the Verity scarlet, and storing that fallback here would make a
+      // default indistinguishable from a decision.
+      themeColor: typeof settings.themeColor === "string" ? settings.themeColor : null,
+      /** Where the tenant lives. Derived from the slug — it is not a stored field. */
+      domain: `${factory.slug}.verity.ai`,
+    },
   };
+}
+
+/**
+ * Set a tenant's brand identity: their mark and their accent.
+ *
+ * Both are already rendered by the owner and worker shells (`--brand`) and by the
+ * public passport page, and both were previously only settable from inside the
+ * tenant's own settings screen. An operator standing up a client could build the
+ * whole workspace and not brand it, which is the step a client notices first.
+ *
+ * The logo is a data URI, matching how `/api/settings` already stores it. Kept
+ * that way deliberately: a second storage path for the same asset means two
+ * places to fix when one breaks.
+ */
+export async function updateTenantBrand(
+  factoryId: string,
+  input: { themeColor?: string | null; logoUrl?: string | null },
+) {
+  await requireHqAction();
+
+  // A colour lands in a `style` attribute on every tenant page. Anything that is
+  // not a hex literal is refused rather than escaped: there is no legitimate
+  // reason for this field to hold anything else, and the narrow rule is the one
+  // that cannot be talked around.
+  const themeColor = input.themeColor?.trim() || null;
+  if (themeColor && !/^#[0-9a-fA-F]{6}$/.test(themeColor)) {
+    return { success: false, error: "Use a 6-digit hex colour, like #00FFCC." };
+  }
+
+  try {
+    const factory = await prisma.factory.findUnique({
+      where: { id: factoryId },
+      select: { settings: true },
+    });
+    if (!factory) return { success: false, error: "Client not found." };
+
+    const settings = (factory.settings ?? {}) as Record<string, unknown>;
+
+    await prisma.factory.update({
+      where: { id: factoryId },
+      data: {
+        // Merged, not replaced: `settings` holds more than the brand, and a
+        // write that overwrites the object drops whatever else was in it.
+        settings: { ...settings, ...(themeColor ? { themeColor } : { themeColor: null }) },
+        ...(input.logoUrl === undefined ? {} : { logoUrl: input.logoUrl || null }),
+      },
+    });
+
+    revalidatePath("/verity/clients");
+    revalidatePath("/owner", "layout");
+    revalidatePath("/worker", "layout");
+    return { success: true };
+  } catch (error: unknown) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Could not update the brand.",
+    };
+  }
+}
+
+/**
+ * Deploy a whole configuration to a tenant in one action: modules, then brand.
+ *
+ * Two writes existed already and an operator had to remember to do both, in the
+ * right order, and then tell the client it was ready. This is the single control
+ * the console's Deploy button needs, and it fails loudly on the first half
+ * rather than half-applying: a tenant whose modules moved but whose brand did
+ * not is a support call, and there is no way to see it from the outside.
+ */
+export async function deployTenantConfig(input: {
+  factoryId: string;
+  organizationId: string;
+  moduleKeys: string[];
+  themeColor?: string | null;
+  logoUrl?: string | null;
+}) {
+  await requireHqAction();
+
+  const modules = await updateTenantModules(input.organizationId, input.moduleKeys);
+  if (!modules.success) return modules;
+
+  const brand = await updateTenantBrand(input.factoryId, {
+    themeColor: input.themeColor,
+    logoUrl: input.logoUrl,
+  });
+  if (!brand.success) return brand;
+
+  // A deployment is a fact about the tenant that outlives this request, and the
+  // trail is where every other cross-tenant operator action already lands.
+  await prisma.auditLog.create({
+    data: {
+      factoryId: input.factoryId,
+      action: `HQ deployed configuration: ${modules.modules?.length ?? 0} modules`,
+      entityType: "Factory",
+      entityId: input.factoryId,
+    },
+  });
+
+  return { success: true, modules: modules.modules };
 }
 
 // ==========================================
