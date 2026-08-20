@@ -21,3 +21,7 @@ Welcome to the documentation for the **Verity Composable Operating Platform**. T
 ### 4. [Development & Product Roadmaps](file:///D:/Code/verity/docs/03-roadmap/roadmaps.md)
 *   **Location:** `docs/03-roadmap/roadmaps.md`
 *   **Contents:** Release phase history, immediate priorities (building B2C Customer portals), and future module expansions.
+
+### 5. [Customer Portal Specification](file:///D:/Code/verity/docs/00-foundation/customer_portal_specification.md)
+*   **Location:** `docs/00-foundation/customer_portal_specification.md`
+*   **Contents:** Mobile-first scheduler layout, whitelabel brand colors, slot-picker rules, and customer catalog menu routes.
