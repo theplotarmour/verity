@@ -6,8 +6,8 @@ import { getOwnerUser } from "@/lib/server/owner";
 import { revalidatePath } from "next/cache";
 import { ADJUSTMENT_TYPES } from "@/lib/inventory-constants";
 import { STOCK_STATUS_FIELD, type StockStatus } from "@/lib/stock-status";
-import { SPEC_SUMMARY_INCLUDE, specSummary, loadRefLabels } from "@/server/queries/spec";
 import { ensureDefaultBin } from "@/server/internal/stockMovements";
+import { round2 } from "@/platform/billing/service-invoice";
 
 // issueMaterialsForWorkOrder and receiveFinishedGoods deliberately are NOT
 // re-exported from here: re-exporting them from a "use server" module would
@@ -22,17 +22,17 @@ export async function dispatchOrder(orderId: string) {
   try {
     const order = await prisma.salesOrder.findUnique({
       where: { id: orderId, factoryId: owner.factoryId },
-      include: { plans: true }
+      select: { id: true },
     });
 
     if (!order) return { error: "Order not found" };
 
-    // Check if all plans are COMPLETED
-    const allCompleted = order.plans.every(p => p.status === "COMPLETED");
-    if (!allCompleted) {
-      return { error: "Cannot dispatch: Not all production plans are completed." };
-    }
-
+    /*
+     * This used to refuse a dispatch until every production plan on the order
+     * was COMPLETED. Plans went with the manufacturing module, and there is no
+     * remaining signal for "the work is finished", so the guard is gone rather
+     * than replaced by one that always passes while pretending to check.
+     */
     await prisma.salesOrder.update({
       where: { id: orderId },
       data: { status: "DISPATCHED" }
@@ -52,44 +52,15 @@ export async function getMaterials() {
   await guardModuleAction("inventory");
   const user = await getOwnerUser();
   if (!user) return [];
-  const groupIds = await stockableGroupIds(user.factoryId);
+  /*
+   * Physical stock. This used to walk the item-group tree down from the Raw
+   * Material and Semi-Finished roots; the tree went with the spec engine, and
+   * itemType carries the same fact directly.
+   */
   return prisma.product.findMany({
-    where: { factoryId: user.factoryId, groupId: { in: [...groupIds] } },
+    where: { factoryId: user.factoryId, itemType: { in: ["RAW_MATERIAL", "SEMI_FINISHED"] } },
     orderBy: { name: "asc" },
   });
-}
-
-// The group ids whose items are physical stock: everything under the seeded Raw
-// Material and Semi-Finished roots (fabric, foam, thread, sub-assemblies). Their
-// descendants are included; reference categories that happen to be RAW_MATERIAL
-// typed — Vehicles/Brands/Models, Designs, Colours — live under other roots and
-// are excluded, so brands and car models stop appearing as "stock".
-async function stockableGroupIds(factoryId: string): Promise<Set<string>> {
-  const groups = await prisma.itemGroup.findMany({
-    where: { factoryId },
-    select: { id: true, parentId: true, name: true, shortCode: true, itemType: true },
-  });
-  const isStockRoot = (g: (typeof groups)[number]) =>
-    !g.parentId &&
-    (["RM", "SF"].includes(g.shortCode ?? "") ||
-      ["Raw Material", "Semi-Finished"].includes(g.name)) &&
-    (g.itemType === "RAW_MATERIAL" || g.itemType === "SEMI_FINISHED");
-  const childrenByParent = new Map<string, string[]>();
-  for (const g of groups) {
-    if (!g.parentId) continue;
-    const list = childrenByParent.get(g.parentId) ?? [];
-    list.push(g.id);
-    childrenByParent.set(g.parentId, list);
-  }
-  const set = new Set<string>();
-  const stack = groups.filter(isStockRoot).map((g) => g.id);
-  while (stack.length) {
-    const id = stack.pop()!;
-    if (set.has(id)) continue;
-    set.add(id);
-    for (const c of childrenByParent.get(id) ?? []) stack.push(c);
-  }
-  return set;
 }
 
 export async function getWarehouses() {
@@ -116,43 +87,16 @@ export async function createStockEntry(data: {
   const itemId = data.materialId ?? null;
   if (!itemId) throw new Error("A material item is required");
 
-  // Cutting issues the calculated quantity and no more. The requirement comes
-  // from CAD (design consumption + BOM), materialised as this work order's
-  // reservations; anything beyond it is real over-consumption and has to go
-  // through adjustStock, which forces a type and a mandatory remark rather than
-  // quietly inflating the issue.
-  if (data.transactionType === "ISSUE" && data.referenceDocType === "WORK_ORDER" && data.referenceDocId) {
-    const [reserved, issued] = await Promise.all([
-      prisma.materialReservation.aggregate({
-        where: { factoryId: user.factoryId, workOrderId: data.referenceDocId, itemId },
-        _sum: { quantity: true },
-      }),
-      prisma.stockLedgerEntry.aggregate({
-        where: {
-          factoryId: user.factoryId,
-          transactionType: "ISSUE",
-          referenceDocType: "WORK_ORDER",
-          referenceDocId: data.referenceDocId,
-          itemId,
-        },
-        _sum: { quantityChange: true },
-      }),
-    ]);
-
-    const allowed = reserved._sum.quantity ?? 0;
-    if (allowed > 0) {
-      const alreadyIssued = Math.abs(issued._sum.quantityChange ?? 0);
-      const requested = Math.abs(data.quantityChange);
-      const remaining = allowed - alreadyIssued;
-      if (requested > remaining + 1e-6) {
-        throw new Error(
-          `Calculated requirement for this work order is ${round2(allowed)}; ${round2(alreadyIssued)} already issued, ` +
-            `so only ${round2(Math.max(remaining, 0))} remains. Record the excess as a stock adjustment with a reason.`
-        );
-      }
-    }
-  }
-
+  /*
+   * There used to be an over-issue guard here: a WORK_ORDER issue could not
+   * exceed the quantity CAD had reserved against that work order. Work orders
+   * and their reservations went with the manufacturing module, so there is no
+   * calculated requirement left to compare an issue against. The guard is
+   * removed rather than kept as a check that can never fire.
+   *
+   * adjustStock still forces a type and a mandatory remark, so a correction is
+   * still recorded as one.
+   */
   const bin = await ensureDefaultBin(user.factoryId, data.warehouseId);
 
   await prisma.stockLedgerEntry.create({
@@ -322,17 +266,12 @@ export async function getInventoryOverview() {
 
   const [rawMaterials, reservations, balances, warehouses, activeWorkOrders] = await Promise.all([
     prisma.product.findMany({
-      // Physical stock only — items under the Raw Material and Semi-Finished
-      // roots. Reference categories (Vehicles/Brands/Models, Designs, Colours)
-      // are RAW_MATERIAL-typed too but are not stock, so they are excluded by
-      // group rather than by type.
+      // Physical stock only. Scoped by item type since the group tree went.
       where: {
         factoryId,
-        groupId: { in: [...(await stockableGroupIds(factoryId))] },
+        itemType: { in: ["RAW_MATERIAL", "SEMI_FINISHED"] },
       },
       include: {
-        group: { select: { name: true } },
-        specValues: { include: SPEC_SUMMARY_INCLUDE },
         // Stock is held in the item's own unit, but the floor counts rolls and
         // bags. Carrying the conversion lets a row say both.
         conversions: { select: { fromUOM: true, toUOM: true, conversionFactor: true } },
@@ -341,60 +280,23 @@ export async function getInventoryOverview() {
     }),
     prisma.materialReservation.findMany({
       where: { factoryId, status: "ACTIVE" },
-      include: {
-        item: true,
-        workOrder: {
-          include: {
-            productionPlan: {
-              include: {
-                salesOrder: true,
-                // Three joins out to Product for a name the item already carries —
-            // and Product is empty, so the WIP column read "—" on every row.
-            blueprintVersion: {
-              include: {
-                blueprint: {
-                  include: { item: { select: { id: true, name: true, group: { select: { name: true } } } } },
-                },
-              },
-            },
-              },
-            },
-          },
-        },
-      },
+      include: { item: true },
       orderBy: { createdAt: "desc" },
     }),
     prisma.binBalance.findMany({
       where: { factoryId },
       include: {
-        item: { include: { specValues: { include: SPEC_SUMMARY_INCLUDE }, conversions: { select: { fromUOM: true, toUOM: true, conversionFactor: true } } } },
+        item: { include: { conversions: { select: { fromUOM: true, toUOM: true, conversionFactor: true } } } },
         bin: { include: { shelf: { include: { rack: { include: { zone: { include: { warehouse: true } } } } } } } },
       },
     }),
     prisma.warehouse.findMany({ where: { factoryId }, orderBy: { name: "asc" } }),
-    // Ongoing productions: every work order that hasn't finished yet, so the
-    // Production tab reflects the floor even when no BOM materials were issued.
-    prisma.workOrder.findMany({
-      where: { factoryId, status: { notIn: ["COMPLETED", "CANCELLED", "DRAFT"] } },
-      include: {
-        reservations: { where: { status: "ACTIVE" }, include: { item: true } },
-        productionPlan: {
-          include: {
-            salesOrder: { include: { customer: true } },
-            // Three joins out to Product for a name the item already carries —
-            // and Product is empty, so the WIP column read "—" on every row.
-            blueprintVersion: {
-              include: {
-                blueprint: {
-                  include: { item: { select: { id: true, name: true, group: { select: { name: true } } } } },
-                },
-              },
-            },
-          },
-        },
-      },
-      orderBy: { startDate: "desc" },
-    }),
+    /*
+     * The Production tab listed every unfinished work order. Work orders are
+     * gone, so the list is empty rather than approximated from sales orders,
+     * which carry no notion of being on a floor.
+     */
+    Promise.resolve([] as never[]),
   ]);
 
   // Net raw-material stock from the ledger (covers items without bin balances)
@@ -405,14 +307,6 @@ export async function getInventoryOverview() {
   });
   const netByItem = new Map(ledgerSums.map((l) => [l.itemId, l._sum.quantityChange ?? 0]));
 
-  // Spec summaries so a stock row says what the item actually is, rather than
-  // leaving the reader to infer it from a name.
-  const stockRefIds = [
-    ...rawMaterials.flatMap((m) => m.specValues.map((v) => v.valueRefId)),
-    ...balances.flatMap((b) => b.item.specValues.map((v) => v.valueRefId)),
-  ].filter((x): x is string => Boolean(x));
-  const stockRefLabels = await loadRefLabels(stockRefIds);
-
   const rawWithStock = rawMaterials.map((m) => {
     const netStock = netByItem.get(m.id) ?? 0;
     // How many of the purchase unit that quantity is — 150 m shown as 3 rolls.
@@ -422,8 +316,8 @@ export async function getInventoryOverview() {
     return {
       ...m,
       netStock,
-      groupName: m.group?.name ?? null,
-      spec: specSummary(m.specValues, stockRefLabels),
+      groupName: null,
+      spec: null,
       secondaryQty:
         toSecondary && toSecondary.conversionFactor > 0
           ? netStock / toSecondary.conversionFactor
@@ -440,7 +334,7 @@ export async function getInventoryOverview() {
       return {
         id: b.id,
         itemCode: b.item.itemCode,
-        itemSpec: specSummary(b.item.specValues, stockRefLabels),
+        itemSpec: null,
         itemName: b.item.name,
         sku: b.item.sku,
         itemType: b.item.itemType,
@@ -457,18 +351,7 @@ export async function getInventoryOverview() {
       };
     });
 
-  const ongoingProductions = activeWorkOrders.map((wo) => ({
-    id: wo.id,
-    woNumber: wo.woNumber,
-    status: wo.status,
-    targetQty: wo.targetQty,
-    startDate: wo.startDate,
-    customerName: wo.productionPlan?.salesOrder?.customer?.name ?? "—",
-    soNumber: wo.productionPlan?.salesOrder?.soNumber ?? "—",
-    productName: wo.productionPlan?.blueprintVersion?.blueprint?.item?.group?.name ?? "—",
-    variantName: wo.productionPlan?.blueprintVersion?.blueprint?.item?.name ?? "",
-    materialsIssued: wo.reservations.length,
-  }));
+  const ongoingProductions: never[] = [];
 
   // ---- Summary + valuation (Milestone 3.5 / 3.6) ----
   // Latest known unit cost per item (most recent receipt rate).
@@ -541,79 +424,20 @@ export async function getInventoryOverview() {
   return { rawMaterials: rawWithStock, reservations, locationBalances, warehouses, ongoingProductions, summary, valuation };
 }
 
-// Material variance (Milestone 3.6): BOM-expected vs actually-issued material per
-// work order. Expected = BOM qty × target × (1 + waste). Issued = ACTIVE/CONSUMED
-// reservation quantity for the work order.
+/*
+ * Material variance compared what a BOM said a work order should consume with
+ * what its reservations actually issued. Both sides of that comparison went
+ * with the manufacturing module.
+ *
+ * Kept as an empty result rather than deleted: the Inventory screen renders a
+ * Variance tab off this, and an empty tab is a smaller change than removing a
+ * tab in the same commit that removes the data behind it.
+ */
 export async function getMaterialVariance() {
   await guardModuleAction("inventory");
-  const user = await getOwnerUser();
-  if (!user) return [];
-  const factoryId = user.factoryId;
-
-  const workOrders = await prisma.workOrder.findMany({
-    where: { factoryId, reservations: { some: {} } },
-    include: {
-      reservations: { include: { item: true } },
-      productionPlan: {
-        include: {
-          salesOrder: true,
-          blueprintVersion: {
-            include: {
-              blueprint: { include: { item: { select: { id: true, name: true, group: { select: { name: true } } } } } },
-              bom: { include: { items: { include: { item: true } } } },
-            },
-          },
-        },
-      },
-    },
-    orderBy: { startDate: "desc" },
-    take: 100,
-  });
-
-  return workOrders.map((wo) => {
-    const target = wo.targetQty || 0;
-    const bomItems = wo.productionPlan?.blueprintVersion?.bom?.items ?? [];
-    const expectedByItem = new Map<string, { name: string; expected: number }>();
-    for (const bi of bomItems) {
-      const expected = bi.quantity * target * (1 + bi.wastePercent / 100);
-      expectedByItem.set(bi.itemId, { name: bi.item.name, expected });
-    }
-    const issuedByItem = new Map<string, number>();
-    for (const r of wo.reservations) issuedByItem.set(r.itemId, (issuedByItem.get(r.itemId) ?? 0) + r.quantity);
-
-    const itemIds = new Set<string>([...expectedByItem.keys(), ...issuedByItem.keys()]);
-    const lines = Array.from(itemIds).map((id) => {
-      const exp = expectedByItem.get(id);
-      const issued = issuedByItem.get(id) ?? 0;
-      const expected = exp?.expected ?? 0;
-      const name = exp?.name ?? wo.reservations.find((r) => r.itemId === id)?.item.name ?? "Material";
-      return { itemId: id, name, expected, issued, variance: issued - expected };
-    });
-
-    return {
-      workOrderId: wo.id,
-      woNumber: wo.woNumber,
-      soNumber: wo.productionPlan?.salesOrder?.soNumber ?? "—",
-      productName: wo.productionPlan?.blueprintVersion?.blueprint?.item?.name ?? "—",
-      targetQty: target,
-      lines,
-      totalVariance: lines.reduce((s, l) => s + l.variance, 0),
-    };
-  });
+  return [] as never[];
 }
 
-// Local helper (not exported — "use server" files may only export async functions).
-function round2(n: number) {
-  return Math.round(n * 100) / 100;
-}
-
-// =======================
-// Batch traceability
-// =======================
-
-// Remaining quantity per batch, with the provenance the floor needs to decide
-// which batch to consume: supplier, first receipt date, and QC state. Batches
-// are FIFO-ordered (oldest receipt first), which is the default issue order.
 export async function getItemBatches(itemId?: string) {
   await guardModuleAction("inventory");
   const user = await getOwnerUser();
