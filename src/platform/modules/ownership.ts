@@ -75,7 +75,6 @@ export const ROUTE_OWNERSHIP: Record<string, Ownership> = {
   "helpdesk/page.tsx": "helpdesk",
   "helpdesk/[id]/page.tsx": "helpdesk",
   "inventory/page.tsx": "inventory",
-  "kitchen/page.tsx": "kitchen",
   "logistics/page.tsx": "sales",
   "order-taking/page.tsx": "sales",
   "production/page.tsx": "manufacturing",
@@ -86,8 +85,6 @@ export const ROUTE_OWNERSHIP: Record<string, Ownership> = {
   "scheduling/page.tsx": "scheduling",
   "service-work-orders/page.tsx": "helpdesk",
   "service-work-orders/inspection/[id]/page.tsx": "helpdesk",
-  "serving/page.tsx": "serving",
-  "counter/page.tsx": "tables_orders",
   "booking/page.tsx": "booking",
   "sites/page.tsx": "sites",
   "sites/[id]/page.tsx": "sites",
@@ -170,14 +167,7 @@ export const ACTION_OWNERSHIP: Record<string, Ownership> = {
   "sites.ts": "sites",
   "scheduling.ts": "scheduling",
   "billing.ts": "billing",
-  "diningBilling.ts": "billing",
-  "menu.ts": "menu",
-  "assistantProposals.ts": "menu", // applying an approved assistant price change
 
-  "tables.ts": "tables_orders",
-  "diningOrders.ts": "tables_orders",
-  "kitchen.ts": "kitchen",
-  "serving.ts": "serving",
   "booking.ts": "booking",
   "franchise.ts": "sites",
 };

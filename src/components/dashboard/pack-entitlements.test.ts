@@ -26,10 +26,6 @@ const DASHBOARDS: Record<string, string> = {
   facility_management: "FacilityManagementDashboard.tsx",
   franchise_qsr: "QsrFranchiseDashboard.tsx",
   franchise_retail: "RetailFranchiseDashboard.tsx",
-  restaurant_ops: "RestaurantDashboard.tsx",
-  professional_services: "ProfessionalServicesDashboard.tsx",
-  retail_os: "RetailDashboard.tsx",
-  restaurant_widgets: "widgets/RestaurantWidgets.tsx",
 };
 
 /**
@@ -69,11 +65,6 @@ const MODEL_MODULE: Record<string, ModuleKey | null> = {
   qualityReport: "quality",
   serviceInspection: "quality",
 
-  menuCategory: "menu",
-  menuItem: "menu",
-  restaurantTable: "tables_orders",
-  diningOrder: "tables_orders",
-  diningBill: "billing",
 
   salesOrder: "sales",
   salesOrderItem: "sales",
@@ -92,8 +83,7 @@ function modelsQueriedBy(file: string): string[] {
 
 describe("dashboards only show what their pack entitles", () => {
   it.each(Object.entries(DASHBOARDS))("%s", (packKey, file) => {
-    const actualPack = packKey === "restaurant_widgets" ? "restaurant_ops" : packKey;
-    const entitled = new Set(withDependencies(VERTICAL_PACKS[actualPack].modules));
+    const entitled = new Set(withDependencies(VERTICAL_PACKS[packKey].modules));
 
     const missing: string[] = [];
     for (const model of modelsQueriedBy(file)) {
@@ -171,8 +161,7 @@ describe("service inspections are reachable by every pack that shows them", () =
 
   it("names only real packs in DASHBOARDS", () => {
     for (const key of Object.keys(DASHBOARDS)) {
-      const actualPack = key === "restaurant_widgets" ? "restaurant_ops" : key;
-      expect(VERTICAL_PACKS, `DASHBOARDS names ${key}, which is not a pack`).toHaveProperty(actualPack);
+      expect(VERTICAL_PACKS, `DASHBOARDS names ${key}, which is not a pack`).toHaveProperty(key);
     }
   });
 });

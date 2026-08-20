@@ -65,9 +65,9 @@ const TRIALS: Record<string, Trial> = {
   "kents": {
     name: "Kent's Kitchen",
     slug: "kents",
-    industry: "Restaurant OS",
+    industry: "franchise_qsr",
     modules: [
-      "core", "hr", "menu", "tables_orders", "kitchen", "serving", "billing"
+      "core", "hr", "inventory", "quality", "procurement", "billing", "sites", "helpdesk"
     ],
     owner: { name: "Kent Jones", phone: "8800000008" },
     sites: [],

@@ -38,14 +38,4 @@ export const billingModule = createModule({
     "requires": "invoice.view"
   }
 ],
-  dashboardWidgets: [
-    {
-      key: "restaurant_takings",
-      title: "Takings",
-      requires: "invoice.view",
-      size: "panel",
-      load: () => import("@/components/dashboard/widgets/RestaurantWidgets").then((m) => ({ default: m.RestaurantTakingsWidget })),
-      sortOrder: 30,
-    },
-  ],
 });

@@ -3,9 +3,7 @@ import "server-only";
 import prisma from "@/lib/prisma";
 import { hasModule } from "@/platform/modules/entitlements";
 import type { ModuleKey } from "@/platform/modules/registry";
-import { ACTIVE_ORDER_STATES, orderLabel, orderTotal } from "@/lib/dining";
 import { LIVE_APPOINTMENT_STATUSES } from "@/lib/booking";
-import { formatMenuPrice } from "@/lib/menu";
 
 /**
  * Read-only tools the assistant may call to ground an answer in live data.
@@ -21,26 +19,9 @@ import { formatMenuPrice } from "@/lib/menu";
  * told the module is not installed rather than being handed an empty result that
  * reads as "you have no stock".
  *
- * All tools are reads. Writes are R4 — a proposal the owner approves — and go
- * through a guarded server action, never through this file.
+ * All tools are reads. A write belongs in a guarded server action the owner
+ * drives, never here.
  */
-
-/**
- * A write the owner must approve before it happens (R4).
- *
- * A `propose_*` tool is still a **read**: it looks up the current value and
- * returns the old→new diff. Nothing is written until the owner clicks Approve,
- * which calls a guarded server action that re-reads and re-validates from the
- * session — the proposal below is a preview, never the source of truth for the
- * write.
- */
-export interface PriceChangeProposal {
-  kind: "menu_price";
-  itemId: string;
-  itemName: string;
-  oldPricePaise: number;
-  newPricePaise: number;
-}
 
 export interface AssistantTool {
   name: string;
@@ -80,74 +61,6 @@ export function stripTenantKeys(args: Record<string, unknown> | null | undefined
 
 export const ASSISTANT_TOOLS: AssistantTool[] = [
   {
-    name: "count_active_orders",
-    module: "tables_orders",
-    description:
-      "Count the dining/counter orders currently live in the restaurant, broken down by state (NEW, ACCEPTED, PREPARING, READY, SERVED, BILLED). Use for 'how busy are we', 'what's cooking', 'anything waiting to pay'.",
-    parameters: { type: "object", properties: {} },
-    async run(factoryId) {
-      const rows = await prisma.diningOrder.groupBy({
-        by: ["state"],
-        where: { factoryId, state: { in: ACTIVE_ORDER_STATES } },
-        _count: { _all: true },
-      });
-      const byState: Record<string, number> = {};
-      let total = 0;
-      for (const row of rows) {
-        byState[row.state] = row._count._all;
-        total += row._count._all;
-      }
-      return { total, byState };
-    },
-  },
-  {
-    name: "find_order",
-    module: "tables_orders",
-    description:
-      "Look up one live order by its counter token (e.g. '12' or '#12') or its table number (e.g. 'T01', 'Table 3'). Returns the order's label, state and running total.",
-    parameters: {
-      type: "object",
-      properties: {
-        query: { type: "string", description: "A token number, or a table's name/number." },
-      },
-      required: ["query"],
-    },
-    async run(factoryId, args) {
-      const query = String(args.query ?? "").trim();
-      if (!query) return { error: "No token or table given." };
-
-      const bare = query.replace(/^#/, "").trim();
-      const asToken = Number(bare);
-      const byToken = bare !== "" && Number.isInteger(asToken);
-
-      const order = await prisma.diningOrder.findFirst({
-        where: {
-          factoryId,
-          state: { in: ACTIVE_ORDER_STATES },
-          ...(byToken
-            ? { token: asToken }
-            : { table: { number: { equals: query, mode: "insensitive" } } }),
-        },
-        orderBy: { createdAt: "desc" },
-        select: {
-          state: true,
-          token: true,
-          customerLabel: true,
-          table: { select: { number: true } },
-          items: { select: { quantity: true, unitPrice: true } },
-        },
-      });
-      if (!order) return { found: false, query };
-
-      return {
-        found: true,
-        label: orderLabel(order),
-        state: order.state,
-        total: formatMenuPrice(orderTotal(order.items)),
-      };
-    },
-  },
-  {
     name: "upcoming_appointments",
     module: "booking",
     description:
@@ -183,45 +96,6 @@ export const ASSISTANT_TOOLS: AssistantTool[] = [
           status: r.status,
         })),
       };
-    },
-  },
-  {
-    name: "propose_price_change",
-    module: "menu",
-    description:
-      "Prepare (but DO NOT apply) a change to a menu item's price. Returns the current and proposed price for the owner to approve. Use when the user asks to change, raise or drop an item's price. The change only happens after the owner approves it on screen.",
-    parameters: {
-      type: "object",
-      properties: {
-        itemName: { type: "string", description: "The menu item's name, as shown on the menu." },
-        newPrice: { type: "number", description: "The proposed new price in rupees (not paise)." },
-      },
-      required: ["itemName", "newPrice"],
-    },
-    async run(factoryId, args) {
-      const itemName = String(args.itemName ?? "").trim();
-      const newRupees = Number(args.newPrice);
-      if (!itemName) return { error: "Which item?" };
-      if (!Number.isFinite(newRupees) || newRupees <= 0) {
-        return { error: "A positive new price in rupees is required." };
-      }
-
-      const item = await prisma.menuItem.findFirst({
-        where: { factoryId, name: { equals: itemName, mode: "insensitive" } },
-        select: { id: true, name: true, price: true },
-      });
-      if (!item) return { found: false, itemName };
-
-      const proposal: PriceChangeProposal = {
-        kind: "menu_price",
-        itemId: item.id,
-        itemName: item.name,
-        oldPricePaise: item.price,
-        newPricePaise: Math.round(newRupees * 100),
-      };
-      // The `proposal` key is the signal the route hoists into the response for
-      // the client to render as an Approve/Cancel diff. Nothing is written here.
-      return { proposal };
     },
   },
 ];

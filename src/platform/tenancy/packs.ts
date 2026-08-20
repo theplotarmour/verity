@@ -73,83 +73,6 @@ export const VERTICAL_PACKS: Record<
     label: "Franchise — Retail",
     modules: ["core", "hr", "inventory", "quality", "procurement", "sales", "billing", "sites"],
   },
-  /*
-   * Restaurant OS — a single location, not a chain.
-   *
-   * The fifth pack, and it follows a customer rather than preceding one, which is
-   * the bar this list sets for itself.
-   *
-   * Deliberately without `sites`: a single restaurant is one place, and modelling
-   * it as a network of one buys nothing but an extra hop in every query. A
-   * multi-location group is `franchise_qsr`, which already exists.
-   *
-   * `inventory` is absent too. It will earn its way in when recipe-level stock
-   * depletion lands; until then a restaurant that cannot deplete stock on a sale
-   * would be paying for a module that only holds numbers somebody types twice.
-   */
-  restaurant_ops: {
-    label: "Restaurant OS",
-    modules: ["core", "hr", "menu", "tables_orders", "kitchen", "serving", "billing"],
-    dashboardWidgets: [
-      "restaurant_metrics",
-      "restaurant_floor",
-      "restaurant_takings",
-      "restaurant_recent_orders",
-    ],
-  },
-  /*
-   * Agencies, consultancies, studios — businesses that sell people's time.
-   *
-   * `projects` and `finance` are what make it a different product from the
-   * others: the unit of work is an engagement with a budget, and the thing that
-   * decides whether the month was good is utilisation, not throughput. No
-   * `inventory` — a consultancy holds no stock, and shipping one would be a
-   * module nobody opens.
-   */
-  professional_services: {
-    label: "Professional Services",
-    modules: ["core", "hr", "billing", "projects", "crm", "sales", "finance"],
-  },
-  /*
-   * A single shop, not a chain.
-   *
-   * Distinct from `franchise_retail`, which carries `sites` because its unit is a
-   * network of outlets. One store is one place: the same `sites` machinery would
-   * be a hop in every query and a screen listing one row.
-   */
-  retail_os: {
-    label: "Retail OS",
-    modules: ["core", "hr", "inventory", "billing", "sales", "crm", "procurement"],
-  },
-  /*
-   * Salons, spas, boutiques — a person's time is the thing sold, and the day is
-   * run off the appointment book. `booking` is the spine; `crm` keeps the client
-   * history a repeat-visit business lives on; `billing` settles the visit.
-   * No `inventory` or `menu` — a stylist holds no stock and cooks nothing.
-   */
-  lifestyle_services: {
-    label: "Lifestyle Services",
-    modules: ["core", "hr", "billing", "sales", "crm", "booking"],
-  },
-  /*
-   * Table-less quick service — a counter, a queue, and instant payment. Same
-   * spine as `restaurant_ops` (menu → order → kitchen → bill) minus `tables` as
-   * the organising unit and minus `serving`: a token or a name replaces the
-   * table, and the customer collects rather than being served to a seat. Reuses
-   * the restaurant dashboard widgets, which `tables_orders` and `billing`
-   * already contribute, so no new dashboard case is needed.
-   */
-  modern_qsr: {
-    label: "Modern QSR",
-    modules: ["core", "hr", "menu", "tables_orders", "kitchen", "billing"],
-    // Counter-first ordering: a table-less QSR leads with its token queue and the
-    // day's takings, not a floor map it has no tables for.
-    dashboardWidgets: [
-      "counter_queue",
-      "restaurant_takings",
-      "restaurant_recent_orders",
-    ],
-  },
 };
 
 export type VerticalPackKey = keyof typeof VERTICAL_PACKS;
@@ -167,6 +90,20 @@ export type VerticalPackKey = keyof typeof VERTICAL_PACKS;
  * `verticalPackOptions` does not list them, and provisioning rejects them.
  */
 const RETIRED_PACKS: Record<string, VerticalPackKey> = {
+  /*
+   * The single-site and hospitality packs, withdrawn.
+   *
+   * They shipped with dashboards and real module lists, which is why they are
+   * mapped rather than forgotten: a tenant stamped `restaurant_ops` still has to
+   * resolve to *something*, and falling through to no pack is what puts a
+   * facility company on a production dashboard. QSR is the surviving multi-site
+   * food pack, retail franchise the surviving retail one, and facility
+   * management the surviving services one.
+   */
+  restaurant_ops: "franchise_qsr",
+  modern_qsr: "franchise_qsr",
+  retail_os: "franchise_retail",
+  lifestyle_services: "facility_management",
   security_services: "facility_management",
   staffing_manpower: "facility_management",
   housekeeping_cleaning: "facility_management",

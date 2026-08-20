@@ -124,8 +124,7 @@ async function main() {
       "purchase_receipt.record",
       // automotive
       "vehicle_catalog.manage", "fitment.manage",
-      // Restaurant OS.
-      "kitchen.view", "kitchen.work", "serving.view", "serving.work",
+      // Billing.
       "invoice.view", "invoice.manage",
       // Booking (salons, spas, service SMBs).
       "booking.view", "booking.manage", "booking.staff",
@@ -141,8 +140,7 @@ async function main() {
       "production.jobs", "production.supervise",
       "quality.queue", "quality.inspect",
       "purchase_order.create", "purchase_receipt.record",
-      // Restaurant OS.
-      "kitchen.view", "kitchen.work", "serving.view", "serving.work",
+      // Billing.
       "invoice.view", "invoice.manage",
       // Booking.
       "booking.view", "booking.manage", "booking.staff",
@@ -155,33 +153,18 @@ async function main() {
       "bom.view", "work_order.create", "work_order.release", "production.supervise",
       "quality.queue",
       "purchase_order.create", "purchase_receipt.record",
-      // Restaurant OS.
-      "kitchen.view", "kitchen.work", "serving.view", "serving.work",
+      // Billing.
       "invoice.view", "invoice.manage",
       // Booking.
       "booking.view", "booking.manage", "booking.staff",
     ],
-    /*
-     * Kitchen and serving grants ride on the existing floor archetypes rather
-     * than new ones: `SystemRole` has no SERVER or KITCHEN_STAFF, and adding
-     * them would be a schema change plus a migration for what is a naming
-     * preference. A supervisor runs the pass; a worker cooks and carries.
-     *
-     * Handing these to a factory's roles costs nothing — `resolveAccess` drops
-     * any permission whose module the tenant is not entitled to, so an auto
-     * components worker never sees a kitchen queue.
-     */
     SUPERVISOR: [
       "dashboard.view", "reports.view",
       "quality.queue", "quality.inspect",
       "production.jobs", "production.supervise",
-      // Restaurant OS.
-      "kitchen.view", "kitchen.work", "serving.view", "serving.work",
     ],
     WORKER: [
       "production.jobs",
-      // Restaurant OS.
-      "kitchen.view", "kitchen.work", "serving.view", "serving.work"
     ],
     STORE_MANAGER: [
       "dashboard.view",
@@ -893,7 +876,7 @@ async function main() {
 
   console.log("Seed complete: departments, item master, catalog, and demo orders across the chain.");
 
-  // ── 16. Seed Kent's Kitchen Restaurant OS ───────────────────────────────────
+  // ── 16. Seed Kent's Kitchen (QSR franchise pack) ────────────────────────────
   console.log("Seeding Kent's Kitchen restaurant workspace...");
 
   const kentsOrgId = "org_kents";
@@ -911,8 +894,11 @@ async function main() {
     create: { id: kentsFacId, organizationId: kentsOrgId, name: "Kent's Kitchen", slug: "kents", logoUrl: null },
   });
 
+  // Kent's runs the surviving multi-site food pack. The single-site restaurant
+  // pack and its four modules were withdrawn; the dining tables stay in the
+  // schema, but nothing entitles a screen onto them any more.
   const restaurantModules = [
-    "core", "hr", "menu", "tables_orders", "kitchen", "serving", "billing"
+    "core", "hr", "inventory", "quality", "procurement", "billing", "sites", "helpdesk"
   ];
   await prisma.moduleEntitlement.createMany({
     data: restaurantModules.map((moduleKey) => ({ organizationId: kentsOrgId, moduleKey, enabled: true })),

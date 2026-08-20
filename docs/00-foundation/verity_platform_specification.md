@@ -19,52 +19,62 @@ Verity does **not** support external developers or a third-party SDK uploader. D
 
 Capabilities in Verity do not exist as isolated CRUD pages. They must compose into continuous, multi-module business workflows coordinated by the **Decoupled Event Bus** (`src/platform/events/bus.ts`).
 
+### Vertical Packs
+
+Four packs are active. They are the only valid pack keys; anything else is a
+retired key that `resolvePackKey()` maps forward onto one of these.
+
+| Key | Vertical |
+| --- | --- |
+| `auto_components` | Custom automotive upholstery manufacturing |
+| `facility_management` | Multi-site cleaning, security and maintenance |
+| `franchise_qsr` | Quick-service restaurant franchise networks |
+| `franchise_retail` | Retail franchise store networks |
+
+`booking` and `crm` belong to no pack. They are composition modules, enabled per
+tenant from the HQ builder.
+
 ### Reference Composition Flows
 
-#### 1. Service/Lifestyle OS Workflow
-For salons, clinics, and appointment-based services:
+The chains below are declared once in `src/platform/events/workflows.ts`, wired
+in `src/platform/events/reactions.ts`, and asserted by `reactions.test.ts` — a
+flow named here without a listener behind it fails a test. Every reaction scopes
+its own queries by `factoryId`, checks its own module entitlement, and is
+idempotent, so a partially entitled tenant runs the steps it owns and silently
+skips the rest.
+
+Publishing goes through `publish()` (`src/platform/events/publish.ts`), which
+registers reactions lazily and never throws into the caller.
+
+#### 1. Service Day
+For appointment-based services:
 ```text
-Appointment Booking (Customer Portal)
+Booking (appointment served)
        │
-       ▼ (Event: appointment.booked)
-Scheduling (Staff Calendar Allocation)
-       │
-       ▼ (Event: attendance.check_in)
-People (Stylist / Professional Assignment)
-       │
-       ▼ (Event: service.completed)
-Billing (Invoice Generation & Payment Checkout)
-       │
-       ▼ (Event: transaction.completed)
-Customer CRM (Spend Profile & Preferences Updated)
-       │
-       ▼ (Event: crm.updated)
-Notifications (SMS / WhatsApp Notification Confirmation)
+       ▼ (Event: appointment.completed)
+Billing (draft invoice raised for the visit)
+CRM     (client spend profile updated)
+Core    (owner notified the client was served)
 ```
 
-#### 2. Facility / Field Maintenance Workflow
+#### 2. Field Maintenance
 For property management and field service operations:
 ```text
-Helpdesk (Ticket Creation via Customer Portal)
+Helpdesk (ticket raised)
        │
        ▼ (Event: ticket.created)
-Work Order (Job Assignment & Tasks Checklist)
+Helpdesk (job dispatched to a technician)
        │
        ▼ (Event: work_order.dispatched)
-Scheduling (Technician Dispatch Calendar)
+Helpdesk (visit completed on site)
        │
-       ▼ (Event: attendance.arrival)
-Employee (On-Site Mobile Updates & Checklist)
-       │
-       ▼ (Event: asset.repaired)
-Asset (Preventive Logs & Condition Ledger Updated)
-       │
-       ▼ (Event: stock.depleted)
-Inventory (Spare Parts Auto-Decrement)
-       │
-       ▼ (Event: inventory.updated)
-Billing (Contract SLA Validation & Invoicing)
+       ▼ (Event: work_order.completed)
+Assets  (condition ledger updated)
+Billing (draft invoice raised for the visit)
 ```
+
+Reactions to a single event are independent listeners, not a sequence: each one
+is isolated and best-effort, so a failure in one cannot stop another.
 
 ---
 
@@ -75,12 +85,12 @@ The client experience is not a generic layout with toggled menu buttons. The UI 
 ### World 1: Customer (Mobile-First White-Label)
 *   **Purpose:** Discovery, visual menus, slots, and transactions.
 *   **Design:** Wholly white-labeled with client-defined colors (`--brand` accent) and asset logos.
-*   **Key Views:** `/book` (slot selector), `/menu` (digital visual catalog), and `/my-bookings` (status & reschedule options).
+*   **Key Views:** `/book` (slot selector) and `/my-bookings` (status & reschedule options).
 
 ### World 2: Employee (Action-First Deskless)
 *   **Purpose:** Frictionless shift execution. Zero business analytics, zero layout choices.
 *   **Design:** Large, touch-friendly bump buttons and compact lists formatted for floor tablets or mobile viewports.
-*   **Key Views:** `/worker/my-day` (clock-in/out, task sheets) and `/worker/kds` (kitchen/station display queue).
+*   **Key Views:** `/worker` (clock-in/out, task sheets), `/worker/schedule`, `/worker/stage` and `/worker/inspection`.
 
 ### World 3: Manager / Owner (Operational Command Center)
 *   **Purpose:** Resource allocation and exception handling.
@@ -89,19 +99,21 @@ The client experience is not a generic layout with toggled menu buttons. The UI 
 
 ### World 4: Verity HQ Admin (Control Plane System Builder)
 *   **Purpose:** Dynamic workspace generation and deployment.
-*   **Design:** A visual control room for constructing client operating environments:
+*   **Design:** A visual control room for constructing client operating environments. Implemented at `/verity/clients/[id]`; deployment runs through `deployTenantConfig()` in `src/server/actions/hq.ts`, guarded by `requireHqAction()` and audit-logged.
     ```text
     [HQ System Builder Console]
-    
+
     CLIENT ORG: AlienKind Cafe
-    
-    1. Active Modules:  [✓] People  [✓] Menu  [✓] Kitchen  [✓] Tables
-    2. Role Matrix:     [✓] Owner   [✓] Server [✓] Cook
-    3. Workflow Hook:   Tables -> Menu -> Kitchen -> Serving -> Billing
+
+    1. Active Modules:  [✓] Core  [✓] HR  [✓] Billing  [✓] Sites
+    2. Workflows:       Service day — complete | Field maintenance — partial (assets off)
+    3. Role Matrix:     Owner · Manager · Worker (users and permissions per role)
     4. Brand Identity:  Logo: alien_logo.png | Accent: #00FFCC | Domain: alienkind.verity.ai
-    
+
     [ Deploy Config to Tenant ]
     ```
+*   **Workflow panel:** reads `workflowStatus()` against the selected module set, so the console shows which chains a selection actually lights up and where each one stops. It cannot advertise a chain the bus does not run.
+*   **Brand identity:** accent colour is rejected unless it matches `/^#[0-9a-fA-F]{6}$/` — the value is written into a `style` attribute.
 
 ---
 

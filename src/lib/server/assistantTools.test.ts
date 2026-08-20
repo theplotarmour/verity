@@ -65,19 +65,9 @@ describe("stripTenantKeys", () => {
 
 describe("assistantToolSpecs", () => {
   it("offers only the tools a tenant is entitled to", () => {
-    const restaurant = assistantToolSpecs(["tables_orders", "kitchen", "billing"]);
-    const names = restaurant.map((t) => t.function.name);
-    expect(names).toContain("count_active_orders");
-    expect(names).toContain("find_order");
-    // No booking module here, so its tool is not offered.
+    // A tenant with neither module is offered nothing, however many tools exist.
+    const names = assistantToolSpecs(["billing", "inventory"]).map((t) => t.function.name);
     expect(names).not.toContain("upcoming_appointments");
-  });
-
-  it("offers the price-change proposal tool only where menu is entitled (R4)", () => {
-    expect(assistantToolSpecs(["menu"]).map((t) => t.function.name)).toContain("propose_price_change");
-    expect(assistantToolSpecs(["booking"]).map((t) => t.function.name)).not.toContain(
-      "propose_price_change",
-    );
   });
 
   it("offers the booking tool only when booking is entitled", () => {
@@ -90,7 +80,7 @@ describe("assistantToolSpecs", () => {
   });
 
   it("shapes every spec as an OpenAI-style function tool", () => {
-    for (const spec of assistantToolSpecs(["tables_orders", "booking"])) {
+    for (const spec of assistantToolSpecs(["booking"])) {
       expect(spec.type).toBe("function");
       expect(typeof spec.function.name).toBe("string");
       expect(spec.function.parameters.type).toBe("object");

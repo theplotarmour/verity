@@ -22,7 +22,7 @@ import {
  *
  * The count is not the point — a deliberate list is. Restaurant OS was the fifth,
  * added because a customer asked for it, which is the bar `packs.ts` sets for
- * itself. Adding a sixth should mean editing this line and noticing that a pack
+ * itself. Adding a fifth should mean editing this line and noticing that a pack
  * without a dashboard case falls through to a factory floor.
  */
 const SUPPORTED_PACKS = [
@@ -30,11 +30,6 @@ const SUPPORTED_PACKS = [
   "facility_management",
   "franchise_qsr",
   "franchise_retail",
-  "restaurant_ops",
-  "professional_services",
-  "retail_os",
-  "lifestyle_services",
-  "modern_qsr",
 ];
 
 describe("vertical packs", () => {

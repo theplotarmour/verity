@@ -35,10 +35,6 @@ export type ModuleKey =
   | "scheduling"
   | "billing"
   | "automotive"
-  | "menu"
-  | "tables_orders"
-  | "kitchen"
-  | "serving"
   | "booking";
 
 export interface ModuleDefinition {
@@ -152,10 +148,6 @@ import { sitesModule } from "./definitions/sites";
 import { schedulingModule } from "./definitions/scheduling";
 import { billingModule } from "./definitions/billing";
 import { automotiveModule } from "./definitions/automotive";
-import { menuModule } from "./definitions/menu";
-import { tables_ordersModule } from "./definitions/tables_orders";
-import { kitchenModule } from "./definitions/kitchen";
-import { servingModule } from "./definitions/serving";
 import { bookingModule } from "./definitions/booking";
 
 const MODULES: ModuleDefinition[] = [
@@ -175,10 +167,6 @@ const MODULES: ModuleDefinition[] = [
   schedulingModule,
   billingModule,
   automotiveModule,
-  menuModule,
-  tables_ordersModule,
-  kitchenModule,
-  servingModule,
   bookingModule,
 ];
 

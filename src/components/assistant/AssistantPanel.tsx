@@ -5,23 +5,19 @@ import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Sparkles, Send, X, Loader2 } from "lucide-react";
 
-import { ProposalCard } from "./ProposalCard";
-import type { PriceChangeProposal } from "@/lib/server/assistantTools";
 
 /**
  * The assistant, as a right-hand drawer.
  *
- * Talks to `/api/assistant`, which is request/response (not a stream) and already
- * returns any write it wants to make as a structured `proposals[]` — so this
- * renders `ProposalCard` from that field directly rather than scraping a JSON
- * block out of the reply text. Approval goes through the card's own guarded
- * server action; the panel never applies anything itself.
+ * Talks to `/api/assistant`, which is request/response (not a stream). Every tool
+ * behind it is a read, so a reply is text: the panel renders it and applies
+ * nothing. A write the assistant suggests is one the owner performs on the screen
+ * that owns it, through that screen's guarded action.
  */
 
 interface Message {
   role: "user" | "assistant";
   content: string;
-  proposals?: PriceChangeProposal[];
   error?: boolean;
 }
 
@@ -57,13 +53,7 @@ export function AssistantPanel({ open, onClose }: { open: boolean; onClose: () =
           ]);
           return;
         }
-        const proposals = (json.proposals ?? []).filter(
-          (p: PriceChangeProposal) => p && p.kind === "menu_price",
-        );
-        setMessages((m) => [
-          ...m,
-          { role: "assistant", content: json.reply || "…", proposals: proposals.length ? proposals : undefined },
-        ]);
+        setMessages((m) => [...m, { role: "assistant", content: json.reply || "…" }]);
       })
       .catch(() => {
         setMessages((m) => [
@@ -135,11 +125,6 @@ export function AssistantPanel({ open, onClose }: { open: boolean; onClose: () =
                       >
                         {m.content}
                       </div>
-                      {m.proposals?.map((p) => (
-                        <div key={p.itemId} className="mt-2">
-                          <ProposalCard proposal={p} />
-                        </div>
-                      ))}
                     </div>
                   </div>
                 ))
