@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   NAV_GROUP_ORDER,
   allNavItems,
+  groupNavItems,
   resolveNavGroups,
   resolveNavItems,
   resolveTopbarItems,
@@ -44,10 +45,13 @@ describe("module ownership", () => {
     expect(hrefs.length).toBe(new Set(hrefs).size);
   });
 
-  it("puts every item in a known group", () => {
-    const known = new Set<string>([...NAV_GROUP_ORDER, "Configure"]);
+  it("puts every item in a non-empty group", () => {
+    // Group names are no longer a whitelist — an unlisted one renders after the
+    // known ones instead of vanishing — so the only thing left to enforce is
+    // that a module actually names its group. An empty string collapses every
+    // unnamed item into one anonymous dropdown.
     for (const item of allNavItems()) {
-      expect(known.has(item.group), `${item.href} is in unknown group "${item.group}"`).toBe(true);
+      expect(item.group.trim(), `${item.href} declares no nav group`).not.toBe("");
     }
   });
 
@@ -169,6 +173,22 @@ describe("grouping", () => {
     // …and a group nobody contributes to is absent, not empty.
     for (const group of groups) expect(group.items.length).toBeGreaterThan(0);
     expect(titles).not.toContain("Service Operations");
+  });
+
+  it("renders a group NAV_GROUP_ORDER has never heard of, after the ones it has", () => {
+    // The regression this exists for: `resolveNavGroups` used to map over
+    // NAV_GROUP_ORDER, so a module contributing a new sidebar group disappeared
+    // from the shell entirely and no test noticed.
+    const unknown = "Field Services";
+    expect(NAV_GROUP_ORDER as readonly string[]).not.toContain(unknown);
+
+    const items = [
+      { href: "/owner/dashboard", label: "Dashboard", iconKey: "home", group: "Overview", moduleKey: "core" as const },
+      { href: "/owner/crews", label: "Crews", iconKey: "users", group: unknown, moduleKey: "core" as const },
+    ];
+    const groups = groupNavItems(items);
+
+    expect(groups.map((g) => g.title)).toEqual(["Overview", unknown]);
   });
 
   it("keeps topbar items out of the sidebar groups", () => {

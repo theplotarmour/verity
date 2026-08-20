@@ -10,12 +10,20 @@ import { allModules, type ModuleKey, type ModuleNavItem, type NavPlacement } fro
  * drift. This is the single implementation, and it can be tested without
  * rendering anything.
  *
- * Group *order* stays configuration here. Group *membership* comes from the
- * modules, which is the point: adding a module must not require editing this
- * file or the shell.
+ * Group *membership and existence* come from the modules. This file only
+ * expresses a *preference* about order, which is the point: adding a module
+ * must not require editing this file or the shell.
  */
 
-/** Desktop group order. A group nobody contributes to is not rendered. */
+/**
+ * Preferred top-to-bottom order for groups this platform already knows about.
+ *
+ * This is a hint, not a whitelist. It used to be the whitelist — `resolveNavGroups`
+ * mapped over it — which meant a module declaring a sidebar group not listed here
+ * had its items silently vanish from the shell, with nothing failing. A module
+ * that has to be named in a shared array to be visible is not installable, so
+ * unlisted groups now render after the listed ones instead of disappearing.
+ */
 export const NAV_GROUP_ORDER = [
   "Overview",
   "Service Operations",
@@ -104,12 +112,39 @@ export interface NavGroup {
  * empty — an "Overview" dropdown that opens onto nothing reads as broken.
  */
 export function resolveNavGroups(ctx: NavContext): NavGroup[] {
-  const items = resolveNavItems(ctx).filter((item) => (item.placement ?? "sidebar") === "sidebar");
+  return groupNavItems(
+    resolveNavItems(ctx).filter((item) => (item.placement ?? "sidebar") === "sidebar"),
+  );
+}
 
-  return NAV_GROUP_ORDER.map((title) => ({
-    title,
-    items: items.filter((item) => item.group === title),
-  })).filter((group) => group.items.length > 0);
+/**
+ * Bucket already-filtered items into ordered groups.
+ *
+ * Split out from `resolveNavGroups` so the grouping rule can be tested against
+ * a hand-written item list. `resolveNavGroups` reads the live registry, so a
+ * test of it can only assert what today's modules happen to declare — and the
+ * rule that matters here is about a group no module declares yet.
+ */
+export function groupNavItems(items: ResolvedNavItem[]): NavGroup[] {
+  /*
+   * Insertion order over a Map is the module declaration order, which is the
+   * only sensible fallback for a group `NAV_GROUP_ORDER` has never heard of.
+   */
+  const groups = new Map<string, ResolvedNavItem[]>();
+  for (const item of items) {
+    const bucket = groups.get(item.group);
+    if (bucket) bucket.push(item);
+    else groups.set(item.group, [item]);
+  }
+
+  const rank = (title: string) => {
+    const index = NAV_GROUP_ORDER.indexOf(title as (typeof NAV_GROUP_ORDER)[number]);
+    return index === -1 ? NAV_GROUP_ORDER.length : index;
+  };
+
+  return [...groups.entries()]
+    .map(([title, groupItems]) => ({ title, items: groupItems }))
+    .sort((a, b) => rank(a.title) - rank(b.title));
 }
 
 /** Config destinations for the topbar icon row. */
