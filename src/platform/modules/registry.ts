@@ -21,6 +21,7 @@
 export type ModuleKey =
   | "core"
   | "inventory"
+  | "catalog"
   | "quality"
   | "procurement"
   | "sales"
@@ -132,6 +133,7 @@ export interface ModuleNavItem {
 
 import { coreModule } from "./definitions/core";
 import { inventoryModule } from "./definitions/inventory";
+import { catalogModule } from "./definitions/catalog";
 import { qualityModule } from "./definitions/quality";
 import { procurementModule } from "./definitions/procurement";
 import { salesModule } from "./definitions/sales";
@@ -149,6 +151,7 @@ import { bookingModule } from "./definitions/booking";
 const MODULES: ModuleDefinition[] = [
   coreModule,
   inventoryModule,
+  catalogModule,
   qualityModule,
   procurementModule,
   salesModule,

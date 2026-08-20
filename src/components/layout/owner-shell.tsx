@@ -29,7 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Avatar, Badge, Input } from "@/components/ui/primitives";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { Settings, Plus , Package, ShoppingCart, Wrench, FlaskConical, Database, Building2, ChefHat, UtensilsCrossed, Sparkles } from "lucide-react";
+import { Settings, Plus , Package, ShoppingCart, Wrench, FlaskConical, Database, Building2, ChefHat, UtensilsCrossed, Tag, Sparkles } from "lucide-react";
 import { AssistantPanel } from "@/components/assistant/AssistantPanel";
 import { SystemRole } from "@prisma/client";
 import { can, Permission, type PermissionMatrix } from "@/lib/permissions";
@@ -75,6 +75,7 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
   settings: <Settings className="h-4 w-4" />,
   chef: <ChefHat className="h-4.5 w-4.5" />,
   utensils: <UtensilsCrossed className="h-4.5 w-4.5" />,
+  tag: <Tag className="h-4.5 w-4.5" />,
 };
 
 /** A nav item with its icon resolved, which is all the shell renders. */

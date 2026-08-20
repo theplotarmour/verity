@@ -53,11 +53,11 @@ export const VERTICAL_PACKS: Record<
    */
   franchise_qsr: {
     label: "Franchise — QSR",
-    modules: ["core", "hr", "inventory", "quality", "procurement", "billing", "sites", "helpdesk"],
+    modules: ["core", "hr", "inventory", "catalog", "quality", "procurement", "billing", "sites", "helpdesk"],
   },
   franchise_retail: {
     label: "Franchise — Retail",
-    modules: ["core", "hr", "inventory", "quality", "procurement", "sales", "billing", "sites"],
+    modules: ["core", "hr", "inventory", "catalog", "quality", "procurement", "sales", "billing", "sites"],
   },
 };
 

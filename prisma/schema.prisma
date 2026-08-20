@@ -396,6 +396,16 @@ model Product {
   safetyStock     Float                @default(0)
   hsnCode         String?
   taxRate         Float                @default(0)
+  /// What a customer pays, in integer paise. Products carried a valuation and a
+  /// tax rate but never a sale price: nothing customer-facing read this table
+  /// until the B2C portals. Paise, not a Float, so booking, catalogue and
+  /// invoice arithmetic is one convention (see Appointment.pricePaise).
+  pricePaise      Int                  @default(0)
+  /// Whether this row appears in the tenant's public portal. Separate from
+  /// `status`, which is about whether the business still trades the item at
+  /// all: a seasonal dish is ACTIVE and unpublished between seasons, and a
+  /// bolt of lining fabric is ACTIVE and never published.
+  isPublished     Boolean              @default(false)
   categoryId      String?
   category        MaterialCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   subcategoryId   String?
@@ -404,9 +414,6 @@ model Product {
   updatedAt       DateTime             @updatedAt
   // Owner-defined custom fields (e.g. "xyz"): values keyed by ItemFieldDefinition.id.
   customFields    Json?                @default("{}")
-
-  // Spec engine. The group supplies the fields this item answers, the name and
-  // code templates, and (later) the BOM template.
 
   conversions               UOMConversion[]
   stockLedgerEntries        StockLedgerEntry[]
@@ -423,7 +430,9 @@ model Product {
 
   @@unique([factoryId, itemCode])
   @@index([factoryId])
-  }
+  /// The portal query: everything a tenant publishes, in one index.
+  @@index([factoryId, isPublished])
+}
 
 /// Owner-defined custom columns on the item catalogue. Not part of the spec
 /// engine that went with the MES layer - these are free-text fields a tenant
