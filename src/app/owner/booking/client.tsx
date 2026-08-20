@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/design/PageHeader";
 import { Surface } from "@/components/design/Surface";
 import { Sheet } from "@/components/design/Sheet";
 import { Button, Input, Select } from "@/components/ui/primitives";
-import { formatMenuPrice } from "@/lib/menu";
+import { formatPaise } from "@/lib/money";
 import {
   type BookingRow,
   createAppointment,
@@ -244,7 +244,7 @@ function BookingCard({
       <p className="truncate text-[12px] text-text-secondary">{row.serviceName}</p>
       <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-text-tertiary">
         <span className="truncate">{row.staffName ?? "Unassigned"}</span>
-        {row.pricePaise > 0 ? <span className="font-mono">{formatMenuPrice(row.pricePaise)}</span> : null}
+        {row.pricePaise > 0 ? <span className="font-mono">{formatPaise(row.pricePaise)}</span> : null}
       </div>
 
       {canManage && row.status !== "COMPLETED" && row.status !== "CANCELLED" ? (

@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import prisma from "@/lib/prisma";
-import { formatMenuPrice } from "@/lib/menu";
+import { formatPaise } from "@/lib/money";
 import { LIVE_APPOINTMENT_STATUSES } from "@/lib/booking";
 import { Nothing, Panel } from "../shared";
 
@@ -69,7 +69,7 @@ export async function UpcomingBookingsWidget({ factoryId }: WidgetProps) {
                   </span>
                   {row.pricePaise > 0 ? (
                     <span className="block font-mono text-[12px] font-semibold text-text-primary">
-                      {formatMenuPrice(row.pricePaise)}
+                      {formatPaise(row.pricePaise)}
                     </span>
                   ) : null}
                 </span>

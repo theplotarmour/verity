@@ -23,10 +23,17 @@ describe("dashboard routing", () => {
   const source = readFileSync(ROUTE, "utf8");
 
   it("has a case for every vertical pack", () => {
-    // The failure this catches: adding a fifth pack, building its dashboard, and
-    // forgetting the case — which lands those tenants on auto components with no
-    // error anywhere.
-    const missing = Object.keys(VERTICAL_PACKS).filter((key) => !source.includes(`case "${key}"`));
+    /*
+     * The failure this catches: adding a pack, building its dashboard, and
+     * forgetting the case — which lands those tenants on the default with no
+     * error anywhere.
+     *
+     * facility_management is exempt: it *is* the default, so writing a case for
+     * it would be a second branch to the same component.
+     */
+    const missing = Object.keys(VERTICAL_PACKS)
+      .filter((key) => key !== "facility_management")
+      .filter((key) => !source.includes(`case "${key}"`));
     expect(
       missing,
       `Packs with no dashboard case (they fall through to the default): ${missing.join(", ")}`,
@@ -35,7 +42,6 @@ describe("dashboard routing", () => {
 
   it("mounts a distinct component per vertical", () => {
     for (const component of [
-      "AutoComponentsDashboard",
       "FacilityManagementDashboard",
       "QsrFranchiseDashboard",
       "RetailFranchiseDashboard",
@@ -63,7 +69,7 @@ describe("industry values route to the right dashboard", () => {
     ["facility_management", "facility_management"],
     ["Facility Management", "facility_management"], // Sentinel's stored label
     ["Security Services", "facility_management"], // Asian Security, retired pack
-    ["auto_components", "auto_components"],
+    ["auto_components", "franchise_retail"],
   ])("%s resolves to %s", (industry, expected) => {
     expect(resolvePackKey(industry)).toBe(expected);
   });

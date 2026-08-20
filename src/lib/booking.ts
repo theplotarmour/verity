@@ -1,5 +1,4 @@
 import type { AppointmentStatus } from "@prisma/client";
-import { istDayStart } from "./dining";
 
 /**
  * Booking constants and pure helpers.
@@ -44,4 +43,22 @@ export function bookingWeekRange(on: Date = new Date()): { start: Date; end: Dat
 /** Minutes between two instants, floored at zero. */
 export function slotMinutes(start: Date, end: Date): number {
   return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+}
+
+/**
+ * Midnight tonight-just-gone, in IST, as a UTC instant.
+ *
+ * The server clock is UTC and the business is not. Without this, "today's book"
+ * rolls over at 05:30 local — in the middle of a working morning, splitting one
+ * day's appointments across two.
+ *
+ * ponytail: IST is hardcoded because every tenant is in India. Upgrade path is a
+ * timezone on Factory, read here, the moment one is not.
+ */
+export function istDayStart(now: Date = new Date()): Date {
+  const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+  const ist = new Date(now.getTime() + IST_OFFSET_MS);
+  // Floor to the IST calendar day, then convert the instant back to UTC.
+  const istMidnight = Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate());
+  return new Date(istMidnight - IST_OFFSET_MS);
 }

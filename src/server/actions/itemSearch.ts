@@ -2,27 +2,25 @@
 
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
-import { loadRefLabels } from "@/server/queries/spec";
 
 /**
  * What counts as a makeable product.
  *
- * The category's own flag is authoritative: anything the owner marked producible
- * in the Master Data Studio shows up in production, whatever it is called and
- * whatever type its root carries. The itemType clause stays as a fallback so
- * items created before the flag existed, or filed straight under a finished-goods
- * root, are still found.
+ * This used to prefer the item category's own `isProducible` flag, set in the
+ * Master Data Studio, and fall back to the item type. Categories went with the
+ * spec engine, so the type is all that is left to ask.
  */
 const PRODUCIBLE_WHERE = {
-  OR: [{ group: { isProducible: true } }, { itemType: "FINISHED_PRODUCT" as const }],
+  itemType: "FINISHED_PRODUCT" as const,
 };
 
 /**
  * One finished good, plus the descriptor fields the production studio reads.
  *
- * The descriptor is derived from the item's own spec answers rather than stored
- * beside them, so an item renamed or re-specced in the studio cannot drift from
- * what production shows.
+ * The descriptor fields used to be derived from the item's spec answers. Those
+ * answers went with the spec engine, so they are empty now. The shape is kept
+ * because several clients destructure it, and narrowing it is a separate change
+ * from removing what fed it.
  */
 export type ItemSearchResult = {
   id: string;
@@ -61,7 +59,7 @@ export async function searchFinishedGoods(query: string, limit = 40): Promise<It
   const user = await getOwnerUser();
   const words = query.trim().split(/\s+/).filter(Boolean);
 
-  const items = await prisma.itemMaster.findMany({
+  const items = await prisma.product.findMany({
     where: {
       factoryId: user.factoryId,
       ...PRODUCIBLE_WHERE,
@@ -74,79 +72,33 @@ export async function searchFinishedGoods(query: string, limit = 40): Promise<It
         ],
       })),
     },
-    include: {
-      group: { select: { name: true } },
-      specValues: {
-        include: {
-          field: { select: { key: true, name: true, refTarget: true, unitSuffix: true, sortOrder: true } },
-          option: { select: { label: true, shortCode: true } },
-          valueItem: { select: { name: true, aliasName: true } },
-        },
-      },
-    },
     orderBy: { name: "asc" },
     take: limit,
   });
 
-  const refIds = items.flatMap((i) =>
-    i.specValues.map((v) => v.valueRefId).filter((x): x is string => Boolean(x))
-  );
-  const refLabels = await loadRefLabels(refIds);
-
-  return items.map((item) => {
-    const by = new Map(item.specValues.map((v) => [v.field.key, v]));
-    const refLabel = (key: string) => {
-      const id = by.get(key)?.valueRefId;
-      return id ? refLabels.get(id) ?? "" : "";
-    };
-
-    const back = by.get("backType");
-    // Short codes are what the descriptor speaks: "DB", not "Double Back".
-    const seatType = (back?.option?.shortCode ?? "") as "SB" | "DB" | "";
-    const fabric = by.get("fabric")?.valueItem;
-
-    // Resolve any spec answer to the text a person reads, regardless of how it
-    // was stored (option pick, linked item, attribute reference, number, flag,
-    // free text). Used to build the product-agnostic detail list.
-    const answerText = (v: (typeof item.specValues)[number]): string => {
-      if (v.option?.label) return v.option.label;
-      if (v.valueItem) return v.valueItem.aliasName || v.valueItem.name || "";
-      if (v.valueRefId) return refLabels.get(v.valueRefId) ?? "";
-      if (v.valueBool !== null && v.valueBool !== undefined) return v.valueBool ? "Yes" : "No";
-      if (v.valueNumber !== null && v.valueNumber !== undefined)
-        return `${v.valueNumber}${v.field.unitSuffix ?? ""}`;
-      return v.valueText ?? "";
-    };
-
-    const specDetails = [...item.specValues]
-      .sort((a, b) => (a.field.sortOrder ?? 0) - (b.field.sortOrder ?? 0))
-      .map((v) => ({ label: v.field.name, value: answerText(v) }))
-      .filter((d) => d.value);
-
-    return {
-      id: item.id,
-      name: item.name,
-      itemCode: item.itemCode,
-      brand: refLabel("brand"),
-      model: refLabel("model"),
-      generation: refLabel("generation"),
-      product: item.group?.name ?? "",
-      seatType: seatType === "SB" || seatType === "DB" ? seatType : "",
-      headrests: by.get("headrests")?.valueNumber ?? null,
-      armrest: (by.get("armrest")?.option?.label ?? "").toLowerCase() === "arm",
-      fabricName: fabric?.aliasName || fabric?.name || "",
-      designName: refLabel("design"),
-      colorName: refLabel("colour") || refLabel("color"),
-      imageUrl: item.imageUrl ?? null,
-      specDetails,
-    };
-  });
+  return items.map((item) => ({
+    id: item.id,
+    name: item.name,
+    itemCode: item.itemCode,
+    brand: "",
+    model: "",
+    generation: "",
+    product: "",
+    seatType: "" as const,
+    headrests: null,
+    armrest: false,
+    fabricName: "",
+    designName: "",
+    colorName: "",
+    imageUrl: item.imageUrl ?? null,
+    specDetails: [],
+  }));
 }
 
 /** How many finished goods exist, so an empty search can say why it is empty. */
 export async function countFinishedGoods() {
   const user = await getOwnerUser();
-  return prisma.itemMaster.count({
+  return prisma.product.count({
     where: {
       factoryId: user.factoryId,
       ...PRODUCIBLE_WHERE,
@@ -158,15 +110,10 @@ export async function countFinishedGoods() {
 /**
  * Producible categories, for the structured form's Product group.
  *
- * Subgroups only: "Seat Cover" and "Floor Mats" are what a factory produces,
- * while their root "Finished Good" is a filing cabinet, not a thing to make.
+ * These were the item groups an owner marked producible. Groups went with the
+ * spec engine and have no successor, so this is empty - kept rather than
+ * removed because the form reads it and guards on length.
  */
 export async function listProductCategories() {
-  const user = await getOwnerUser();
-  const groups = await prisma.itemGroup.findMany({
-    where: { factoryId: user.factoryId, isProducible: true, parentId: { not: null } },
-    select: { id: true, name: true, parent: { select: { name: true } } },
-    orderBy: { name: "asc" },
-  });
-  return groups.map((g) => ({ id: g.id, name: g.name, parentName: g.parent?.name ?? null }));
+  return [] as { id: string; name: string; parentName: string | null }[];
 }

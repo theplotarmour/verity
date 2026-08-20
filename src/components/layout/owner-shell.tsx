@@ -29,7 +29,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Avatar, Badge, Input } from "@/components/ui/primitives";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { Settings, Plus , Package, ShoppingCart, Wrench, FlaskConical, Database, Building2, ChefHat, UtensilsCrossed, Sparkles } from "lucide-react";
+import { Settings, Plus , Package, ShoppingCart, Wrench, FlaskConical, Database, Building2, ChefHat, UtensilsCrossed, Tag, Sparkles } from "lucide-react";
 import { AssistantPanel } from "@/components/assistant/AssistantPanel";
 import { SystemRole } from "@prisma/client";
 import { can, Permission, type PermissionMatrix } from "@/lib/permissions";
@@ -75,6 +75,7 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
   settings: <Settings className="h-4 w-4" />,
   chef: <ChefHat className="h-4.5 w-4.5" />,
   utensils: <UtensilsCrossed className="h-4.5 w-4.5" />,
+  tag: <Tag className="h-4.5 w-4.5" />,
 };
 
 /** A nav item with its icon resolved, which is all the shell renders. */
@@ -323,7 +324,7 @@ export function OwnerShell({
           // size — the state flipped, the labels changed, and the box stayed
           // 60px until the transition was removed. A nav that snaps is better
           // than a nav stuck at the wrong width.
-          className="flex shrink-0 flex-col overflow-hidden border-r border-border bg-surface"
+          className="flex shrink-0 flex-col overflow-hidden rounded-[24px] verity-glass m-4 mr-0"
         >
           {/* Identity. The whole block is the way home. */}
           <div className="flex shrink-0 items-center gap-2.5 px-3 py-3">
@@ -416,7 +417,7 @@ export function OwnerShell({
 
           {/* Account, pinned. Theme, notifications and logout sit behind the
               overflow rather than as three more permanent controls. */}
-          <div className="shrink-0 border-t border-border p-2" ref={profileRef}>
+          <div className="shrink-0 border-t border-white/10 p-2" ref={profileRef}>
             <div className="relative flex items-center gap-2">
               <span
                 className={cn(
@@ -483,14 +484,14 @@ export function OwnerShell({
           </div>
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          {/* Content. min-h-0 so a Workspace child can own its own scrolling
-              rather than growing the page. The topbar rides inside this scroll
-              container on purpose — it is a thin utility row, not chrome, and
-              pinning it would spend 40px of every screen holding a search box
-              nobody is looking at. */}
-          <main className="flex min-h-0 flex-1 flex-col overflow-y-auto min-w-0 scrollbar-none">
-            <div className="flex h-10 shrink-0 items-center gap-3 border-b border-border px-4">
+        <div className="flex min-w-0 flex-1 flex-col rounded-[24px] verity-glass m-4 ml-3 overflow-hidden">
+        {/* Content. min-h-0 so a Workspace child can own its own scrolling
+            rather than growing the page. The topbar rides inside this scroll
+            container on purpose — it is a thin utility row, not chrome, and
+            pinning it would spend 40px of every screen holding a search box
+            nobody is looking at. */}
+        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto min-w-0 scrollbar-none">
+          <div className="flex h-12 shrink-0 items-center gap-3 border-b border-white/10 px-4 bg-white/[0.02] dark:bg-black/10">
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -629,20 +630,13 @@ export function OwnerShell({
           </div>
         </main>
 
-        {/* Floating action. Production-only: it deep-links to the production
-            board, which a service tenant does not have. */}
-        {can(userRole, "CREATE_ORDER", permissionMatrix) &&
-          (!enabledModules || enabledModules.includes("manufacturing")) && (
-            <Link
-              href="/owner/production?new=true"
-              aria-label="New production order"
-              // Sits above the dock, using the same max() the dock does — with
-              // the bare env() it would tuck under the pill on a notched phone.
-              className="fixed bottom-[calc(4rem+max(0.5rem,env(safe-area-inset-bottom))+0.75rem)] right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--brand)] text-white shadow-[0_8px_24px_-6px_var(--brand)] transition active:scale-95"
-            >
-              <Plus className="h-6 w-6" />
-            </Link>
-          )}
+        {/*
+         * The floating action deep-linked to /owner/production?new=true and was
+         * gated on the manufacturing module. Both went with the MES layer, so
+         * there is no single "new thing" every remaining vertical shares - a
+         * QSR outlet, a facility contract and a retail store each start
+         * somewhere different. Removed rather than repointed at a guess.
+         */}
 
         {/* The dock. Fixed, not absolute: on iOS the URL bar collapsing changes
             the container height mid-scroll, and an absolutely positioned bar

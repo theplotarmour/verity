@@ -116,8 +116,8 @@ describe("team size brackets", () => {
 
   it("costs the same at 51 users as at 5,000", () => {
     // Flat, not per-seat. If this ever differs, per-user pricing has crept back.
-    const at51 = monthlyTotal({ packKey: "auto_components", bracket: bracketForUsers(51) });
-    const at5000 = monthlyTotal({ packKey: "auto_components", bracket: bracketForUsers(5000) });
+    const at51 = monthlyTotal({ packKey: "franchise_retail", bracket: bracketForUsers(51) });
+    const at5000 = monthlyTotal({ packKey: "franchise_retail", bracket: bracketForUsers(5000) });
     expect(at51).toBe(at5000);
   });
 
@@ -129,12 +129,13 @@ describe("team size brackets", () => {
 
 describe("monthly total", () => {
   it("adds the bracket to the pack price", () => {
-    // The worked example from the pricing decision: a Large auto-components
-    // tenant. Pinned so a change to either number is visible here.
-    const total = monthlyTotal({ packKey: "auto_components", bracket: "LARGE" });
-    expect(total).toBe(PACK_PRICE.auto_components + TEAM_BRACKET.LARGE.monthly);
-    // ₹24,999 pack + ₹8,000 Large bracket. The 80-worker factory, flat.
-    expect(formatPrice(total)).toBe("₹32,999");
+    // The worked example from the pricing decision, re-pinned on retail after
+    // auto components was retired. Pinned so a change to either number shows up
+    // here rather than on an invoice.
+    const total = monthlyTotal({ packKey: "franchise_retail", bracket: "LARGE" });
+    expect(total).toBe(PACK_PRICE.franchise_retail + TEAM_BRACKET.LARGE.monthly);
+    // ₹21,999 pack + ₹8,000 Large bracket, flat for the whole team.
+    expect(formatPrice(total)).toBe("₹29,999");
   });
 
   it("falls back to à la carte when there is no pack", () => {

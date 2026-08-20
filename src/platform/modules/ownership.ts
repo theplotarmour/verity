@@ -38,7 +38,6 @@ export const ROUTE_OWNERSHIP: Record<string, Ownership> = {
   "users/page.tsx": "core",
   "users/new/page.tsx": "core",
   "users/[id]/page.tsx": "core",
-  "search/page.tsx": "core",
   "system/storage/page.tsx": "core",
   /*
    * The tenant's own Verity subscription — trial state, plan, bracket — not the
@@ -57,13 +56,8 @@ export const ROUTE_OWNERSHIP: Record<string, Ownership> = {
 
   // ---- deferred: open decision, see VERITY_COMPLETION_PLAN.md ----
   // Is this cross-module configuration, or `inventory` data wearing a config hat?
-  "master-data/page.tsx": "deferred",
-  "settings/master-data/add/page.tsx": "deferred",
-  "settings/master-data/studio/page.tsx": "deferred",
-  "settings/master-data/item/[id]/page.tsx": "deferred",
   // Reports reads across many modules. A single page guard is the wrong shape; it
   // needs per-section gating, which is its own piece of work.
-  "reports/page.tsx": "deferred",
 
   // ---- module-owned, already guarded ----
   "assets/page.tsx": "assets",
@@ -71,33 +65,23 @@ export const ROUTE_OWNERSHIP: Record<string, Ownership> = {
   "billing/page.tsx": "billing",
   "billing/[id]/page.tsx": "billing",
   "customers/page.tsx": "sales",
-  "floor/page.tsx": "manufacturing",
   "helpdesk/page.tsx": "helpdesk",
   "helpdesk/[id]/page.tsx": "helpdesk",
   "inventory/page.tsx": "inventory",
-  "kitchen/page.tsx": "kitchen",
   "logistics/page.tsx": "sales",
-  "order-taking/page.tsx": "sales",
-  "production/page.tsx": "manufacturing",
   "projects/page.tsx": "projects",
   "projects/[id]/page.tsx": "projects",
   "purchase/page.tsx": "procurement",
-  "qc-floor/page.tsx": "quality",
   "scheduling/page.tsx": "scheduling",
   "service-work-orders/page.tsx": "helpdesk",
   "service-work-orders/inspection/[id]/page.tsx": "helpdesk",
-  "serving/page.tsx": "serving",
-  "counter/page.tsx": "tables_orders",
   "booking/page.tsx": "booking",
+  "catalog/page.tsx": "catalog",
   "sites/page.tsx": "sites",
   "sites/[id]/page.tsx": "sites",
 
   // ---- module-owned, guarded in this pass ----
-  "floor/[id]/page.tsx": "manufacturing",
-  "production/label/[id]/page.tsx": "manufacturing",
-  "settings/blueprint/[itemId]/page.tsx": "manufacturing",
   "inventory/labels/page.tsx": "inventory",
-  "review/[id]/page.tsx": "quality",
 };
 
 /** Keys are file names in `src/server/actions/`. */
@@ -110,7 +94,6 @@ export const ACTION_OWNERSHIP: Record<string, Ownership> = {
   "permissions.ts": "core",
   "notifications.ts": "core",
   "storage.ts": "core",
-  "timeline.ts": "core",
   "team.ts": "core",
   "user.ts": "core",
   "employee.ts": "core",
@@ -119,44 +102,20 @@ export const ACTION_OWNERSHIP: Record<string, Ownership> = {
   "billing-account.ts": "core", // the tenant's own Verity subscription, not the billing module
 
   // ---- public: no session, by design ----
-  "verify.ts": "public", // a customer scanning a passport has never logged in
 
   // ---- deferred with the routes above ----
   "masterData.ts": "deferred",
-  "masterDataInit.ts": "deferred",
-  "itemGroups.ts": "deferred",
   "items.ts": "deferred",
-  "itemDrafts.ts": "deferred",
   "itemSearch.ts": "deferred",
   "itemUnits.ts": "deferred",
-  "itemsFromSpec.ts": "deferred",
-  "spec.ts": "deferred",
-  "specCsv.ts": "deferred",
-  "specFields.ts": "deferred",
-  "fieldEntries.ts": "deferred",
   "locations.ts": "deferred",
   "orderItemResolver.ts": "deferred", // a resolver over master data, no session of its own
   "reports.ts": "deferred",
 
   // ---- module-owned ----
-  "production.ts": "manufacturing",
-  "stages.ts": "manufacturing",
-  "stage-video.ts": "manufacturing",
-  "worker.ts": "manufacturing",
-  "assignments.ts": "manufacturing",
-  "history.ts": "manufacturing",
-  "cad.ts": "manufacturing",
   // Not "use server" — see its header. Its callers in itemBom.ts are guarded.
-  "itemBlueprint.ts": "internal",
-  "itemBom.ts": "manufacturing",
-  "bomTemplates.ts": "manufacturing",
-  "bomContributions.ts": "manufacturing",
-  "floor.ts": "manufacturing",
 
-  "qc.ts": "quality",
   "qc-templates.ts": "quality",
-  "qc-video.ts": "quality",
-  "inspector.ts": "quality",
   "serviceQuality.ts": "quality",
 
   "inventory.ts": "inventory",
@@ -170,15 +129,16 @@ export const ACTION_OWNERSHIP: Record<string, Ownership> = {
   "sites.ts": "sites",
   "scheduling.ts": "scheduling",
   "billing.ts": "billing",
-  "diningBilling.ts": "billing",
-  "menu.ts": "menu",
-  "assistantProposals.ts": "menu", // applying an approved assistant price change
 
-  "tables.ts": "tables_orders",
-  "diningOrders.ts": "tables_orders",
-  "kitchen.ts": "kitchen",
-  "serving.ts": "serving",
   "booking.ts": "booking",
+  "catalog.ts": "catalog",
+  /*
+   * The public portals. Not module-owned in the guard's sense: they take no
+   * session, so there is nothing for `guardModuleAction` to read a tenant from.
+   * `resolvePortalTenant` is their guard, and it re-checks the entitlement on
+   * every call from the slug in the URL.
+   */
+  "portal.ts": "public",
   "franchise.ts": "sites",
 };
 

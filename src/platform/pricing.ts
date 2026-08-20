@@ -98,52 +98,12 @@ export const TRIAL = {
  * being a discount.
  */
 export const PACK_PRICE: Record<VerticalPackKey, number> = {
-  // à la carte ₹32,500 → 23.1% off
-  auto_components: 24_999 * RUPEE,
   // à la carte ₹32,500 → 21.5% off
   facility_management: 25_499 * RUPEE,
   // à la carte ₹26,000 → 23.1% off
   franchise_qsr: 19_999 * RUPEE,
   // à la carte ₹28,000 → 21.4% off
   franchise_retail: 21_999 * RUPEE,
-  /*
-   * à la carte ₹25,500 → 21.6% off.
-   *
-   * Specified as ₹22,499 against an à la carte of ₹29,500. That figure priced all
-   * six paid modules at Tier 2; `hr` and `billing` are Tier 1 (₹2,500, see
-   * TIER_ONE), so the real total is ₹25,500 and ₹22,499 was 11.8% off — half the
-   * committed floor, and the test said so.
-   *
-   * The band for this pack is ₹19,125–₹20,400. ₹19,999 sits at 21.6%, and matches
-   * franchise_qsr — a restaurant and a QSR outlet buying near-identical bundles for
-   * near-identical money is a price list somebody can defend out loud.
-   */
-  restaurant_ops: 19_999 * RUPEE,
-  // à la carte ₹25,500 → 21.6% off. Same shape as Restaurant OS: two Tier 1
-  // modules, four Tier 2, plus the platform fee.
-  professional_services: 19_999 * RUPEE,
-  /*
-   * à la carte ₹23,500 → 23.4% off.
-   *
-   * Specified against ₹23,000, which counted hr + inventory + billing as ₹7,000;
-   * three Tier 1 modules are ₹7,500. The real band is ₹17,625–₹18,400 and ₹17,999
-   * sits inside it either way, so the chosen number stands.
-   */
-  retail_os: 17_999 * RUPEE,
-  /*
-   * à la carte ₹23,500 → 23.4% off. hr + billing (Tier 1), sales + crm (Tier 2),
-   * booking (Tier 3, vertical), plus the platform fee. Band ₹17,625–₹18,800;
-   * ₹17,999 sits at 23.4%, matching Retail OS — a salon and a boutique paying
-   * near-identical money for a service bundle is a defensible line.
-   */
-  lifestyle_services: 17_999 * RUPEE,
-  /*
-   * à la carte ₹21,000 → 23.8% off. Restaurant OS without serving and without
-   * tables as the organising unit: hr + billing (Tier 1), menu + tables_orders +
-   * kitchen (Tier 2), plus the platform fee. Band ₹15,750–₹16,800; ₹15,999 is at
-   * 23.8%, a touch under Restaurant OS, which is right — it is the lighter bundle.
-   */
-  modern_qsr: 15_999 * RUPEE,
 };
 
 /** The discount band a pack must sit inside. Enforced by test, not by intent. */

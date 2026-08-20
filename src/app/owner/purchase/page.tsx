@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getPurchaseOrders, getSuppliers, getReorderSuggestions } from "@/server/actions/purchase";
 import { getMaterials } from "@/server/actions/inventory";
 import PurchaseClient from "./PurchaseClient";
-import { getPurchasableItems } from "@/server/queries/spec";
+import { getPurchasableItems } from "@/server/queries/catalog";
 
 import { guardModulePage } from "@/platform/modules/guard";
 

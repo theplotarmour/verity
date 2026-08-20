@@ -65,7 +65,7 @@ export type ItemInput = {
 // prefix and takes max+1 so gaps from edits/deletes don't cause collisions.
 async function nextItemCode(factoryId: string, itemType: ItemType): Promise<string> {
   const prefix = ITEM_TYPE_PREFIX[itemType];
-  const existing = await prisma.itemMaster.findMany({
+  const existing = await prisma.product.findMany({
     where: { factoryId, itemCode: { startsWith: `${prefix}-` } },
     select: { itemCode: true },
   });
@@ -84,7 +84,7 @@ export async function getItemFormData() {
   if (!user) return { items: [], categories: [], fieldDefs: [] };
 
   const [items, categories, fieldDefs] = await Promise.all([
-    prisma.itemMaster.findMany({
+    prisma.product.findMany({
       where: { factoryId: user.factoryId },
       include: {
         category: { select: { id: true, name: true } },
@@ -169,7 +169,7 @@ export async function createItem(input: ItemInput) {
 
   try {
     const item = await prisma.$transaction(async (tx) => {
-      const created = await tx.itemMaster.create({
+      const created = await tx.product.create({
         data: {
           factoryId: owner.factoryId,
           name: input.name.trim(),
@@ -219,7 +219,7 @@ export async function updateItem(input: ItemInput) {
   if (!owner) return { error: "Unauthorized" };
   if (!input.id) return { error: "Missing item id" };
 
-  const existing = await prisma.itemMaster.findFirst({
+  const existing = await prisma.product.findFirst({
     where: { id: input.id, factoryId: owner.factoryId },
   });
   if (!existing) return { error: "Item not found" };
@@ -228,7 +228,7 @@ export async function updateItem(input: ItemInput) {
 
   try {
     await prisma.$transaction(async (tx) => {
-      await tx.itemMaster.update({
+      await tx.product.update({
         where: { id: input.id },
         data: {
           name: input.name.trim(),
@@ -277,9 +277,9 @@ export async function updateItem(input: ItemInput) {
 export async function setItemStatus(id: string, status: "ACTIVE" | "INACTIVE") {
   const owner = await getOwnerUser();
   if (!owner) return { error: "Unauthorized" };
-  const existing = await prisma.itemMaster.findFirst({ where: { id, factoryId: owner.factoryId } });
+  const existing = await prisma.product.findFirst({ where: { id, factoryId: owner.factoryId } });
   if (!existing) return { error: "Item not found" };
-  await prisma.itemMaster.update({ where: { id }, data: { status } });
+  await prisma.product.update({ where: { id }, data: { status } });
   revalidatePath("/owner/inventory");
   return { success: true };
 }
@@ -289,14 +289,14 @@ export async function setItemStatus(id: string, status: "ACTIVE" | "INACTIVE") {
 export async function deleteItem(id: string) {
   const owner = await getOwnerUser();
   if (!owner) return { error: "Unauthorized" };
-  const existing = await prisma.itemMaster.findFirst({ where: { id, factoryId: owner.factoryId } });
+  const existing = await prisma.product.findFirst({ where: { id, factoryId: owner.factoryId } });
   if (!existing) return { error: "Item not found" };
 
   // Clean up rows that are safe to remove with the item (its own conversions and
   // zero-effect balances); real transactional references are left to the FK.
   await prisma.uOMConversion.deleteMany({ where: { itemId: id } }).catch(() => {});
   try {
-    await prisma.itemMaster.delete({ where: { id } });
+    await prisma.product.delete({ where: { id } });
     revalidatePath("/owner/inventory");
     revalidatePath("/owner/master-data");
     revalidatePath("/owner/settings/master-data/studio");

@@ -21,13 +21,13 @@ function revalidateMasterPaths(scope: "catalog" | "materials" = "catalog") {
   }
 }
 
-// SKUs are globally unique in ItemMaster; suffix until free so two materials
+// SKUs are globally unique in Product; suffix until free so two materials
 // that normalize to the same code (e.g. "Napa" twice) don't crash the insert.
 async function ensureUniqueSku(base: string) {
   const clean = base.trim() || `RM-${Date.now().toString(36).toUpperCase()}`;
   let candidate = clean;
   for (let i = 2; ; i++) {
-    const exists = await prisma.itemMaster.findUnique({ where: { sku: candidate }, select: { id: true } });
+    const exists = await prisma.product.findUnique({ where: { sku: candidate }, select: { id: true } });
     if (!exists) return candidate;
     candidate = `${clean}-${i}`;
   }
@@ -179,7 +179,7 @@ export async function seedMasterDefaults() {
 }
 
 // Fabrics and materials are separate catalogs that happen to share the
-// ItemMaster table, told apart by category. A material must therefore never be
+// Product table, told apart by category. A material must therefore never be
 // filed under "Fabric" — that is what made new materials vanish from the
 // Materials sheet and reappear under Fabrics. The category is resolved here,
 // creating it when missing, so the caller cannot fall back to the wrong one.
@@ -203,14 +203,14 @@ export async function addCatalogItem(kind: "FABRIC" | "MATERIAL", name: string, 
     category = await prisma.materialCategory.create({ data: { factoryId: user.factoryId, name: wanted } });
   }
 
-  const duplicate = await prisma.itemMaster.findFirst({
+  const duplicate = await prisma.product.findFirst({
     where: { factoryId: user.factoryId, name: { equals: clean, mode: "insensitive" }, categoryId: category.id },
     select: { id: true },
   });
   if (duplicate) return { error: `"${clean}" already exists in ${wanted}` };
 
   const sku = await ensureUniqueSku(`RM-${clean.replace(/[^A-Za-z0-9]+/g, "-").toUpperCase()}`);
-  await prisma.itemMaster.create({
+  await prisma.product.create({
     data: { categoryId: category.id, name: clean, sku, defaultUOM: unit, itemType: "RAW_MATERIAL", factoryId: user.factoryId },
   });
   revalidateMasterPaths("materials");
@@ -220,13 +220,13 @@ export async function addCatalogItem(kind: "FABRIC" | "MATERIAL", name: string, 
 export async function addMaterial(categoryId: string, name: string, sku: string, unit: string) {
   const user = await getOwnerUser();
   if (!user) throw new Error("Unauthorized");
-  const duplicate = await prisma.itemMaster.findFirst({
+  const duplicate = await prisma.product.findFirst({
     where: { factoryId: user.factoryId, name: { equals: name, mode: "insensitive" }, categoryId },
     select: { id: true },
   });
   if (duplicate) throw new Error(`"${name}" already exists in this category`);
   const uniqueSku = await ensureUniqueSku(sku);
-  await prisma.itemMaster.create({
+  await prisma.product.create({
     data: { categoryId, name, sku: uniqueSku, defaultUOM: unit, itemType: "RAW_MATERIAL", factoryId: user.factoryId },
   });
   revalidateMasterPaths("materials");
@@ -235,7 +235,7 @@ export async function addMaterial(categoryId: string, name: string, sku: string,
 export async function removeMaterial(id: string) {
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
-  const result = await guardDelete("material", () => prisma.itemMaster.delete({ where: { id, factoryId: user.factoryId } }));
+  const result = await guardDelete("material", () => prisma.product.delete({ where: { id, factoryId: user.factoryId } }));
   if ("error" in result) return result;
   revalidateMasterPaths("materials");
   return result;
@@ -292,7 +292,7 @@ export async function addColor(name: string) {
 export async function updateColor(id: string, name: string) {
   const user = await getOwnerUser();
   if (!user) throw new Error("Unauthorized");
-  await prisma.itemMaster.update({
+  await prisma.product.update({
     where: { id, factoryId: user.factoryId },
     data: { name: name.trim() },
   });
@@ -303,7 +303,7 @@ export async function removeColor(id: string) {
   const user = await getOwnerUser();
   if (!user) return { error: "Unauthorized" };
   const result = await guardDelete("colour", () =>
-    prisma.itemMaster.delete({ where: { id, factoryId: user.factoryId } })
+    prisma.product.delete({ where: { id, factoryId: user.factoryId } })
   );
   if ("error" in result) return result;
   revalidateMasterPaths();
@@ -318,7 +318,7 @@ export async function updateMaterial(id: string, data: { name?: string; sku?: st
   const user = await getOwnerUser();
   if (!user) throw new Error("Unauthorized");
   try {
-    await prisma.itemMaster.update({
+    await prisma.product.update({
       where: { id, factoryId: user.factoryId },
       data: { name: data.name, sku: data.sku, defaultUOM: data.unit },
     });
@@ -367,7 +367,7 @@ export async function importMasterCsv(sheet: string, rows: Array<Record<string, 
   const [pfDesigns, pfColors, pfMaterials, pfSuppliers, pfProducts, pfMaterialCats, pfProductCats] = await Promise.all([
     Promise.resolve([]),
     sheet === "colors" ? itemsInRootCategory(factoryId, "Colour") : Promise.resolve([]),
-    sheet === "materials" ? prisma.itemMaster.findMany({ where: { factoryId }, select: { name: true, sku: true } }) : Promise.resolve([]),
+    sheet === "materials" ? prisma.product.findMany({ where: { factoryId }, select: { name: true, sku: true } }) : Promise.resolve([]),
     sheet === "suppliers" ? prisma.supplier.findMany({ where: { factoryId }, select: { name: true } }) : Promise.resolve([]),
     Promise.resolve([]),
     sheet === "materials" ? prisma.materialCategory.findMany({ where: { factoryId }, select: { id: true, name: true } }) : Promise.resolve([]),
@@ -412,7 +412,7 @@ export async function importMasterCsv(sheet: string, rows: Array<Record<string, 
           }
         }
         if (!materialSkuSet.has(lower(sku)) && !materialNameSet.has(lower(name))) {
-          await prisma.itemMaster.create({ data: { factoryId, name, sku, defaultUOM: unit, itemType: "RAW_MATERIAL", categoryId } });
+          await prisma.product.create({ data: { factoryId, name, sku, defaultUOM: unit, itemType: "RAW_MATERIAL", categoryId } });
           materialSkuSet.add(lower(sku)); materialNameSet.add(lower(name));
           imported++;
         }

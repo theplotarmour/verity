@@ -11,7 +11,7 @@ import { Surface } from "@/components/design/Surface";
 import { Badge, Button, Input, Select, EmptyState } from "@/components/ui/primitives";
 import { useRouter } from "next/navigation";
 import dayjs from "dayjs";
-import { SpecCombobox } from "@/components/spec/SpecCombobox";
+import { ItemCombobox } from "@/components/catalog/ItemCombobox";
 
 export default function PurchaseClient({ orders, suppliers, materials, reorderSuggestions = [], purchasableItems = [] }: any) {
   const router = useRouter();
@@ -715,7 +715,7 @@ export default function PurchaseClient({ orders, suppliers, materials, reorderSu
                     {orderItems.map((item, idx) => (
                       <div key={idx} className="flex items-center gap-2">
                         <div className="flex-1">
-                          <SpecCombobox
+                          <ItemCombobox
                             options={purchaseOptions}
                             value={item.materialId || null}
                             onChange={(id) => {
@@ -832,7 +832,7 @@ export default function PurchaseClient({ orders, suppliers, materials, reorderSu
                     {returnItems.map((item, idx) => (
                       <div key={idx} className="flex items-center gap-2">
                         <div className="flex-1">
-                          <SpecCombobox
+                          <ItemCombobox
                             options={purchaseOptions}
                             value={item.materialId || null}
                             onChange={(id) => {

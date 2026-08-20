@@ -12,7 +12,7 @@
  * Two rules keep this honest:
  *
  *  1. A module may only be depended on by modules that declare it in `requires`.
- *     If `quality` reads a `manufacturing` table without declaring it, the
+ *     If `quality` reads a `helpdesk` table without declaring it, the
  *     entitlement check is a lie.
  *  2. `core` is always on and cannot be disabled. Anything a tenant cannot
  *     function without belongs there, not in an optional module.
@@ -21,7 +21,7 @@
 export type ModuleKey =
   | "core"
   | "inventory"
-  | "manufacturing"
+  | "catalog"
   | "quality"
   | "procurement"
   | "sales"
@@ -34,11 +34,6 @@ export type ModuleKey =
   | "sites"
   | "scheduling"
   | "billing"
-  | "automotive"
-  | "menu"
-  | "tables_orders"
-  | "kitchen"
-  | "serving"
   | "booking";
 
 export interface ModuleDefinition {
@@ -138,7 +133,7 @@ export interface ModuleNavItem {
 
 import { coreModule } from "./definitions/core";
 import { inventoryModule } from "./definitions/inventory";
-import { manufacturingModule } from "./definitions/manufacturing";
+import { catalogModule } from "./definitions/catalog";
 import { qualityModule } from "./definitions/quality";
 import { procurementModule } from "./definitions/procurement";
 import { salesModule } from "./definitions/sales";
@@ -151,17 +146,12 @@ import { helpdeskModule } from "./definitions/helpdesk";
 import { sitesModule } from "./definitions/sites";
 import { schedulingModule } from "./definitions/scheduling";
 import { billingModule } from "./definitions/billing";
-import { automotiveModule } from "./definitions/automotive";
-import { menuModule } from "./definitions/menu";
-import { tables_ordersModule } from "./definitions/tables_orders";
-import { kitchenModule } from "./definitions/kitchen";
-import { servingModule } from "./definitions/serving";
 import { bookingModule } from "./definitions/booking";
 
 const MODULES: ModuleDefinition[] = [
   coreModule,
   inventoryModule,
-  manufacturingModule,
+  catalogModule,
   qualityModule,
   procurementModule,
   salesModule,
@@ -174,11 +164,6 @@ const MODULES: ModuleDefinition[] = [
   sitesModule,
   schedulingModule,
   billingModule,
-  automotiveModule,
-  menuModule,
-  tables_ordersModule,
-  kitchenModule,
-  servingModule,
   bookingModule,
 ];
 
@@ -212,8 +197,8 @@ export function moduleForPermission(key: string): ModuleDefinition | undefined {
 
 /**
  * Expand a set of entitled modules to include everything they require.
- * Entitling `manufacturing` without `inventory` is a configuration error, not
- * a runtime one — resolve it here rather than failing deep in a query.
+ * Entitling `billing` without `crm` is a configuration error, not a runtime
+ * one — resolve it here rather than failing deep in a query.
  */
 export function withDependencies(keys: ModuleKey[]): ModuleKey[] {
   const out = new Set<ModuleKey>(alwaysOnModules());

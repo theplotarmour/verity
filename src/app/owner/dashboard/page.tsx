@@ -3,37 +3,33 @@ import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { resolvePackKey, VERTICAL_PACKS } from "@/platform/tenancy/packs";
-import { AutoComponentsDashboard } from "@/components/dashboard/AutoComponentsDashboard";
-import { FacilityManagementDashboard } from "@/components/dashboard/FacilityManagementDashboard";
-import { QsrFranchiseDashboard } from "@/components/dashboard/QsrFranchiseDashboard";
-import { RetailFranchiseDashboard } from "@/components/dashboard/RetailFranchiseDashboard";
-import { RestaurantDashboard } from "@/components/dashboard/RestaurantDashboard";
-import { ProfessionalServicesDashboard } from "@/components/dashboard/ProfessionalServicesDashboard";
-import { RetailDashboard } from "@/components/dashboard/RetailDashboard";
-import { LifestyleServicesDashboard } from "@/components/dashboard/LifestyleServicesDashboard";
 
 /**
- * The dashboard is per-vertical.
+ * The dashboard is composed from the tenant's modules.
  *
- * A facility-management company opening a screen headed "Today Production" with
- * a QC pass rate learns nothing and concludes the product is not for them. So
- * this route resolves the tenant's pack and mounts the dashboard built for it.
+ * `resolveDashboardWidgets()` is the primary path: each module declares the
+ * widgets it contributes, and this route lays out whatever the entitled set
+ * returns. Adding a module must not mean editing this file.
+ *
+ * The per-vertical dashboards below it are a *fallback*, for a tenant whose
+ * modules contribute no widgets at all. They are `await import`ed inside that
+ * branch rather than imported at the top, so the common path does not pull four
+ * whole dashboards into the module graph to render none of them.
  *
  * `resolvePackKey` rather than reading `industry` directly: that column is free
  * text and holds three different shapes across live rows — a pack key on new
  * tenants, a display label on older ones, and whatever sales typed on the rest.
  * Normalising in one place is what stops this switch from being a lottery.
  *
- * Auto components is the fallback, not a default anyone was assigned: it is the
- * original dashboard, so a tenant with no recognisable pack sees what they saw
- * before rather than an empty page.
+ * Facility management is the fallback's fallback, so a tenant with no
+ * recognisable pack still lands on a dashboard rather than an empty page.
  */
 import { entitledModules } from "@/platform/modules/entitlements";
 import Link from "next/link";
 import { resolveAccess } from "@/platform/rbac/permissions";
 import { resolveDashboardWidgets } from "@/platform/modules/navigation";
 import { PageHeader } from "@/components/design/PageHeader";
-import { cn } from "@/lib/utils";
+
 
 export default async function OwnerDashboard() {
   const dbUser = await getOwnerUser();
@@ -137,13 +133,7 @@ export default async function OwnerDashboard() {
         {panels.length > 0 && (
           <section className="grid w-full items-stretch gap-4 xl:grid-cols-3 xl:gap-6">
             {panels.map(({ key, Component }) => (
-              <div
-                key={key}
-                className={cn(
-                  "flex flex-col h-full",
-                  key === "restaurant_floor" ? "xl:col-span-2" : "xl:col-span-1"
-                )}
-              >
+              <div key={key} className="flex flex-col h-full xl:col-span-1">
                 <Component factoryId={dbUser.factoryId} firstName={firstName} />
               </div>
             ))}
@@ -159,26 +149,23 @@ export default async function OwnerDashboard() {
   };
 
   switch (resolvePackKey(factory?.industry)) {
-    case "facility_management":
-      return <FacilityManagementDashboard {...props} />;
-    case "franchise_qsr":
+    case "franchise_qsr": {
+      const { QsrFranchiseDashboard } = await import("@/components/dashboard/QsrFranchiseDashboard");
       return <QsrFranchiseDashboard {...props} />;
-    case "franchise_retail":
+    }
+    case "franchise_retail": {
+      const { RetailFranchiseDashboard } = await import("@/components/dashboard/RetailFranchiseDashboard");
       return <RetailFranchiseDashboard {...props} />;
-    case "restaurant_ops":
-      return <RestaurantDashboard {...props} />;
-    case "professional_services":
-      return <ProfessionalServicesDashboard {...props} />;
-    case "retail_os":
-      return <RetailDashboard {...props} />;
-    case "lifestyle_services":
-      return <LifestyleServicesDashboard {...props} />;
-    // Table-less QSR shares the restaurant floor/kitchen/takings view — the
-    // widget path handles an entitled tenant; this case is the zero-widget fallback.
-    case "modern_qsr":
-      return <RestaurantDashboard {...props} />;
-    case "auto_components":
-    default:
-      return <AutoComponentsDashboard {...props} />;
+    }
+    default: {
+      /*
+       * Facility management is the fallback because it is the least
+       * product-specific of the three: sites, people and tickets, with no
+       * catalogue or outlet network assumed. The auto-components dashboard that
+       * used to sit here went with the manufacturing module.
+       */
+      const { FacilityManagementDashboard } = await import("@/components/dashboard/FacilityManagementDashboard");
+      return <FacilityManagementDashboard {...props} />;
+    }
   }
 }

@@ -15,9 +15,6 @@ export async function getQCTemplates() {
     where: { factoryId: session.factoryId, status: 'active' },
     include: {
       ownerDepartment: { select: { id: true, name: true, isQcStage: true } },
-      // The categories that actually run this checklist. Without it the list
-      // page had nothing to read and every template claimed to be the default.
-      defaultForItemGroups: { select: { id: true, name: true }, orderBy: { name: "asc" } },
       sections: {
         orderBy: { sortOrder: 'asc' },
         include: {
@@ -328,23 +325,13 @@ export async function getTemplateAssignments(templateId: string) {
   await guardModuleAction("quality");
   const user = { factoryId: session.factoryId };
 
-  const [groups, departments] = await Promise.all([
-    // Any category, at any depth. This was restricted to producible subgroups,
-    // which decided on the owner's behalf what is worth inspecting — a bought-in
-    // fabric can need a goods-in check, and a root category is as legitimate a
-    // place to hang a checklist as a leaf.
-    prisma.itemGroup.findMany({
-      where: { factoryId: user.factoryId },
-      select: {
-        id: true,
-        name: true,
-        parent: { select: { name: true } },
-        // Only whether *this* template is among the category's checklists; a
-        // category legitimately belongs to several, one per department.
-        defaultChecklists: { where: { id: templateId }, select: { id: true } },
-      },
-      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    }),
+  /*
+   * A checklist used to be tickable against item categories, so a template
+   * could be the default for "Seat Cover" but not for "Floor Mats". Categories
+   * went with the spec engine, so the category list is empty and a template's
+   * only assignment is the department that owns it.
+   */
+  const [departments] = await Promise.all([
     prisma.department.findMany({
       where: { factoryId: user.factoryId, active: true },
       select: { id: true, name: true, isQcStage: true },
@@ -353,15 +340,7 @@ export async function getTemplateAssignments(templateId: string) {
   ]);
 
   return {
-    groups: groups.map((g) => ({
-      id: g.id,
-      name: g.name,
-      parentName: g.parent?.name ?? null,
-      assigned: g.defaultChecklists.length > 0,
-      // Nothing is taken from anywhere any more: ticking a category here leaves
-      // its other departments' checklists alone.
-      takenBy: null,
-    })),
+    groups: [] as { id: string; name: string; parentName: string | null; assigned: boolean; takenBy: null }[],
     // Departments are no longer ticked per template: a checklist belongs to one
     // department, chosen in the builder header.
     departments: departments.map((d) => ({ id: d.id, name: d.name, isQcStage: d.isQcStage })),
@@ -371,40 +350,18 @@ export async function getTemplateAssignments(templateId: string) {
 /**
  * Tick or untick one category on one checklist.
  *
- * Takes the template explicitly rather than a nullable id, because untick has to
- * disconnect *this* template and leave the category's other departments' lists
- * alone — the old single-column write is exactly what unmapped Cutting when
- * Stitching was ticked.
+ * Categories went with the spec engine, so there is nothing to tick. Kept as a
+ * no-op because the settings screen still renders the (now empty) category
+ * list, and removing the control is a separate change from removing the data
+ * behind it.
  */
 export async function setTemplateForItemGroup(
-  groupId: string,
-  templateId: string,
-  assigned: boolean
+  _groupId: string,
+  _templateId: string,
+  _assigned: boolean
 ) {
   const session = await getUserSession();
   if (!session) return { error: 'Unauthorized' };
   await guardModuleWrite("quality");
-  const user = { factoryId: session.factoryId };
-  // connect/disconnect rather than overwriting a single column, so mapping
-  // "Seat Cover" to the Stitching checklist cannot unmap it from Cutting.
-  const group = await prisma.itemGroup.findFirst({
-    where: { id: groupId, factoryId: user.factoryId },
-    select: { id: true },
-  });
-  if (!group) return { error: 'Category not found' };
-  await prisma.itemGroup.update({
-    where: { id: group.id },
-    data: {
-      defaultChecklists: assigned
-        ? { connect: { id: templateId } }
-        : { disconnect: { id: templateId } },
-    },
-  });
-  // Existing items keep the checklist their blueprint was built with. Changing
-  // the category's default should not silently re-scope a job already in flight;
-  // Rebuild blueprint on the item is the deliberate way to pick it up.
-  revalidatePath("/owner/master-data");
-  revalidatePath("/owner/settings");
   return { ok: true };
 }
-

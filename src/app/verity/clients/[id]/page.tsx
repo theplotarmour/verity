@@ -30,6 +30,8 @@ export default async function HqClientDetailPage({
         users={detail.users}
         modules={detail.modules}
         packs={packs}
+        roles={detail.roles}
+        brand={detail.brand}
       />
       <IntegrationsPanel factoryId={id} apiKeys={apiKeys} webhooks={webhooks} />
     </div>

@@ -34,7 +34,7 @@ import { withDependencies } from "./registry";
 
 const FM = withDependencies(VERTICAL_PACKS.facility_management.modules);
 const QSR = withDependencies(VERTICAL_PACKS.franchise_qsr.modules);
-const AUTO = withDependencies(VERTICAL_PACKS.auto_components.modules);
+const RETAIL = withDependencies(VERTICAL_PACKS.franchise_retail.modules);
 
 describe("legacy permission mapping", () => {
   it("maps every permission in the union", () => {
@@ -50,7 +50,7 @@ describe("legacy permission mapping", () => {
     // helpdesk, sites, projects, scheduling, purchase, assets, billing.
     // Scoping it to `sales` would remove a facility-management tenant's ability
     // to grant access to their own helpdesk.
-    for (const [name, modules] of [["FM", FM], ["QSR", QSR], ["auto", AUTO]] as const) {
+    for (const [name, modules] of [["FM", FM], ["QSR", QSR], ["retail", RETAIL]] as const) {
       expect(
         isLegacyPermissionActive("CREATE_ORDER", modules as ModuleKey[]),
         `${name} cannot grant CREATE_ORDER`,
@@ -68,7 +68,7 @@ describe("legacy permission mapping", () => {
       "VIEW_REPORTS",
     ];
     for (const permission of administrative) {
-      for (const modules of [FM, QSR, AUTO]) {
+      for (const modules of [FM, QSR, RETAIL]) {
         expect(
           isLegacyPermissionActive(permission, modules as ModuleKey[]),
           `${permission} is not grantable`,
@@ -77,15 +77,25 @@ describe("legacy permission mapping", () => {
     }
   });
 
-  it("hides genuinely module-specific permissions from packs without the module", () => {
-    // Facility management has no manufacturing, so "Work assigned jobs" gates a
-    // screen that does not exist for them.
-    expect(FM).not.toContain("manufacturing");
-    expect(isLegacyPermissionActive("WORKER_JOBS", FM as ModuleKey[])).toBe(false);
+  it("hides genuinely module-specific permissions from a tenant without the module", () => {
+    /*
+     * Asserted against a hand-written module set rather than a pack.
+     *
+     * It used to compare facility management (no manufacturing, so no "Work
+     * assigned jobs") against auto components (which had it). Manufacturing is
+     * gone, and every surviving pack carries billing, sales and quality - which
+     * are the only modules the remaining legacy permissions map to. So no pack
+     * hides anything, and a test phrased in packs could only assert that.
+     *
+     * A tenant *can* still be entitled to less than a pack: the HQ builder sets
+     * modules directly. That is the case this covers.
+     */
+    const lean: ModuleKey[] = ["core", "hr"];
+    expect(isLegacyPermissionActive("DELETE_ORDER", lean)).toBe(false);
 
-    // …and auto components, which does have it, keeps it.
-    expect(AUTO).toContain("manufacturing");
-    expect(isLegacyPermissionActive("WORKER_JOBS", AUTO as ModuleKey[])).toBe(true);
+    // …and a tenant with sales keeps it.
+    expect(RETAIL).toContain("sales");
+    expect(isLegacyPermissionActive("DELETE_ORDER", RETAIL as ModuleKey[])).toBe(true);
   });
 
   it("shows everything when entitlements are unknown", () => {
@@ -93,10 +103,11 @@ describe("legacy permission mapping", () => {
     expect(scopeLegacyPermissions(ALL_PERMISSIONS, undefined)).toEqual(ALL_PERMISSIONS);
   });
 
-  it("hides something for at least one real pack, so the filter is not inert", () => {
+  it("hides something for a lean tenant, so the filter is not inert", () => {
     // Tripwire: if every permission mapped to core, every test above would pass
-    // while the filter did nothing.
-    const shown = scopeLegacyPermissions(ALL_PERMISSIONS, FM as ModuleKey[]);
+    // while the filter did nothing. Phrased against a lean module set for the
+    // reason given above - no surviving pack is narrow enough to hide anything.
+    const shown = scopeLegacyPermissions(ALL_PERMISSIONS, ["core", "hr"]);
     expect(shown.length).toBeLessThan(ALL_PERMISSIONS.length);
     expect(shown.length).toBeGreaterThan(0);
   });

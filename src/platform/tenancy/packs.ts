@@ -12,7 +12,7 @@ import { type ModuleKey, withDependencies } from "@/platform/modules/registry";
 
 /** Modules a new tenant starts with unless told otherwise. */
 export const DEFAULT_MODULES: ModuleKey[] = [
-  "core", "inventory", "manufacturing", "quality", "procurement", "sales", "hr",
+  "core", "inventory", "quality", "procurement", "sales", "hr",
 ];
 
 /**
@@ -22,12 +22,13 @@ export const DEFAULT_MODULES: ModuleKey[] = [
  * ("what kind of business are you?") instead of twenty they cannot ("do you
  * want the assets module?").
  *
- * **Deliberately four.** There were twenty-two, each a plausible bundle nobody
+ * **Deliberately three.** There were twenty-two, each a plausible bundle nobody
  * had sold to. A pack is a promise that the product is *tuned* for that
  * business — it decides the dashboard a tenant lands on — and twenty-two of
- * those promises could not be kept. These four have a named prospect or a built
- * dashboard behind them. Adding a fifth is cheap; it should follow a customer,
- * not precede one.
+ * those promises could not be kept. `auto_components` was the fourth survivor
+ * until the MES layer it stood on was withdrawn; a pack whose modules no longer
+ * exist is a promise that cannot be kept either. Adding a fourth back is cheap;
+ * it should follow a customer, not precede one.
  *
  * `withDependencies()` fills in transitive requirements, so a pack lists only
  * what it actually cares about.
@@ -36,21 +37,6 @@ export const VERTICAL_PACKS: Record<
   string,
   { label: string; modules: ModuleKey[]; dashboardWidgets?: string[] }
 > = {
-  auto_components: {
-    label: "Auto Components",
-    modules: ["core", "hr", "inventory", "manufacturing", "quality", "procurement", "sales", "automotive"],
-    // The floor, read top to bottom: the numbers, then where the work is, then the
-    // detail panels, then the queue you work once you have read the floor.
-    dashboardWidgets: [
-      "factory_metrics",
-      "production_funnel",
-      "floor_progress",
-      "factory_signals",
-      "quality_pareto",
-      "factory_feed",
-      "operational_warnings",
-    ],
-  },
   facility_management: {
     label: "Facility Management",
     modules: ["core", "hr", "sites", "scheduling", "helpdesk", "assets", "quality", "procurement", "billing"],
@@ -73,83 +59,6 @@ export const VERTICAL_PACKS: Record<
     label: "Franchise — Retail",
     modules: ["core", "hr", "inventory", "quality", "procurement", "sales", "billing", "sites"],
   },
-  /*
-   * Restaurant OS — a single location, not a chain.
-   *
-   * The fifth pack, and it follows a customer rather than preceding one, which is
-   * the bar this list sets for itself.
-   *
-   * Deliberately without `sites`: a single restaurant is one place, and modelling
-   * it as a network of one buys nothing but an extra hop in every query. A
-   * multi-location group is `franchise_qsr`, which already exists.
-   *
-   * `inventory` is absent too. It will earn its way in when recipe-level stock
-   * depletion lands; until then a restaurant that cannot deplete stock on a sale
-   * would be paying for a module that only holds numbers somebody types twice.
-   */
-  restaurant_ops: {
-    label: "Restaurant OS",
-    modules: ["core", "hr", "menu", "tables_orders", "kitchen", "serving", "billing"],
-    dashboardWidgets: [
-      "restaurant_metrics",
-      "restaurant_floor",
-      "restaurant_takings",
-      "restaurant_recent_orders",
-    ],
-  },
-  /*
-   * Agencies, consultancies, studios — businesses that sell people's time.
-   *
-   * `projects` and `finance` are what make it a different product from the
-   * others: the unit of work is an engagement with a budget, and the thing that
-   * decides whether the month was good is utilisation, not throughput. No
-   * `inventory` — a consultancy holds no stock, and shipping one would be a
-   * module nobody opens.
-   */
-  professional_services: {
-    label: "Professional Services",
-    modules: ["core", "hr", "billing", "projects", "crm", "sales", "finance"],
-  },
-  /*
-   * A single shop, not a chain.
-   *
-   * Distinct from `franchise_retail`, which carries `sites` because its unit is a
-   * network of outlets. One store is one place: the same `sites` machinery would
-   * be a hop in every query and a screen listing one row.
-   */
-  retail_os: {
-    label: "Retail OS",
-    modules: ["core", "hr", "inventory", "billing", "sales", "crm", "procurement"],
-  },
-  /*
-   * Salons, spas, boutiques — a person's time is the thing sold, and the day is
-   * run off the appointment book. `booking` is the spine; `crm` keeps the client
-   * history a repeat-visit business lives on; `billing` settles the visit.
-   * No `inventory` or `menu` — a stylist holds no stock and cooks nothing.
-   */
-  lifestyle_services: {
-    label: "Lifestyle Services",
-    modules: ["core", "hr", "billing", "sales", "crm", "booking"],
-  },
-  /*
-   * Table-less quick service — a counter, a queue, and instant payment. Same
-   * spine as `restaurant_ops` (menu → order → kitchen → bill) minus `tables` as
-   * the organising unit and minus `serving`: a token or a name replaces the
-   * table, and the customer collects rather than being served to a seat. Reuses
-   * the restaurant dashboard widgets, which `tables_orders` and `billing`
-   * already contribute, so no new dashboard case is needed.
-   */
-  modern_qsr: {
-    label: "Modern QSR",
-    modules: ["core", "hr", "menu", "tables_orders", "kitchen", "billing"],
-    // Counter-first ordering: a table-less QSR leads with its token queue and the
-    // day's takings, not a floor map it has no tables for.
-    dashboardWidgets: [
-      "counter_queue",
-      "restaurant_takings",
-      "restaurant_recent_orders",
-    ],
-  },
 };
 
 export type VerticalPackKey = keyof typeof VERTICAL_PACKS;
@@ -167,6 +76,20 @@ export type VerticalPackKey = keyof typeof VERTICAL_PACKS;
  * `verticalPackOptions` does not list them, and provisioning rejects them.
  */
 const RETIRED_PACKS: Record<string, VerticalPackKey> = {
+  /*
+   * The single-site and hospitality packs, withdrawn.
+   *
+   * They shipped with dashboards and real module lists, which is why they are
+   * mapped rather than forgotten: a tenant stamped `restaurant_ops` still has to
+   * resolve to *something*, and falling through to no pack is what puts a
+   * facility company on a production dashboard. QSR is the surviving multi-site
+   * food pack, retail franchise the surviving retail one, and facility
+   * management the surviving services one.
+   */
+  restaurant_ops: "franchise_qsr",
+  modern_qsr: "franchise_qsr",
+  retail_os: "franchise_retail",
+  lifestyle_services: "facility_management",
   security_services: "facility_management",
   staffing_manpower: "facility_management",
   housekeeping_cleaning: "facility_management",
@@ -178,15 +101,23 @@ const RETIRED_PACKS: Record<string, VerticalPackKey> = {
   professional_services: "facility_management",
   digital_creative: "facility_management",
   events_hospitality: "facility_management",
-  garments_textiles: "auto_components",
-  furniture_manufacturing: "auto_components",
-  engineering_fabrication: "auto_components",
-  packaging: "auto_components",
-  electronics: "auto_components",
-  food_beverage: "auto_components",
-  jewellery: "auto_components",
-  footwear_leather: "auto_components",
-  printing: "auto_components",
+  /*
+   * The manufacturing keys, including `auto_components` itself. The MES layer -
+   * blueprints, routing, work orders, job cards, stage capture - was withdrawn
+   * along with the `manufacturing` and `automotive` modules, so there is no
+   * pack that makes a shop floor any more. They resolve to the retail pack
+   * because what survives for these tenants is a catalogue, stock and orders.
+   */
+  auto_components: "franchise_retail",
+  garments_textiles: "franchise_retail",
+  furniture_manufacturing: "franchise_retail",
+  engineering_fabrication: "franchise_retail",
+  packaging: "franchise_retail",
+  electronics: "franchise_retail",
+  food_beverage: "franchise_retail",
+  jewellery: "franchise_retail",
+  footwear_leather: "franchise_retail",
+  printing: "franchise_retail",
 };
 
 const slugify = (value: string) =>
@@ -237,8 +168,8 @@ export function verticalPackOptions(): { key: string; label: string; modules: Mo
  * The modules a pack resolves to, or the defaults if the key means nothing.
  * Goes through `resolvePackKey`, so a retired key still resolves to the pack
  * that replaced it rather than silently collapsing to DEFAULT_MODULES — which
- * would quietly hand a facility-management tenant the manufacturing bundle and
- * no sites module.
+ * would quietly hand a facility-management tenant the default bundle and no
+ * sites module.
  */
 export function modulesForPack(packKey: string | null | undefined): ModuleKey[] {
   const resolved = resolvePackKey(packKey);

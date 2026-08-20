@@ -20,21 +20,14 @@ import {
 /**
  * The supported packs, as a closed allowlist.
  *
- * The count is not the point — a deliberate list is. Restaurant OS was the fifth,
- * added because a customer asked for it, which is the bar `packs.ts` sets for
- * itself. Adding a sixth should mean editing this line and noticing that a pack
- * without a dashboard case falls through to a factory floor.
+ * The count is not the point — a deliberate list is. Adding a fourth should mean
+ * editing this line and noticing that a pack without a dashboard case falls
+ * through to the default.
  */
 const SUPPORTED_PACKS = [
-  "auto_components",
   "facility_management",
   "franchise_qsr",
   "franchise_retail",
-  "restaurant_ops",
-  "professional_services",
-  "retail_os",
-  "lifestyle_services",
-  "modern_qsr",
 ];
 
 describe("vertical packs", () => {
@@ -67,8 +60,8 @@ describe("resolvePackKey", () => {
     ["facility_management", "facility_management"], // new tenants — key form
     ["franchise_qsr", "franchise_qsr"],
     ["Franchise — QSR", "franchise_qsr"], // em dash in the label
-    ["auto_components", "auto_components"],
-    ["garments_textiles", "auto_components"], // retired production pack
+    ["auto_components", "franchise_retail"], // retired with the MES layer
+    ["garments_textiles", "franchise_retail"], // retired production pack
   ])("resolves %s to %s", (industry, expected) => {
     expect(resolvePackKey(industry)).toBe(expected);
   });

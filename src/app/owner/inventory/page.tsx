@@ -5,7 +5,7 @@ import { getDispatches, getDispatchableOrders } from "@/server/actions/dispatch"
 import { getPendingDeliveries } from "@/server/actions/purchase";
 import { getItemFormData } from "@/server/actions/items";
 import InventoryClient from "./InventoryClient";
-import { getStockableItems } from "@/server/queries/spec";
+import { getStockableItems } from "@/server/queries/catalog";
 
 import { guardModulePage } from "@/platform/modules/guard";
 

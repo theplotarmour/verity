@@ -2,11 +2,16 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import prisma from "@/lib/prisma";
 
 /**
- * Characterisation tests for the order → blueprint → production chain.
+ * Characterisation tests for the order shape.
  *
  * These capture what the system does *today*, not what it should do. Their job
- * is to fail loudly while ItemMaster and ProductVariant are being unified, so a
- * refactor of the 2,300-line order studio cannot quietly break order booking.
+ * is to fail loudly if a refactor of the order studio quietly breaks order
+ * booking.
+ *
+ * They used to walk the order → blueprint → production chain and assert that
+ * every order had an active blueprint version with a populated BOM, and that
+ * item spec hashes were unique. That chain went with the manufacturing module;
+ * what is left to characterise is that an order's lines point at real items.
  *
  * They read the seeded database rather than calling the server actions, because
  * those call getOwnerUser(), which needs a request context.
@@ -14,7 +19,7 @@ import prisma from "@/lib/prisma";
  * On a blank factory they are skipped rather than failed: "there are no orders"
  * is not a regression, and a suite that stays red teaches everyone to ignore it.
  */
-describe("order and blueprint shape", () => {
+describe("order shape", () => {
   let factoryId: string;
   let seeded = false;
 
@@ -59,97 +64,5 @@ describe("order and blueprint shape", () => {
         expect(line.itemId).toBeTruthy();
       }
     }
-  });
-
-  it("every order resolves to a finished-good item with a full production definition", async () => {
-    if (!seeded) return;
-    const orders = await prisma.salesOrder.findMany({
-      where: { factoryId, ...SEEDED_ORDERS },
-      include: {
-        item: {
-          include: {
-            blueprint: {
-              include: {
-                versions: {
-                  where: { isActive: true },
-                  include: { routeSteps: true, bom: { include: { items: true } } },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-    expect(orders.length).toBeGreaterThan(0);
-    for (const o of orders) {
-      expect(o.itemId, `${o.soNumber} has no item`).toBeTruthy();
-      expect(o.item!.itemType).toBe("FINISHED_PRODUCT");
-      const version = o.item!.blueprint?.versions[0];
-      expect(version, `${o.soNumber} item has no active blueprint`).toBeTruthy();
-      expect(version!.routeSteps.length).toBeGreaterThan(0);
-      expect(version!.bom!.items.length).toBeGreaterThan(0);
-    }
-  });
-
-  it("every blueprint is keyed on an item and has at least one version", async () => {
-    if (!seeded) return;
-    // Scoped to the items seeded orders are built from, for the same reason the
-    // scans above are: several test files create a Blueprint and then its first
-    // version as two writes, and a factory-wide scan running in parallel lands
-    // between them and sees a version-less blueprint that is about to have one.
-    const seededOrders = await prisma.salesOrder.findMany({
-      where: { factoryId, ...SEEDED_ORDERS, itemId: { not: null } },
-      select: { itemId: true },
-    });
-    const itemIds = seededOrders.map((o) => o.itemId!).filter(Boolean);
-    if (itemIds.length === 0) return;
-
-    const blueprints = await prisma.blueprint.findMany({
-      where: { factoryId, itemId: { in: itemIds } },
-      include: { versions: { select: { id: true, isActive: true } } },
-    });
-    expect(blueprints.length).toBeGreaterThan(0);
-    for (const b of blueprints) {
-      expect(b.itemId).toBeTruthy();
-      expect(b.versions.length).toBeGreaterThan(0);
-    }
-  });
-
-  it("a producible item inherits QC, route and BOM from its group", async () => {
-    if (!seeded) return;
-    const item = await prisma.itemMaster.findFirst({
-      where: {
-        factoryId,
-        manufacturingType: "MAKE",
-        specHash: { not: null },
-        blueprint: { versions: { some: { isActive: true, bom: { items: { some: {} } } } } },
-      },
-      include: {
-        blueprint: {
-          include: {
-            versions: {
-              where: { isActive: true },
-              include: { qcTemplate: true, routeSteps: true, bom: { include: { items: true } } },
-            },
-          },
-        },
-      },
-    });
-    expect(item, "no producible item has a populated blueprint").toBeTruthy();
-    const version = item!.blueprint!.versions[0];
-    expect(version.qcTemplateId).toBeTruthy();
-    expect(version.routeSteps.length).toBeGreaterThan(0);
-    expect(version.bom!.items.length).toBeGreaterThan(0);
-  });
-
-  it("spec-created items carry a unique identity hash", async () => {
-    if (!seeded) return;
-    const items = await prisma.itemMaster.findMany({
-      where: { factoryId, specHash: { not: null } },
-      select: { specHash: true },
-    });
-    expect(items.length).toBeGreaterThan(0);
-    const hashes = items.map((i) => i.specHash);
-    expect(new Set(hashes).size).toBe(hashes.length);
   });
 });

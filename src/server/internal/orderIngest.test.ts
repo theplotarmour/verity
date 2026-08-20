@@ -36,11 +36,10 @@ describe("ingestExternalOrder", () => {
     const other = await prisma.factory.findFirst({ where: { id: { not: factoryId } } });
     if (other) {
       const sku = `TEST-FOREIGN-${Date.now().toString(36).toUpperCase()}`;
-      const item = await prisma.itemMaster.create({
+      const item = await prisma.product.create({
         data: {
           factoryId: other.id,
           itemType: "FINISHED_PRODUCT",
-          manufacturingType: "MAKE",
           name: `Foreign Tenant Item ${sku}`,
           sku,
           itemCode: sku,
@@ -58,7 +57,7 @@ describe("ingestExternalOrder", () => {
       await prisma.salesOrder.deleteMany({ where: { id: { in: created } } });
     }
     if (foreignItemId) {
-      await prisma.itemMaster.delete({ where: { id: foreignItemId } }).catch(() => undefined);
+      await prisma.product.delete({ where: { id: foreignItemId } }).catch(() => undefined);
     }
     await prisma.$disconnect();
   });

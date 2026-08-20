@@ -41,18 +41,17 @@ describe("dashboard widget registry", () => {
     });
     expect(resolved.length).toBeGreaterThan(0);
     const keys = resolved.map((w) => w.key);
-    expect(keys).toContain("restaurant_floor");
-    expect(keys).toContain("restaurant_takings");
+    expect(keys).toContain("booking_upcoming");
   });
 });
 
 describe("widget permission gates", () => {
   it("hides a widget whose registry grant is not held", () => {
-    // restaurant_takings requires "invoice.view"
+    // booking_upcoming requires "booking.view"
     const withGrant = resolveDashboardWidgets({
       userRole: "OWNER",
       enabledModules: ALL_MODULES,
-      grantedPermissions: ["invoice.view"],
+      grantedPermissions: ["booking.view"],
     });
     const without = resolveDashboardWidgets({
       userRole: "OWNER",
@@ -60,7 +59,7 @@ describe("widget permission gates", () => {
       grantedPermissions: ["dashboard.view"],
     });
 
-    expect(withGrant.map((w) => w.key)).toContain("restaurant_takings");
-    expect(without.map((w) => w.key)).not.toContain("restaurant_takings");
+    expect(withGrant.map((w) => w.key)).toContain("booking_upcoming");
+    expect(without.map((w) => w.key)).not.toContain("booking_upcoming");
   });
 });

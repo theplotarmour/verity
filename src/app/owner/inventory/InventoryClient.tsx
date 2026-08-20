@@ -15,7 +15,7 @@ import { Surface } from "@/components/design/Surface";
 import { Badge, Button, Input, Select, EmptyState } from "@/components/ui/primitives";
 import { useRouter } from "next/navigation";
 import dayjs from "dayjs";
-import { SpecCombobox } from "@/components/spec/SpecCombobox";
+import { ItemCombobox } from "@/components/catalog/ItemCombobox";
 import { ITEM_TYPE_LABELS } from "@/lib/item-constants";
 type Tab = "overview" | "raw" | "production" | "dispatch" | "warehouses" | "stores";
 
@@ -74,7 +74,7 @@ export default function InventoryClient({ overview, ledger, warehouses, material
     batchNumber: "",
   });
 
-  // Stock is recorded against an ItemMaster row whatever its type; the old
+  // Stock is recorded against an Product row whatever its type; the old
   // MATERIAL / PRODUCT toggle existed only because finished goods used to live
   // in a different table.
   const itemOptions = useMemo(
@@ -140,7 +140,7 @@ export default function InventoryClient({ overview, ledger, warehouses, material
       await createStockEntry({
         transactionType: stockModalType,
         warehouseId: isRawSelected ? factoryWarehouseId : formData.warehouseId,
-        // Always an ItemMaster id now — createStockEntry resolves it directly.
+        // Always an Product id now — createStockEntry resolves it directly.
         materialId: formData.itemId,
         batchNumber: formData.batchNumber || undefined,
         quantityChange: stockModalType === "ISSUE" ? -Math.abs(formData.quantityChange) : Math.abs(formData.quantityChange)
@@ -657,7 +657,7 @@ export default function InventoryClient({ overview, ledger, warehouses, material
                   decides how it is handled, so there is nothing to declare up
                   front. */}
               <Field label="Item">
-                <SpecCombobox
+                <ItemCombobox
                   options={itemOptions}
                   value={formData.itemId || null}
                   onChange={(id) => setFormData({ ...formData, itemId: id ?? "" })}

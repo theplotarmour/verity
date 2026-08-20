@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import prisma from "@/lib/prisma";
 import { registerReactions } from "./reactions";
 import { emit, listenerCount } from "./bus";
+import { COMPOSED_WORKFLOWS } from "./workflows";
 
 /**
  * The real reactions, not synthetic ones.
@@ -23,9 +24,41 @@ describe("registerReactions", () => {
 
   it("is idempotent — registering again does not stack duplicate listeners", () => {
     registerReactions();
+    const afterFirst = listenerCount("appointment.completed");
     registerReactions();
-    // One reaction per event no matter how many actions call registerReactions.
-    expect(listenerCount("appointment.completed")).toBe(1);
+    registerReactions();
+    // The count is asserted against itself rather than a literal: the event now
+    // fans out to several modules (audit, billing, crm, notifications) and that
+    // list will keep growing. What must never change is that calling register
+    // again adds nothing — every publish calls it.
+    expect(afterFirst).toBeGreaterThanOrEqual(1);
+    expect(listenerCount("appointment.completed")).toBe(afterFirst);
+  });
+
+  it("has a listener behind every event the declared workflows name", () => {
+    registerReactions();
+    // `workflows.ts` is what the HQ builder shows an operator when they pick
+    // modules. A step described there with nothing registered against it is a
+    // promise the platform does not keep, and it would be invisible without
+    // this: the console would render the chain either way.
+    for (const workflow of COMPOSED_WORKFLOWS) {
+      for (const step of workflow.steps) {
+        if (!step.event) continue;
+        expect(
+          listenerCount(step.event),
+          `${workflow.key}: no reaction registered for ${step.event}`,
+        ).toBeGreaterThanOrEqual(1);
+      }
+    }
+  });
+
+  it("wires the maintenance workflow onto its milestones", () => {
+    registerReactions();
+    // helpdesk → assets → billing → notifications, composed without any of the
+    // four importing another.
+    expect(listenerCount("ticket.created")).toBeGreaterThanOrEqual(1);
+    expect(listenerCount("work_order.dispatched")).toBeGreaterThanOrEqual(1);
+    expect(listenerCount("work_order.completed")).toBeGreaterThanOrEqual(3);
   });
 
   it("emitting a lifecycle event writes the audit row through the reaction", async () => {

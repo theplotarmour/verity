@@ -119,7 +119,7 @@ describe("Blank Tenant & Module Disable Runtime Invariants", () => {
     expect(org).toBe(organizationId);
 
     // Create a mock inventory resource
-    const item = await prisma.itemMaster.create({
+    const item = await prisma.product.create({
       data: {
         factoryId,
         itemCode: `TEST-ITEM-${suffix}`,
@@ -138,13 +138,13 @@ describe("Blank Tenant & Module Disable Runtime Invariants", () => {
     await expect(guardModuleAction("inventory")).rejects.toThrow("The Inventory module is not enabled.");
 
     // 3. Verify data retention (the row is still in the database)
-    const dbItem = await prisma.itemMaster.findUnique({
+    const dbItem = await prisma.product.findUnique({
       where: { id: item.id },
     });
     expect(dbItem).not.toBeNull();
     expect(dbItem?.name).toBe("Test Integration Item");
 
     // Clean up test item
-    await prisma.itemMaster.delete({ where: { id: item.id } });
+    await prisma.product.delete({ where: { id: item.id } });
   });
 });

@@ -4,7 +4,6 @@ import { guardModuleAction, guardModuleWrite } from "@/platform/modules/guard";
 import prisma from "@/lib/prisma";
 import { getOwnerUser } from "@/lib/server/owner";
 import { revalidatePath } from "next/cache";
-import { deriveProductionStatus, isDispatchReady } from "@/lib/production-status";
 import { checkOpeningSop } from "@/server/internal/sopGate";
 
 // Ensures a Default zone/rack/shelf/bin chain for a warehouse (mirrors
@@ -30,10 +29,15 @@ async function resolveOrderItem(salesOrderId: string) {
   return { order, itemId: item?.itemId ?? (order as any).itemId ?? null, quantity: item?.quantity ?? 1 };
 }
 
-// Orders eligible for dispatch. A production only becomes dispatchable once the
-// whole physical route is genuinely finished — cutting, stitching, QC approval,
-// packing and sealing — so a verified passport alone is not enough. Stock
-// matched to a READY order is the one exception: its goods already exist.
+/*
+ * Orders eligible for dispatch.
+ *
+ * This used to walk the job cards and require the whole physical route -
+ * cutting, stitching, QC approval, packing - to be finished, with a READY
+ * order as the stock-matched exception. The route went with the manufacturing
+ * module, so READY is the whole rule now: an order an operator has marked
+ * ready, and which has not already been dispatched.
+ */
 export async function getDispatchableOrders() {
   await guardModuleAction("sales");
   const user = await getOwnerUser();
@@ -43,61 +47,17 @@ export async function getDispatchableOrders() {
     where: {
       factoryId: user.factoryId,
       dispatches: { none: {} },
-      OR: [
-        { status: "READY" },
-        {
-          plans: {
-            some: {
-              workOrders: {
-                some: { jobCards: { some: { inspection: { report: { isNot: null } } } } },
-              },
-            },
-          },
-        },
-      ],
+      status: "READY",
     },
-    include: {
-      customer: true,
-      plans: {
-        select: {
-          workOrders: {
-            select: {
-              jobCards: {
-                select: {
-                  sequence: true,
-                  status: true,
-                  department: { select: { name: true } },
-                  stage: { select: { name: true } },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
+    include: { customer: true },
     orderBy: { orderDate: "desc" },
   });
 
-  return orders
-    .map((order) => {
-      const jobCards = order.plans.flatMap((p) =>
-        p.workOrders.flatMap((wo) =>
-          wo.jobCards.map((c) => ({
-            sequence: c.sequence,
-            status: c.status,
-            departmentName: c.department?.name ?? null,
-            stageName: c.stage?.name ?? null,
-          }))
-        )
-      );
-      const { plans, ...rest } = order;
-      return {
-        ...rest,
-        productionStatus: deriveProductionStatus({ orderStatus: order.status, jobCards }),
-        dispatchReady: order.status === "READY" || isDispatchReady({ orderStatus: order.status, jobCards }),
-      };
-    })
-    .filter((o) => o.dispatchReady);
+  return orders.map((order) => ({
+    ...order,
+    productionStatus: order.status,
+    dispatchReady: true,
+  }));
 }
 
 export async function getDispatchDestinations() {
@@ -129,16 +89,7 @@ export async function createDispatch(data: {
 
   const order = await prisma.salesOrder.findFirst({
     where: { id: data.salesOrderId, factoryId },
-    include: {
-      dispatches: true,
-      plans: {
-        include: {
-          workOrders: {
-            include: { jobCards: { include: { inspection: { include: { report: true } } } } },
-          },
-        },
-      },
-    },
+    include: { dispatches: true },
   });
   if (!order) return { error: "Order not found" };
   if (order.dispatches.length > 0) return { error: "Order already dispatched" };
@@ -149,11 +100,13 @@ export async function createDispatch(data: {
   const sop = await checkOpeningSop(factoryId, order.siteId);
   if (!sop.open) return { error: sop.reason ?? "Today's opening checklist is not complete." };
 
-  const hasPassport = order.status === "READY" || order.plans.some((p) =>
-    p.workOrders.some((wo) => wo.jobCards.some((jc) => jc.inspection?.report))
-  );
-  if (!hasPassport) {
-    return { error: "Order needs a verified passport before dispatch" };
+  /*
+   * The passport gate required a QC report reached through the order's job
+   * cards. Inspections went with the manufacturing module, so READY - which an
+   * operator sets deliberately - is the remaining signal that goods exist.
+   */
+  if (order.status !== "READY") {
+    return { error: "Order must be marked ready before dispatch" };
   }
 
   if (data.destinationType !== "CUSTOMER" && !data.destinationWarehouseId) {
@@ -210,7 +163,7 @@ export async function getDispatches() {
       salesOrder: {
         include: {
           customer: true,
-          item: { select: { name: true, group: { select: { name: true } } } },
+          item: { select: { name: true } },
           items: true,
         },
       },

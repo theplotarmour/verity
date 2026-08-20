@@ -55,7 +55,6 @@ const LEGACY_PERMISSION_MODULE: Record<string, ModuleKey> = {
   DELETE_ORDER: "sales",
   QC_QUEUE: "quality",
   INSPECT_CHECKPOINT: "quality",
-  WORKER_JOBS: "manufacturing",
 };
 
 /** The module that owns a legacy permission. Unknown keys are treated as core. */

@@ -5,7 +5,11 @@
     "D:\\Code\\myskills\\franchise-ops-helper",
     "D:\\Code\\myskills\\emilkowalski-skills\\skills\\improve-animations",
     "D:\\Code\\myskills\\emilkowalski-skills\\skills\\apple-design",
-    "D:\\Code\\myskills\\emilkowalski-skills\\skills\\animate"
+    "D:\\Code\\myskills\\emilkowalski-skills\\skills\\animate",
+    "D:\\Code\\myskills\\caveman\\skills\\caveman",
+    "D:\\Code\\myskills\\caveman\\skills\\surgical-patch",
+    "D:\\Code\\myskills\\caveman\\skills\\investigate-first",
+    "D:\\Code\\myskills\\caveman\\skills\\verify-and-stop"
   ],
   "permissions": {
     "allow": [
@@ -23,6 +27,14 @@
       "Skill(apple-design:*)",
       "Skill(animate)",
       "Skill(animate:*)",
+      "Skill(caveman)",
+      "Skill(caveman:*)",
+      "Skill(surgical-patch)",
+      "Skill(surgical-patch:*)",
+      "Skill(investigate-first)",
+      "Skill(investigate-first:*)",
+      "Skill(verify-and-stop)",
+      "Skill(verify-and-stop:*)",
       "Bash(sort -t: -k2 -rn)",
       "Bash(python -)",
       "Bash(git mv *)",
@@ -32,6 +44,28 @@
       "Bash(npx vitest *)",
       "Bash(npx tsx *)",
       "Bash(npx prisma *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:/Users/divyo/AppData/Local/Programs/Python/Python311/Scripts/graphify.EXE hook-guard search"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:/Users/divyo/AppData/Local/Programs/Python/Python311/Scripts/graphify.EXE hook-guard read"
+          }
+        ]
+      }
     ]
   }
 }

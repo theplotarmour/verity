@@ -14,16 +14,16 @@ import { VERTICAL_PACKS } from "@/platform/tenancy/packs";
 
 describe("parseSuggestion", () => {
   it("accepts a real pack key and fills in its label and modules", () => {
-    const s = parseSuggestion("modern_qsr");
+    const s = parseSuggestion("franchise_qsr");
     expect(s).not.toBeNull();
-    expect(s!.packKey).toBe("modern_qsr");
-    expect(s!.label).toBe(VERTICAL_PACKS.modern_qsr.label);
+    expect(s!.packKey).toBe("franchise_qsr");
+    expect(s!.label).toBe(VERTICAL_PACKS.franchise_qsr.label);
     expect(s!.modules).toContain("core");
-    expect(s!.modules).toContain("tables_orders");
+    expect(s!.modules).toContain("sites");
   });
 
   it("accepts the human label the model might echo back", () => {
-    expect(parseSuggestion("Lifestyle Services")?.packKey).toBe("lifestyle_services");
+    expect(parseSuggestion("Facility Management")?.packKey).toBe("facility_management");
   });
 
   it("rejects a hallucinated pack rather than passing it through", () => {
@@ -36,6 +36,6 @@ describe("parseSuggestion", () => {
   });
 
   it("tolerates surrounding whitespace the model adds", () => {
-    expect(parseSuggestion("  retail_os \n")?.packKey).toBe("retail_os");
+    expect(parseSuggestion("  franchise_retail \n")?.packKey).toBe("franchise_retail");
   });
 });

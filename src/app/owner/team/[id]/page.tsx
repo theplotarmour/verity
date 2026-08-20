@@ -16,9 +16,9 @@ export default async function MemberDetailPage({ params }: { params: Promise<{ i
 
   if (!member) notFound();
 
-  const orderCount = await prisma.jobCard.count({
-    where: { factoryId: dbUser.factoryId, assignedToId: member.id }
-  });
+  // Job cards were the unit of work assigned to a person; they went with the
+  // manufacturing module, and nothing replaced them.
+  const orderCount = 0;
 
   const auditLogs = await prisma.auditLog.findMany({
     where: {

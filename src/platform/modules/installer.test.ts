@@ -62,11 +62,11 @@ describe("the dependency graph", () => {
   });
 
   it("resolves every module's dependencies transitively", () => {
-    // `manufacturing` requires `inventory`, which requires `core`. Activating
-    // manufacturing must produce all three.
-    const resolved = withDependencies(["manufacturing"]);
-    expect(resolved).toContain("manufacturing");
-    expect(resolved).toContain("inventory");
+    // `billing` requires `sales`, which requires `core`. Activating billing must
+    // produce all three.
+    const resolved = withDependencies(["billing"]);
+    expect(resolved).toContain("billing");
+    expect(resolved).toContain("sales");
     expect(resolved).toContain("core");
   });
 
@@ -101,15 +101,14 @@ describe("deactivation blockers", () => {
     active.filter((k) => k !== key && (getModule(k)?.requires ?? []).includes(key));
 
   it("blocks a module something else still needs", () => {
-    // The example from the requirement: inventory cannot go while manufacturing
-    // is active.
-    const active: ModuleKey[] = ["core", "inventory", "manufacturing"];
-    expect(dependents("inventory", active)).toContain("manufacturing");
+    // The example from the requirement: sales cannot go while billing is active.
+    const active: ModuleKey[] = ["core", "sales", "billing"];
+    expect(dependents("sales", active)).toContain("billing");
   });
 
   it("allows it once the dependent is gone", () => {
-    const active: ModuleKey[] = ["core", "inventory"];
-    expect(dependents("inventory", active)).toEqual([]);
+    const active: ModuleKey[] = ["core", "sales"];
+    expect(dependents("sales", active)).toEqual([]);
   });
 
   it("never allows an always-on module to be blocked or removed", () => {

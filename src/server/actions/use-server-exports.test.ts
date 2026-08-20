@@ -12,7 +12,7 @@ import path from "node:path";
  * `WARNINGS_QUEUE_LIMIT` const, both perfectly reasonable-looking lines.
  *
  * Constants and pure helpers belong in a plain module beside the action, which is
- * where `lib/qc-score.ts`, `lib/stage-holds.ts` and `lib/notifications.ts` came
+ * where `lib/notifications.ts` came
  * from. This test is much cheaper than the build.
  */
 
@@ -52,7 +52,7 @@ describe('"use server" modules export only async functions', () => {
   it("finds the action modules to check", () => {
     // Guards the guard: a broken directive regex would make this vacuously pass.
     expect(files.length).toBeGreaterThan(20);
-    expect(files).toContain("qc.ts");
+    expect(files).toContain("billing.ts");
     expect(files).toContain("notifications.ts");
   });
 
@@ -62,7 +62,7 @@ describe('"use server" modules export only async functions', () => {
       offendingExports(source),
       `${file} is "use server", so every export must be an async function. ` +
         "Move constants, types-with-values and sync helpers into a plain module " +
-        "(see src/lib/qc-score.ts) and import them here.",
+        "(see src/lib/notifications.ts) and import them here.",
     ).toEqual([]);
   });
 });

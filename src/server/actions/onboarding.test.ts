@@ -55,9 +55,9 @@ describe("provisioning requires a pack", () => {
   });
 
   it("does not name a default pack anywhere", () => {
-    // `industry: pack ? key : "auto_components"` was the original branch, and my
+    // `industry: pack ? key : "franchise_retail"` was the original branch, and my
     // first version of this test looked for exactly that punctuation — so it
-    // missed `|| "auto_components"` when I checked it by reinstating the bug.
+    // missed `|| "franchise_retail"` when I checked it by reinstating the bug.
     //
     // Asserting the literal is absent entirely is the version that holds. hq.ts
     // builds its error messages from Object.keys(VERTICAL_PACKS), so it has no
@@ -65,7 +65,7 @@ describe("provisioning requires a pack", () => {
     expect(
       code,
       "hq.ts names a specific pack, which is only ever a default in disguise",
-    ).not.toContain("auto_components");
+    ).not.toContain("franchise_retail");
   });
 });
 
@@ -76,7 +76,7 @@ describe("the packs are the only choices", () => {
     // exact membership is pinned in packs.test.ts, and the dashboard-routing test
     // pins that each one has a screen built for it.
     const keys = Object.keys(VERTICAL_PACKS);
-    expect(keys.length).toBeGreaterThanOrEqual(4);
+    expect(keys.length).toBeGreaterThanOrEqual(3);
     expect(new Set(keys).size, "a duplicate pack key").toBe(keys.length);
   });
 

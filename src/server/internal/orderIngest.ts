@@ -71,7 +71,7 @@ export interface IngestResult {
  */
 async function matchItemByName(factoryId: string, name: string | null | undefined) {
   if (!name?.trim()) return null;
-  const found = await prisma.itemMaster.findFirst({
+  const found = await prisma.product.findFirst({
     where: { factoryId, name: { equals: name.trim(), mode: "insensitive" } },
     select: { id: true },
   });
@@ -113,7 +113,7 @@ export async function ingestExternalOrder(
   const lineItemIds = await Promise.all(
     input.lines.map(async (line) => {
       if (line.itemId) {
-        const owned = await prisma.itemMaster.findFirst({
+        const owned = await prisma.product.findFirst({
           where: { id: line.itemId, factoryId },
           select: { id: true },
         });
