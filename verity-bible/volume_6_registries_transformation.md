@@ -37,29 +37,34 @@ To prevent terminology drift between design, product, engineering, and support, 
 ## 2. The Invariant Register
 Invariants must remain true across every tenant configuration, industry pack, and codebase build:
 
-### `INV-001` — Strict Tenancy Separation
+### `INV-001` — Strict Tenancy Separation [FACT]
 *   **Statement:** All database operations (reads/writes) must contain a tenancy filter matching the authenticated principal's session scope.
 *   **Rationale:** Prevents tenant data leakage, which is our highest operational risk.
 *   **Violation Example:** Executing `prisma.appointment.findMany()` without scoping by `factoryId` or `organizationId`.
+*   **Detection:** Middlewares or DB-level RLS policies reject queries missing tenant scope identifiers.
 
-### `INV-002` — No-Show Lock
-*   **Statement:** A worker cannot check into a shift or work order if their active GPS coordinates fall outside the Location's geofenced radius, unless an authorized manager override action is recorded.
-*   **Rationale:** Prevents fraudulent check-ins in shift-based operations.
-
-### `INV-003` — State Immutability in Closed Status
+### `INV-002` — Read-Only Closed States [FACT]
 *   **Statement:** Once a Work Order transitions to the `Closed` terminal state, its field properties become read-only. No further status changes or mutations are permitted.
 *   **Rationale:** Enforces accounting and auditing integrity.
+*   **Violation Example:** A script attempting to edit the `scheduledAt` date of a Closed order.
+*   **Detection:** Application validation gates raise `E_PRECONDITION` on modifications to closed records.
+
+### `INV-003` — Unified Party Identity [INFERRED]
+*   **Statement:** A physical person or corporate entity must have exactly one row in the `Party` table. No separate tables for customers vs employees can exist.
+*   **Rationale:** Eliminates duplication and profile synchronization bugs.
+*   **Violation Example:** Having a `res_partner` row and an unrelated `hr_employee` row for the same person.
+*   **Detection:** Schema compiler checks check constraints and unique index rules.
 
 ---
 
 ## 3. The Principle Register
 
-### `PRN-001` — Least Surprise (Explainable Automation)
+### `PRN-001` — Least Surprise (Explainable Automation) [INFERRED]
 *   **Principle:** Automations must be explicit, versioned, and easily traceable.
 *   **Meaning:** If the system automatically reassigns a work order, it must log the execution of Rule X, explaining why the action was taken.
 *   **Anti-Example:** An automated backend cron job that silently moves unassigned tickets to a different queue without logging the criteria.
 
-### `PRN-002` — Progressive Disclosure of Complexity
+### `PRN-002` — Progressive Disclosure of Complexity [INFERRED]
 *   **Principle:** Keep simple actions simple, while making advanced configurations possible.
 *   **Meaning:** Frontline workers see only two buttons (e.g., "Start Shift" and "Report Incident"). A scheduler sees a multi-pane calendar grid. The underlying database schema remains unified.
 
@@ -67,12 +72,12 @@ Invariants must remain true across every tenant configuration, industry pack, an
 
 ## 4. The Decision Register
 
-### `DEC-001` — Elimination of the Kitchen Module & KDS
+### `DEC-001` — Elimination of the Kitchen Module & KDS [FACT]
 *   **Decision:** The kitchen display system (KDS) and cooking queue tracking are permanently excluded from the Verity core product scope.
 *   **Status:** `ACCEPTED`
 *   **Rationale:** Verity is optimized for service-driven organizations. Food preparation tracking requires micro-level inventory recipes and highly specific KDS bump timers that do not generalize into other service operations. Food delivery ordering is retained via the `catalog` module posting to `ingestExternalOrder`.
 
-### `DEC-002` — Unified Product-Service Catalog
+### `DEC-002` — Unified Product-Service Catalog [FACT]
 *   **Decision:** Services are stored directly in the unified `Product` table where `itemType = SERVICE`. The scheduling `Appointment` model holds a flat `serviceName` and `pricePaise` to maintain database decoupling.
 *   **Status:** `ACCEPTED`
 *   **Rationale:** Prevents tight structural links between scheduling capabilities and the product inventory module, allowing either to be turned off without causing code compilation failures.
@@ -132,7 +137,7 @@ Visual restraint, high information density for managers, low density task-flows 
 12 Core Primitives, 28 secondary terms, fully locked.
 
 ### Invariants Verified
-Tenancy isolation (`INV-001`), geofenced check-in (`INV-002`), read-only closed states (`INV-003`).
+Tenancy isolation (`INV-001`), read-only closed states (`INV-002`), unified party identity (`INV-003`).
 
 ### Confidence
 **`HIGH`**. The model successfully decouples operational execution from ERP accounting bloat.
