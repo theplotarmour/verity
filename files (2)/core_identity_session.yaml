@@ -1,0 +1,307 @@
+key: core_identity_session
+name: Identity & Session
+layer: core
+confidence: KNOWN
+description: >
+  Authentication, session lifecycle, device trust and principal resolution. This is
+  the only capability that may exist before a tenant has any modules. It is never
+  optional, never removable by a pack, and never overridden by tenant configuration
+  beyond the policy knobs declared here.
+
+principles:
+  - Authentication answers "who is this principal". Authorization (core_authorization)
+    answers "what may this principal do". They are separate subsystems with separate
+    audit streams and must not be collapsed.
+  - A session is a claim about a principal AND a device AND a tenant AND a time window.
+    Dropping any of the four produces a security hole.
+  - Every mutating request re-resolves permissions from the authorization service.
+    A session never carries a cached permission set beyond its TTL.
+  - Logout is a server-side revocation, not a client-side token deletion.
+
+entities:
+
+  - key: principal
+    name: Principal
+    description: Any actor that can hold a session. Human user, service account, or external portal identity.
+    owner: platform
+    tenancy: cross_tenant_row_with_membership
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: kind, type: enum, values: [user, service_account, portal_identity], req: true, immutable: true}
+      - {key: primary_email, type: citext, req: false, unique_scope: platform, sensitive: true, note: '''nullable because Indian field workforce onboards by phone, not email'}
+      - {key: primary_phone_e164, type: string, req: false, unique_scope: platform, sensitive: true}
+      - {key: display_name, type: string, req: true}
+      - {key: status, type: enum, values: [invited, active, suspended, locked, deactivated], req: true}
+      - {key: mfa_enrolled, type: bool, req: true, default: false}
+      - {key: password_credential_id, type: uuid, req: false, note: null for phone-OTP-only principals}
+      - {key: failed_auth_count, type: int, default: 0}
+      - {key: locked_until, type: timestamptz, nullable: true}
+      - {key: last_authenticated_at, type: timestamptz, nullable: true}
+      - {key: created_at, type: timestamptz, req: true, immutable: true}
+      - {key: deactivated_at, type: timestamptz, nullable: true}
+    invariants:
+      - At least one of primary_email or primary_phone_e164 must be non-null for kind=user.
+      - kind=service_account must have both null and authenticate only by credential.
+      - status=deactivated is terminal for authentication but the row is never hard-deleted while any audit row references it.
+    states: [invited, active, suspended, locked, deactivated]
+
+  - key: tenant_membership
+    name: Tenant Membership
+    description: The link between a principal and a tenant. A principal with zero memberships can authenticate but has nowhere to land.
+    owner: tenant
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: principal_id, type: uuid, req: true, fk: principal}
+      - {key: tenant_id, type: uuid, req: true, fk: tenant}
+      - {key: status, type: enum, values: [invited, active, suspended, revoked], req: true}
+      - {key: employment_link_id, type: uuid, nullable: true, note: 'links to people.employee when the principal is staff, null for client contacts'}
+      - {key: default_landing_surface, type: enum, values: [console, field_app, kds, pos, portal, hq], req: true}
+      - {key: invited_by_principal_id, type: uuid, nullable: true}
+      - {key: joined_at, type: timestamptz, nullable: true}
+      - {key: revoked_at, type: timestamptz, nullable: true}
+    invariants:
+      - unique(principal_id, tenant_id)
+      - Revoking the last active membership with tenant_owner archetype is forbidden; see action revoke_membership.
+
+  - key: session
+    name: Session
+    description: A server-side revocable record. The client token is a pointer to this row, never a self-contained authority.
+    owner: platform
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: principal_id, type: uuid, req: true, fk: principal}
+      - {key: tenant_id, type: uuid, req: true, note: 'a session is scoped to exactly one tenant, switching tenant mints a new session'}
+      - {key: device_id, type: uuid, req: true, fk: device}
+      - {key: surface, type: enum, values: [console, field_app, kds, pos, portal, hq], req: true}
+      - {key: issued_at, type: timestamptz, req: true, immutable: true}
+      - {key: absolute_expiry_at, type: timestamptz, req: true, immutable: true}
+      - {key: idle_expiry_at, type: timestamptz, req: true, note: 'slides forward on activity, never past absolute_expiry_at'}
+      - {key: revoked_at, type: timestamptz, nullable: true}
+      - {key: revocation_reason, type: enum, values: [user_logout, user_logout_all, admin_revoke, password_change, mfa_change, membership_revoked, principal_suspended, device_untrusted, suspicious_activity, absolute_timeout, idle_timeout, tenant_suspended], nullable: true}
+      - {key: elevated_until, type: timestamptz, nullable: true, note: 'step-up window after re-auth, required for high-risk actions'}
+      - {key: impersonated_by_principal_id, type: uuid, nullable: true, note: set when a platform operator is acting as this principal}
+      - {key: impersonation_ticket_ref, type: string, nullable: true}
+      - {key: ip_at_issue, type: inet}
+      - {key: user_agent_at_issue, type: text}
+    invariants:
+      - A revoked session is never un-revoked. Re-authentication mints a new row.
+      - idle_expiry_at <= absolute_expiry_at always.
+      - impersonated_by_principal_id non-null requires impersonation_ticket_ref non-null.
+    states: [active, idle_expired, absolutely_expired, revoked]
+
+  - key: device
+    name: Device
+    description: A physical or logical client. Shared kitchen tablets and shared POS terminals are first-class, not an afterthought.
+    owner: tenant
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true}
+      - {key: label, type: string, req: true, note: 'human-set, e.g. "Kitchen Tab 2"'}
+      - {key: kind, type: enum, values: [personal_mobile, shared_tablet, pos_terminal, kds_screen, desktop_browser, integration_client], req: true}
+      - {key: shared, type: bool, req: true, note: shared devices get shorter idle timeouts and PIN-based fast user switching}
+      - {key: trust_status, type: enum, values: [untrusted, trusted, blocked], req: true, default: untrusted}
+      - {key: bound_site_id, type: uuid, nullable: true, note: a KDS bound to a site refuses sessions for other sites}
+      - {key: last_seen_at, type: timestamptz}
+      - {key: os_family, type: string, nullable: true}
+      - {key: app_version, type: string, nullable: true}
+      - {key: min_supported_version_ok, type: bool, computed: true}
+    invariants:
+      - kind=kds_screen or pos_terminal implies shared=true.
+      - A blocked device may not mint sessions and its existing sessions are revoked on block.
+
+actions:
+
+  # ---------------- AUTHENTICATION ----------------
+  - key: authenticate_password
+    entity: session
+    label: Sign in with email and password
+    actors: [any_unauthenticated]
+    preconditions:
+      - Principal exists and status IN (active, invited).
+      - Principal is not locked (locked_until is null or in the past).
+      - Device is not trust_status=blocked.
+      - Tenant is not suspended, OR the principal holds a platform archetype.
+    inputs: [email, password, device_fingerprint, surface, tenant_hint_optional]
+    creates: [session, device_if_new, auth_attempt_record]
+    updates: [principal.failed_auth_count, principal.last_authenticated_at, device.last_seen_at]
+    events: [session.created, principal.authenticated]
+    notifications:
+      - {to: principal, channel: email_or_whatsapp, when: new_device_or_new_geo, template: new_signin_alert}
+    undoable: false
+    audit_class: security
+    concurrency: >
+      Two simultaneous sign-ins from different devices both succeed and create
+      independent sessions. There is no global single-session constraint by default;
+      a tenant policy may set max_concurrent_sessions_per_principal, in which case
+      the OLDEST session is revoked with reason=admin_revoke and the user is told
+      on the surviving device.
+    failure_modes:
+      - {code: E_VALIDATION, cause: malformed email, message: Enter a valid email address.}
+      - {code: E_AUTHN, cause: wrong password OR unknown email, message: Email or password is incorrect., note: 'identical message and identical response timing for both cases, constant-time compare, to prevent account enumeration'}
+      - {code: E_AUTHN, cause: principal.status=suspended, message: This account is suspended. Contact your administrator.}
+      - {code: E_AUTHN, cause: principal.status=deactivated, message: Email or password is incorrect., note: deliberately indistinguishable from unknown account}
+      - {code: E_RATE_LIMIT, cause: 5 failures in 15 min per principal, message: Too many attempts. Try again in 15 minutes., note: 'lock is per principal AND separately per source IP, so an attacker cannot lock a victim out cheaply — IP limit is 20/15min'}
+      - {code: E_TENANT_SUSPENDED, cause: tenant billing suspension, message: This workspace is suspended.}
+      - {code: E_PRECONDITION, cause: device blocked, message: This device is not permitted. Contact your administrator.}
+    edge_cases:
+      - Correct password but MFA enrolled -> session is NOT created. A short-lived mfa_challenge token is returned instead. The session row is created only after MFA success.
+      - Principal has zero active tenant memberships -> authentication succeeds, no session is minted, user lands on a "no workspaces" screen with a support link. This is not an error state.
+      - Principal has multiple active memberships and no tenant_hint -> tenant picker. Session minted only after choice.
+      - Password correct but expired per tenant password_max_age policy -> forced change flow, session minted only after change, all other sessions revoked with reason=password_change.
+      - Clock skew on the device does not affect expiry; expiry is evaluated server-side only.
+      - Sign-in during an in-progress offline sync on the same device by a DIFFERENT principal -> blocked with E_PRECONDITION until the queue drains or the outgoing user explicitly discards, because queued mutations are attributed to the queueing principal and must not be replayed under a new identity.
+
+  - key: authenticate_phone_otp
+    entity: session
+    label: Sign in with phone and OTP
+    actors: [any_unauthenticated]
+    rationale: Primary path for guards, technicians and kitchen staff who have no work email.
+    preconditions:
+      - Principal with matching primary_phone_e164 exists and status IN (active, invited).
+      - OTP send is DLT-compliant (registered template, registered header).
+    inputs: [phone_e164, otp_code, device_fingerprint, surface]
+    creates: [session, device_if_new, auth_attempt_record]
+    events: [session.created, principal.authenticated]
+    audit_class: security
+    failure_modes:
+      - {code: E_AUTHN, cause: wrong OTP, message: That code is incorrect., note: 'max 5 verify attempts per OTP, then OTP is burned'}
+      - {code: E_AUTHN, cause: expired OTP, message: That code has expired. Request a new one., note: OTP TTL 5 minutes}
+      - {code: E_RATE_LIMIT, cause: OTP resend abuse, message: Wait before requesting another code., note: '3 sends per phone per 15 min, exponential backoff 30s/60s/300s'}
+      - {code: E_DEPENDENCY, cause: SMS gateway down, message: We could not send the code. Try WhatsApp instead., note: 'automatic channel fallback SMS -> WhatsApp authentication template'}
+    edge_cases:
+      - Same phone number reused after an employee leaves and a new employee gets the recycled SIM -> phone is NOT an identity. On employee deactivation the phone is released from the principal after a tenant-configured cooling period (default 30 days) and re-registration requires supervisor confirmation.
+      - OTP delivered but user is offline -> OTP verification requires connectivity. There is no offline first-login. Devices are provisioned online, then may go offline.
+      - Two principals in different tenants share one phone number (a supervisor who moonlights) -> permitted; after OTP success the tenant picker appears.
+
+  - key: verify_mfa
+    entity: session
+    label: Complete MFA challenge
+    actors: [principal_with_valid_mfa_challenge]
+    creates: [session]
+    events: [session.created, mfa.verified]
+    audit_class: security
+    failure_modes:
+      - {code: E_AUTHN, cause: wrong TOTP, message: That code is incorrect., note: 'allow +/- 1 time step for clock drift, no more'}
+      - {code: E_CONFLICT_UNIQUE, cause: TOTP code replay, message: That code has already been used., note: used codes cached for 90s per principal}
+      - {code: E_RATE_LIMIT, cause: 5 failed MFA attempts, message: Too many attempts., note: 'challenge burned, must restart sign-in'}
+    edge_cases:
+      - Recovery code used -> valid once, consumed, principal is told how many remain, and an alert is sent on all channels.
+      - MFA device lost -> recovery is an administrative action by tenant_admin with a mandatory reason, NOT a self-service email link, because email is often shared in small Indian firms.
+
+  # ---------------- SESSION LIFECYCLE ----------------
+  - key: refresh_session
+    entity: session
+    label: Slide idle expiry
+    actors: [session_holder]
+    preconditions: [session.revoked_at is null, now < idle_expiry_at, now < absolute_expiry_at]
+    updates: [session.idle_expiry_at, device.last_seen_at]
+    events: []
+    audit_class: read_sensitive_only
+    note: >
+      Deliberately does NOT emit an event. Refreshes are high-frequency and would
+      flood the event log. Session activity is observable from device.last_seen_at.
+    edge_cases:
+      - Refresh arriving after idle_expiry_at but before absolute_expiry_at -> E_AUTHN, session revoked with reason=idle_timeout. No silent resurrection.
+      - Refresh from a different IP/geo than issue -> allowed by default (Indian mobile networks change IP constantly) but a geo jump exceeding tenant policy geo_velocity_kmh triggers step-down: session survives, elevated_until is cleared, and next high-risk action requires re-auth.
+
+  - key: elevate_session
+    entity: session
+    label: Step-up re-authentication
+    actors: [session_holder]
+    rationale: High-risk actions must not ride on a 12-hour-old session.
+    required_for:
+      - Changing another principal's permissions
+      - Viewing or editing salary fields
+      - Approving payment runs
+      - Exporting any dataset containing sensitive fields
+      - Deploying a pack or module version to production
+      - Revoking another principals sessions
+      - Generating an API key
+    updates: [session.elevated_until]
+    events: [session.elevated]
+    audit_class: security
+    policy: {default_elevated_window_minutes: 15, max: 60}
+
+  - key: logout
+    entity: session
+    label: Log out (this device)
+    actors: [session_holder]
+    preconditions: [session exists and is not already revoked]
+    updates: [session.revoked_at, session.revocation_reason=user_logout]
+    events: [session.revoked]
+    undoable: false
+    audit_class: security
+    client_obligations:
+      - Server revokes first, client clears local state only after a 2xx OR after a 401/404 (both mean the session is gone).
+      - On success the client must purge: access token, refresh token, cached permission set, cached tenant config, cached user profile, in-memory PII, service worker caches keyed to the session, and IndexedDB stores marked session_scoped.
+      - The client must NOT purge stores marked device_scoped (offline mutation queue, downloaded shift roster) until the queue is confirmed empty. See edge cases.
+      - Push notification token is de-registered for this principal on this device before local purge.
+    failure_modes:
+      - {code: E_DEPENDENCY, cause: network unavailable at logout, message: null, note: 'see offline edge case, this is NOT surfaced as a failure'}
+    edge_cases:
+      - "OFFLINE LOGOUT: user taps Log out with no connectivity and a non-empty mutation queue. Do NOT silently discard. Present three options: (a) Stay signed in until synced — recommended, default; (b) Log out and keep queued work on this device for this user to sync later — allowed only on non-shared devices, queue stays encrypted at rest keyed to the principal; (c) Log out and discard N unsynced changes — requires typing the count to confirm, emits a client_side_discard telemetry event, and is refused entirely if any queued mutation is financial or attendance-related."
+      - "SHARED DEVICE LOGOUT: on device.shared=true, logout also clears the fast-switch PIN cache and returns to the roster picker, not to the marketing login screen."
+      - "KDS LOGOUT: a KDS screen bound to a site does not truly log out to an anonymous state — it returns to a station picker while retaining the device-level station credential. A human logging out of a KDS must not orphan in-flight kitchen tickets; open tickets are already server-side, so this is safe, but the client must confirm 'N tickets in progress remain on the server' rather than showing an empty screen."
+      - "LOGOUT DURING AN IN-FLIGHT MUTATION: the mutation is allowed to complete server-side; the session is revoked at the transaction boundary, not mid-transaction. The result is written to the audit log with the pre-revocation session id."
+      - "LOGOUT WHILE IMPERSONATED: if impersonated_by_principal_id is set, 'log out' ends the impersonation and returns the operator to their own HQ session; it does not log out the impersonated users real sessions."
+      - "DOUBLE LOGOUT / already-revoked session: idempotent. Returns 2xx. Never an error."
+      - "Logout does not revoke other sessions. That is logout_all."
+
+  - key: logout_all
+    entity: session
+    label: Log out of all devices
+    actors: [session_holder, tenant_admin_for_other_principal, platform_operator]
+    preconditions: [session.elevated_until > now when performed against another principal]
+    updates: [all sessions for principal set revoked_at, reason=user_logout_all or admin_revoke]
+    events: [session.revoked (one per session), principal.all_sessions_revoked]
+    audit_class: security
+    notifications:
+      - {to: principal, channel: email_and_whatsapp, when: performed_by_someone_else, template: sessions_revoked_by_admin, must_include: [actor_display_name, reason, timestamp]}
+    edge_cases:
+      - The acting session may optionally be preserved ("log out everywhere else"). Default for self-service is to preserve the current session; default for admin action is to revoke everything including any admin-held impersonation session.
+      - Service-account sessions are NOT revoked by a human logout_all; they are separate principals. Revoking them is revoke_api_key.
+      - A revoked session on an offline device keeps working until the device next reaches the server. This is unavoidable and must be stated in the security model, not hidden. Mitigation: offline token TTL is capped at tenant policy offline_grace_hours (default 12, max 72) and financial actions are never permitted offline.
+
+  - key: switch_tenant
+    entity: session
+    label: Switch workspace
+    actors: [session_holder_with_multiple_memberships]
+    creates: [new session]
+    updates: [old session revoked with reason=user_logout]
+    events: [session.revoked, session.created]
+    audit_class: security
+    rationale: A session is single-tenant. Switching mints a new session so no cross-tenant data can ever be served under one session id.
+    edge_cases:
+      - Unsynced offline queue for tenant A blocks switching to tenant B on a shared device; on a personal device the queue is retained per-tenant and switching is allowed.
+
+  - key: revoke_membership
+    entity: tenant_membership
+    label: Remove a person from the workspace
+    actors: [tenant_admin, tenant_owner]
+    preconditions:
+      - Acting session is elevated.
+      - Target is not the last active principal holding tenant_owner archetype.
+    updates: [tenant_membership.status=revoked, all sessions for that principal in that tenant revoked with reason=membership_revoked]
+    events: [membership.revoked, session.revoked]
+    audit_class: security
+    edge_cases:
+      - "LAST OWNER PROTECTION: refuse with E_PRECONDITION and name the constraint. Ownership transfer is a distinct action requiring the incoming owner to accept."
+      - "Revoking a membership does NOT delete the persons operational history. Work orders they completed, attendance they recorded and invoices they raised remain, attributed to the now-revoked principal, displayed with a 'no longer active' marker."
+      - "In-flight approvals assigned to the revoked principal are reassigned per the tenants approval_fallback policy (escalate to their manager by default) and never silently stall."
+      - "Their shifts in the future roster are flagged as unstaffed and the dispatcher is notified. Verity never silently leaves a site unmanned."
+      - "External client contacts: revoking access must not cancel their open tickets."
+
+policy_knobs:
+  - {key: session_absolute_ttl_hours, default: 12, range: [1, 720], per_surface: true, note: KDS/POS often need long shifts; console should be short}
+  - {key: session_idle_ttl_minutes, default: 60, range: [5, 1440], per_surface: true, note: shared devices default 10}
+  - {key: offline_grace_hours, default: 12, range: [0, 72]}
+  - {key: max_concurrent_sessions_per_principal, default: null, note: null = unlimited}
+  - {key: password_min_length, default: 12, range: [8, 128]}
+  - {key: password_max_age_days, default: null, note: 'null = never expire; NIST guidance is against forced rotation, offered only for clients with contractual requirements'}
+  - {key: mfa_required_for_archetypes, default: [tenant_owner, tenant_admin, finance, platform_operator, platform_support]}
+  - {key: geo_velocity_kmh, default: 900}
+  - {key: new_device_alert, default: true}
+
+open_questions:
+  - {q: 'Do NCR field staff reliably retain access to the phone number on file across SIM churn?', assumption: Yes within a 30-day cooling period, confidence: WORKING_ASSUMPTION, method: operator interview, priority: High}
+  - {q: 'Is a shared-device PIN fast-switch acceptable to clients from a contractual security standpoint?', assumption: 'Yes for kitchen/POS, no for security guard attendance', confidence: VALIDATION_REQUIRED, method: client contract review, priority: High}
