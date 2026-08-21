@@ -1,43 +1,19 @@
-# VERITY MASTER BIBLE — VOLUME II
-## Meta-Model, Core Primitives & Configuration Philosophy
+# VERITY MASTER BIBLE — PRIMITIVE VALIDATION
+## Deep Structural Validation of Primary Primitives
 
-This volume defines the conceptual schema of Verity: the dynamic Meta-Model that enables composability, the universal primitives that represent business reality, and the rules of configuration and extension.
-
----
-
-## 1. The Verity Meta-Model Specification
-Verity's architectural core is built on a unified, highly consistent meta-model:
-
-*   **Capability:** A self-contained, domain-specific slice of business functionality (e.g., `Scheduling`, `Billing`, `CRM`). It encapsulates all its Entities, Actions, States, Permissions, and Events.
-*   **Entity:** A structured data model representing a physical or logical object in the domain. Every Entity belongs to exactly one Capability.
-*   **Field:** An attribute of an Entity with strict validation, naming, and type rules.
-*   **Relationship:** A semantic link between Entities (one-to-one, one-to-many, many-to-many).
-*   **Action:** A mutating transaction that changes the state of one or more Entities. Actions are the only way to write to the database. They enforce preconditions, validate inputs, check permissions, and emit events.
-*   **State:** A static status representation of an Entity. An Entity must always exist in exactly one valid State.
-*   **Transition:** An allowed movement from one State to another, triggered exclusively by an Action.
-*   **Event:** An immutable, historical fact emitted by a Capability when an Action completes. Events are broadcast to the platform's Event Bus.
-*   **Rule:** A deterministic logical assertion that validates data or enforces policy constraints.
-*   **Workflow:** A sequence of Actions and State transitions coordinating multiple Entities and Capabilities to complete a business outcome.
-*   **Role:** A collection of permissions representing an archetype of authority in the workspace.
-*   **Workspace:** A customized screen layout and action queue optimized for a specific Role.
+This document contains the deep validation of Verity’s four primary primitives (`WORK`, `PARTY`, `RESOURCE`, `LOCATION`) mapping them against the required 17-point structural checklist.
 
 ---
 
-## 2. Primary Primitives (The 17-point Structural Checklist)
+## 1. Primitive: WORK [FACT]
 
-Every industry-specific concept in Verity is built on top of these primary primitives. They must never be bypassed.
-
----
-
-### Primitive 1: WORK [FACT]
-
-1.  **Definition:** The canonical execution unit representing a single committed service obligation. We distinguish `Work` from:
-    *   *Request:* An incoming intake ticket containing uncommitted customer signals.
-    *   *Task:* A small sub-step checklist item within a single Work Order (no independent lifecycle).
+1.  **Definition:** The canonical execution unit representing a single committed service obligation at a specific site. We distinguish `Work` from other concepts:
+    *   *Task:* A small sub-step checklist item within a single Work Order.
     *   *Activity:* Timeline log tracking history (e.g., email sent, phone call logged).
+    *   *Request:* Incoming triage ticket representing uncommitted customer signals.
     *   *Appointment:* A scheduled time-locked calendar lock on a Resource.
     *   *Project:* A structural container of parent-child related Work Orders.
-2.  **Ownership:** Owned by the Tenant `Organization`, scoped to a specific target `Location`.
+2.  **Ownership:** Mapped to the tenant `Organization`. Within the tenant, it is owned by the specific target `Location` where the work is performed.
 3.  **Lifecycle:** `Draft` $\rightarrow$ `Scheduled` $\rightarrow$ `In-Progress` $\rightarrow$ `Pending-Verification` $\rightarrow$ `Completed` (or `Cancelled`/`Closed`).
 4.  **States:**
     *   `Draft`: Created, awaiting detail mapping and dispatching.
@@ -62,7 +38,7 @@ Every industry-specific concept in Verity is built on top of these primary primi
     *   `monitored_by` active `SLA`.
     *   `contains` one-to-many `Documents` (blueprints, manuals, check-in photos).
 8.  **Evidence:** Action `submit` requires evidence validation:
-    *   GPS coordinate match with Location geofence (if enabled).
+    *   GPS coordinate match with Location geofence.
     *   Min 1 photo upload showing completed work.
     *   Customer signature capture if billing is service-based.
 9.  **Assignment:** Linked to a `Resource`. A Work Order can only be assigned to a Resource whose calendar has availability and whose skill tags cover the Work Order qualifications.
@@ -84,7 +60,7 @@ Every industry-specific concept in Verity is built on top of these primary primi
 
 ---
 
-### Primitive 2: PARTY [FACT]
+## 2. Primitive: PARTY [FACT]
 
 1.  **Definition:** The single canonical entity representing any human or corporate participant. We distinguish `Party` from other concepts:
     *   *User:* Stores credentials and passwords. A `User` is linked to a `Party` (role = worker/manager).
@@ -113,7 +89,7 @@ Every industry-specific concept in Verity is built on top of these primary primi
 
 ---
 
-### Primitive 3: RESOURCE [FACT]
+## 3. Primitive: RESOURCE [FACT]
 
 1.  **Definition:** A capacity-constrained unit available for shift/work allocation. We distinguish `Resource` from:
     *   *Employee:* HR contract record (salary, leaves).
@@ -141,7 +117,7 @@ Every industry-specific concept in Verity is built on top of these primary primi
 
 ---
 
-### Primitive 4: LOCATION [FACT]
+## 4. Primitive: LOCATION [FACT]
 
 1.  **Definition:** A physical coordinate region where operations occur. We distinguish `Location` from:
     *   *Warehouse:* Storage stock location. A warehouse is a `Location` with inventory capability turned on.
@@ -165,37 +141,3 @@ Every industry-specific concept in Verity is built on top of these primary primi
 15. **Audit:** Track geofence border changes and supervisor bypass history.
 16. **Extensions:** Floor map uploads and custom gate access instructions.
 17. **Composition:** Aggregating sites into city/regional branch clusters.
-
----
-
-## 3. Decoupled Resource Modeling
-
-The `Resource` primitive acts as an abstraction layer representing schedulable capacity. It has strict rules of operation:
-
-### A. Non-Human Resources
-*   **Vehines, Machines, Rooms:** When a physical machine or tool is scheduled, it is represented as a `Resource` profile linked to a physical `Asset` record. It maintains its own calendar of locked availability.
-*   **Crews and Teams:** A group of resources can be clustered into a single parent `Resource` (Crew). Schedulers book the Crew, which automatically locks the capacity calendars of all member Resources.
-
-### B. Shared Resource Allocation
-*   If a Resource is shared across multiple branches or Locations under the same Tenant Organization, its primary availability calendar tracks conflicts. Schedulers in Branch A cannot assign the Resource during a time slot already locked by Branch B.
-
----
-
-## 4. Location Nesting Specification
-
-A `Location` represents any operational space. It supports arbitrary depth nesting via parent-child relations:
-
-```text
-  Branch A (Parent Location)
-      └─► Site A (Child Location)
-            └─► Building A (Grandchild Location)
-                  └─► Floor 3 (Area Location)
-                        └─► Zone 4 (Zone / Bin / Rack Location)
-```
-
-### Location Types:
-1.  **Physical Location:** A geographical coordinate region with geofence constraints (Site, Branch).
-2.  **Service Location:** A client site address where service work is executed.
-3.  **Organizational Location:** An internal office, branch, or team base.
-4.  **Inventory Location:** A storage warehouse, depot, or vehicle stock space.
-5.  **Employee Home Location:** A reference coordinate used to calculate travel times and route dispatching.

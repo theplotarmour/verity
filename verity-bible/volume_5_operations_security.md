@@ -1,69 +1,56 @@
 # VERITY MASTER BIBLE — VOLUME V
-## Platform Operations, Data, Security & Tenancy
+## Platform Operations, Tenancy & Offline Sync Constitution
 
-This volume governs the infrastructure and operations of the Verity platform: multi-tenancy isolation rules, data integrity constraints, API integrations, observability targets, versioning, and our stance on Artificial Intelligence.
+This volume governs the infrastructure and operations of the Verity platform: multi-tenancy isolation rules, data integrity constraints, API integrations, and the Offline Synchronization Engine.
 
 ---
 
-## 1. Security & Tenancy Architecture
+## 1. Security & Tenancy Isolation
 Verity operates on a strict multi-tenant architecture. Data leaks between Organizations are catastrophic failures.
 
-### A. Tenancy Isolation [FACT]
+### A. Tenant Isolation [FACT]
 1.  **Logical RLS Partitioning:** Every query executed by the server must be scoped by the tenant's `organizationId` (for corporate entities) or `factoryId` (for specific sites/outlets).
 2.  **Cross-Tenant Guardrails:** Database operations must use Row-Level Security (RLS) policies at the PostgreSQL engine level, or enforce tenancy checks within the database driver middleware. Tenant context is derived strictly from the authenticated session, never from user-supplied query parameters.
 3.  **Cross-Tenant Relationships:** It is strictly forbidden for any entity in tenant $A$ to reference a foreign key in tenant $B$. Shared systems (like global product templates) must use cross-tenant mappings that copy configuration rather than sharing direct entity rows.
 
-### B. Least Privilege Access (Security Constitution) [INFERRED]
-*   **Role-Based Access Control (RBAC):** Permissions are explicit. Actions reject execution by default unless the principal's session carries a Role that explicitly grants permission for that specific Entity action.
-*   **Administrative Separation:** Platform operators (Verity HQ support staff) have separate credentials and audit streams from Tenant Administrators. A platform operator can only access tenant data through an explicit, time-locked "Impersonation Ticket" authorized by the tenant.
+### B. Product Rules vs. Technical Implementation Rules
+*   **The Product Rule:** Tenant isolation is absolute. Under no circumstances can data from Tenant A be visible to Tenant B.
+*   **The Implementation Rule [PROPOSED]:** Row-Level Security (RLS) is the default database mechanism for enforcing the tenant isolation requirement. Alternative storage isolation patterns (such as separate schemas or separate databases) may be implemented for large-enterprise tier tenants without mutating the platform's logical data models.
 
 ---
 
-## 2. Data Philosophy
-*   **Single Source of Truth [INFERRED]:** A domain object exists in exactly one canonical table. A customer is a `Party` (role = CUSTOMER); their billing info, service history, and support tickets reference this single `Party` record. We do not maintain separate tables like `CrmCustomer`, `BillingClient`, and `BookingUser`.
-*   **Separation of Data and Experience [INFERRED]:** The database model stores business truth (e.g., a worker logged check-in at 09:03 AM). How that check-in is displayed (e.g., "On Time", "Late", or hidden behind a weekly scorecard) is computed at the presentation layer. We do not store formatted UI strings or temporary visual states in the database.
+## 2. Offline Synchronization Engine Specification [PROPOSED]
+Operating in field environments requires a robust, fault-tolerant offline synchronization engine. We establish strict platform rules:
+
+### A. Offline Command Structure
+An offline device enqueues mutating actions locally as **`OfflineCommands`**:
+```json
+{
+  "commandId": "uuid-v4-token",
+  "action": "work_order.job.complete",
+  "payload": { "workOrderId": "123", "evidenceIds": ["456"] },
+  "deviceTimestamp": "2026-08-22T02:15:00.000Z",
+  "userId": "user-999"
+}
+```
+
+### B. Core Sync Invariants:
+1.  **Synchronization Identity:** Every `OfflineCommand` must carry a unique, client-generated `commandId`.
+2.  **Idempotency:** The server checks the `commandId` before processing. If a command is transmitted multiple times (due to network retries), the server processes it exactly once and returns the cached result.
+3.  **Chronological Replay:** Commands must replay on the server in the exact chronological order of their `deviceTimestamp` to preserve process continuity.
+4.  **Optimistic UI Mutation:** The mobile client applies changes to its local store immediately. These changes are flagged as `Unsynced` until the server returns confirmation.
+
+### C. Conflict Handling Rules:
+*   **Field-Level Last-Write-Wins:** If two offline users edit different fields on the same record, the server merges the changes. If they edit the same field, the server applies the value with the latest `deviceTimestamp`.
+*   **State Conflict Aborts:** If an offline action modifies a record whose state has changed server-side in a way that violates preconditions (e.g., checking into a shift that was cancelled by a manager), the replay aborts, is flagged in the `Audit Log`, and enqueues a sync exception in the Worker workspace for manual resolution.
+*   **Delete Conflicts:** If User A deletes a record offline while User B edits it offline, the delete action wins by default. The edit is recorded in the audit log as "Discarded (Target Deleted)".
+*   **Authorization Conflict:** If a worker's permissions were revoked while they were offline, their offline commands are rejected by the server upon sync.
 
 ---
 
-## 3. Integration & Webhooks
-Verity is designed to coexist with legacy systems (e.g., SAP, QuickBooks, external HR payroll).
-*   **API-First Design [INFERRED]:** Every feature inside Verity's Owner and Worker shells runs on the same APIs that are exposed to external developers.
-*   **Webhook Reliability [INFERRED]:** External integrations consume platform events. Webhook delivery must be transactional. Outbox events are written to a database queue (`WebhookOutbox`) during the primary Action transaction and delivered asynchronously with backoff.
-*   **Connector Boundaries [INFERRED]:** Verity does not permit external systems to write directly to the database. All external integrations must modify state by invoking standard Verity Actions, ensuring business logic, invariants, and validation rules are always enforced.
+## 3. The Billing Boundary [INFERRED]
+Verity is an operational platform, not a general ledger accounting tool. We draw a strict boundary for billing:
 
----
-
-## 4. Observability & System Diagnostics
-*   **System Diagnostics [INFERRED]:** Logging must categorize into `SystemLogs` (infrastructure metrics, network latency) and `OperationalAudit` (business state changes, employee clock-ins, overrides).
-*   **Visible Failures [INFERRED]:** If an integration or automated rule fails, the failure is surfaced in the Owner Console as an active warning (e.g., "QuickBooks Sync Failed: Invoice #102"). We do not hide operational errors in text files.
-
----
-
-## 5. Observability and Performance Priorities
-We prioritize real-world experience over synthetic benchmarks.
-*   **Frontline Latency [PROPOSED]:** Mobile operations must load the "My Day" view and accept check-ins in $< 1.5\text{s}$ even on 3G connections.
-*   **Query Safety [PROPOSED]:** All tenant list queries must map to database indexes. We explicitly index search columns (like `factoryId` and `date`/`startTime`) in models like `ShiftSchedule` and `Appointment` to prevent full table scans.
-
----
-
-## 6. The AI Position & Constraints [INFERRED]
-We maintain a strict boundary for Artificial Intelligence:
-*   **AI as an Assistant, Not an Author:** AI may assist with natural language queries, document search, summaries, and work order recommendations.
-*   **Deterministic Correctness:** No core business rules, permissions checks, workflow state transitions, or financial ledger actions can depend on AI output. Every critical operational mutation must run through deterministic code.
-*   **Explainability:** If AI recommends a scheduling change or flags an anomaly, it must provide the underlying data points that led to that suggestion.
-
----
-
-## 7. Versioning & Upgrade Immunity [INFERRED]
-*   **Backwards Compatibility:** Database migrations must never break active client applications. When renaming fields or deprecating models, the change must execute in three phases:
-    1.  *Phase 1:* Add new field, double-write to both.
-    2.  *Phase 2:* Migrate old data, point reads to the new field.
-    3.  *Phase 3:* Remove the old column.
-*   **Workflow Snapshotting:** Active work orders must run on the workflow version that was active when they were committed. If a manager modifies the work order workflow steps, in-flight work orders must complete under their original rules.
-
----
-
-## 8. Offline Queue Synchronization & Conflict Handling [PROPOSED]
-*   **Chronological Replays:** Offline mutations are enqueued locally with physical device timestamps. Upon reconnection, mutations replay sequentially in order of creation.
-*   **Conflict Resolution (Field-Level Last-Write-Wins):** If two offline users edit the same entity (e.g., updating different fields on a work order), the server merges changes by applying the field value with the latest device timestamp.
-*   **Conflict Aborts:** If a mutation affects a value that has been changed server-side by a different action (e.g., checking into a shift that was cancelled by a manager), the replay fails, is logged in `OperationalAudit`, and triggers a sync conflict notification in the Worker workspace for manual resolution.
+*   **Operational Completion:** Billing calculations are triggered exclusively by the `work.completed` or `booking.verified` events.
+*   **Decoupled Transactions:** The billing engine listens to operational events and writes to a separate, asynchronous billing database. Operational workflows never wait for payment gateway APIs to succeed before updating job states.
+*   **Cancellation Charges:** The billing engine calculates cancellation fees based on operational evidence (e.g., travel time spent before cancellation) without corrupting the Work Order state machine.

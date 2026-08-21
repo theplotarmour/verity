@@ -39,18 +39,21 @@ Invariants must remain true across every tenant configuration, industry pack, an
 
 ### `INV-001` — Strict Tenancy Separation [FACT]
 *   **Statement:** All database operations (reads/writes) must contain a tenancy filter matching the authenticated principal's session scope.
+*   **Category:** PLATFORM INVARIANT
 *   **Rationale:** Prevents tenant data leakage, which is our highest operational risk.
 *   **Violation Example:** Executing `prisma.appointment.findMany()` without scoping by `factoryId` or `organizationId`.
 *   **Detection:** Middlewares or DB-level RLS policies reject queries missing tenant scope identifiers.
 
 ### `INV-002` — Read-Only Closed States [FACT]
 *   **Statement:** Once a Work Order transitions to the `Closed` terminal state, its field properties become read-only. No further status changes or mutations are permitted.
+*   **Category:** DOMAIN INVARIANT
 *   **Rationale:** Enforces accounting and auditing integrity.
 *   **Violation Example:** A script attempting to edit the `scheduledAt` date of a Closed order.
 *   **Detection:** Application validation gates raise `E_PRECONDITION` on modifications to closed records.
 
 ### `INV-003` — Unified Party Identity [INFERRED]
 *   **Statement:** A physical person or corporate entity must have exactly one row in the `Party` table. No separate tables for customers vs employees can exist.
+*   **Category:** PLATFORM INVARIANT
 *   **Rationale:** Eliminates duplication and profile synchronization bugs.
 *   **Violation Example:** Having a `res_partner` row and an unrelated `hr_employee` row for the same person.
 *   **Detection:** Schema compiler checks check constraints and unique index rules.

@@ -1,78 +1,63 @@
 # VERITY MASTER BIBLE — VOLUME III
-## Execution Engine, Workflows, Events & Exception Law
+## Execution Engine, Workflows, SLA & Evidence Law
 
-This volume governs how work is executed in Verity: how state changes, how events propagate, and how the platform models the messy reality of physical operations.
-
----
-
-## 1. State & Transition Integrity
-Every Entity in Verity has an explicit, developer-declared state machine.
-*   **No Implicit State [INFERRED]:** System behavior must never depend on implicit state derived from UI visual states, date comparisons, or loose database column values. It must rely strictly on the `status` enum.
-*   **Transition Gates (Preconditions) [INFERRED]:** A transition from state $A$ to state $B$ is only possible if all preconditions declared on the Action are satisfied.
-*   **Transactional Boundaries [INFERRED]:** A state transition and its side-effects (e.g., updating a shift status and generating an audit log) must execute within a single atomic database transaction. If any step fails, the entire transaction rolls back.
+This volume governs how work is executed in Verity: how state changes, how events propagate, SLA clock states, evidence capturing, and cancellation policies.
 
 ---
 
-## 2. Event Model & The Platform Bus
-Verity communicates asynchronously through a decoupled, transactional Event Bus.
-
-### Event Naming Convention [INFERRED]:
-`[capability].[entity_noun].[verb_past_tense]`
-*   *Correct:* `work_order.job.created`, `scheduling.shift.assigned`, `billing.invoice.finalized`
-*   *Incorrect:* `completeJob`, `shift_assignment`, `invoice.payment.fail`
-
-### Invariants:
-1.  **Idempotency [INFERRED]:** All event consumers must be designed to be idempotent. If an event is received twice (due to network retries), the consumer must produce the same result and avoid double-processing (e.g., double invoicing or double notification sends).
-2.  **No In-Flight Mutation [INFERRED]:** Events represent historical facts. Once published, the event payload is immutable.
-3.  **Audit Trailing [INFERRED]:** Important events are written directly to the security and operational audit databases.
-
----
-
-## 3. Exception-First Thinking
-Most ERPs are designed for the "happy path" (where scheduling is perfect, workers arrive on time, and invoices are paid instantly). Verity explicitly designs for operational friction:
+## 1. SLA Clock State Specification [FACT]
+An SLA (Service Level Agreement) policy enforces operational deadline timers on `Work` or `Requests`. Every SLA target has an explicit clock state machine:
 
 ```text
-  HAPPY PATH:  Schedule ──> Check-In ──> Execute ──> Complete ──> Verify
-  
-  EXCEPTION:   Schedule ───┬───────────────────────────────────────────┐
-                           │ (No Show / Delay)                         │ (Override)
-                           ├─► Reassign ──► Escalation ──► Audit Log ──┴─► Force Close
+  INITIALIZE ──> START ───┬──────────────────────┬───> STOP (Completed)
+                          │ (Pause / Blocked)    │
+                          ▼                      ▼
+                        PAUSE                  BREACH (Overdue)
 ```
 
-For every workflow, we model the following recovery paths:
-*   **Resource No-Show [PROPOSED]:** What happens when a worker fails to clock into a shift within the 15-minute grace period? The system pauses the shift, flags an alert, and notifies the supervisor with a "one-tap reassign" prompt.
-*   **SLA at Risk [PROPOSED]:** If a critical work order is within 30 minutes of breaching its SLA and has not been started, the system automatically escalates priority, routes alerts to dispatchers, and logs the escalation.
-*   **Partial Completion [PROPOSED]:** If a worker cannot finish a task due to missing parts or inaccessible sites, they mark it `Partially Completed` and upload photo/text evidence. The system flags the job for reschedule and prevents the customer invoice from being generated automatically.
+### Clock States:
+*   `Start (Running):` Triggered by transition to `Scheduled`, `In-Progress`, or when a Request is registered. The clock counts down towards the deadline.
+*   `Pause:` Suspend countdown. Triggered when work is blocked by external dependencies (e.g., awaiting customer approval, missing parts, site-inaccessible) or state = `Draft`.
+*   `Resume:` Re-start countdown. Triggered when block dependencies are cleared or state transitions back to `In-Progress`.
+*   `Stop:` Terminal clock state. Triggered when work transitions to `Completed` or `Closed`. The final elapsed time is frozen.
+*   `Breach:` Triggered automatically when current time exceeds `deadline_at` while clock is running. The SLA status changes to `BREACHED`.
+
+### SLA Priority & Precedence:
+When multiple SLA rules apply (e.g., a generic tenant SLA policy and a client-specific contract SLA):
+1.  **Contract SLA Wins:** The client's signed contract SLA overrides the default tenant SLA.
+2.  **Explicit Work-Level Deadline Wins:** A manually set deadline on a specific Work Order overrides automated SLA rules.
 
 ---
 
-## 4. Human Override & Accountability
-We reject the idea of absolute, unyielding automation. Real business requires human judgment. However, overrides must never be silent.
+## 2. Cancellation & Partial Execution Semantics
 
-### Overrides Rules [PROPOSED]:
-*   **Attribution:** Any action that bypasses standard business logic (e.g., checking in an employee who is outside the GPS geofence) requires a human operator to click "Authorize Override" and input a mandatory reason.
-*   **Audit Classification:** All overrides are stored as `security` or `operational_override` logs, recording the authorizing User's ID, the override justification, the original validation error, and the timestamp.
+A Work Order can enter a terminal execution state while preserving history. We establish strict semantics:
 
----
-
-## 5. Evidence & Approvals
-Verity requires hard verification for critical operational milestones.
-
-### A. Evidence Model [PROPOSED]
-Actions like `complete_work` or `record_attendance` can configure mandatory evidence requirements:
-*   **Photos:** Compulsory photo upload with metadata (GPS coordinates, capture timestamp).
-*   **Signatures:** Customer signature captured directly on the mobile touchscreen.
-*   **Geo-Verification:** Worker GPS coordinates must fall within the Location's geofenced radius.
-
-### B. Approvals Model [PROPOSED]
-Approvals are a reusable platform capability:
-*   **Threshold Approvals:** A purchase request under $500 is auto-approved; under $5,000 requires supervisor approval; larger amounts require department head approval.
-*   **Multi-Step Gates:** Work orders for regulated sites (e.g., medical clinics) require a sequence of approvals (Safety Sign-off $\rightarrow$ Supervisor Review $\rightarrow$ Client Handover) before transition to `Completed`.
-*   **Idempotency & Double-Click Protection:** All approval buttons use transactional token locks to prevent duplicate submissions when users double-tap.
+*   **Cancelled Before Start:** The state transitions `Draft` $\rightarrow$ `Cancelled`. No resource capacity was consumed. No billing occurs.
+*   **Cancelled During Execution:** The state transitions `In-Progress` $\rightarrow$ `Cancelled`. Work was halted midway. The transition emits `work_order.job.cancelled`. Schedulers analyze uploaded checklists and `Evidence` to compute partial billing or record spent hours.
+*   **Partially Completed:** The state transitions `In-Progress` $\rightarrow$ `Pending-Verification`. The worker records which tasks were completed and flags a blocked exception. A supervisor reviews the work, billing is calculated on completed items, and the system automatically spawns a secondary child Work Order for the remaining steps.
+*   **Completed Then Reversed:** A completed and verified job is found to be defective. Schedulers do not reopen the completed Work Order (which is read-only). Instead, they trigger a `Re-work Order` linked as a child to the original.
+*   **Abandoned:** The work was started but resource became unavailable and the deadline passed without completion. State moves to `Draft` for rescheduling, and the resource is flagged for investigation.
 
 ---
 
-## 6. Business Truth vs. System State [INFERRED]
-Operational software operates in the physical world, creating a gap between what is happening and what the database knows.
-*   **Uncertainty Surfacing:** If a worker is offline, the system marks their local mutations as `Pending Sync`.
-*   **Verification Gates:** Managers see a clear distinction between `Completed` (marked by worker) and `Verified` (confirmed by supervisor). Verity never updates financial ledger balances on worker claims alone.
+## 3. Evidence Primitive Model [PROPOSED]
+Evidence is a core primitive representing verified historical data captured in the field.
+
+### A. Attributes & Immutability:
+*   **Immutability:** Once an Evidence record (photo, coordinates, signature) is uploaded to the server, its binary payload and metadata are locked and cannot be modified or deleted.
+*   **Traceability:** Every Evidence record is linked directly to a specific User ID, GPS coordinates, capture timestamp, and parent Work Order ID.
+
+### B. Supported Types:
+1.  **Photo:** Compressed image files containing camera metadata.
+2.  **Video:** Low-resolution video clips for verification.
+3.  **Signature:** Encoded vector coordinate streams of client sign-offs.
+4.  **Geo-Match:** Verification of device GPS coords against the Location geofence coordinates.
+5.  **Measurement:** Structured parameter entries (e.g., temperature, voltage readings).
+
+---
+
+## 4. Concurrency & Duplicate Prevention
+
+*   **Optimistic Concurrency Control:** All mutating actions on `Work` records must pass a version token check. If Supervisor A edits a record while Supervisor B is modifying the same record, Supervisor B's update is rejected with `E_CONFLICT`, prompting them to refresh their workspace.
+*   **Duplicate Prevention:** All check-ins and state changes use idempotent token locks to prevent duplicate submissions when users double-tap action buttons.
