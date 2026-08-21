@@ -1,0 +1,541 @@
+key: inventory
+name: Inventory
+layer: domain
+confidence: KNOWN
+description: >
+  What is physically held, where, how much, and what it is worth. The ledger is
+  append-only: every change in quantity is a movement with a reason and an actor, and the
+  balance is derived from movements rather than stored and adjusted. Counting, wastage and
+  reservation are first-class because they are where a stock system either matches reality
+  or quietly stops being believed.
+
+principles:
+  - Balance is derived from an append-only movement ledger, never held as a mutable number. A stored balance that can be edited is a balance nobody can explain, and the first unexplained figure is the moment people start keeping a spreadsheet.
+  - Every movement has a reason from a closed set. Adjustment with no reason is the field where all inconvenient truth goes to be hidden.
+  - A reservation is not a movement. Reserving is a promise about future stock and it must be visible separately, or an available quantity means two different things depending on who is asking.
+  - Negative stock is a fact to be recorded and reported, not a state to be prevented. Preventing it means refusing to record work that has already physically happened.
+  - Valuation is a separate concern from quantity and may legitimately lag it. A model that couples them makes every physical correction into an accounting event.
+  - Counting is a workflow, not a field update. Somebody walks around with a device, disagrees with the system, and a second person decides who is right.
+
+entities:
+
+  - key: stock_location
+    name: Stock Location
+    description: A place stock is held - a store, a sub-store, a bin, a mobile holding. Distinct from a site because several stock locations exist within one site and stock moves between them.
+    owner: tenant
+    tenancy: tenant_scoped_with_site_partition
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: site_ref, type: uuid, nullable: true, note: resolved through the org_structure port}
+      - {key: code, type: string, req: true, unique_scope: tenant, immutable: true}
+      - {key: label, type: string, req: true}
+      - {key: parent_stock_location_id, type: uuid, nullable: true, fk: stock_location}
+      - {key: path, type: string, req: true, note: 'materialised ancestor path, so a balance query across a subtree is a prefix match rather than a recursive walk'}
+      - {key: kind, type: enum, values: [store, sub_store, bin, mobile_holding, consumption_point, quarantine, in_transit], req: true, note: 'in_transit and quarantine exist so that stock which is neither here nor there has somewhere to be. Without them, every transfer and every rejected receipt produces stock that has vanished'}
+      - {key: allows_negative, type: bool, req: true, default: true, note: 'whether consumption may drive the balance below zero at this location. Default true, because refusing to record consumption that has already physically occurred is how a stock system becomes fiction'}
+      - {key: counted_at, type: timestamptz, nullable: true}
+      - {key: custodian_principal_id, type: uuid, nullable: true, note: resolved through the principal_directory port. Who answers for what is here}
+      - {key: is_valued, type: bool, req: true, default: true, note: whether stock here contributes to the valuation. A consumption point frequently should not}
+    invariants:
+      - parent_stock_location_id must not create a cycle, and depth is bounded at stock_location_max_depth.
+      - path is derived and never writable.
+      - kind=in_transit locations may only be the source or destination of transfer movements. Any other movement into or out of them is a modelling error, because in-transit stock has no physical custodian.
+      - A stock location may not be deleted while any movement references it. It is retired, because a historical movement must resolve to where it happened.
+    states: [draft, active, suspended, retired]
+    initial_state: draft
+    transitions:
+      - {from: draft, to: active, action: activate_stock_location, actor: supervisor or ops_manager, guard: 'a code and a label are set and the parent, where given, is active', side_effects: the location becomes selectable for movements and appears in balance queries, reversibility: true}
+      - {from: active, to: suspended, action: suspend_stock_location, actor: supervisor or ops_manager, guard: a reason is supplied, side_effects: 'no new movements accepted; the balance is retained and still reported, because suspending a location does not make its contents disappear', reversibility: true}
+      - {from: suspended, to: active, action: resume_stock_location, actor: as above, guard: null, side_effects: none, reversibility: true}
+      - {from: active, to: retired, action: retire_stock_location, actor: ops_manager, guard: 'every balance is zero, or the remainder has been explicitly transferred or written off with a reason', side_effects: 'removed from pickers, historical movements still resolve', reversibility: false}
+      - {from: suspended, to: retired, action: retire_stock_location, actor: as above, guard: as above, side_effects: as above, reversibility: false}
+      - {from: draft, to: retired, action: retire_stock_location, actor: as above, guard: never activated, side_effects: none, reversibility: false}
+    stuck_state_policy:
+      draft: >
+        Threshold: draft_location_stale_days (default 14). Told: the creating principal.
+        Escape hatch: activate or retire. Low risk, and the characteristic confusion is
+        somebody having set up a store during onboarding and finding it absent from every
+        picker.
+      active: >
+        Three monitored exceptions. (a) A location with a non-zero balance never counted for
+        uncounted_location_days (default 180) - the balance is a claim nobody has checked and
+        its age is the honest measure of how much it should be trusted. Told: the custodian
+        and ops_manager. (b) A location holding a persistent negative balance for longer than
+        negative_balance_alert_hours (default 24), which means consumption has been recorded
+        against stock that was never received. Told: the custodian and ops_manager, and this
+        is the most actionable signal in the capability because the cause is almost always a
+        missing receipt. (c) An in_transit location holding stock for longer than
+        in_transit_alert_days (default 3) - stock that left one place and never arrived
+        anywhere, which is the definition of a loss that nobody has yet noticed.
+      suspended: >
+        Threshold: location_suspension_review_days (default 14). Told: the suspending
+        principal and ops_manager. Escape hatch: resume or retire. A suspended location with
+        a balance is stock the operation cannot use and is still paying for, and the review
+        notification carries its valuation for exactly that reason.
+      retired: >
+        Terminal. Retained permanently so historical movements resolve. Nothing pends.
+
+  - key: stock_movement
+    name: Stock Movement
+    description: One append-only record that a quantity of something moved, was created, or was destroyed - with its reason, its actor and its evidence. The only way a balance ever changes.
+    owner: tenant
+    tenancy: tenant_scoped_with_site_partition
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true, note: 'uuid v7, so the ledger is time-ordered without a separate sequence'}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: item_ref, type: uuid, req: true, immutable: true, note: resolved through the orderable_item port. Opaque here}
+      - {key: from_location_id, type: uuid, nullable: true, immutable: true, fk: stock_location, note: 'null for a receipt, which creates stock from outside the system'}
+      - {key: to_location_id, type: uuid, nullable: true, immutable: true, fk: stock_location, note: 'null for a consumption or a scrap, which destroys it'}
+      - {key: quantity, type: decimal, req: true, immutable: true}
+      - {key: unit_of_measure, type: string, req: true, immutable: true, note: 'recorded on the movement rather than inherited from the item, because an item''s unit can be changed by a later catalogue version and a historical movement must remain interpretable'}
+      - {key: movement_kind, type: enum, values: [receipt, consumption, transfer, adjustment, wastage, return_to_supplier, return_from_customer, production_output, production_input, count_correction, opening_balance], req: true, immutable: true}
+      - {key: reason_key, type: string, req: true, immutable: true, note: 'from a tenant-configured closed list per movement kind. Mandatory on every movement including adjustments, because an unreasoned adjustment is the field where inconvenient truth is hidden'}
+      - {key: reason_note, type: text, nullable: true, immutable: true}
+      - {key: source_capability_key, type: string, nullable: true, immutable: true}
+      - {key: source_ref, type: uuid, nullable: true, immutable: true, note: 'the work order line, order line or receipt that caused it, resolved through the relevant port. Opaque'}
+      - {key: unit_cost_minor, type: money_minor, nullable: true, financial: true, immutable: true, note: 'the cost applied to this movement by the valuation method at the time. Frozen, because recomputing history is how two valuations of the same past appear'}
+      - {key: batch_ref, type: string, nullable: true, immutable: true}
+      - {key: expires_on, type: date, nullable: true, immutable: true}
+      - {key: occurred_at, type: timestamptz, req: true, immutable: true, note: 'business time, which for an offline replay is when the person did it'}
+      - {key: recorded_at, type: timestamptz, req: true, immutable: true}
+      - {key: actor_principal_id, type: uuid, req: true, immutable: true}
+      - {key: evidence_ref, type: string, nullable: true, immutable: true}
+      - {key: reverses_movement_id, type: uuid, nullable: true, immutable: true, fk: stock_movement}
+      - {key: count_id, type: uuid, nullable: true, immutable: true, fk: stock_count}
+    invariants:
+      - Every field is immutable. There is no update path and no delete path. A wrong movement is corrected by a reversing movement, so that the sequence of corrections is itself visible.
+      - At least one of from_location_id and to_location_id is non-null. A movement from nowhere to nowhere is not a movement.
+      - quantity is positive. Direction is expressed by the from and to locations, never by a sign, because a signed quantity plus a direction is two ways to say the same thing and they will eventually disagree.
+      - reason_key is mandatory for every kind including transfer. A transfer with no reason cannot be distinguished from a correction dressed as a transfer.
+      - unit_cost_minor is frozen at write. Recomputing the cost of a historical movement produces two valuations of the same past.
+      - Financial fields are gated by view_financial and are never offline_editable. Quantity is neither, because the person recording consumption in a store room must be able to record it.
+    states: [recorded, reversed, superseded_by_count]
+    initial_state: recorded
+    transitions:
+      - {from: recorded, to: reversed, action: reverse_movement, actor: 'supervisor, ops_manager or finance', guard: a reason is supplied and a reversing movement is written in the same transaction, side_effects: the balance is corrected by the reversing movement; this row is never altered, reversibility: false}
+      - {from: recorded, to: superseded_by_count, action: apply_count, actor: supervisor or ops_manager, guard: a stock count produced a correction covering this item and location, side_effects: a count_correction movement is written; this row is marked so that pre-count and post-count periods can be analysed separately, reversibility: false}
+    stuck_state_policy:
+      recorded: >
+        A movement is a fact and does not pend. Two conditions on the ledger as a whole are
+        monitored here because there is nowhere better for them. (a) A movement whose
+        occurred_at is more than late_movement_alert_hours (default 24) before its recorded_at
+        - stock activity being reported long after it happened, which makes every balance in
+        between wrong retrospectively. Told: ops_manager, with the affected items and the
+        window. (b) A movement of kind adjustment exceeding adjustment_value_alert_minor in a
+        rolling day for one location (default is a tenant-set money threshold). Told: finance
+        and ops_manager. Adjustments are where a stock system is bent to match a spreadsheet,
+        and the value rather than the count is what makes that visible.
+      reversed: >
+        Terminal. The row and its reversal are both retained permanently. The monitored
+        condition is a pattern - reversals by one principal exceeding reversal_rate_alert of
+        their movements (default 0.05) - told to ops_manager. Individually a reversal is an
+        honest correction; concentrated, it is either a broken capture flow or somebody
+        adjusting stock to match what they want it to be.
+      superseded_by_count: >
+        Terminal. Retained. Marking rather than deleting is what allows a count to be analysed
+        as a boundary - how much drift accumulated before it, and whether the same drift
+        resumes after it, which is the only way to tell a counting problem from a shrinkage
+        problem. Nothing pends.
+
+  - key: stock_reservation
+    name: Stock Reservation
+    description: A claim on future stock that has not yet moved. Held separately from movements so that available and on-hand never mean the same thing by accident.
+    owner: tenant
+    tenancy: tenant_scoped_with_site_partition
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: item_ref, type: uuid, req: true}
+      - {key: location_id, type: uuid, req: true, fk: stock_location}
+      - {key: quantity, type: decimal, req: true}
+      - {key: unit_of_measure, type: string, req: true}
+      - {key: source_capability_key, type: string, req: true}
+      - {key: source_ref, type: uuid, req: true, note: 'what claimed it, resolved through the relevant port'}
+      - {key: reserved_at, type: timestamptz, req: true, immutable: true}
+      - {key: expires_at, type: timestamptz, nullable: true, note: 'a reservation with no expiry is a permanent reduction in available stock that nobody remembers making. Nullable because a genuinely open-ended reservation exists, and it is monitored rather than forbidden'}
+      - {key: consumed_movement_id, type: uuid, nullable: true, fk: stock_movement}
+      - {key: released_reason, type: text, nullable: true}
+    invariants:
+      - quantity is positive.
+      - A reservation is never itself a movement and never alters the on-hand balance. It reduces available and leaves on-hand untouched, and the two figures are always reported separately.
+      - Consuming a reservation writes a movement and links it, in the same transaction, so a reservation can never be consumed without stock moving or stock move against a reservation without discharging it.
+      - Reservations may exceed on-hand where the location allows negative. Refusing to reserve because stock has not arrived yet would make forward commitment impossible.
+    states: [held, partially_consumed, consumed, released, expired]
+    initial_state: held
+    transitions:
+      - {from: held, to: partially_consumed, action: consume_reservation, actor: system or employee, guard: a movement consumes less than the reserved quantity, side_effects: the remaining quantity stays reserved, reversibility: false}
+      - {from: held, to: consumed, action: consume_reservation, actor: as above, guard: the movement consumes the full quantity, side_effects: none, reversibility: false}
+      - {from: partially_consumed, to: consumed, action: consume_reservation, actor: as above, guard: the remainder is consumed, side_effects: none, reversibility: false}
+      - {from: held, to: released, action: release_reservation, actor: 'system, employee or supervisor', guard: 'the claiming source withdrew, or a reason is supplied', side_effects: available stock increases immediately, reversibility: false}
+      - {from: partially_consumed, to: released, action: release_reservation, actor: as above, guard: as above, side_effects: as above, reversibility: false}
+      - {from: held, to: expired, action: observe_reservation_expiry, actor: system_scheduler, guard: 'expires_at is set and now > expires_at', side_effects: 'available stock increases and the claiming source is told, because a source that believes it holds stock and does not will fail at the moment of use', reversibility: false}
+      - {from: partially_consumed, to: expired, action: observe_reservation_expiry, actor: system_scheduler, guard: as above, side_effects: as above, reversibility: false}
+    stuck_state_policy:
+      held: >
+        The most damaging quiet state in the capability: stock that is unavailable to
+        everybody and used by nobody. Threshold: any reservation with no expires_at held
+        longer than open_reservation_alert_days (default 7), and any expired-eligible
+        reservation not swept within reservation_sweep_lag_minutes (default 15). Told: the
+        claiming source''s owner and ops_manager for the first; platform_operator for the
+        second, because an unswept expiry is machinery rather than operations. Escape hatch:
+        consume, release, or set an expiry. Verity never auto-releases an unexpiring
+        reservation, because releasing stock somebody is relying on produces a shortage at
+        the moment of use.
+      partially_consumed: >
+        Same thresholds as held, applied to the remainder. The specific monitored case is a
+        partial consumption where the source has already completed - the remainder is stranded
+        and will never be consumed. Detected by asking the source through the port whether it
+        is still live, rather than by a timer, because a timer would release stock from a
+        long-running job that genuinely still needs it.
+      consumed: >
+        Terminal. Retained, because the link between a reservation and its movement is what
+        allows a commitment to be traced from claim to consumption. Nothing pends.
+      released: >
+        Terminal. Retained with the reason. The monitored condition is a pattern - a source
+        that reserves and releases repeatedly without consuming, which is usually a workflow
+        creating reservations too early. Told: ops_manager, monthly.
+      expired: >
+        Terminal. Retained. A high expiry rate means reservations are being made with windows
+        shorter than the work actually takes, which produces a shortage exactly when the work
+        finally starts. Reported alongside the released rate for the same reason.
+
+  - key: stock_count
+    name: Stock Count
+    description: A structured comparison of what the system believes against what somebody physically found, with a second person deciding where they differ.
+    owner: tenant
+    tenancy: tenant_scoped_with_site_partition
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: location_id, type: uuid, req: true, fk: stock_location}
+      - {key: count_kind, type: enum, values: [full, cycle, spot, closing], req: true}
+      - {key: scope_item_refs, type: json, nullable: true, note: 'flat list. Null means every item with a non-zero balance or any movement in the period, which is a materially different scope from every item that exists and is stated rather than assumed'}
+      - {key: snapshot_at, type: timestamptz, req: true, immutable: true, note: 'the instant the expected balances were frozen. Everything after it is compared as movement-since rather than as discrepancy, which is the difference between counting and blaming'}
+      - {key: expected_lines, type: json, req: true, note: 'flat list of item and expected quantity at snapshot. Frozen, because a count compared against a live balance can never be reconciled'}
+      - {key: counted_by_principal_id, type: uuid, nullable: true}
+      - {key: counted_at, type: timestamptz, nullable: true}
+      - {key: reviewed_by_principal_id, type: uuid, nullable: true}
+      - {key: blind, type: bool, req: true, default: true, note: 'whether the counter sees the expected quantity. Default blind, because a visible expectation is the number that gets written down'}
+      - {key: variance_value_minor, type: money_minor, nullable: true, financial: true}
+      - {key: variance_line_count, type: int, nullable: true}
+      - {key: approved_at, type: timestamptz, nullable: true}
+    invariants:
+      - expected_lines is frozen at snapshot_at. A count compared against a balance that moved during counting cannot be reconciled, and every variance becomes an argument.
+      - The reviewing principal may not be the counting principal where the tenant requires review. A person confirming their own count is a count with one opinion in it.
+      - Applying a count writes count_correction movements with reasons. It never edits a balance, because a balance is derived.
+      - A count may not be applied twice. The applied state is terminal.
+    states: [planned, in_progress, counted, under_review, applied, abandoned]
+    initial_state: planned
+    transitions:
+      - {from: planned, to: in_progress, action: start_count, actor: employee or supervisor, guard: null, side_effects: expected balances are frozen at snapshot_at; movements continue and are tracked separately as movement-since, reversibility: true}
+      - {from: in_progress, to: counted, action: submit_count, actor: employee, guard: 'every item in scope has a counted quantity, or is explicitly marked not-found', side_effects: 'variance computed against the frozen expectation, adjusted for movement-since', reversibility: true}
+      - {from: counted, to: under_review, action: submit_count, actor: system, guard: 'the tenant requires review, or the variance exceeds the review threshold', side_effects: the reviewer is notified, reversibility: true}
+      - {from: counted, to: applied, action: apply_count, actor: supervisor or ops_manager, guard: review is not required and the variance is within the auto-apply threshold, side_effects: 'count_correction movements written with reasons, location counted_at updated', reversibility: false}
+      - {from: under_review, to: applied, action: apply_count, actor: 'supervisor, ops_manager or finance', guard: every variance line has a reason and the reviewer is not the counter, side_effects: as above, reversibility: false}
+      - {from: under_review, to: in_progress, action: recount, actor: supervisor or ops_manager, guard: a reason is supplied, side_effects: a new snapshot is taken; the previous count is retained as evidence of the first attempt, reversibility: true}
+      - {from: planned, to: abandoned, action: abandon_count, actor: employee or supervisor, guard: null, side_effects: none, reversibility: false}
+      - {from: in_progress, to: abandoned, action: abandon_count, actor: supervisor, guard: a reason is supplied, side_effects: 'partial counts are retained rather than discarded, because a partial count is still evidence', reversibility: false}
+      - {from: counted, to: abandoned, action: abandon_count, actor: ops_manager, guard: a reason is supplied and the acting session is elevated, side_effects: as above, reversibility: false, note: 'abandoning a submitted count is discarding a discrepancy somebody found, which is exactly the act that most needs to be visible'}
+    stuck_state_policy:
+      planned: >
+        Threshold: planned_count_stale_days (default 14). Told: the planning principal and the
+        location custodian. Escape hatch: start or abandon. A planned count that never starts
+        is a control that exists on paper only, and the location's uncounted-days monitor
+        keeps running underneath it.
+      in_progress: >
+        A count in progress freezes an expectation that becomes staler by the hour. Threshold:
+        count_in_progress_alert_hours (default 8), and a hard alert at
+        count_stale_hours (default 48) after which the variance is dominated by
+        movement-since rather than by anything the counter found. Told: the counter, then the
+        supervisor. Escape hatch: submit, recount with a fresh snapshot, or abandon. Verity
+        never auto-submits a partial count, because a partial count applied as though complete
+        writes corrections for items nobody looked at.
+      counted: >
+        Submitted and not applied is a discrepancy that has been found and not acted on.
+        Threshold: count_review_days (default 3). Told: the reviewer, then ops_manager. Escape
+        hatch: apply, recount, or abandon with a reason. Never auto-applied above the
+        threshold variance, because auto-applying a large variance writes off value without a
+        person having agreed to it.
+      under_review: >
+        Threshold: count_review_days as above, escalating to finance where the variance value
+        exceeds the finance notification threshold. Told: the reviewer and finance. Escape
+        hatch: apply or recount. The specific case worth naming is a review nobody completes
+        because the variance is uncomfortable, and the escalation exists for exactly that.
+      applied: >
+        Terminal. Retained permanently. The monitored condition is the same location showing a
+        variance in the same direction across consecutive counts, which is a systematic loss
+        rather than a counting error, and is the single most valuable output of this entity.
+        Told: ops_manager and finance.
+      abandoned: >
+        Terminal. Retained with the reason, and abandoned counts that had reached counted are
+        reported separately to ops_manager, because discarding a discrepancy somebody found is
+        the act that most needs a witness.
+
+ports:
+  - port_key: stock_movement_sink
+    direction: provides
+    contract: >
+      Accept consume, reserve, release, return and scrap requests against an item at a
+      location, and report available and on-hand quantities separately. A caller that cannot
+      distinguish the two will promise stock it does not have.
+    cardinality: exactly_one
+
+  - port_key: stock_availability
+    direction: provides
+    contract: Report on-hand, reserved and available quantities for an item at a location or across a subtree, with the age of the last count as a confidence indicator.
+    cardinality: exactly_one
+
+  - port_key: orderable_item
+    direction: requires
+    contract: Resolve an item to its unit of measure, whether it is stocked, its composition and its shelf-life behaviour.
+    cardinality: exactly_one
+    unbound_behaviour: FORBIDDEN. Stock is quantities of catalogued things. Without a catalogue there is nothing to hold, and free-text stock lines cannot be consumed, valued or counted.
+
+  - port_key: org_structure
+    direction: requires
+    contract: Resolve the site a stock location belongs to and the site partition for scoping.
+    cardinality: zero_or_one
+    unbound_behaviour: Stock locations exist without a site and every balance is tenant-scoped. For a multi-site tenant this makes stock visible across sites that should not see each other, which is a real disclosure and is stated rather than silently applied.
+
+  - port_key: procurement_source
+    direction: requires
+    contract: Resolve a receipt to its purchase order, its supplier and its expected quantities and costs, so that a receipt can be matched rather than merely recorded.
+    cardinality: zero_or_one
+    unbound_behaviour: 'Receipts are recorded with a free-text source and a manually entered cost. Nothing is matched, so over-receipt and price variance cannot be detected. The stock is correct and the commercial control is absent, and the receipt surface says so.'
+
+  - port_key: financial_document_sink
+    direction: requires
+    contract: Report valuation movements - the value of consumption, wastage and count corrections - for the accounting period.
+    cardinality: zero_or_one
+    unbound_behaviour: 'Valuation is computed and reported within this capability and is not posted anywhere. Cost of consumption exists as a figure to be read rather than as an entry, which is exactly how a business with an external accountant operates.'
+
+  - port_key: evidence_capture
+    direction: requires
+    contract: Attach a photograph to a wastage, a count variance or a rejected receipt.
+    cardinality: zero_or_one
+    unbound_behaviour: Wastage and variance carry a reason and no evidence. For any tenant whose losses are material this materially weakens the record and it is not a blocker.
+
+  - port_key: notification
+    direction: requires
+    contract: Deliver low-stock, expiry, negative-balance, count-due and variance messages.
+    cardinality: zero_or_one
+    unbound_behaviour: 'Everything degrades to console lists. Expiry warnings in particular become invisible, which for anything perishable converts a preventable write-off into an inevitable one.'
+
+actions:
+
+  - key: record_movement
+    entity: stock_movement
+    label: Record a stock movement
+    actors: [employee, supervisor, ops_manager, system, integration_principal]
+    rationale: >
+      The only way a balance ever changes. Made a single explicit action across every movement
+      kind so that reason, actor, evidence and idempotency are uniform, rather than each
+      consuming capability inventing its own path into the ledger.
+    preconditions:
+      - The item resolves and is stocked.
+      - At least one of the from and to locations is supplied and is active.
+      - A reason key valid for the movement kind is supplied.
+      - The quantity is positive and its unit matches the item's unit or converts by a declared factor.
+    inputs: [item_ref, from_location_id, to_location_id, quantity, unit_of_measure, movement_kind, reason_key, reason_note, source_ref, batch_ref, expires_on, occurred_at, evidence_ref, client_movement_token]
+    creates: [stock_movement, a reservation discharge where one is named]
+    updates: [derived balances, reservation state]
+    events: [stock.moved, stock.balance_changed, stock.went_negative]
+    notifications:
+      - {to: the location custodian and ops_manager, channel: in_app, when: the movement drives the balance negative, template: negative_balance, must_include: [item, location, resulting_quantity, likely_missing_receipt], batching_policy: one digest per location per hour}
+      - {to: the location custodian, channel: in_app, when: 'the resulting balance is below the item''s reorder point where one is configured', template: low_stock, batching_policy: daily digest}
+    undoable: true
+    reversal_action: reverse_movement
+    audit_class: always
+    idempotency_key_source: >
+      client_movement_token where supplied, otherwise source_capability_key plus source_ref
+      plus movement_kind. The source-keyed form is what stops a retried work order completion
+      or a replayed order line consuming stock twice, which is the most expensive duplicate in
+      this capability because it is invisible until a count.
+    offline_policy: queue
+    concurrency: >
+      The ledger is append-only, so movements do not contend with each other and a movement
+      never blocks another movement. Balance is derived by summation over the ledger with a
+      periodically materialised checkpoint, so a hot item does not serialise. Reservation
+      discharge takes the reservation row, and the negative-balance check is advisory rather
+      than a constraint - deliberately, because a constraint would refuse to record physical
+      reality and the ledger would then be wrong in a way nobody could see.
+    failure_modes:
+      - {code: E_VALIDATION, cause: 'no reason key, or a reason key not valid for this movement kind', message: Choose a reason., note: 'mandatory on every kind. An unreasoned adjustment is where inconvenient truth is hidden, and the closed list is what makes the adjustment report readable'}
+      - {code: E_VALIDATION, cause: unit of measure does not match and no conversion factor is declared, message: This is measured in a different unit., note: 'refused rather than converted by assumption, because an assumed conversion is the classic silent factor-of-a-thousand error'}
+      - {code: E_PRECONDITION, cause: the movement would go negative at a location where allows_negative is false, message: This action is not available in the current state., note: 'names the shortfall. This is the one place negative is refused, and it is opt-in per location rather than the default, because refusing to record consumption that has physically happened makes the ledger fiction'}
+      - {code: E_PRECONDITION, cause: the item is not stocked, message: This action is not available in the current state., note: 'the consuming capability should be recording it as free text instead, and the message says so'}
+      - {code: E_AUTHZ_FIELD, cause: unit_cost_minor supplied without view_financial, message: null, note: 'dropped, and the valuation method supplies the cost instead. Quantity is unaffected, because a store person must be able to record what left the shelf'}
+      - {code: E_VALIDATION, cause: occurred_at more than movement_backdate_limit_days in the past, message: That is too far back., note: 'the correct path is an adjustment with a reason, which is separately reported. Arbitrary backdating on the ordinary path lets a ledger be rewritten quietly'}
+      - {code: E_DEPENDENCY, cause: the catalogue is unavailable, message: null, note: on a device with a cached item set the movement is recorded against the cached item and re-validated on sync. Refusing to record physical movement because a catalogue service is down is how a store room reverts to paper}
+    edge_cases:
+      - "Consumption recorded offline in a store room with no signal, which is the normal case. Queued with occurred_at from the device. On sync the movements apply in occurred_at order, so a receipt recorded after a consumption but occurring before it produces the right intermediate balances. Applying in arrival order instead would produce spurious negative balances and a stream of false alerts."
+      - A movement driving the balance negative. Recorded, and a distinct event is emitted. Negative stock is a fact - it means a receipt was missed, or a count was wrong, or something was taken without being recorded - and all three are findable only if the negative is allowed to exist. The alert names the most likely cause, which is a missing receipt, because that is what it is nine times out of ten.
+      - Two capabilities consuming the same stock concurrently for different work. Both succeed; the ledger has no contention. The balance may go negative and the negative is the signal. Locking to prevent it would serialise the busiest item in the operation at the busiest moment.
+      - A movement whose source is later cancelled - a work order voided after parts were fitted. The movement is NOT automatically reversed, because the parts were physically consumed. The reversal is a separate decision with its own reason, and leaving it to a human is the only way to distinguish parts returned to the shelf from parts already installed.
+      - Batch and expiry recorded on a receipt. Consumption does not automatically select a batch. Which batch left is a physical fact the person recording it knows and the system does not, so it is captured rather than inferred, and where it is not captured the movement records that the batch is unknown rather than guessing the oldest.
+
+  - key: apply_count
+    entity: stock_count
+    label: Apply a stock count
+    actors: [supervisor, ops_manager, finance]
+    rationale: >
+      The moment the system's belief is replaced by what somebody physically found. It writes
+      corrections rather than editing balances, so that the size of the correction is
+      permanently visible - which is the only number that tells a business whether its stock
+      control is working.
+    preconditions:
+      - The count is counted or under_review.
+      - Every variance line has a reason where the variance exceeds the reason threshold.
+      - The applying principal is not the counting principal where the tenant requires review.
+      - The acting session is elevated where the variance value exceeds the elevation threshold.
+    inputs: [count_id, variance_reasons, approval_note]
+    creates: [count_correction movements for every varying line]
+    updates: [count state, location counted_at, movements marked superseded_by_count]
+    events: [stock.count_applied, stock.variance_recorded]
+    notifications:
+      - {to: finance and ops_manager, channel: in_app, when: the variance value exceeds the finance notification threshold, template: count_variance, must_include: [location, variance_value, largest_lines, reasons]}
+      - {to: the location custodian, channel: in_app, when: always, template: count_applied}
+    undoable: false
+    confirmation_specification: 'Modal stating the number of varying lines, the total variance value in each direction separately rather than netted, the largest individual variances, and that corrections cannot be undone except by a further count. Requires typing the net variance value. Required because applying a count writes off value and cannot be reversed.'
+    audit_class: always
+    idempotency_key_source: count_id. A replayed application writes one set of corrections. Applying a count twice would double every correction and the second application would look exactly like real shrinkage.
+    offline_policy: refuse
+    concurrency: >
+      Application takes the count row exclusively and computes each correction as the counted
+      quantity minus the balance AT APPLICATION TIME, not minus the frozen expectation - with
+      the movement-since already accounted for. Using the frozen expectation would re-apply
+      every movement that happened during the count. This distinction is the single most
+      common defect in stock counting implementations and it is why snapshot_at exists as a
+      separate field from counted_at.
+    failure_modes:
+      - {code: E_PRECONDITION, cause: a variance line above the threshold has no reason, message: Give a reason for the differences., note: names the lines}
+      - {code: E_PRECONDITION, cause: the applier is the counter and review is required, message: This action is not available in the current state., note: a person confirming their own count is a count with one opinion in it}
+      - {code: E_AUTHN, cause: variance value exceeds the elevation threshold and the session is not elevated, message: Confirm your identity to continue.}
+      - {code: E_CONFLICT_VERSION, cause: 'movements occurred that the movement-since calculation cannot resolve, for example a reversal of a pre-snapshot movement', message: Someone else changed this record., note: 'the count returns to under_review with the conflicting movements named, because silently absorbing them into the variance attributes somebody else''s correction to the counter'}
+      - {code: E_PRECONDITION, cause: the count is already applied, message: null, note: 2xx no-op}
+    edge_cases:
+      - A count applied long after it was taken. The movement-since calculation grows and the variance becomes dominated by activity rather than by what was found. Beyond count_stale_hours the application is refused and a recount is required, because at that point the count is measuring the wrong thing.
+      - A blind count where the counter recorded zero for an item they simply did not look at. This is why not-found is a distinct answer from zero. Conflating them writes off the entire balance of every item the counter walked past.
+      - A variance in the same direction at the same location across consecutive counts. Applied normally and reported as a systematic pattern, because a consistent direction is shrinkage or a consistent process error, and a one-off variance is neither.
+      - Applying a count that includes items with open reservations. Reservations are untouched. A count measures on-hand, and adjusting reservations to fit a count would silently break commitments made to other capabilities.
+      - A count applied while a device is still holding unsynced consumption for that location. The unsynced movements arrive afterwards with earlier occurred_at values and would make the corrected balance wrong. The count application records the last-known sync position of every device holding stock for that location, and where any is behind, the application warns and names them. This is the only place a stock count and offline capture genuinely conflict, and it cannot be solved by the model alone.
+
+  - key: reserve_stock
+    entity: stock_reservation
+    label: Reserve stock
+    actors: [system, employee, supervisor, integration_principal]
+    preconditions: [the item is stocked, the location is active, the quantity is positive]
+    inputs: [item_ref, location_id, quantity, unit_of_measure, source_capability_key, source_ref, expires_at]
+    creates: [stock_reservation]
+    updates: [derived available quantity]
+    events: [stock.reserved]
+    notifications:
+      - {to: the location custodian, channel: in_app, when: the reservation drives available below zero, template: over_reserved, batching_policy: hourly digest}
+    undoable: true
+    reversal_action: release_reservation
+    audit_class: always
+    idempotency_key_source: 'source_capability_key plus source_ref plus item_ref plus location_id. A retried reservation from the same source claim produces one reservation, because two reservations for one claim silently halve the available stock'
+    offline_policy: refuse
+    concurrency: >
+      Reservations are appended and available is derived, so two concurrent reservations do
+      not contend and both succeed even where they exceed on-hand. Over-reservation is
+      reported rather than prevented, for the same reason negative stock is - a refusal here
+      means a forward commitment cannot be recorded, and it will then be made anyway and
+      recorded nowhere.
+    failure_modes:
+      - {code: E_VALIDATION, cause: quantity not positive, message: field-specific}
+      - {code: E_PRECONDITION, cause: the location is suspended or retired, message: This action is not available in the current state.}
+      - {code: E_VALIDATION, cause: expires_at in the past, message: field-specific}
+      - {code: E_QUOTA, cause: more than max_open_reservations_per_source, message: Plan limit reached., note: catches a workflow creating a reservation per attempt rather than per claim}
+    edge_cases:
+      - A reservation with no expiry. Permitted and monitored, because a genuinely open-ended reservation exists - stock set aside for a long-running commitment - and forbidding it would push the practice into a physically separated shelf that the system knows nothing about.
+      - Reserving more than is on hand. Permitted where the location allows negative. Available goes negative, which is the honest representation of having promised more than is held, and it is exactly the number a purchaser needs.
+      - A reservation whose source disappears - the claiming capability is disabled. The reservation persists and appears in the open-reservation monitor with its source named as unavailable. Auto-releasing on capability disable would free stock that a re-enabled capability still expects.
+      - Consuming against the wrong reservation. Not prevented; reservations are claims and the movement records which one it discharged. The reconciliation is visible because both the reservation and the movement carry their source references.
+
+rules:
+  - key: balance_is_derived_never_stored
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'On-hand balance is computed from the append-only movement ledger. No field anywhere holds a mutable balance, and no action writes one.'
+    on_conflict: not overridable
+    rationale: A stored balance that can be edited is a balance nobody can explain, and the first unexplained figure is when the parallel spreadsheet appears.
+
+  - key: every_movement_has_a_reason
+    kind: validation
+    scope: kernel
+    overridable_at: null
+    default: 'reason_key is mandatory on every movement of every kind, from a tenant-configured closed list per kind, which may not be empty.'
+    on_conflict: not overridable
+
+  - key: available_and_on_hand_are_separate
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'A reservation reduces available and never on-hand. Both figures are reported separately and no interface may show one labelled as the other.'
+    on_conflict: not overridable
+    rationale: A caller that cannot distinguish the two will promise stock it does not have.
+
+  - key: negative_is_recorded_not_prevented
+    kind: policy
+    scope: capability
+    overridable_at: site
+    default: 'true at every location. A site may set allows_negative false per location, in which case consumption beyond the balance is refused with the shortfall named.'
+    on_conflict: most specific scope wins
+    rationale: Refusing to record consumption that has already physically happened does not prevent the loss; it prevents the record of it, and the ledger then disagrees with the shelf in a way nobody can find.
+
+  - key: costs_are_frozen_at_movement
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'unit_cost_minor is written once by the valuation method in force at the time and is never recomputed.'
+    on_conflict: not overridable
+    rationale: Recomputing history produces two valuations of the same past, and both will be quoted.
+
+  - key: count_corrections_are_movements
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'Applying a count writes count_correction movements. It never edits a balance and never deletes a movement.'
+    on_conflict: not overridable
+
+  - key: valuation_method
+    kind: policy
+    scope: capability
+    overridable_at: tenant
+    default: 'weighted_average. A tenant may select first_in_first_out or standard_cost. The method may not be changed retrospectively; a change applies from a stated date forward and the change is recorded.'
+    on_conflict: most specific scope wins
+    rationale: >
+      A shipped default is required by kernel K07 and weighted average is the least
+      surprising and the least sensitive to movement ordering, which matters when movements
+      arrive out of order from offline devices.
+
+policy_knobs:
+  - {key: stock_location_max_depth, default: 4, range: [1, 8], lowest_settable_scope: kernel}
+  - {key: uncounted_location_days, default: 180, range: [7, 1095]}
+  - {key: negative_balance_alert_hours, default: 24, range: [1, 720]}
+  - {key: in_transit_alert_days, default: 3, range: [1, 60]}
+  - {key: location_suspension_review_days, default: 14, range: [1, 180]}
+  - {key: draft_location_stale_days, default: 14, range: [1, 90]}
+  - {key: late_movement_alert_hours, default: 24, range: [1, 720]}
+  - {key: reversal_rate_alert, default: 0.05, range: [0.001, 1.0]}
+  - {key: open_reservation_alert_days, default: 7, range: [1, 180]}
+  - {key: reservation_sweep_lag_minutes, default: 15, range: [1, 240], lowest_settable_scope: kernel}
+  - {key: max_open_reservations_per_source, default: 100, range: [1, 10000]}
+  - {key: planned_count_stale_days, default: 14, range: [1, 180]}
+  - {key: count_in_progress_alert_hours, default: 8, range: [1, 168]}
+  - {key: count_stale_hours, default: 48, range: [1, 720]}
+  - {key: count_review_days, default: 3, range: [1, 60]}
+  - {key: movement_backdate_limit_days, default: 7, range: [0, 365]}
+  - {key: count_requires_review, default: true}
+  - {key: count_auto_apply_variance_value_minor, default: 0, note: 'zero means never auto-apply. Deliberately zero rather than a plausible tolerance, because an auto-applied variance is value written off without a person agreeing to it'}
+  - {key: adjustment_value_alert_minor, default: null, note: 'null means no threshold is set. Deliberately null rather than a number, because the right threshold depends entirely on what the tenant holds and a shipped number would be noise for one tenant and silence for another'}
+
+open_questions:
+  - {q: 'How should a stock count reconcile against devices still holding unsynced movements for that location? The model warns and names the devices and cannot resolve it, because the physical count already happened against a shelf whose recorded history is incomplete.', assumption: 'Warn, name the devices, and let a human decide whether to wait or to proceed. There is no correct automatic answer.', confidence: VALIDATION_REQUIRED, method: 'measure how often devices are behind at count time in pilot, and observe what operators do about it', priority: Critical, blocks: [apply_count concurrency, offline_sync ordering guarantees]}
+  - {q: 'Should batch selection at consumption be inferred where the person does not record it - oldest first being the obvious guess - or left unknown? Inferring makes expiry management work and records something that may be false; leaving it unknown makes traceability incomplete.', assumption: Left unknown and recorded as unknown. Inference is not applied., confidence: VALIDATION_REQUIRED, method: determine whether any target segment has a traceability obligation that makes an inferred batch unacceptable, priority: High, blocks: [batch traceability claims, expiry management]}
+  - {q: 'Is weighted average the right shipped default valuation method for these segments, and does the answer change once movements routinely arrive out of order from offline devices?', assumption: 'Weighted average, chosen for insensitivity to ordering rather than for accounting preference.', confidence: VALIDATION_REQUIRED, method: 'review with an accountant familiar with the target segments, and a simulation of out-of-order arrival under each method', priority: High}
+  - {q: 'What should happen to stock movements whose source record is later voided - parts consumed against a cancelled work order? The model deliberately does not auto-reverse, which is correct when the parts were installed and wrong when they went back on the shelf, and the system cannot tell which.', assumption: 'No automatic reversal. A human decides, with the void event surfaced as a prompt.', confidence: WORKING_ASSUMPTION, method: measure how often each case occurs in pilot, priority: Medium}
+  - {q: 'Should adjustment_value_alert_minor ship with any default at all? Null means no threshold and therefore no monitor until somebody configures one, which is honest and means the most important control in the capability is off on day one.', assumption: 'Null, with the absence surfaced in the onboarding checklist rather than hidden behind a guessed number.', confidence: VALIDATION_REQUIRED, method: operator interviews to establish whether a percentage-of-holding-value threshold would work as a universal default, priority: High, blocks: [AET-06 decision count]}

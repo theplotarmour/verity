@@ -1,0 +1,550 @@
+key: notification
+name: Notification
+layer: core
+confidence: KNOWN
+description: >
+  Deciding who should be told something, choosing a channel they consent to and can be
+  reached on, respecting when they may not be disturbed, spending the tenant's money
+  responsibly, and knowing whether the message actually arrived. Every capability in the
+  library degrades badly when this one is unbound, so its behaviour is a platform concern
+  rather than a feature.
+
+evidence_basis:
+  - claim: Business messaging on the dominant conversational channel in this market is priced per template message by category, with a category that is free inside an open customer service window, so channel and template choice is a direct and material cost decision rather than a presentation one.
+    sources:
+      - "The platform organises template messages into three categories - Marketing, Utility and Authentication - and charges on a per-message basis effective 1 July 2025. Utility templates delivered within an open customer service window are free, all non-template messages inside that window are free, and a free-entry-point window gives 72 hours of free messaging of any type. https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing"
+      - "Rates vary by template category and by the recipient's country calling code, and volume tiers lower utility and authentication rates. https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing"
+    confidence: KNOWN
+    implication: cost_class is a first-class field on every notification and the routing decision consults it. A model that treats channel choice as presentation will spend a tenant's money on every routine alert.
+  - claim: Commercial messaging by short message in this jurisdiction requires registration of the sending entity, the sender header and every content template on a regulator-mandated platform before any message can be delivered, and the registered identifiers must be supplied with each send.
+    sources:
+      - "Under the Telecom Commercial Communications Customer Preference Regulations, a business registers once as a Principal Entity and receives an Entity ID, then registers a six-character header used as the sender identifier, then registers each content template which returns its own Template ID. The Entity ID and Template ID are supplied on every send and the message text must match the approved template. https://support.exotel.com/support/solutions/articles/3000096504-trai-regulations-on-commercial-communications-dlt-portal-sms-in-india"
+      - "Providing the Principal Entity ID alongside the header and content has been mandatory since 19 November 2020. https://www.smsgatewaycenter.com/blog/dlt-registration-step-by-step-guide-india/"
+    confidence: KNOWN
+    implication: >
+      A template is not a string the tenant may edit freely. It is a registered artefact with
+      an external identifier and an approval lifecycle, and an unregistered or edited template
+      silently fails to deliver. The model therefore versions templates, holds their external
+      registration identifiers, and refuses to send an unapproved one rather than attempting
+      it and reporting a provider error nobody can interpret.
+
+principles:
+  - A notification is a cost as well as a courtesy. Every send has a price and the aggregate across a tenant is a real number, so batching, channel choice and suppression are product decisions rather than optimisations.
+  - Audience is computed from a role or a relationship, never stored as a person. A notification addressed to a named individual dies silently the day they leave.
+  - Delivery is not the same as being told. The model tracks what the provider says and never claims more than that, because a delivered message on a locked handset at 3am has not told anybody anything.
+  - Quiet hours are honoured except where the message concerns safety, security or a live operational commitment, and that exception list is closed and small.
+  - Failure to deliver is information that belongs to whoever is waiting for a response, not to an operations queue. The assignee who thinks they are being ignored is the person who needs to know the reply bounced.
+  - Nothing sends twice. At-least-once delivery upstream plus retries here means duplicate suppression is a correctness requirement, not a nicety.
+
+entities:
+
+  - key: notification_template
+    name: Template
+    description: A versioned, per-channel message with its variables, its cost class and, where a channel demands it, its external registration.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: key, type: string, req: true, immutable: true}
+      - {key: version_number, type: int, req: true}
+      - {key: channel, type: enum, values: [in_app, push, email, sms, whatsapp, voice, webhook], req: true, immutable: true}
+      - {key: locale, type: string, req: true}
+      - {key: subject_text, type: string, nullable: true}
+      - {key: body_text, type: text, req: true}
+      - {key: variables, type: json, req: true, note: 'flat list of variable keys the body uses. Declared rather than parsed, so a missing value is caught at render rather than sent as an empty gap in a sentence'}
+      - {key: cost_class, type: enum, values: [free_in_service_window, utility, authentication, marketing, internal], req: true, note: 'from the channel provider''s own categories. This is a real money field and it drives both routing and the send-time cost record'}
+      - {key: external_registration_id, type: string, nullable: true, note: 'the registered template identifier where the channel requires one. Without it the send will be rejected by the provider, so it is checked before sending rather than discovered afterwards'}
+      - {key: external_entity_id, type: string, nullable: true, note: 'the registered sending entity identifier, held per tenant per channel'}
+      - {key: external_header, type: string, nullable: true, note: the registered sender identifier shown to the recipient}
+      - {key: registration_state, type: enum, values: [not_required, unregistered, pending, approved, rejected], req: true, default: not_required}
+      - {key: registration_rejection_reason, type: text, nullable: true}
+      - {key: mandatory_class, type: enum, values: [none, mandatory_operational, mandatory_legal], req: true, default: none, note: whether a recipient may suppress it. The list of things they may not suppress is deliberately short}
+      - {key: quiet_hours_exempt, type: bool, req: true, default: false}
+      - {key: max_length, type: int, nullable: true}
+    invariants:
+      - A template is never edited after approval. A change is a new version requiring its own registration, because the registered text is what the provider matches against and an edited template silently fails to deliver.
+      - registration_state=approved requires external_registration_id where the channel demands registration. A template that looks approved without an identifier will be rejected at send time by the provider, with an error the tenant cannot interpret.
+      - mandatory_class other than none requires a stated justification recorded on the template, because the set of messages a person may not turn off is the set most likely to be abused.
+      - quiet_hours_exempt true requires mandatory_class other than none. A routine message that ignores quiet hours is how a tenant teaches its workforce to disable notifications entirely.
+      - Every variable referenced in body_text must appear in variables, checked at publication rather than at render.
+    states: [draft, pending_registration, approved, rejected, superseded, retired]
+    initial_state: draft
+    transitions:
+      - {from: draft, to: pending_registration, action: submit_template, actor: tenant_admin or ops_manager, guard: 'the channel requires registration, variables are declared, and cost_class is set', side_effects: submitted to the provider registry, reversibility: true}
+      - {from: draft, to: approved, action: publish_template, actor: tenant_admin or ops_manager, guard: the channel requires no registration and every variable is declared, side_effects: the template becomes usable, reversibility: true}
+      - {from: pending_registration, to: approved, action: observe_registration, actor: system, guard: the registry approves and returns an identifier, side_effects: as above, reversibility: false}
+      - {from: pending_registration, to: rejected, action: observe_registration, actor: system, guard: the registry rejects, side_effects: the rejection reason is recorded verbatim and the author is told, reversibility: true}
+      - {from: rejected, to: pending_registration, action: submit_template, actor: as above, guard: the text has been changed, side_effects: as for submission, reversibility: true}
+      - {from: approved, to: superseded, action: publish_template, actor: as above, guard: a later version of the same key and channel is approved, side_effects: in-flight sends keep the version they resolved, reversibility: false}
+      - {from: approved, to: retired, action: retire_template, actor: as above, guard: no active rule or subscription references it, side_effects: none, reversibility: false}
+      - {from: draft, to: retired, action: retire_template, actor: as above, guard: null, side_effects: none, reversibility: false}
+    stuck_state_policy:
+      draft: >
+        Threshold: draft_template_stale_days (default 14). Told: the author. Escape hatch:
+        submit, publish or retire. The characteristic confusion is somebody having rewritten a
+        message in response to a complaint and believing the new wording is going out.
+      pending_registration: >
+        External approval is outside the tenant's control and takes as long as it takes.
+        Threshold: registration_pending_days (default 3), then weekly. Told: the author and
+        tenant_admin, and the notification states plainly that any rule depending on this
+        template is currently sending nothing or falling back to another channel. Escape
+        hatch: chase, or fall back. Verity never substitutes an approved template of different
+        wording, because the wording is what was approved.
+      rejected: >
+        Threshold: immediate. Told: the author with the registry's rejection reason verbatim,
+        because those reasons are specific and paraphrasing them destroys the only actionable
+        information. Escape hatch: amend and resubmit, or retire and route to another channel.
+        A rejected template referenced by an active rule is escalated to tenant_admin, because
+        that rule is silently failing.
+      approved: >
+        Steady state. Two monitored exceptions. (a) A template whose send failure rate exceeds
+        template_failure_alert (default 0.1) - usually a variable rendering as empty or a
+        length overflow on a channel that truncates. (b) A template of cost class marketing
+        whose volume exceeds a tenant-set monthly threshold, told to tenant_owner with the
+        spend, because marketing volume is the single largest controllable cost in this
+        capability and nobody sees it until an invoice.
+      superseded: >
+        Terminal. Retained permanently, because a delivered message must remain reproducible
+        exactly as it was sent when a recipient disputes what they were told. Nothing pends.
+      retired: >
+        Terminal. Retained for the same reason. Nothing pends.
+
+  - key: notification_message
+    name: Message
+    description: One attempt to tell one recipient one thing on one channel, with what was rendered, what it cost and what the provider said happened.
+    owner: tenant
+    tenancy: tenant_scoped_with_site_partition
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: template_id, type: uuid, req: true, fk: notification_template}
+      - {key: template_version, type: int, req: true, immutable: true}
+      - {key: recipient_principal_id, type: uuid, nullable: true}
+      - {key: recipient_party_ref, type: uuid, nullable: true}
+      - {key: recipient_channel_ref, type: uuid, nullable: true, note: 'which channel of theirs, resolved through the party_directory port with consent and suppression already applied'}
+      - {key: audience_rule, type: text, req: true, note: 'how this recipient was selected - the role, the relationship or the subscription. Recorded so that "why did I get this" is answerable, which is the second most common support question this capability generates'}
+      - {key: source_capability_key, type: string, req: true}
+      - {key: source_ref, type: uuid, nullable: true}
+      - {key: trigger_event_id, type: uuid, nullable: true, note: 'the event that caused it, so duplicate suppression can key on it'}
+      - {key: rendered_subject, type: string, nullable: true, immutable: true}
+      - {key: rendered_body, type: text, req: true, immutable: true, note: 'what was actually sent, frozen. Re-rendering from the template at read time would show a recipient something different from what they received'}
+      - {key: channel, type: enum, values: [in_app, push, email, sms, whatsapp, voice, webhook], req: true}
+      - {key: cost_class, type: enum, values: [free_in_service_window, utility, authentication, marketing, internal], req: true, financial: true}
+      - {key: estimated_cost_minor, type: money_minor, nullable: true, financial: true}
+      - {key: priority, type: enum, values: [low, normal, high, critical], req: true, default: normal}
+      - {key: mandatory_class, type: enum, values: [none, mandatory_operational, mandatory_legal], req: true, default: none}
+      - {key: scheduled_for, type: timestamptz, nullable: true, note: set when a message is held for quiet hours or for batching}
+      - {key: sent_at, type: timestamptz, nullable: true}
+      - {key: provider_reference, type: string, nullable: true}
+      - {key: delivery_state, type: enum, values: [queued, sent, delivered, read, failed, bounced, suppressed, expired], req: true, default: queued}
+      - {key: failure_reason, type: text, nullable: true}
+      - {key: attempt_count, type: int, req: true, default: 0}
+      - {key: batch_id, type: uuid, nullable: true, fk: notification_batch}
+      - {key: dedupe_key, type: string, req: true, note: 'computed from the trigger, the recipient and the template. The uniqueness constraint on it is what makes at-least-once upstream delivery safe'}
+    invariants:
+      - unique(tenant_id, dedupe_key) within the deduplication window. At-least-once event delivery upstream plus retries here means a duplicate message is the expected failure rather than an unlikely one.
+      - rendered_body is frozen. A recipient disputing what they were told must be shown what was sent, not what the current template would produce.
+      - A message may not be created for a channel the recipient has suppressed or has not consented to for its cost class, except where mandatory_class is other than none, and even then never on a channel that is hard-suppressed by a bounce.
+      - delivery_state=delivered means only that the provider reported delivery. No inference beyond that is permitted anywhere in the platform.
+      - Financial fields are gated by view_financial. The rendered body is gated by the permissions of the record it concerns, not by the notification capability's own rules.
+    states: [queued, held, sent, delivered, read, failed, suppressed, expired]
+    initial_state: queued
+    transitions:
+      - {from: queued, to: held, action: hold_for_quiet_hours, actor: system, guard: the recipient is within quiet hours and the message is not exempt, side_effects: scheduled_for set to the end of the quiet window, reversibility: true}
+      - {from: held, to: queued, action: release_held_message, actor: system_scheduler, guard: 'the quiet window has ended, or the message was escalated to a mandatory class', side_effects: none, reversibility: false}
+      - {from: queued, to: sent, action: send_message, actor: system, guard: a provider accepts it, side_effects: 'provider_reference recorded, cost recorded', reversibility: false}
+      - {from: sent, to: delivered, action: observe_delivery_receipt, actor: system, guard: the provider reports delivery, side_effects: none, reversibility: false}
+      - {from: delivered, to: read, action: observe_delivery_receipt, actor: system, guard: the provider or the surface reports a read, side_effects: none, reversibility: false, note: 'read is recorded where a channel offers it and is never assumed from delivery, because the difference matters for anything that escalates on being unread'}
+      - {from: queued, to: failed, action: send_message, actor: system, guard: every attempt failed and the retry budget is exhausted, side_effects: 'the originating capability and, where one exists, the person waiting on a response are told', reversibility: true}
+      - {from: sent, to: failed, action: observe_delivery_receipt, actor: system, guard: the provider reports a permanent failure, side_effects: as above, reversibility: true}
+      - {from: failed, to: queued, action: retry_message, actor: system or a person, guard: 'an alternative channel is chosen, or the recipient detail is corrected', side_effects: a new attempt on a different channel; never a silent retry on the same failing address, reversibility: false}
+      - {from: queued, to: suppressed, action: suppress_message, actor: system, guard: 'the recipient has withdrawn consent for this cost class, or the channel is hard-suppressed, and the message is not mandatory', side_effects: 'recorded as suppressed rather than discarded, so the originating capability can see that nobody was told', reversibility: false}
+      - {from: held, to: expired, action: expire_message, actor: system_scheduler, guard: 'the message''s own relevance window passed while it was held', side_effects: the originating capability is told that its message was never sent, reversibility: false}
+      - {from: queued, to: expired, action: expire_message, actor: system_scheduler, guard: as above, side_effects: as above, reversibility: false}
+    stuck_state_policy:
+      queued: >
+        A queued message is something nobody has been told yet. Threshold: queue_lag_seconds
+        (default 60) for priority critical and high, queue_lag_minutes (default 10) otherwise.
+        Told: platform_operator, because a queue that is not draining is machinery. Escape
+        hatch: drain, or fail over to a secondary provider. Critical and high priority messages
+        deliberately have a threshold in seconds, because they include coverage risk, safety
+        and security alerts whose value decays to nothing within minutes.
+      held: >
+        Bounded by the end of the quiet window. The monitored exception is a message held so
+        long that it will arrive after it matters - a shift reminder held past the shift.
+        Threshold: the message's own relevance window where the originating capability declares
+        one. Escape hatch: expire it and tell the originator, which is the model's choice,
+        rather than sending it late. A reminder about something that has already happened is
+        worse than no reminder, because it teaches the recipient that the messages are not
+        worth reading.
+      sent: >
+        Sent and unconfirmed. Threshold: receipt_wait_minutes (default 30) where the channel
+        offers receipts. Told: nobody by notification - a notification about a notification is
+        unreliable by construction - and the state is surfaced to the originating capability,
+        which is where somebody is waiting for a response and can act.
+      failed: >
+        Threshold: immediate. Told: the originating capability, and where the message was a
+        reply or a request to a person, the principal waiting on the answer. This is the rule
+        that matters most here: a bounced reply belongs to the assignee who believes they are
+        being ignored, not to an operations queue nobody reads. Escape hatch: retry on an
+        alternative channel, or contact the recipient another way. Never a silent retry on the
+        same address, because the address is usually the problem.
+      suppressed: >
+        Terminal. Retained rather than discarded, so the originating capability can see that
+        nobody was told. The monitored condition is an originating capability whose messages
+        are suppressed above suppression_rate_alert (default 0.2), which usually means it is
+        sending marketing-class messages to people who only consented to transactional ones.
+      expired: >
+        Terminal. Retained with the reason. The originator is told, because a capability that
+        believes it notified somebody and did not will make a worse decision later.
+      delivered: >
+        Terminal unless a read receipt follows. Retained for the audit period. Nothing pends.
+      read: >
+        Terminal. Retained. Nothing pends.
+
+  - key: notification_preference
+    name: Preference
+    description: What one recipient wants, per category and per channel, including their quiet hours - with an explicit record of what they may not turn off.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: principal_id, type: uuid, nullable: true}
+      - {key: party_ref, type: uuid, nullable: true}
+      - {key: category_key, type: string, req: true, note: 'a grouping of templates a person can reason about, such as roster changes. Preferences are never per template, because a list of two hundred switches is a list nobody sets'}
+      - {key: channel, type: enum, values: [in_app, push, email, sms, whatsapp, voice], req: true}
+      - {key: enabled, type: bool, req: true, default: true}
+      - {key: digest_mode, type: enum, values: [immediate, hourly, daily, weekly], req: true, default: immediate}
+      - {key: quiet_hours_start, type: time, nullable: true}
+      - {key: quiet_hours_end, type: time, nullable: true}
+      - {key: timezone, type: string, nullable: true, note: 'the recipient''s own timezone, without which quiet hours are meaningless for anybody who does not share the tenant''s'}
+      - {key: set_by, type: enum, values: [recipient, administrator, pack_default], req: true}
+      - {key: set_at, type: timestamptz, req: true}
+    invariants:
+      - unique(tenant_id, principal_id or party_ref, category_key, channel).
+      - A preference may not disable a category containing mandatory_operational or mandatory_legal templates. The attempt is recorded and the recipient is shown which messages they will continue to receive and why.
+      - quiet_hours_start and quiet_hours_end require timezone. Quiet hours in an unstated timezone are quiet hours for somebody else.
+      - A preference set by the recipient may not be overridden by an administrator without a recorded reason, and the recipient is told.
+    states: [active, superseded]
+    initial_state: active
+    transitions:
+      - {from: active, to: superseded, action: set_preference, actor: the recipient or an administrator, guard: a new preference for the same key is written, side_effects: 'the previous row is retained, so the history of what somebody chose is answerable', reversibility: false}
+    stuck_state_policy:
+      active: >
+        Not a queue. Two monitored conditions. (a) A recipient who has disabled every channel
+        for a category containing operationally significant messages, which is legitimate and
+        means the originating capability must not rely on reaching them. This is reported to
+        their supervisor once rather than repeatedly, because it is a fact to be known and not
+        a problem to be fixed. (b) A recipient with no preference row at all for a category
+        that is sending to them, which means they are on the pack default and have never been
+        asked - reported in aggregate as a proportion, because a tenant where nobody has ever
+        set a preference usually has a preferences screen nobody can find.
+      superseded: >
+        Terminal. Retained, because what somebody chose and when is exactly what is asked about
+        after a complaint that they were or were not contacted. Nothing pends.
+
+  - key: notification_batch
+    name: Batch
+    description: A group of messages collapsed into one send for one recipient, which is how a bulk event stops being forty messages.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: recipient_principal_id, type: uuid, nullable: true}
+      - {key: recipient_party_ref, type: uuid, nullable: true}
+      - {key: category_key, type: string, req: true}
+      - {key: channel, type: enum, values: [in_app, push, email, sms, whatsapp], req: true}
+      - {key: window_start, type: timestamptz, req: true}
+      - {key: window_end, type: timestamptz, req: true}
+      - {key: message_count, type: int, req: true, default: 0}
+      - {key: dispatched_message_id, type: uuid, nullable: true, fk: notification_message}
+      - {key: max_priority_in_batch, type: enum, values: [low, normal, high, critical], req: true, default: low, note: 'a batch containing a high-priority item is dispatched immediately rather than at the end of its window, because batching an urgent message is how it arrives too late to matter'}
+    invariants:
+      - A batch containing any message of priority high or critical, or any mandatory_class other than none, dispatches immediately and the remaining window is abandoned.
+      - message_count is derived from its members and is never written directly.
+      - A batch dispatches exactly one message. If dispatch fails, the batch does not silently dissolve into individual sends - it retries as a batch, because dissolving would produce the flood the batch existed to prevent.
+    states: [accumulating, dispatched, abandoned]
+    initial_state: accumulating
+    transitions:
+      - {from: accumulating, to: dispatched, action: dispatch_batch, actor: system_scheduler, guard: 'the window ended, or a high-priority or mandatory member arrived', side_effects: one message is created and sent; every member is marked as batched, reversibility: false}
+      - {from: accumulating, to: abandoned, action: abandon_batch, actor: system_scheduler, guard: every member expired or was suppressed before the window ended, side_effects: the originating capabilities are told that nothing was sent, reversibility: false}
+    stuck_state_policy:
+      accumulating: >
+        Bounded by window_end. The monitored exception is a batch whose window has ended and
+        which has not dispatched within batch_dispatch_lag_minutes (default 5), meaning the
+        scheduler is not running while people are waiting to be told things. Told:
+        platform_operator. Escape hatch: dispatch manually. A second exception is a batch that
+        has accumulated more than batch_size_alert members (default 50), which is usually a
+        capability emitting per-row notifications for a bulk operation and is worth telling
+        that capability's owner about rather than silently absorbing.
+      dispatched: >
+        Terminal. Retained so the composition of a digest is reproducible when a recipient asks
+        why they were told about something. Nothing pends.
+      abandoned: >
+        Terminal. Retained with the reason. Nothing pends.
+
+ports:
+  - port_key: notification
+    direction: provides
+    contract: >
+      Accept a request to tell an audience something, where the audience is expressed as a
+      role, a relationship or a subscription and never as a person; resolve recipients,
+      channels, consent, preferences and quiet hours; deduplicate; batch; send; and report the
+      delivery outcome back to the requesting capability. Reporting the outcome back is part of
+      the contract, because the capability that asked is the only one that knows who is waiting.
+    cardinality: exactly_one
+
+  - port_key: party_directory
+    direction: requires
+    contract: Resolve a party to their channels with per-purpose consent and suppression state, and report a channel becoming suppressed.
+    cardinality: zero_or_one
+    unbound_behaviour: >
+      External recipients cannot be resolved and only in-app and push to principals are
+      available. Every message to a counterparty, a consumer or a supplier is unsendable. This
+      is a severe degradation for any pack with an external audience and it is not an error,
+      because an internal-only tenant is a real configuration.
+
+  - port_key: principal_directory
+    direction: requires
+    contract: Resolve internal recipients, their devices for push, their role holdings for role-addressed audiences, and their availability.
+    cardinality: exactly_one
+    unbound_behaviour: FORBIDDEN. Audience resolution by role is the mechanism that stops notifications dying when somebody leaves, and without a principal directory there is no role to resolve.
+
+  - port_key: org_structure
+    direction: requires
+    contract: Resolve relationship-based audiences such as the supervisor of a location, and resolve the location calendar for quiet hours that follow a site rather than a person.
+    cardinality: zero_or_one
+    unbound_behaviour: 'Relationship-based audiences reduce to role-at-tenant-scope, which means a message intended for one location''s supervisor reaches every supervisor. That is noisy rather than broken, and the noise is what makes people stop reading.'
+
+  - port_key: message_transport
+    direction: requires
+    contract: >
+      Submit a rendered message on a channel and return a provider reference, a cost where the
+      provider reports one, and asynchronous delivery receipts. Report permanent versus
+      transient failure distinguishably, because the two demand different behaviour.
+    cardinality: zero_or_many
+    unbound_behaviour: >
+      Only in-app delivery works, which requires the recipient to open the application. Every
+      other capability's unbound-notification degradation applies simultaneously. The tenant
+      surface states plainly which channels are unavailable rather than offering them and
+      failing, because an offered channel that silently fails is worse than an absent one.
+
+  - port_key: audit_sink
+    direction: requires
+    contract: Record sends, suppressions and preference overrides as audit events.
+    cardinality: exactly_one
+    unbound_behaviour: FORBIDDEN. Whether somebody was told something is a question asked in every dispute, and an unaudited notification record can be edited.
+
+  - port_key: config_resolution
+    direction: requires
+    contract: Resolve quiet hours, batching windows, cost ceilings and channel preference order at tenant, site, role and user scope.
+    cardinality: exactly_one
+    unbound_behaviour: FORBIDDEN. Every behavioural decision in this capability is a resolved configuration value, and without resolution there is no defined behaviour.
+
+actions:
+
+  - key: request_notification
+    entity: notification_message
+    label: Tell somebody something
+    actors: [system, integration_principal, any_authenticated]
+    rationale: >
+      The single entry point every capability uses. Its contract - audience by role or
+      relationship, never by person - is what stops the platform accumulating notifications
+      addressed to people who have left, which is the most common way an operational alert
+      silently stops reaching anybody.
+    preconditions: [the template resolves and is approved, the audience expression resolves to at least one recipient or to a recorded empty set]
+    inputs: [template_key, audience_expression, variables, source_ref, trigger_event_id, priority, relevance_window]
+    creates: [notification_message per resolved recipient, batch membership where batching applies]
+    updates: []
+    events: [notification.requested, notification.audience_empty]
+    notifications: []
+    undoable: true
+    reversal_action: 'cancel while still queued or held; a sent message cannot be recalled'
+    audit_class: always
+    idempotency_key_source: >
+      trigger_event_id plus template_key plus recipient, hashed into dedupe_key. This is the
+      constraint that makes at-least-once upstream event delivery safe. Without it, one work
+      order completion delivered twice becomes two messages to a counterparty, and a
+      counterparty receiving everything twice concludes the system is broken.
+    offline_policy: queue
+    concurrency: >
+      Deduplication is enforced by a unique index on dedupe_key within the window rather than
+      by a check, so two concurrent requests for the same trigger produce one message. Audience
+      resolution happens at request time against a consistent snapshot, so a role change
+      mid-resolution does not produce a partial audience.
+    failure_modes:
+      - {code: E_PRECONDITION, cause: the template is not approved, message: null, note: 'the request is REFUSED and the originator is told, rather than sending an unregistered template that the provider will reject with an error nobody can interpret'}
+      - {code: E_PRECONDITION, cause: the audience resolves to nobody, message: null, note: recorded as an empty-audience event and reported to the originating capability. This is the failure that matters most - a message nobody received because the role has no holders looks exactly like a message that was sent}
+      - {code: E_VALIDATION, cause: a declared variable has no supplied value, message: null, note: refused rather than rendering an empty gap in a sentence. A message reading that a shift starts at blank is worse than no message}
+      - {code: E_CONFLICT_UNIQUE, cause: a message with this dedupe key already exists in the window, message: null, note: returns the existing message with 200}
+      - {code: E_QUOTA, cause: 'the tenant''s cost ceiling for the period is exhausted', message: null, note: non-mandatory messages are SUPPRESSED and mandatory ones still send. The tenant_owner is told immediately. A ceiling that silently stops a safety alert would be a worse failure than the spend it prevents}
+      - {code: E_RATE_LIMIT, cause: one source exceeding its send rate, message: null, note: 'throttled with the overflow batched rather than dropped, because the usual cause is a bulk operation and dropping loses real notifications'}
+    edge_cases:
+      - An audience expressed as a role with no active holders. The empty-audience event is the whole point: a coverage alert addressed to a supervisor role at a location with no supervisor is silence that looks identical to success, and the originating capability must be able to tell the difference.
+      - A bulk operation emitting one notification per row - a roster published for two hundred people. Batching per recipient per category collapses it to one message each. Where a member is high priority the batch dispatches immediately, because batching an urgent message is how it arrives too late to matter.
+      - A recipient in a different timezone from the tenant. Quiet hours resolve against the recipient's own timezone where they have one, and against the location's where the message is location-scoped. Resolving against the tenant's is the default failure and it wakes people at four in the morning.
+      - A message whose relevance window passes while held for quiet hours. Expired rather than sent late, and the originator is told. A reminder about a shift that has started teaches the recipient that these messages are not worth reading, which costs more than the missed reminder.
+      - The same event triggering notifications from two capabilities - a work order completion and a billing event. Both send, because they are different messages to possibly different audiences. Deduplication keys on the trigger AND the template, so it collapses genuine duplicates without collapsing two distinct messages that share a cause.
+      - A cost ceiling reached mid-period. Non-mandatory messages suppress and are recorded as suppressed so the originators know. Mandatory operational and legal messages continue regardless of the ceiling, and the overspend is reported rather than prevented.
+
+  - key: send_message
+    entity: notification_message
+    label: Send a queued message
+    actors: [system]
+    rationale: >
+      Separated from the request because the two happen at different times under different
+      conditions - a message may be held for hours, batched, or waiting on a provider - and
+      because retry behaviour belongs here rather than in every calling capability.
+    preconditions: [the message is queued and not suppressed, a transport for the channel is available, the recipient channel is still consenting and unsuppressed]
+    inputs: [message_id, attempt_number]
+    creates: []
+    updates: [delivery_state, provider_reference, attempt_count, estimated cost]
+    events: [notification.sent, notification.failed]
+    notifications: []
+    undoable: false
+    confirmation_specification: 'None. No human is in this path. The kernel K06 requirement is met by the dedupe constraint and by the refusal to retry silently on a failing address, which are the two controls a confirmation would otherwise stand in for.'
+    audit_class: always
+    idempotency_key_source: 'message_id plus attempt_number. A provider accepting the same message twice is charged twice and delivered twice, so the transport submission carries the message id as its own idempotency key where the provider supports one.'
+    offline_policy: refuse
+    concurrency: >
+      A message is claimed by a single sender with a conditional state write, so two workers
+      cannot both submit it. Retries use exponential backoff with jitter; the retry schedule
+      and the total budget are configuration rather than code, because the right number of
+      retries differs sharply between a push notification and a message that costs money.
+    failure_modes:
+      - {code: E_DEPENDENCY, cause: transient provider failure, message: null, note: 'retried with exponential backoff and jitter up to the retry budget, then failed over to the next channel in the preference order where one is configured. A transient failure that exhausts its budget on one channel and never tries another is a message lost to a temporary outage'}
+      - {code: E_PRECONDITION, cause: 'permanent provider rejection, for example an unregistered template or an invalid header', message: null, note: 'no retry. The rejection reason is recorded verbatim and the template is flagged, because retrying a structurally invalid message wastes the budget and delays the fallback'}
+      - {code: E_PRECONDITION, cause: the recipient channel became suppressed between queueing and sending, message: null, note: suppressed rather than sent. Consent withdrawn after a message is queued is still consent withdrawn}
+      - {code: E_VALIDATION, cause: the rendered body exceeds the channel maximum, message: null, note: 'refused rather than truncated. A truncated message that ends mid-sentence is worse than one that was not sent, and the template''s failure rate monitor is what surfaces the pattern'}
+      - {code: E_QUOTA, cause: provider rate limit, message: null, note: 'queued and retried, and the delay is reported to the originator where the message has a relevance window, so it can decide whether a late message is still worth sending'}
+    edge_cases:
+      - A provider reporting delivery for a message that never reached the person - a message delivered to a handset that is off, or to a mailbox nobody reads. The model records delivered and claims nothing more. Every capability that escalates on non-delivery must therefore escalate on non-RESPONSE rather than on non-delivery, and that requirement is stated in the port contract rather than left to each capability to discover.
+      - Failover between channels. Configured as an ordered preference per category, and each attempt is a separate message row with its own cost, so the cost of failover is visible rather than hidden inside a retry count.
+      - A cost-bearing message sent successfully to a wrong number. Recorded, charged and irrecoverable. The mitigation is at the party capability's channel verification and this capability's record simply makes the cost visible, which is the honest division of responsibility.
+      - A provider outage lasting hours. Messages queue, the queue-lag monitor fires to platform_operator, and messages whose relevance windows pass are expired with their originators told. Nothing is silently dropped and nothing is sent long after it mattered.
+      - A message whose recipient is deactivated between queueing and sending. Suppressed, and the originating capability is told, because a notification to a departed person is exactly the condition role-based addressing exists to prevent and its occurrence means an audience was resolved to a person somewhere.
+
+  - key: set_preference
+    entity: notification_preference
+    label: Choose what to be told
+    actors: [any_authenticated, consumer, customer_contact, tenant_admin]
+    rationale: >
+      A recipient who cannot turn something off will turn everything off, usually at the
+      operating system level where the tenant can neither see it nor recover from it. Granular,
+      honest preferences are what protect the messages that matter.
+    preconditions: [the category exists, the acting principal is the recipient or holds administer over notification preferences]
+    inputs: [principal_or_party, category_key, channel, enabled, digest_mode, quiet_hours_start, quiet_hours_end, timezone, reason]
+    creates: [notification_preference]
+    updates: [previous preference superseded]
+    events: [notification.preference_changed]
+    notifications:
+      - {to: the recipient, channel: in_app, when: the change was made by an administrator rather than by them, template: preference_changed_for_you, must_include: [category, channel, new_setting, actor_display_name, reason], mandatory_operational: true}
+    undoable: true
+    reversal_action: set_preference back, which supersedes rather than undoes
+    audit_class: always
+    idempotency_key_source: recipient plus category_key plus channel plus a hash of the settings
+    offline_policy: queue
+    concurrency: Preferences are superseded rather than updated, so concurrent writes produce an ordered history and the latest set_at wins. The history is retained because what somebody chose and when is what is asked about after a complaint.
+    failure_modes:
+      - {code: E_PRECONDITION, cause: the category contains mandatory templates and the request disables it, message: Some of these cannot be turned off., note: the request partially succeeds for the non-mandatory templates and the recipient is shown exactly which messages they will still receive and why. Silently ignoring the request is what teaches people to disable notifications at the operating system}
+      - {code: E_VALIDATION, cause: quiet hours set with no timezone, message: Choose a timezone., note: never defaulted from the tenant}
+      - {code: E_AUTHZ_SCOPE, cause: setting a preference for another principal without authority, message: Not found.}
+      - {code: E_VALIDATION, cause: an administrator overriding a recipient-set preference with no reason, message: Give a reason. It is shown to them.}
+    edge_cases:
+      - A recipient disabling every channel for an operationally significant category. Permitted for non-mandatory categories, and their supervisor is told once. It is legitimate and the consequence - that the originating capability cannot rely on reaching them - must be visible to somebody rather than only to the recipient.
+      - Quiet hours that span midnight. Supported, and this is where most implementations fail. The window is evaluated as a wrapping interval in the recipient's own timezone, and the test cases for it are generated explicitly.
+      - An administrator enabling a channel a recipient turned off. Permitted with a reason and the recipient is told. Doing it silently is the fastest way to lose the recipient's trust in every message the platform sends.
+      - A recipient with no preference row at all. The pack default applies. The proportion of recipients who have never set anything is reported, because in a tenant where nobody has ever changed a preference the screen is usually unreachable rather than the defaults perfect.
+      - A consumer setting preferences without an account. Handled through the party channel consent record rather than here, and the two are deliberately separate - consent is a lawful basis and a preference is a choice about volume, and conflating them means a withdrawal of consent looks like a preference somebody can flip back.
+
+rules:
+  - key: audience_is_never_a_person
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'An audience is expressed as a role, a relationship or a subscription. A stored user identifier as an audience is rejected at configuration time.'
+    on_conflict: not overridable
+    rationale: Kernel K10. A notification addressed to a named individual dies silently the day they leave, and nobody notices because silence looks like success.
+
+  - key: empty_audience_is_an_event
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'A request resolving to no recipients emits an empty-audience event to the originating capability. It is never a silent no-op.'
+    on_conflict: not overridable
+    rationale: A message nobody received because a role has no holders is indistinguishable from success unless the absence is reported.
+
+  - key: deduplication_is_a_constraint
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'unique(tenant, dedupe_key) within the deduplication window, enforced at the database.'
+    on_conflict: not overridable
+    rationale: At-least-once upstream delivery plus retries here makes the duplicate the expected case rather than the unlikely one.
+
+  - key: delivered_means_only_what_the_provider_said
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'delivery_state=delivered asserts only that the provider reported delivery. No capability may treat it as evidence that a person was informed, and escalation must be on non-response rather than on non-delivery.'
+    on_conflict: not overridable
+
+  - key: no_silent_retry_on_a_failing_address
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'A permanent failure is never retried on the same address. It fails over to the next configured channel or it fails, and the originator and the person waiting are told.'
+    on_conflict: not overridable
+
+  - key: mandatory_set_is_small_and_justified
+    kind: validation
+    scope: kernel
+    overridable_at: null
+    default: 'mandatory_operational and mandatory_legal require a recorded justification on the template, and the count of mandatory templates is reported to tenant_owner quarterly.'
+    on_conflict: not overridable
+    rationale: The set of messages somebody may not turn off is the set most likely to be abused, and the only workable control is making its size visible.
+
+  - key: quiet_hours
+    kind: policy
+    scope: capability
+    overridable_at: user
+    default: '22:00 to 07:00 in the recipient timezone, applying to every message except those marked mandatory_operational or mandatory_legal and quiet_hours_exempt.'
+    on_conflict: most specific scope wins
+    rationale: Required to ship a default by kernel K07. A tenant whose workforce works nights will set it per site, and the default protects the majority who do not.
+
+  - key: cost_ceiling_never_blocks_mandatory
+    kind: guard
+    scope: kernel
+    overridable_at: null
+    default: 'A tenant cost ceiling suppresses non-mandatory messages and never suppresses mandatory_operational or mandatory_legal ones. The overspend is reported.'
+    on_conflict: not overridable
+    rationale: A ceiling that silently stops a safety or security alert is a worse failure than the spend it prevents.
+
+policy_knobs:
+  - {key: quiet_hours_start, default: '22:00', per_surface: false}
+  - {key: quiet_hours_end, default: '07:00'}
+  - {key: dedupe_window_minutes, default: 60, range: [1, 1440]}
+  - {key: queue_lag_seconds, default: 60, range: [5, 600], lowest_settable_scope: kernel}
+  - {key: queue_lag_minutes, default: 10, range: [1, 120], lowest_settable_scope: kernel}
+  - {key: receipt_wait_minutes, default: 30, range: [1, 1440]}
+  - {key: retry_budget, default: 5, range: [0, 20]}
+  - {key: retry_base_seconds, default: 30, range: [1, 600]}
+  - {key: batch_window_minutes, default: 15, range: [1, 1440]}
+  - {key: batch_dispatch_lag_minutes, default: 5, range: [1, 120], lowest_settable_scope: kernel}
+  - {key: batch_size_alert, default: 50, range: [2, 1000]}
+  - {key: template_failure_alert, default: 0.1, range: [0.001, 1.0]}
+  - {key: suppression_rate_alert, default: 0.2, range: [0.01, 1.0]}
+  - {key: registration_pending_days, default: 3, range: [1, 60]}
+  - {key: draft_template_stale_days, default: 14, range: [1, 180]}
+  - {key: monthly_cost_ceiling_minor, default: null, note: 'null means no ceiling. Deliberately null, because a shipped ceiling would suppress a small tenant''s routine messages and be irrelevant to a large one, and the failure mode of a wrong ceiling is silence'}
+  - {key: channel_preference_order, default: [in_app, push, whatsapp, sms, email], note: 'ordered failover. The default puts the free channels first, which is a cost decision made deliberately and stated'}
+
+open_questions:
+  - {q: 'Should Verity hold the tenant''s external messaging registrations - the sending entity, the header and the template identifiers - or should each tenant hold their own with Verity as a configured consumer? Holding them centrally makes onboarding far faster and makes Verity responsible for another party''s regulatory position.', assumption: None. The model has fields for the identifiers and takes no position on whose registration they are., confidence: VALIDATION_REQUIRED, method: legal and commercial review of who may hold a registration and what liability follows, priority: Critical, blocks: [template registration lifecycle, onboarding time, AET-06 decision count]}
+  - {q: 'What does a tenant''s messaging actually cost per active recipient per month across the target segments? Every batching, channel-order and ceiling default in this capability is a guess without that number, and the difference between a good and a bad default is a material share of a small tenant''s software budget.', assumption: 'None. The defaults order free channels first, which is directionally right and quantitatively unfounded.', confidence: VALIDATION_REQUIRED, method: measure per-recipient message volume by category and channel across a pilot quarter and price it against the published rate card, priority: Critical, blocks: [channel_preference_order, batch_window_minutes, monthly_cost_ceiling_minor, unit economics]}
+  - {q: 'Should a recipient be able to see every message the platform has sent them? It is honest, it makes disputes about whether somebody was told trivially resolvable, and it exposes internal audience rules and any message sent to the wrong person.', assumption: None., confidence: VALIDATION_REQUIRED, method: privacy review plus operator interview, priority: High}
+  - {q: 'Is a message-delivered receipt sufficient evidence for any contractual purpose - proof that a counterparty was notified of a breach, for example? The model explicitly claims only what the provider reported, and some contracts require more.', assumption: Not sufficient. The claim is limited and stated., confidence: VALIDATION_REQUIRED, method: contract review alongside the evidence and audit claims raised elsewhere, priority: High, blocks: [sla_contract escalation evidence, core_audit tamper-evidence claim]}
+  - {q: 'How should a recipient who works nights be handled by default? The shipped quiet hours protect the majority and are exactly wrong for a night workforce, and the correct default may be to have none until somebody sets them.', assumption: '22:00 to 07:00, overridable at site and user. Wrong for a night operation on day one.', confidence: VALIDATION_REQUIRED, method: operator interviews across the segments that operate overnight, priority: High}

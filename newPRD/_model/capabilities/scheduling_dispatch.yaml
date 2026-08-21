@@ -1,0 +1,563 @@
+key: scheduling_dispatch
+name: Scheduling and Dispatch
+layer: domain
+confidence: KNOWN
+description: >
+  The single reusable engine that matches demand to resources across time and place. It
+  never knows what kind of resource it is scheduling or what kind of demand it is
+  satisfying. Both arrive through ports as shapes - a thing with availability, capacity and
+  qualifications, and a thing with a window, a location, a required qualification set and a
+  priority. That is the whole reason one scheduling engine can serve every pack.
+
+principles:
+  - The engine matches shapes, not nouns. If the word for a resource or a demand ever appears in this capability, the composition has failed and AET-01 will say so.
+  - An assignment is a commitment to a person, not a row in a plan. Changing it late has a human cost, and the model makes that cost visible rather than treating a reassignment as a free edit.
+  - Publishing is a distinct act from planning. A draft schedule that people can see is a schedule people will act on, so visibility is a state transition with notifications, not a filter.
+  - Optimisation proposes, humans dispose. An automatic assignment that cannot be explained will be overridden, and once overridden habitually the engine is decoration.
+  - Coverage is the metric that matters, not utilisation. An unstaffed commitment is a failure; an underused resource is an inefficiency. Confusing the two produces a system that optimises the wrong thing.
+
+entities:
+
+  - key: demand
+    name: Demand
+    description: A unit of work needing a resource, at a time, at a place, with a required qualification set. Produced by any capability that provides schedulable_demand.
+    owner: tenant
+    tenancy: tenant_scoped_with_site_partition
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: source_capability_key, type: string, req: true, immutable: true, note: 'which capability produced this demand, so an orphan can be traced'}
+      - {key: source_ref, type: uuid, req: true, immutable: true, note: 'the producing record, resolved through the schedulable_demand port. Deliberately not a foreign key'}
+      - {key: location_ref, type: uuid, nullable: true, note: resolved through the org_structure port}
+      - {key: window_start, type: timestamptz, req: true}
+      - {key: window_end, type: timestamptz, req: true}
+      - {key: is_window_flexible, type: bool, req: true, default: false, note: whether the window is a hard commitment or a preference. Conflating the two is why an engine reschedules something that could not move}
+      - {key: required_qualification_keys, type: json, req: true, note: flat list of scalars}
+      - {key: required_count, type: int, req: true, default: 1, note: 'how many resources this demand needs simultaneously. One field rather than N duplicated demands, so partial coverage is expressible'}
+      - {key: priority, type: enum, values: [routine, elevated, urgent, critical], req: true, default: routine}
+      - {key: recurrence_id, type: uuid, nullable: true, fk: recurrence_pattern}
+      - {key: cost_ceiling_minor, type: money_minor, nullable: true, financial: true}
+      - {key: cancellation_deadline_at, type: timestamptz, nullable: true, note: 'after which cancelling has a cost, which the billing capability decides and this capability only records'}
+    invariants:
+      - window_end > window_start.
+      - required_count >= 1. A demand for zero resources is a demand that should not exist.
+      - A demand may never reference the concrete entity of its producing capability. The source_ref is opaque here and is resolved through the port, which is what keeps one engine usable by every producer.
+      - Demand is never created directly by a human in this capability. It always arrives from a producer through the schedulable_demand port, so that cancelling the producing record cancels the demand rather than leaving an orphan.
+    states: [open, partially_covered, covered, at_risk, unfulfilled, cancelled, completed]
+    initial_state: open
+    transitions:
+      - {from: open, to: partially_covered, action: assign_resource, actor: dispatcher or system, guard: at least one and fewer than required_count assignments are confirmed, side_effects: coverage recomputed, reversibility: true}
+      - {from: open, to: covered, action: assign_resource, actor: dispatcher or system, guard: confirmed assignments equal required_count, side_effects: 'coverage recomputed, the producer is notified through the port', reversibility: true}
+      - {from: partially_covered, to: covered, action: assign_resource, actor: dispatcher or system, guard: as above, side_effects: as above, reversibility: true}
+      - {from: covered, to: partially_covered, action: release_assignment, actor: 'dispatcher, resource or system', guard: an assignment is released or declined, side_effects: 'coverage recomputed, backfill sought where the port is bound', reversibility: true}
+      - {from: partially_covered, to: open, action: release_assignment, actor: as above, guard: no confirmed assignment remains, side_effects: as above, reversibility: true}
+      - {from: open, to: at_risk, action: observe_coverage_risk, actor: system_scheduler, guard: window_start is within coverage_risk_lead_minutes and coverage is below required_count, side_effects: 'escalation to the dispatcher and, at critical priority, to ops_manager', reversibility: true}
+      - {from: partially_covered, to: at_risk, action: observe_coverage_risk, actor: system_scheduler, guard: as above, side_effects: as above, reversibility: true}
+      - {from: at_risk, to: covered, action: assign_resource, actor: dispatcher or system, guard: confirmed assignments equal required_count, side_effects: escalation cleared, reversibility: true}
+      - {from: at_risk, to: unfulfilled, action: observe_window_start_uncovered, actor: system_scheduler, guard: 'now >= window_start and coverage is below required_count', side_effects: 'the producer is told through the port, the failure is recorded with the coverage shortfall and the reason', reversibility: false}
+      - {from: covered, to: completed, action: observe_window_end, actor: system_scheduler, guard: 'now >= window_end and every assignment is in a terminal state', side_effects: 'the producer is told; whether the work actually happened is the producer''s question, not this capability''s', reversibility: false}
+      - {from: partially_covered, to: completed, action: observe_window_end, actor: system_scheduler, guard: as above, side_effects: as above, reversibility: false}
+      - {from: unfulfilled, to: completed, action: observe_window_end, actor: system_scheduler, guard: 'now >= window_end', side_effects: as above, reversibility: false}
+      - {from: open, to: cancelled, action: cancel_demand, actor: the producing capability through the port, guard: null, side_effects: 'assignments released, resources notified, cancellation cost recorded where past the deadline', reversibility: false}
+      - {from: partially_covered, to: cancelled, action: cancel_demand, actor: as above, guard: null, side_effects: as above, reversibility: false}
+      - {from: covered, to: cancelled, action: cancel_demand, actor: as above, guard: null, side_effects: as above, reversibility: false}
+      - {from: at_risk, to: cancelled, action: cancel_demand, actor: as above, guard: null, side_effects: as above, reversibility: false}
+    stuck_state_policy:
+      completed: >
+        Terminal here. Whether the work was actually done, and whether it is billable, are
+        the producing capability's questions and the billing sink's questions. This
+        capability asserts only that the window ended with the assignments in terminal
+        states. Nothing pends.
+      cancelled: >
+        Terminal. Retained with the cancelling producer, the timestamp relative to
+        cancellation_deadline_at, and the assignments that were released, because a late
+        cancellation frequently has a cost and this row is the evidence for it. Nothing pends.
+      open: >
+        An open demand approaching its window with nobody assigned is the core operational
+        failure this capability exists to prevent. Threshold: coverage_risk_lead_minutes,
+        which is priority-dependent - default 2880 minutes for routine, 1440 elevated, 240
+        urgent, 60 critical - at which point it moves to at_risk rather than merely being
+        reported. Told: the dispatcher. Escape hatch: assign, or cancel through the producer.
+        Deliberately NOT an escape hatch - auto-assigning the nearest available resource,
+        because an auto-assignment made at the deadline is the one nobody has checked.
+      partially_covered: >
+        Worse than open, because it looks staffed on a summary screen. Same thresholds as
+        open, and the notification always names the SHORTFALL rather than the coverage - two
+        of three is reported as one short, not as sixty-seven percent, because a percentage
+        is what makes a shortfall look acceptable. Told: the dispatcher, and at critical
+        priority ops_manager.
+      covered: >
+        Steady state until the window. The monitored exception is coverage that decays -
+        an assignment declined or released after the demand was reported covered to the
+        producer. The producer is told of the change explicitly rather than being left with
+        a stale belief, which matters because the producer may have already told a
+        counterparty.
+      at_risk: >
+        This is an escalation, not a queue. Notification cadence increases as window_start
+        approaches - at entry, at half the remaining lead time, and every
+        at_risk_repeat_minutes (default 15) in the final hour. Told: the dispatcher, then
+        ops_manager, then at critical priority the tenant_owner. Escape hatch: cover it,
+        reduce required_count with a recorded reason, or cancel. There is no automatic
+        resolution and there is no snooze, because a snoozed unstaffed commitment is an
+        unstaffed commitment.
+      unfulfilled: >
+        A recorded failure rather than a queue. It stops escalating on entry, because the
+        moment has passed and continuing to page people about it trains them to ignore
+        pages. Told once, to ops_manager, with the shortfall, the reason and the producer.
+        It appears permanently in coverage reporting. Escape hatch: none - the purpose of the
+        state is that the failure is not erasable.
+
+  - key: assignment
+    name: Assignment
+    description: A commitment that one resource will satisfy one demand for a period. The unit that a person actually experiences.
+    owner: tenant
+    tenancy: tenant_scoped_with_site_partition
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: demand_id, type: uuid, req: true, fk: demand}
+      - {key: resource_ref, type: uuid, req: true, note: resolved through the schedulable_resource port}
+      - {key: starts_at, type: timestamptz, req: true}
+      - {key: ends_at, type: timestamptz, req: true}
+      - {key: assigned_by, type: enum, values: [dispatcher, optimiser, self_selected, escalation, backfill], req: true}
+      - {key: assigned_by_principal_id, type: uuid, nullable: true}
+      - {key: assignment_reason, type: text, nullable: true, note: mandatory when assigned_by is optimiser - the explanation of why this resource. An unexplained optimiser assignment gets overridden until the optimiser is switched off}
+      - {key: acceptance_required, type: bool, req: true, default: false, note: 'whether the resource must confirm. Configuration, because engagement kinds differ in whether a person may decline'}
+      - {key: accepted_at, type: timestamptz, nullable: true}
+      - {key: declined_at, type: timestamptz, nullable: true}
+      - {key: decline_reason, type: text, nullable: true}
+      - {key: published_at, type: timestamptz, nullable: true, note: when the resource could first see it. Null means the assignment exists only in the plan}
+      - {key: overtime_minutes, type: int, nullable: true, note: 'computed against the resource''s limits at assignment time and recomputed on change'}
+      - {key: cost_estimate_minor, type: money_minor, nullable: true, financial: true}
+      - {key: swap_of_assignment_id, type: uuid, nullable: true, fk: assignment}
+      - {key: version, type: int, req: true, default: 1, note: 'incremented on every change after publication, so a resource can see that what they were told has changed'}
+    invariants:
+      - ends_at > starts_at.
+      - No two non-terminal assignments for one resource_ref may overlap in time. Double-booking a person is the defect that destroys trust in a roster faster than any other, and it is prevented by a constraint rather than by a check.
+      - An assignment may not be created against a resource the schedulable_resource port reports as unavailable, except through the escalation path, which requires a reason and is separately reported.
+      - published_at may never be unset. Un-publishing an assignment somebody has already seen does not un-tell them.
+      - Financial fields are gated by view_financial and are never offline_editable.
+    states: [planned, published, accepted, declined, in_progress, completed, released, no_show]
+    initial_state: planned
+    transitions:
+      - {from: planned, to: published, action: publish_schedule, actor: dispatcher or system_scheduler, guard: the demand is not cancelled and the resource is still reported available, side_effects: the resource is notified; published_at set; from here every change increments version and re-notifies, reversibility: false}
+      - {from: published, to: accepted, action: accept_assignment, actor: the resource, guard: acceptance_required is true, side_effects: coverage confirmed to the producer, reversibility: true}
+      - {from: published, to: declined, action: decline_assignment, actor: the resource, guard: acceptance_required is true and a reason is supplied, side_effects: 'demand coverage recomputed, backfill sought where the port is bound, dispatcher notified', reversibility: false}
+      - {from: published, to: in_progress, action: observe_start, actor: system_scheduler, guard: 'now >= starts_at and acceptance_required is false', side_effects: none, reversibility: false}
+      - {from: accepted, to: in_progress, action: observe_start, actor: system_scheduler, guard: 'now >= starts_at', side_effects: none, reversibility: false}
+      - {from: in_progress, to: completed, action: observe_end, actor: system_scheduler, guard: 'now >= ends_at', side_effects: 'the producer is told; whether the work was done is the producer''s question', reversibility: false}
+      - {from: planned, to: released, action: release_assignment, actor: dispatcher, guard: null, side_effects: 'demand coverage recomputed; no notification, because nobody was ever told', reversibility: false}
+      - {from: published, to: released, action: release_assignment, actor: dispatcher or ops_manager, guard: a reason is supplied, side_effects: 'the resource is notified that a commitment they were given has been withdrawn, and the late-change cost is recorded', reversibility: false}
+      - {from: accepted, to: released, action: release_assignment, actor: dispatcher or ops_manager, guard: as above, side_effects: as above, reversibility: false}
+      - {from: in_progress, to: released, action: release_assignment, actor: ops_manager, guard: a reason is supplied and the acting session is elevated, side_effects: 'as above, plus the partial period is recorded so it can still be paid and billed', reversibility: false, note: releasing work that has already started is rare and expensive and is deliberately restricted and separately reported}
+      - {from: published, to: no_show, action: record_no_show, actor: supervisor or dispatcher, guard: 'now > starts_at plus no_show_grace_minutes and no presence evidence exists', side_effects: 'demand coverage recomputed, backfill sought, the resource and their supervisor are told', reversibility: true}
+      - {from: accepted, to: no_show, action: record_no_show, actor: as above, guard: as above, side_effects: as above, reversibility: true}
+      - {from: no_show, to: in_progress, action: reverse_no_show, actor: supervisor or dispatcher, guard: 'presence evidence arrived late, or the no-show was recorded in error, and a reason is supplied', side_effects: 'coverage restored, any backfill already dispatched is NOT auto-cancelled', reversibility: false}
+    stuck_state_policy:
+      planned: >
+        A planned assignment nobody has published is invisible to the person expected to do
+        it. Threshold: publish_lead_hours before starts_at (default 72), or immediately if
+        starts_at is inside that window. Told: the dispatcher. Escape hatch: publish or
+        release. Verity does not auto-publish. Auto-publishing a draft roster is how a
+        half-finished plan becomes a set of commitments at 2am.
+      published: >
+        Where acceptance_required is true, an unanswered publication is a commitment nobody
+        has confirmed. Threshold: acceptance_deadline_hours (default 24, or half the lead
+        time when that is shorter). Told: the resource, then the dispatcher. Escape hatch:
+        the resource accepts or declines, or the dispatcher reassigns. On the deadline the
+        assignment is NOT auto-accepted and NOT auto-released - it is escalated, because both
+        automatic outcomes are wrong and the choice belongs to a person who can see the
+        coverage position.
+      accepted: >
+        Steady state until start. The monitored exception is an accepted assignment whose
+        underlying demand or resource changed after acceptance - the window moved, the
+        location moved, the qualification requirement changed. The version increment and
+        re-notification exist for exactly this, and an accepted assignment whose version has
+        moved without re-acknowledgement is reported to the dispatcher, because the person
+        accepted something different from what now exists.
+      declined: >
+        Terminal for this assignment and an active problem for the demand. Not a queue in
+        itself; the demand's own coverage policy carries the escalation. The monitored
+        exception is a resource declining more than decline_rate_threshold of published
+        assignments over a rolling period (default 0.3), reported to their supervisor rather
+        than to the dispatcher, because a high decline rate is a conversation about the
+        person's circumstances and not a scheduling adjustment.
+      in_progress: >
+        Bounded by ends_at. The monitored exception is an assignment in progress far past its
+        ends_at without transitioning - the scheduler is not running, or the window was wrong.
+        Threshold: overrun_alert_minutes (default 60). Told: the supervisor. Escape hatch:
+        end it, extend it explicitly, or let the producer close it. An assignment silently
+        running for days accumulates overtime and cost against a period nobody agreed.
+      no_show: >
+        An escalation, not a queue. Told at entry to the dispatcher and the supervisor;
+        backfill is sought immediately where the port is bound. The window for reverse_no_show
+        stays open for no_show_reversal_hours (default 48), after which the record is fixed,
+        because a no-show reversed a week later is a payroll correction rather than a
+        scheduling one and belongs in a different conversation.
+      released: >
+        Terminal. Retained with the reason and the notice given, because the pattern of late
+        releases against one resource is a real grievance and the only place it is visible.
+        Nothing pends.
+      completed: >
+        Terminal from this capability's point of view. Whether the work was actually done,
+        and whether it is billable, are the producer's and the billing sink's questions.
+        Nothing pends here.
+
+  - key: schedule_version
+    name: Schedule Version
+    description: A published snapshot of a period's assignments for a location or a resource set - what people were told, as they were told it.
+    owner: tenant
+    tenancy: tenant_scoped_with_site_partition
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: scope_location_ref, type: uuid, nullable: true, note: resolved through the org_structure port}
+      - {key: period_start, type: timestamptz, req: true}
+      - {key: period_end, type: timestamptz, req: true}
+      - {key: version_number, type: int, req: true}
+      - {key: published_at, type: timestamptz, nullable: true}
+      - {key: published_by_principal_id, type: uuid, nullable: true}
+      - {key: assignment_ids, type: json, req: true, note: flat list of scalars capturing exactly which assignments were in this version}
+      - {key: change_summary, type: json, nullable: true, note: 'against the previous version - added, removed, moved - as flat scalar lists, so a resource can be shown what changed rather than a new roster'}
+      - {key: coverage_shortfall_count, type: int, req: true, default: 0}
+    invariants:
+      - A published version is immutable. A change produces a new version. Editing a published roster in place means nobody can prove what somebody was told.
+      - version_number is contiguous per scope and period. A gap means a version was published and lost.
+      - A version may not be published while the period contains any assignment in state planned that the publisher has not either included or explicitly excluded. A silently omitted assignment is a person who was left off the roster.
+    states: [draft, published, superseded]
+    initial_state: draft
+    transitions:
+      - {from: draft, to: published, action: publish_schedule, actor: dispatcher or ops_manager, guard: 'every planned assignment in the period is included or explicitly excluded, and the coverage shortfall has been acknowledged where non-zero', side_effects: 'every included assignment moves to published, every affected resource is notified with the change summary rather than the whole roster', reversibility: false}
+      - {from: published, to: superseded, action: publish_schedule, actor: dispatcher or ops_manager, guard: a later version for the same scope and period is published, side_effects: none, reversibility: false}
+      - {from: draft, to: superseded, action: discard_schedule_draft, actor: dispatcher, guard: null, side_effects: none, reversibility: false}
+    stuck_state_policy:
+      draft: >
+        A draft roster that never publishes is the single most common cause of a location
+        being unstaffed by surprise, because the dispatcher believes it is done. Threshold:
+        publish_lead_hours before period_start (default 72). Told: the dispatcher, then
+        ops_manager at half the remaining lead. Escape hatch: publish or discard. No
+        auto-publish, for the same reason as on the assignment.
+      published: >
+        Steady state. The monitored exception is a published version with a non-zero
+        coverage_shortfall_count and no subsequent version - the shortfall was acknowledged
+        and then never resolved. Told: ops_manager, daily until the period starts.
+      superseded: >
+        Terminal. Retained permanently. This is the evidence of what people were told and
+        when, which is what a roster dispute is actually about. Nothing pends.
+
+  - key: recurrence_pattern
+    name: Recurrence Pattern
+    description: The rule that generates repeating demand, and the horizon over which it has been materialised.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: source_capability_key, type: string, req: true}
+      - {key: source_ref, type: uuid, req: true, note: resolved through the schedulable_demand port}
+      - {key: rule, type: text, req: true, note: 'an expression in the closed expression language, statically cost-bounded, so a pattern cannot be authored that generates unbounded demand'}
+      - {key: timezone, type: string, req: true, note: 'the pattern''s own timezone, which may differ from the location''s. A weekly pattern authored in one timezone and applied in another drifts by an hour twice a year and the drift is always discovered by a person standing somewhere at the wrong time'}
+      - {key: starts_on, type: date, req: true}
+      - {key: ends_on, type: date, nullable: true}
+      - {key: materialised_to, type: date, nullable: true, note: how far ahead demand has actually been generated. The gap between this and the horizon is the thing that silently stops a roster existing}
+      - {key: horizon_days, type: int, req: true, default: 90}
+      - {key: exception_dates, type: json, nullable: true, note: flat list of dates where the pattern does not apply}
+    invariants:
+      - The rule expression is statically cost-bounded and is rejected at save time if it could generate more than max_generated_demand_per_run occurrences. An unbounded pattern is a denial of service against the tenant's own database.
+      - materialised_to may never exceed starts_on plus horizon_days plus the generation batch size. Materialising the whole of a pattern with no end date is how a scheduling table becomes unbounded.
+      - Changing a pattern never alters demand that has already been materialised and covered. It applies from the change forward, and already-materialised uncovered demand is listed for explicit review.
+    states: [active, paused, ended]
+    initial_state: active
+    transitions:
+      - {from: active, to: paused, action: pause_recurrence, actor: dispatcher or ops_manager, guard: a reason is supplied, side_effects: generation stops; already-materialised demand is untouched and is listed, reversibility: true}
+      - {from: paused, to: active, action: resume_recurrence, actor: dispatcher or ops_manager, guard: null, side_effects: 'generation resumes from materialised_to, and the gap created while paused is listed rather than backfilled', reversibility: true}
+      - {from: active, to: ended, action: end_recurrence, actor: dispatcher or ops_manager, guard: an end date is supplied, side_effects: generation stops permanently; materialised demand beyond the end date is listed for cancellation rather than cancelled automatically, reversibility: false}
+      - {from: paused, to: ended, action: end_recurrence, actor: as above, guard: as above, side_effects: as above, reversibility: false}
+    stuck_state_policy:
+      active: >
+        The dangerous condition is a pattern whose materialised_to has fallen behind the
+        horizon, which means demand that should exist does not, and nothing anywhere shows a
+        gap because you cannot see demand that was never created. Threshold:
+        materialised_to earlier than today plus materialisation_lag_alert_days (default 14).
+        Told: platform_operator, because this is generation machinery, AND ops_manager,
+        because the operational consequence is theirs. Escape hatch: run generation. This is
+        the highest-value monitor in the capability and it is deliberately reported to both
+        sides, since each alone would assume the other was handling it.
+      paused: >
+        Threshold: recurrence_pause_review_days (default 14). Told: the pausing principal and
+        ops_manager. Escape hatch: resume or end. A paused pattern produces no demand, and a
+        pattern paused for a fortnight is usually one somebody forgot, which surfaces as an
+        empty roster.
+      ended: >
+        Terminal. Retained, because the pattern is the explanation for demand that already
+        exists. Nothing pends.
+
+ports:
+  - port_key: schedulable_resource
+    direction: requires
+    contract: >
+      A resource with availability, capacity, a qualification set, calendar exceptions and a
+      single reason code when unavailable. The engine never learns what kind of thing it is.
+    cardinality: zero_or_many
+    unbound_behaviour: >
+      No assignments can be made. Demand is still recorded, still ages, and still reports its
+      coverage shortfall, so the tenant can see what would need staffing. The scheduling
+      surface shows demand only, with an explicit statement that no resource provider is
+      bound - rather than an empty resource picker, which reads as a fault.
+
+  - port_key: schedulable_demand
+    direction: requires
+    contract: A unit of demand with a window, a required qualification set, a location, a required count and a priority, plus a cancellation signal.
+    cardinality: zero_or_many
+    unbound_behaviour: 'No demand exists, so there is nothing to schedule. The capability is inert rather than broken, and the surface says so. Deliberately not an error - a tenant may install scheduling ahead of the capability that will feed it.'
+
+  - port_key: org_structure
+    direction: requires
+    contract: Resolve locations for demand and for the site partition, and expose the hierarchy for dispatcher scope.
+    cardinality: zero_or_one
+    unbound_behaviour: Demand and assignments carry no location. Distance and travel considerations are unavailable and the optimiser degrades to qualification and availability matching only, which is stated on every proposal it makes.
+
+  - port_key: location_calendar
+    direction: requires
+    contract: 'Given a location and an instant, return whether it operates and which operating day the instant belongs to.'
+    cardinality: zero_or_one
+    unbound_behaviour: >
+      Operating hours are not consulted. Demand may be scheduled at times a location is
+      closed, and overnight periods are attributed by calendar midnight rather than by the
+      location's day boundary. The second of those is a silent correctness failure in every
+      downstream hours calculation and it is stated here rather than discovered in a payroll
+      dispute.
+
+  - port_key: evidence_capture
+    direction: requires
+    contract: Capture presence or completion evidence against an assignment.
+    cardinality: zero_or_one
+    unbound_behaviour: 'no_show is determined by the absence of any other signal rather than by the absence of presence evidence, which makes it far weaker and much more likely to be disputed. The no-show record states which basis was used.'
+
+  - port_key: backfill_request
+    direction: requires
+    contract: Signal that a covered demand has lost coverage and cover is needed, with the remaining lead time and the priority.
+    cardinality: zero_or_one
+    unbound_behaviour: Coverage loss is reported to the dispatcher as an escalation and nothing is dispatched automatically. Every threshold still fires; only the automatic search is absent.
+
+  - port_key: billable_outcome_sink
+    direction: requires
+    contract: Emit a completed assignment as a billable outcome with quantity, rate basis and evidence references.
+    cardinality: zero_or_one
+    unbound_behaviour: 'Assignments complete normally and record their duration. No billable event is produced and the scheduling surface shows no billing affordance at all, rather than showing one that is disabled.'
+
+  - port_key: approval_chain
+    direction: requires
+    contract: Route overtime, cost-ceiling breach and unavailable-resource overrides for approval.
+    cardinality: zero_or_one
+    unbound_behaviour: 'The action executes immediately with an audit note recording that no approval chain was configured. Overtime and ceiling breaches are still computed, recorded and reported - the approval is what is missing, not the visibility.'
+
+  - port_key: notification
+    direction: requires
+    contract: Deliver publication, change, acceptance-request, coverage-risk and no-show messages, honouring quiet hours except where marked mandatory_operational.
+    cardinality: zero_or_one
+    unbound_behaviour: >
+      Nothing is pushed. Assignments still publish and are visible in the app, which means a
+      resource who does not open the app does not know. This is the most damaging unbound
+      behaviour in the whole library and the pack documentation must say so plainly.
+
+actions:
+
+  - key: assign_resource
+    entity: assignment
+    label: Assign a resource to a demand
+    actors: [dispatcher, ops_manager, supervisor, system]
+    preconditions:
+      - The demand is in state open, partially_covered or at_risk.
+      - The resource is reported available by the schedulable_resource port for the whole window, or the escalation path is used with a reason.
+      - The resource holds every required qualification, or the override path is used with a reason.
+      - No overlapping non-terminal assignment exists for this resource.
+      - Working-hour limits reported by the resource provider are not breached.
+    inputs: [demand_id, resource_ref, starts_at, ends_at, assignment_reason, acceptance_required, override_reason]
+    creates: [assignment]
+    updates: [demand coverage and state, resource availability through the port]
+    events: [assignment.created, demand.coverage_changed]
+    notifications:
+      - {to: the resource, channel: push_and_in_app, when: 'the assignment is published, not at creation', template: assignment_published, must_include: [window, location, what_changed_if_a_version], mandatory_operational: true}
+      - {to: dispatcher, channel: in_app, when: an override or escalation path was used, template: override_recorded, must_include: [override_reason, actor_display_name]}
+    undoable: true
+    reversal_action: release_assignment
+    audit_class: always
+    idempotency_key_source: 'demand_id plus resource_ref plus starts_at. A double-tap on a dispatch screen produces one assignment, which matters because dispatch screens are used at speed under pressure.'
+    offline_policy: refuse
+    concurrency: >
+      The overlap constraint is enforced by an exclusion constraint on the resource over the
+      time range, inside the transaction, not by a read-then-write check. Two dispatchers
+      assigning the same resource to overlapping demands: one succeeds, the other receives
+      E_CONFLICT_UNIQUE naming the winning assignment and its dispatcher. Coverage counting
+      on the demand is done under a row lock on the demand, so required_count can never be
+      exceeded by a race - over-assignment is as much a defect as under-assignment because
+      somebody travels for nothing.
+    failure_modes:
+      - {code: E_CONFLICT_UNIQUE, cause: the resource already has an overlapping assignment, message: This person is already assigned at that time., note: 'names the other assignment and its location, because the dispatcher''s next question is always where'}
+      - {code: E_PRECONDITION, cause: the resource is reported unavailable, message: This action is not available in the current state., note: 'the message carries the single reason CODE from the resource provider, resolved to a human phrase locally. It never carries the provider''s reason text, which may be sensitive'}
+      - {code: E_PRECONDITION, cause: a required qualification is missing or expired, message: This action is not available in the current state., note: 'names the qualification, which is not sensitive, unlike an absence reason'}
+      - {code: E_PRECONDITION, cause: a working-hour limit would be breached, message: This action is not available in the current state., note: names the specific limit and the resulting total. A limit refusal that does not say by how much is a refusal the dispatcher will route around}
+      - {code: E_VALIDATION, cause: assignment window falls outside the demand window and the demand is not flexible, message: This does not fit the requested time.}
+      - {code: E_VALIDATION, cause: assigned_by is optimiser and assignment_reason is empty, message: null, note: an unexplained automatic assignment is refused at write time rather than being allowed to erode trust in the optimiser}
+      - {code: E_QUOTA, cause: 'cost_estimate would breach the demand''s cost ceiling', message: Plan limit reached., note: 'routed through the approval_chain port where bound, refused with the ceiling named where not'}
+      - {code: E_CONFLICT_VERSION, cause: the demand changed since the dispatch screen loaded, message: Someone else changed this record.}
+    edge_cases:
+      - Assigning across the location's day boundary. The assignment is one record spanning the boundary; attribution to operating days is computed by the location_calendar port and is recorded on the assignment rather than derived later, so that a calendar change cannot retroactively move somebody's hours between days.
+      - Assigning a resource whose availability window ends mid-assignment. Refused. Partial availability produces a partial assignment only if the demand's required_count and window permit splitting, and splitting is always an explicit act rather than an automatic one.
+      - Assignment created before the demand is published to the resource. Normal - creation and publication are separate, and this is what makes a draft roster possible.
+      - Two demands at the same location in the same window each needing the same single resource. Both cannot be covered. The engine does not silently prefer one; it reports the contention with both priorities and the dispatcher chooses. Automatic priority resolution is offered as configuration and is off by default, because the first time it silently drops an urgent demand nobody will trust it again.
+      - An override used to assign an unavailable resource. Permitted for a dispatcher only where the tenant enables it, always requires a reason, is reported to ops_manager and is counted. A rising override count is the signal that the availability data is wrong, which is more useful than blocking the override and having the dispatcher work around the system entirely.
+
+  - key: publish_schedule
+    entity: schedule_version
+    label: Publish the schedule
+    actors: [dispatcher, ops_manager]
+    rationale: >
+      Publication is the moment a plan becomes a set of promises to people. Separating it
+      from planning is what makes a draft roster safe to work on, and versioning it is what
+      makes a later dispute answerable.
+    preconditions:
+      - Every planned assignment in the period is included or explicitly excluded.
+      - Any coverage shortfall is acknowledged.
+      - The publisher holds assign at a scope covering every location in the period.
+    inputs: [scope_location_ref, period_start, period_end, excluded_assignment_ids, shortfall_acknowledgement]
+    creates: [schedule_version]
+    updates: [included assignments move to published, previous version superseded]
+    events: [schedule.published, assignment.published per assignment]
+    notifications:
+      - {to: every resource with an included assignment, channel: push_and_in_app, when: always, template: schedule_published, must_include: [changed_assignments_only_where_a_previous_version_exists], batching_policy: 'one message per resource per publication, never one per assignment', mandatory_operational: true}
+      - {to: the supervisor of each location in scope, channel: in_app, when: coverage_shortfall_count is non-zero, template: coverage_shortfall, must_include: [shortfall_by_demand]}
+    undoable: false
+    confirmation_specification: 'Modal stating the number of resources who will be notified, the number of assignments that CHANGED since the previous version, the coverage shortfall count, and how many of the changes fall inside late_change_hours of their start. Requires acknowledging the shortfall when non-zero. Required because publication cannot be undone - people have been told.'
+    audit_class: always
+    idempotency_key_source: 'scope plus period plus a hash of the ordered assignment id list. Republishing an unchanged schedule is a 2xx no-op that notifies nobody, which is what makes a nervous second click harmless.'
+    offline_policy: refuse
+    concurrency: >
+      Publication takes an advisory lock on (scope, period). A second publication waits
+      rather than interleaving, and on acquiring the lock recomputes its change summary
+      against whatever is now the current version - so the summary a resource receives always
+      describes the change from what they were previously told, not from what the publisher
+      happened to be looking at.
+    failure_modes:
+      - {code: E_PRECONDITION, cause: planned assignments in the period are neither included nor excluded, message: Some assignments are neither published nor excluded., note: names them. A silently omitted assignment is a person left off the roster}
+      - {code: E_VALIDATION, cause: shortfall not acknowledged, message: Confirm you have seen the gaps.}
+      - {code: E_AUTHZ_SCOPE, cause: 'the period contains a location outside the publisher''s scope', message: Not found.}
+      - {code: E_DEPENDENCY, cause: notification provider unavailable, message: null, note: 'publication COMMITS and notifications are queued for retry. A schedule that fails to publish because a message could not be sent leaves the dispatcher believing it did not publish, and they will publish again'}
+      - {code: E_QUOTA, cause: the period contains more than max_assignments_per_publication, message: Plan limit reached., note: 'publication is split by scope rather than raised, because a single publication touching tens of thousands of people is a notification incident'}
+    edge_cases:
+      - Republishing after a small change. Every affected resource receives a CHANGE summary, not the whole roster, and resources with no change receive nothing at all. Sending an unchanged roster to two hundred people is how they learn to ignore roster notifications, after which the next real change is missed.
+      - A change published inside late_change_hours of the assignment's start. Permitted, flagged in the confirmation, counted per dispatcher and reported. Verity does not block late changes - operations require them - and it does make their frequency visible, because a roster changed at midnight every night is a management problem rather than a scheduling one.
+      - Publishing a period that overlaps an already-published period. The overlap is resolved by publishing a new version of the union, never two versions of overlapping ranges, because a resource holding two versions covering the same evening cannot tell which is current.
+      - A resource whose only assignment in the period is excluded. They are notified that they have no assignments in the period, not left with the previous version. Silence after a published roster is indistinguishable from an unchanged roster.
+      - Publishing when the notification port is unbound. Permitted, and the confirmation states plainly that nobody will be told and that resources must open the app. This is the most consequential unbound behaviour in the library and the confirmation is where it becomes visible to the person it affects.
+
+  - key: release_assignment
+    entity: assignment
+    label: Take an assignment back
+    actors: [dispatcher, ops_manager]
+    preconditions: [the assignment is not already terminal, a reason is supplied when it has been published, the acting session is elevated when the assignment is in progress]
+    inputs: [assignment_id, reason, seek_backfill]
+    creates: []
+    updates: [assignment state, demand coverage, resource availability]
+    events: [assignment.released, demand.coverage_changed]
+    notifications:
+      - {to: the resource, channel: push_and_in_app, when: the assignment was published, template: assignment_withdrawn, must_include: [window, reason_category, actor_display_name], mandatory_operational: true}
+      - {to: dispatcher, channel: in_app, when: released by anyone other than the dispatcher, template: coverage_lost}
+    undoable: false
+    confirmation_specification: 'Modal stating the notice period remaining before the assignment would have started, whether the release falls inside late_change_hours, the resulting coverage shortfall on the demand, and whether backfill will be sought. Required because a published assignment cannot be un-withdrawn - the person has been told it is gone.'
+    audit_class: always
+    idempotency_key_source: assignment_id plus target state. Replay is a 2xx no-op that does not re-notify.
+    offline_policy: refuse
+    concurrency: >
+      Coverage recomputation on the demand is done under the demand row lock, so a release
+      racing an assignment cannot leave the coverage count wrong in either direction. A
+      release racing an acceptance: the release wins and the resource is told their
+      acceptance no longer applies, because the alternative is a person believing they hold a
+      commitment that has been given away.
+    failure_modes:
+      - {code: E_PRECONDITION, cause: the assignment is already terminal, message: null, note: 2xx no-op}
+      - {code: E_VALIDATION, cause: reason empty on a published assignment, message: Give a reason. It is shown to the person.}
+      - {code: E_AUTHN, cause: session not elevated while the assignment is in progress, message: Confirm your identity to continue.}
+      - {code: E_DEPENDENCY, cause: backfill_request port unavailable while backfill was requested, message: null, note: the release commits and the backfill request is queued. A release that fails because cover could not be sought leaves a commitment that everyone believes is staffed}
+    edge_cases:
+      - Releasing the last covering assignment on a demand inside its risk window. The demand moves straight to at_risk and escalates immediately rather than waiting for the next scheduler pass, because the lead time is exactly what has just been lost.
+      - Releasing an assignment a resource has already travelled for. This capability cannot know that. Where evidence capture reports presence at the location, the release is refused and the correct action is to end the assignment early, which preserves the period for payment and billing. Releasing it would erase the fact that somebody turned up.
+      - A resource releasing their own assignment. Not this action - that is decline before start, and there is no self-release after start. A person who leaves mid-assignment is recorded by the supervisor as an early end, not as a release, because the two produce different pay and billing outcomes and only one of them is the person's own claim.
+      - Bulk release across a period, for instance when a location closes at short notice. Supported as a batch of individual releases sharing one correlation_id and one reason, so that each resource receives one message and the audit reads as one decision rather than forty.
+
+rules:
+  - key: no_double_booking
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'No resource may hold two non-terminal assignments overlapping in time. Enforced by a database exclusion constraint, not by an application check.'
+    on_conflict: not overridable
+
+  - key: coverage_never_exceeds_required_count
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'Confirmed assignments against a demand may never exceed required_count. Over-assignment is as much a defect as under-assignment, because somebody travels for nothing.'
+    on_conflict: not overridable
+
+  - key: publication_is_irreversible
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'published_at is never unset. A change after publication produces a new version and a re-notification. Un-publishing does not un-tell.'
+    on_conflict: not overridable
+
+  - key: optimiser_must_explain
+    kind: validation
+    scope: capability
+    overridable_at: null
+    default: 'An assignment with assigned_by=optimiser is rejected without an assignment_reason naming the factors that selected this resource.'
+    on_conflict: not overridable
+    rationale: An unexplainable automatic assignment gets overridden, and a habitually overridden optimiser is switched off. Explanation is what makes automation survive contact with a dispatcher.
+
+  - key: unavailable_override
+    kind: policy
+    scope: capability
+    overridable_at: tenant
+    default: 'false. A dispatcher may not assign a resource the provider reports unavailable. A tenant may enable it, in which case a reason is mandatory, ops_manager is told, and the override count is reported weekly.'
+    on_conflict: most specific scope wins
+    rationale: Blocking absolutely drives dispatchers to a spreadsheet. Permitting silently makes availability data meaningless. Permitting visibly, and counting it, turns the override into the signal that the availability data is wrong.
+
+  - key: coverage_risk_lead_by_priority
+    kind: policy
+    scope: capability
+    overridable_at: site
+    default: 'routine 2880 minutes, elevated 1440, urgent 240, critical 60. A site may shorten or lengthen each.'
+    on_conflict: most specific scope wins
+
+  - key: acceptance_deadline_never_auto_resolves
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'An unanswered acceptance request is escalated at its deadline. It is never auto-accepted and never auto-released.'
+    on_conflict: not overridable
+    rationale: Both automatic outcomes are wrong. Auto-accept commits a person who never agreed; auto-release removes coverage nobody replaced. The choice belongs to somebody who can see the coverage position.
+
+policy_knobs:
+  - {key: publish_lead_hours, default: 72, range: [1, 2160]}
+  - {key: acceptance_deadline_hours, default: 24, range: [1, 336]}
+  - {key: late_change_hours, default: 24, range: [1, 168]}
+  - {key: at_risk_repeat_minutes, default: 15, range: [1, 240]}
+  - {key: no_show_grace_minutes, default: 15, range: [0, 180]}
+  - {key: no_show_reversal_hours, default: 48, range: [1, 336]}
+  - {key: overrun_alert_minutes, default: 60, range: [5, 1440]}
+  - {key: decline_rate_threshold, default: 0.3, range: [0.05, 1.0]}
+  - {key: materialisation_lag_alert_days, default: 14, range: [1, 90]}
+  - {key: recurrence_pause_review_days, default: 14, range: [1, 180]}
+  - {key: recurrence_horizon_days, default: 90, range: [7, 730]}
+  - {key: max_generated_demand_per_run, default: 10000, lowest_settable_scope: kernel}
+  - {key: max_assignments_per_publication, default: 5000, lowest_settable_scope: kernel}
+  - {key: auto_resolve_demand_contention, default: false, note: when true the engine prefers the higher priority demand rather than reporting the contention}
+
+open_questions:
+  - {q: 'Is the optimiser in scope for v1 at all? The model declares assigned_by=optimiser and requires it to explain itself, but no optimisation objective has been chosen. Coverage, cost, travel and fairness cannot all be maximised and choosing between them is a product decision with a direct effect on who gets work.', assumption: None. The model deliberately supports an optimiser and does not specify one., confidence: VALIDATION_REQUIRED, method: 'operator interviews on what a dispatcher actually optimises for today, then a shadow-mode trial comparing the objective against real dispatcher choices', priority: High, blocks: [optimiser design, assignment.assignment_reason content, fairness reporting]}
+  - {q: 'Should fairness of allocation be a first-class constraint - how work is distributed between resources over time - or is that a reporting concern? It is the thing a workforce notices first and it is absent from the model.', assumption: None., confidence: VALIDATION_REQUIRED, method: operator and workforce interviews; the two groups are likely to answer differently and both answers matter, priority: High}
+  - {q: 'Who owns the decision to reduce required_count on an at_risk demand - the dispatcher, who can see the coverage position, or the producing capability, which knows what the count meant? The current model puts the escape hatch on the dispatcher, which may amount to letting operations quietly renegotiate a commitment.', assumption: 'The dispatcher may reduce it with a reason, and the producer is notified. This may be wrong where the count is contractual.', confidence: WORKING_ASSUMPTION, method: review with a business whose coverage counts are contractually fixed, priority: High, blocks: [demand.required_count mutability, sla_contract interaction]}
+  - {q: 'How far ahead should recurrence materialise? Too short and the roster does not exist when somebody looks; too long and every pattern change requires reconciling thousands of already-generated rows.', assumption: '90 days, which is a guess informed by nothing.', confidence: VALIDATION_REQUIRED, method: 'measure how far ahead pilot tenants actually plan, and how often patterns change', priority: Medium}
+  - {q: 'DEC-C-003 bites here. If a tenant could hold two capability versions per site during a rollout, two sites could compute coverage differently for the same shared resource, and the resource would receive two contradictory rosters.', assumption: None. DEC-C-003 is unresolved and this is a concrete reason it matters., confidence: VALIDATION_REQUIRED, method: resolve DEC-C-003, priority: High, blocks: [DEC-C-003]}

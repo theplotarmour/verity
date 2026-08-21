@@ -1,0 +1,448 @@
+key: core_configuration
+name: Configuration
+layer: core
+confidence: KNOWN
+description: >
+  Typed, scoped, defaulted, validated settings that alter behaviour without altering the
+  model, plus the resolution engine that turns seven layers of possible values into one
+  answer. This capability is where tenant difference is supposed to live. If it is weak,
+  difference leaks into code and Verity becomes an ERP with a theme picker.
+
+principles:
+  - Precedence is strictly most-specific-wins with no partial merging. Object-valued configuration is forbidden precisely because merge semantics become ambiguous and nobody can predict the resolved value.
+  - Every setting ships a default. A setting with no default forces every tenant to answer a question at provisioning time, which is how onboarding becomes a consulting engagement.
+  - A resolved value always knows where it came from. "Why is this 30" must be answerable without reading code, and the answer names the scope, the principal and the timestamp.
+  - Changing a setting is a versioned event, never an in-place mutation of the truth. The old value is recoverable and the change is attributable.
+  - A setting's change_impact determines its deployment path. Immediate for things that cannot corrupt data, staging-first for everything else. This is a product decision recorded in the composition model and enforced here.
+
+entities:
+
+  - key: config_definition
+    name: Configuration Definition
+    description: The declaration of a setting - its type, its default, its validation, the lowest scope that may set it, and what changing it costs.
+    owner: platform
+    tenancy: platform_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: config_key, type: string, req: true, unique_scope: global, immutable: true, note: 'namespaced by the declaring capability, for example work_order.auto_close_days, so two capabilities cannot collide'}
+      - {key: declaring_capability_key, type: string, req: true, immutable: true}
+      - {key: value_type, type: enum, values: [string, int, decimal, bool, timestamptz, date, time, enum, duration_minutes, money_minor, json_list], req: true, immutable: true, note: 'a closed set drawn from the kernel FieldType set. json_list is permitted for lists of scalars only; a list of objects is a model, not a setting'}
+      - {key: enum_values, type: json, nullable: true, note: required when value_type is enum}
+      - {key: default_value, type: text, req: true, note: serialised per value_type. Mandatory - kernel K07 forbids a shipped rule or setting with no default}
+      - {key: lowest_settable_scope, type: enum, values: [kernel_default, capability_default, pack_default, tenant, site, role, user], req: true}
+      - {key: validation_expression, type: text, nullable: true, note: 'an Expression evaluated at set time, statically cost-bounded'}
+      - {key: range_min, type: text, nullable: true}
+      - {key: range_max, type: text, nullable: true}
+      - {key: change_impact, type: enum, values: [immediate, next_session, requires_migration, requires_staging], req: true}
+      - {key: nullable_meaning, type: text, nullable: true, note: 'MANDATORY where null is a legal value, stating what null MEANS - for example null means never expire. A setting where null is legal and undocumented is a three-valued logic bug waiting to be written'}
+      - {key: label, type: string, req: true}
+      - {key: help_text, type: text, req: true, note: 'mandatory. A setting an administrator cannot understand is a setting they will set wrong, and every wrong setting becomes a support ticket'}
+      - {key: decision_question, type: text, req: true, note: 'the business question this setting answers, phrased as an operator would ask it. This is what the settings screen groups by, not the capability name'}
+      - {key: sensitive, type: bool, req: true, default: false, note: 'gated by view_sensitive when true, for example an integration endpoint'}
+      - {key: financial, type: bool, req: true, default: false}
+      - {key: deprecated_at, type: timestamptz, nullable: true}
+      - {key: replaced_by_config_key, type: string, nullable: true}
+    invariants:
+      - value_type may never change. A type change is a new config_key plus a migration mapping, exactly as it is for a field. This is in the composition model's forbidden_overrides list and is restated here because configuration is where the temptation is strongest.
+      - A setting whose change_impact is requires_migration or requires_staging may never be written directly in production by a tenant principal. It routes through the staging-first path.
+      - Deprecating a definition never deletes stored values. The values remain readable so that a tenant can be shown what they had before the replacement setting took over.
+      - lowest_settable_scope=kernel_default means the value is a platform constant that appears in the configuration surface as read-only rather than being hidden. Hidden constants are how an operator concludes the software is doing something arbitrary.
+    states: [draft, active, deprecated, retired]
+    initial_state: draft
+    transitions:
+      - {from: draft, to: active, action: publish_config_definition, actor: platform_operator, guard: 'default_value validates against value_type, range and validation_expression, and help_text and decision_question are non-empty', side_effects: the setting appears in the configuration surface at and below its lowest_settable_scope, reversibility: true}
+      - {from: active, to: deprecated, action: deprecate_config_definition, actor: platform_operator, guard: 'a replacement key is named, or the deprecation reason states that the behaviour is now unconditional', side_effects: 'the setting is marked in the surface, existing values keep resolving, no new values may be set', reversibility: true}
+      - {from: deprecated, to: active, action: undeprecate_config_definition, actor: platform_operator, guard: null, side_effects: none, reversibility: true}
+      - {from: deprecated, to: retired, action: retire_config_definition, actor: platform_operator, guard: 'no tenant holds a non-default value for this key, or every such tenant has been migrated to the replacement', side_effects: the definition and its values become read-only history, reversibility: false}
+    stuck_state_policy:
+      retired: >
+        Terminal. The definition no longer participates in resolution and no new value may
+        reference it. Retained permanently together with the values once set against it,
+        because 'what was this set to before the migration' is a question asked during
+        incidents years later. Nothing pends.
+      draft: >
+        A draft definition is invisible to tenants, so an abandoned draft costs nothing
+        operationally and costs a great deal in the release notes, where a setting somebody
+        promised does not exist. Threshold: draft_definition_stale_days (default 30). Told:
+        the authoring platform_operator. Escape hatch: publish or delete. Deletion is
+        permitted only in draft, which is the one state where no tenant can have depended
+        on it.
+      active: >
+        Steady state. Two monitored exceptions. (a) A setting that no tenant has ever
+        changed from its default across the whole platform after
+        never_overridden_days (default 365) - strong evidence that the setting should be a
+        constant and that every tenant is paying for a decision nobody needed to make. This
+        feeds AET-06, the count of decisions a tenant must answer, which is the metric that
+        keeps onboarding from becoming consulting. (b) A setting overridden by more than
+        half of tenants - strong evidence the shipped default is wrong. Both are reported to
+        platform_operator quarterly, neither triggers an automatic change.
+      deprecated: >
+        Deprecation is a migration that somebody has to finish. Threshold:
+        deprecation_grace_days (default 180). Told: platform_operator, with the list of
+        tenants still holding non-default values and what those values are. Escape hatch:
+        migrate the remaining tenants, then retire. A definition that sits deprecated
+        forever is worse than one that was never deprecated, because the surface now carries
+        a warning nobody can act on.
+
+  - key: config_value
+    name: Configuration Value
+    description: One value set at one scope. The resolved answer for a principal is the narrowest of these that applies.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true, note: 'null is not permitted here even for platform-set values; a platform default lives in config_definition, not as a tenant_id-less row, so that row-level security has nothing to special-case'}
+      - {key: config_key, type: string, req: true, immutable: true}
+      - {key: scope_kind, type: enum, values: [pack_default, tenant, site, role, user], req: true, immutable: true}
+      - {key: scope_ref, type: uuid, nullable: true, immutable: true, note: 'the site, role or user this value applies to, resolved through the org_structure or principal_directory port; null when scope_kind is tenant or pack_default'}
+      - {key: value, type: text, nullable: true, note: 'serialised per the definition''s value_type. Null is legal only where the definition declares nullable_meaning'}
+      - {key: set_by_principal_id, type: uuid, req: true, note: resolved through the principal_directory port}
+      - {key: set_at, type: timestamptz, req: true}
+      - {key: reason, type: text, nullable: true, note: required where the definition is financial or sensitive}
+      - {key: source_pack_key, type: string, nullable: true, note: set when the value arrived from a pack rather than from a person}
+      - {key: authored_against_capability_version, type: string, nullable: true, note: 'per the composition model''s override upgrade semantics - every override records the version it was authored against'}
+      - {key: effective_from, type: timestamptz, nullable: true, note: a scheduled change; null means immediately}
+      - {key: superseded_at, type: timestamptz, nullable: true}
+      - {key: superseded_by_value_id, type: uuid, nullable: true, fk: config_value}
+    invariants:
+      - unique(tenant_id, config_key, scope_kind, scope_ref) among non-superseded rows. Two live values at the same scope for the same key is not a state anyone can resolve.
+      - scope_kind may never be narrower than the definition's lowest_settable_scope. Enforced at write time against the definition, not at read time, so an illegal value can never exist to be resolved.
+      - A value is never edited. A change supersedes the previous row. The history is the entity, and the current value is a query over it.
+      - A value whose definition has been retired is retained and stops participating in resolution. It is not deleted, because "what was this set to before the migration" is a question somebody asks during an incident.
+    states: [scheduled, active, superseded]
+    initial_state: active
+    transitions:
+      - {from: scheduled, to: active, action: observe_effective_from, actor: system_scheduler, guard: 'now >= effective_from', side_effects: 'the previous active value at this scope is superseded, resolution caches are invalidated', reversibility: false}
+      - {from: scheduled, to: superseded, action: cancel_scheduled_value, actor: tenant_admin, guard: now < effective_from, side_effects: none, reversibility: false}
+      - {from: active, to: superseded, action: set_config_value, actor: tenant_admin, guard: a new value is written at the same scope, side_effects: 'superseded_at and superseded_by_value_id set, resolution caches invalidated', reversibility: false}
+    stuck_state_policy:
+      scheduled: >
+        A scheduled change is a promise with a date on it, and the common failure is that
+        the date passes without the scheduler running. Threshold: any scheduled value whose
+        effective_from is more than scheduled_value_lag_minutes (default 15) in the past and
+        which is still scheduled. Told: platform_operator, because this is scheduler
+        machinery, and the setting principal, because they are the one whose change did not
+        happen. Escape hatch: apply immediately. A second failure mode - a change scheduled
+        so far ahead that its author has left - is bounded by refusing effective_from more
+        than max_schedule_lead_days (default 365) ahead at write time.
+      active: >
+        An active value is a steady state and is never stuck. The monitored exception is
+        drift - the running system's observed behaviour disagreeing with the resolved value,
+        detected by the manifest reconciliation sweep. Drift is an alert, not a surprise,
+        per the composition model. Told: platform_operator and tenant_admin. Escape hatch:
+        reconcile, which re-applies the resolved value and records what it found. A second
+        exception - a value whose authored_against_capability_version is behind the
+        installed version and whose definition changed - is a BROKEN override, blocks the
+        upgrade in staging, and is listed with the tenant, the exact value and the change
+        that broke it.
+      superseded: >
+        Terminal. Retained for the audit retention period so that the history of a setting
+        is answerable. Nothing pends.
+
+  - key: config_change_set
+    name: Configuration Change Set
+    description: A group of configuration changes that must be applied together, versioned, reviewable, and deployable through the staging-first path.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: label, type: string, req: true}
+      - {key: changes, type: json, req: true, note: 'array of proposed config_value writes; a list of scalars-per-change rather than a nested object, so it stays diffable'}
+      - {key: highest_change_impact, type: enum, values: [immediate, next_session, requires_migration, requires_staging], req: true, note: 'computed as the maximum across the set, which is what determines the deployment path for the whole set. A set is only as safe as its riskiest member'}
+      - {key: created_by_principal_id, type: uuid, req: true, note: resolved through the principal_directory port}
+      - {key: created_at, type: timestamptz, req: true, immutable: true}
+      - {key: staging_run_ref, type: string, nullable: true, note: 'reference to the automated acceptance run in the tenant''s staging environment'}
+      - {key: approved_by_principal_id, type: uuid, nullable: true}
+      - {key: applied_at, type: timestamptz, nullable: true}
+      - {key: rollback_of_change_set_id, type: uuid, nullable: true, fk: config_change_set}
+    invariants:
+      - A change set containing any member whose change_impact is requires_staging or requires_migration may not be applied to production without a completed staging run and a recorded human approval.
+      - A change set is applied atomically. Half an applied set is a configuration state nobody designed and nobody can reason about.
+      - A rollback is a NEW change set that restores previous values, never an undo of the original. This keeps the history linear and is consistent with the platform's forward-only posture pending DEC-K-011.
+    states: [draft, staged, approved, applied, abandoned]
+    initial_state: draft
+    transitions:
+      - {from: draft, to: staged, action: stage_change_set, actor: tenant_admin, guard: every change validates against its definition and the acting principal may set every key at the named scope, side_effects: 'applied to the tenant staging environment, automated acceptance run triggered', reversibility: true}
+      - {from: staged, to: approved, action: approve_change_set, actor: 'tenant_owner, or tenant_admin where the approval_chain port is unbound', guard: 'the staging acceptance run passed, or its failures were explicitly accepted with a recorded reason', side_effects: none, reversibility: true}
+      - {from: approved, to: applied, action: apply_change_set, actor: tenant_admin, guard: acting session elevated, side_effects: 'every member value written atomically, resolution caches invalidated, post-deploy reconciliation against the tenant manifest scheduled', reversibility: false}
+      - {from: draft, to: applied, action: apply_change_set, actor: tenant_admin, guard: highest_change_impact is immediate or next_session, side_effects: as above, reversibility: false, note: 'the fast path. The composition model is explicit that labels, terminology, branding, feature flags and notification preferences cannot corrupt data and must not be forced through staging'}
+      - {from: draft, to: abandoned, action: abandon_change_set, actor: tenant_admin, guard: null, side_effects: none, reversibility: false}
+      - {from: staged, to: abandoned, action: abandon_change_set, actor: tenant_admin, guard: null, side_effects: staging environment reverted to match production, reversibility: false}
+      - {from: approved, to: abandoned, action: abandon_change_set, actor: tenant_owner or tenant_admin, guard: null, side_effects: as staged, reversibility: false}
+    stuck_state_policy:
+      applied: >
+        Terminal. The set has landed and its member values are live. Nothing pends. The one
+        follow-on obligation is the post-deploy reconciliation against the tenant manifest,
+        which is tracked on the reconciliation run rather than on the change set, so that a
+        failed reconciliation does not make an applied change look unapplied.
+      abandoned: >
+        Terminal. Retained rather than deleted, so that 'we tried this and stopped' is
+        recoverable. That is more useful during an incident review than a gap. Nothing pends.
+      draft: >
+        Threshold: draft_change_set_stale_days (default 14). Told: the creating principal.
+        Escape hatch: apply or abandon. A draft change set is harmless but it holds a
+        staging environment's worth of intent that somebody will eventually apply without
+        remembering why.
+      staged: >
+        A staged change set is occupying the tenant's staging environment, and a second
+        change set cannot be staged behind it. This makes it a queue head, which is the
+        classic stuck state. Threshold: staged_change_set_stale_days (default 7). Told: the
+        creating principal, then tenant_owner. Escape hatch: approve, abandon, or force-evict
+        with a recorded reason so a second change set can proceed. Verity never silently
+        evicts, because evicting somebody else's staged work at 9am on a Monday is how a
+        team stops using staging.
+      approved: >
+        Approved and unapplied is the most dangerous of these states, because everybody
+        involved believes the change is live. Threshold: approved_unapplied_hours (default
+        48). Told: the approver and the creator, escalating to tenant_owner. Escape hatch:
+        apply or abandon. Approval expires at approval_validity_days (default 14), after
+        which the set returns to staged and must be re-approved, because an approval given
+        against a two-week-old staging run is an approval of something else.
+
+ports:
+  - port_key: principal_directory
+    direction: requires
+    contract: Resolve the principal who set a value, and resolve a user-scoped value's target principal.
+    cardinality: exactly_one
+    unbound_behaviour: FORBIDDEN. A configuration change that cannot be attributed is not auditable, and configuration is one of the two surfaces an investigation always looks at first.
+
+  - port_key: org_structure
+    direction: requires
+    contract: Resolve site-scoped and role-scoped configuration targets, and expose the hierarchy so a site value can be shown alongside the tenant value it overrides.
+    cardinality: zero_or_one
+    unbound_behaviour: >
+      The site scope is not offered in the configuration surface and no site-scoped value
+      can be written. Existing site-scoped values, if a capability was disabled after they
+      were written, are retained and do NOT participate in resolution - they resolve as if
+      absent. The surface states that N site-scoped values are dormant, so the difference
+      between "not set" and "set but unresolvable" is visible rather than silent.
+
+  - port_key: authorization_decision
+    direction: requires
+    contract: Determine whether the acting principal may set a given key at a given scope, and project sensitive and financial settings out of a reader's view.
+    cardinality: exactly_one
+    unbound_behaviour: FORBIDDEN. Configuration includes financial and security-affecting settings and cannot be exposed without projection.
+
+  - port_key: approval_chain
+    direction: requires
+    contract: Route a change set for approval, resolve approvers from role and scope, record the decision with a reason.
+    cardinality: zero_or_one
+    unbound_behaviour: 'Change sets are approved by the acting tenant_admin themselves, with an audit note recording that no approval chain was configured. The staging requirement is NOT waived - a chain being unbound removes the second pair of eyes, not the test run.'
+
+  - port_key: config_resolution
+    direction: provides
+    contract: >
+      Given a config_key and a full principal context - tenant, site, role set, user - return
+      the resolved value, the scope it was resolved at, who set it and when. The provenance
+      is part of the contract, not an extra. A resolver that returns only the value cannot
+      answer the question every support call starts with.
+    cardinality: exactly_one
+
+  - port_key: config_change_feed
+    direction: provides
+    contract: An ordered stream of applied configuration changes for consumers that cache resolved values, carrying the key, the scope, and the invalidation set.
+    cardinality: zero_or_many
+
+actions:
+
+  - key: resolve_config
+    confirmation_specification: 'None. A pure read on the hot path.'
+    entity: config_value
+    label: Resolve a setting for a principal
+    actors: [any_authenticated, integration_principal, system]
+    rationale: >
+      Modelled explicitly because precedence, caching and the null case are product
+      decisions. An implicit resolver is one that gets a different answer on the server and
+      in the offline client, which is the worst possible bug class - the software behaves
+      differently depending on where it is running.
+    preconditions: [the config_key names an active or deprecated definition]
+    inputs: [config_key, tenant_id, site_ref, role_set, principal_id]
+    creates: []
+    updates: []
+    events: []
+    notifications: []
+    undoable: false
+    audit_class: read_sensitive_only
+    idempotency_key_source: not applicable - a pure read
+    offline_policy: read_only
+    concurrency: >
+      Resolution reads a consistent snapshot. A configuration change landing mid-request
+      does not change the answer within that request, which matters because two resolutions
+      of the same key inside one transaction returning different values would produce
+      behaviour no test could reproduce.
+    failure_modes:
+      - {code: E_VALIDATION, cause: unknown config_key, message: null, note: 'a programming error, not a user error. Raised to platform_operator. Deliberately NOT resolved to a fallback default, because a typo in a key silently resolving to something plausible is how a feature ships doing nothing'}
+      - {code: E_PRECONDITION, cause: the definition is retired, message: null, note: as above}
+      - {code: E_DEPENDENCY, cause: org_structure unavailable and a site-scoped value exists, message: null, note: 'resolution FAILS rather than falling back to the tenant value. Falling back would silently apply a different setting than the one configured, and for a setting like an SLA target or a geofence radius that is a materially different product'}
+    edge_cases:
+      - Two role-scoped values apply because the principal holds two roles. This is the one place precedence is genuinely ambiguous, and it is resolved by a declared tiebreak - the role with the lower role_precedence_rank wins, and rank is mandatory on every role. It is NOT resolved by picking the more permissive value, because "more permissive" is undefined for a setting like a session timeout where lower is stricter and for a geofence radius where lower is also stricter but for a page size neither is.
+      - A null value at a narrow scope where a non-null value exists at a wider scope. Null WINS if the definition declares nullable_meaning, because setting something to null is an act. If the definition does not declare nullable_meaning, null at any scope is rejected at write time and so cannot occur here.
+      - The offline client resolving a value it cached before a change. It uses the cached value and the surface shows the cache age. It does not guess. Any action whose behaviour depends on a setting with change_impact requires_migration is refused offline outright.
+      - A pack_default value and a tenant value both exist. Tenant wins, and the surface shows the pack value as the thing being overridden, so an administrator can see what the pack intended.
+      - Resolution for an integration_principal, which has no site and no user scope. Only pack_default, tenant and role apply. A service account inheriting a human's user-scoped preference would be a subtle and untraceable behaviour change.
+
+  - key: set_config_value
+    entity: config_value
+    label: Change a setting
+    actors: [tenant_admin, tenant_owner, platform_operator]
+    preconditions:
+      - The definition is active.
+      - scope_kind is at or above the definition's lowest_settable_scope.
+      - The acting principal may administer the declaring capability at the named scope.
+      - The value passes type, range and validation_expression checks.
+      - change_impact is immediate or next_session, otherwise the write must go through a change set.
+    inputs: [config_key, scope_kind, scope_ref, value, reason, effective_from, expected_current_value_id]
+    creates: [config_value]
+    updates: [previous config_value superseded, resolution caches invalidated]
+    events: [config.changed]
+    notifications:
+      - {to: tenant_admin, channel: in_app, when: the definition is financial or sensitive, template: sensitive_setting_changed, must_include: [config_label, old_value, new_value, actor_display_name, scope], batching_policy: 'one message per change set, never one per key'}
+    undoable: true
+    reversal_action: set_config_value with the previous value
+    audit_class: always
+    idempotency_key_source: 'tenant_id plus config_key plus scope_kind plus scope_ref plus a hash of the value. Setting a value to what it already is returns 200 and writes no new row and emits no event, which is what makes a re-run of a pack installation or a bulk import safe.'
+    offline_policy: refuse
+    concurrency: >
+      Optimistic on expected_current_value_id. Two administrators changing the same key at
+      the same scope: the second receives E_CONFLICT_VERSION with both values and the
+      identity of the other administrator, and must choose. Last-write-wins is refused here
+      deliberately - for a setting like an overtime threshold or a billing rounding rule,
+      silently discarding one administrator's decision has a money consequence.
+    failure_modes:
+      - {code: E_VALIDATION, cause: 'value fails type parse, range or validation_expression', message: field-specific, note: 'the message must state the range and the current value, because "invalid" alone sends the administrator to support'}
+      - {code: E_PRECONDITION, cause: change_impact is requires_staging or requires_migration, message: This change has to be tested in staging first., note: the API offers the change-set path in the error body rather than only refusing}
+      - {code: E_AUTHZ_SCOPE, cause: scope_ref names a site the principal cannot reach, message: Not found.}
+      - {code: E_PRECONDITION, cause: scope_kind narrower than lowest_settable_scope, message: This setting can only be changed for the whole workspace., note: names the scope that IS permitted}
+      - {code: E_CONFLICT_VERSION, cause: concurrent change, message: Someone else changed this record., retryable: true}
+      - {code: E_VALIDATION, cause: reason empty on a financial or sensitive setting, message: Give a reason. It is recorded.}
+      - {code: E_PRECONDITION, cause: the definition is deprecated, message: This setting is being replaced. Use the new one., note: names replaced_by_config_key}
+    edge_cases:
+      - Setting a value at a scope where a narrower value already exists. The narrower value still wins. The surface shows this before saving, naming the overriding scopes and their values, because an administrator changing a tenant default and seeing nothing happen at three sites will otherwise conclude the software is broken.
+      - Clearing a value rather than setting one. Modelled as a distinct input - clear rather than a value of empty string - because for a string setting, empty and unset are different and conflating them is a classic three-valued bug.
+      - A value set with effective_from in the future while an immediate change is also made. Both rows exist; the immediate one is active, the future one is scheduled. The surface shows the upcoming change, because a setting that will change on its own at midnight and gives no warning is indistinguishable from a fault.
+      - Changing a session-timeout or geofence-radius setting while shifts are in progress. Change_impact next_session means live sessions are unaffected; the change applies to the next one. Retroactively shortening a live session mid-shift is an outage, and this is why the impact classification exists.
+      - A pack installation writing a pack_default over a value a tenant explicitly set. The tenant value wins by precedence and the pack value is recorded as the underlying default. A pack that could silently overwrite tenant intent would make upgrades terrifying.
+      - Setting a value for a capability that is not enabled in this tenant. Permitted and stored. It resolves to nothing until the capability is enabled. Refusing would make staging a pack impossible, and discarding would lose the administrator's work.
+
+  - key: stage_change_set
+    entity: config_change_set
+    label: Test a configuration change in staging
+    actors: [tenant_admin, tenant_owner]
+    preconditions: [every member change validates, the staging environment is free or the acting principal has evicted the previous occupant with a reason]
+    inputs: [label, changes]
+    creates: [config_change_set, staging_run]
+    updates: []
+    events: [change_set.staged]
+    notifications:
+      - {to: 'the principal whose change set was evicted, if any', channel: in_app, when: on_eviction, template: staging_evicted, must_include: [evicting_principal, reason]}
+    undoable: true
+    reversal_action: abandon_change_set
+    audit_class: always
+    idempotency_key_source: tenant_id plus a hash of the ordered change list plus the creating principal
+    offline_policy: refuse
+    concurrency: One staged change set per tenant. The staging environment is a single resource and pretending otherwise produces acceptance results that describe neither change set.
+    failure_modes:
+      - {code: E_PRECONDITION, cause: staging environment occupied, message: 'Another change is being tested. You can evict it, and they will be told.', note: 'offers the action rather than only refusing, and names who will be told'}
+      - {code: E_DEPENDENCY, cause: staging environment unavailable, message: A required service is unavailable., note: 'the change set stays draft. It is NOT auto-promoted to production on a staging outage, which is the shortcut that eventually causes the incident staging exists to prevent'}
+      - {code: E_VALIDATION, cause: a member change references an unknown or retired key, message: field-specific}
+      - {code: E_QUOTA, cause: more than max_changes_per_set members, message: Plan limit reached., note: 'a change set with two hundred members is a migration and cannot be meaningfully reviewed by a human, which is the entire purpose of the review step'}
+    edge_cases:
+      - The staging environment's data is a copy taken at an unstated moment. The acceptance run's meaning depends on how fresh that copy is, so the run result records the copy timestamp. A pass against three-month-old data is a weaker statement than it looks and the surface says so.
+      - A change set staged, then the underlying capability upgraded before it is applied. The set is invalidated and returns to draft with the reason, because its acceptance run tested a different system.
+      - Staging a set whose only members are immediate-impact. Permitted, and the surface offers the fast path instead, because forcing a branding colour change through staging is how a team learns to route around staging entirely.
+
+  - key: apply_change_set
+    entity: config_change_set
+    label: Apply a configuration change
+    actors: [tenant_admin, tenant_owner]
+    preconditions:
+      - Acting session is elevated.
+      - The set is approved, or its highest_change_impact is immediate or next_session.
+      - The approval, where required, is not older than approval_validity_days.
+    inputs: [change_set_id]
+    creates: [config_value rows for every member]
+    updates: [previous values superseded, resolution caches invalidated, post-deploy reconciliation scheduled]
+    events: [change_set.applied, config.changed per member]
+    notifications:
+      - {to: tenant_owner, channel: in_app_and_email, when: 'the set contains a financial, security-affecting or migration-class change', template: configuration_applied, must_include: [label, member_count, actor_display_name]}
+    undoable: false
+    confirmation_specification: 'Modal listing every member change as old value to new value with its scope, the count of principals and sites affected, and the highest change impact. Requires typing the change set label. Required because undoable is false - a rollback is a new change set, not an undo.'
+    audit_class: always
+    idempotency_key_source: change_set_id. Applying an already-applied set is a 2xx no-op and does not re-emit events.
+    offline_policy: refuse
+    concurrency: >
+      The whole set is applied in one transaction. Concurrent single-key writes to any key
+      in the set fail with E_CONFLICT_VERSION rather than interleaving. The reconciliation
+      sweep runs after commit and compares the running system against the resolved manifest,
+      so a partial application caused by anything below the transaction boundary is detected
+      rather than assumed impossible.
+    failure_modes:
+      - {code: E_PRECONDITION, cause: approval expired, message: This was approved more than N days ago. It needs approving again.}
+      - {code: E_PRECONDITION, cause: staging run never completed, message: This action is not available in the current state.}
+      - {code: E_CONFLICT_VERSION, cause: a member key changed since the set was staged, message: Someone else changed this record., note: 'names the specific keys that moved, so the administrator can decide whether their change is still the right one'}
+      - {code: E_AUTHN, cause: session not elevated, message: Confirm your identity to continue.}
+      - {code: E_INTERNAL, cause: the transaction fails partway, message: Something went wrong. The team has been notified., note: the whole set rolls back. A half-applied configuration is a state nobody designed}
+    edge_cases:
+      - Applying a set that changes a setting a running workflow depends on. Running workflow instances continue on the definition version they started with; the composition model is explicit that a workflow change is a new version and never an edit to a running instance. The same principle is applied to configuration a workflow reads.
+      - Applying a rollback change set. It is an ordinary change set whose members restore previous values, with rollback_of_change_set_id set for narrative. It is not privileged and it goes through the same path, because a rollback applied without testing is how one incident becomes two.
+      - Post-deploy reconciliation finds drift. Reported as an alert naming the key, the expected value and the observed behaviour. Never auto-corrected, because auto-correcting drift can mean overwriting an emergency manual intervention somebody made at 3am.
+
+rules:
+  - key: precedence_is_most_specific_wins
+    kind: policy
+    scope: kernel
+    overridable_at: null
+    default: 'kernel_default, capability_default, pack_default, tenant, site, role, user - narrowest wins, with no partial merging of any value.'
+    on_conflict: not overridable
+
+  - key: no_object_valued_configuration
+    kind: validation
+    scope: kernel
+    overridable_at: null
+    default: 'value_type may not be an object or a list of objects. Lists of scalars are permitted. Anything requiring structure is a model, not a setting.'
+    on_conflict: not overridable
+    rationale: Object values force a merge decision at every scope boundary and there is no merge rule that is right for every object. The kernel forbids the situation rather than picking a wrong rule.
+
+  - key: every_setting_ships_a_default
+    kind: validation
+    scope: kernel
+    overridable_at: null
+    default: 'publish_config_definition is refused where default_value is absent.'
+    on_conflict: not overridable
+    rationale: Kernel K07. A setting with no default is a question every tenant must answer at provisioning, and the count of such questions is what AET-06 measures.
+
+  - key: role_scope_tiebreak
+    kind: policy
+    scope: kernel
+    overridable_at: null
+    default: 'Where a principal holds two roles with conflicting role-scoped values, the role with the lower role_precedence_rank wins. Rank is mandatory on every role.'
+    on_conflict: not overridable
+    rationale: The only genuinely ambiguous point in the precedence chain. Resolved by a declared rank rather than by choosing the more permissive value, because permissiveness is undefined for most settings.
+
+  - key: staging_first_for_structural_change
+    kind: guard
+    scope: kernel
+    overridable_at: null
+    default: 'A change whose impact is requires_migration or requires_staging may not be written directly to production.'
+    on_conflict: not overridable
+    rationale: Recorded as a product owner decision in the composition model's deployment_paths.
+
+policy_knobs:
+  - {key: draft_definition_stale_days, default: 30, lowest_settable_scope: kernel}
+  - {key: never_overridden_days, default: 365, lowest_settable_scope: kernel}
+  - {key: deprecation_grace_days, default: 180, lowest_settable_scope: kernel}
+  - {key: draft_change_set_stale_days, default: 14, range: [1, 90]}
+  - {key: staged_change_set_stale_days, default: 7, range: [1, 30]}
+  - {key: approved_unapplied_hours, default: 48, range: [1, 720]}
+  - {key: approval_validity_days, default: 14, range: [1, 90]}
+  - {key: scheduled_value_lag_minutes, default: 15, lowest_settable_scope: kernel}
+  - {key: max_schedule_lead_days, default: 365, range: [1, 730]}
+  - {key: max_changes_per_set, default: 50, range: [1, 500]}
+
+open_questions:
+  - {q: 'DEC-K-001 again. If a tenant may add entities at runtime, may it also add configuration DEFINITIONS at runtime? A tenant-defined setting has no shipped default from a pack author, no help text written by anyone accountable, and no upgrade story.', assumption: 'None. Definitions are platform-authored in this model, which is consistent with option A or C of DEC-K-001 and inconsistent with a full option B.', confidence: VALIDATION_REQUIRED, method: resolve DEC-K-001, priority: Critical, blocks: [config_definition ownership, the whole configuration surface, AET-06 threshold]}
+  - {q: 'What is the acceptable count of settings a tenant MUST answer before the system is usable? AET-06 declares this test with a threshold marked VALIDATION_REQUIRED, and this capability is where the count is actually incurred.', assumption: 'None. The count is measurable from the model as soon as enough capabilities exist - settings with no usable default for the tenant''s pack.', confidence: VALIDATION_REQUIRED, method: 'operator interviews plus a timed provisioning exercise with a real owner, measuring abandonment', priority: High, blocks: [AET-06]}
+  - {q: 'Does every tenant get a staging environment, or only tenants above a plan tier? The staging-first rule is unconditional in the composition model, which implies every tenant, which has a real infrastructure cost per tenant.', assumption: None. The rule and the cost are in direct tension and this has not been resolved., confidence: VALIDATION_REQUIRED, method: cost model against the target price point for the smallest customer segment, priority: High, blocks: [stage_change_set, apply_change_set, deployment model]}
+  - {q: 'Is role_precedence_rank a property tenants set, or is it derived from the archetype hierarchy? Tenant-set rank is flexible and is another decision at provisioning; derived rank is automatic and will be wrong for some tenant.', assumption: 'Derived from archetype with a tenant override available, but this has not been validated.', confidence: WORKING_ASSUMPTION, method: pilot with a tenant whose role structure does not match the archetype hierarchy, priority: Medium}
+  - {q: 'Should configuration history be visible to a tenant_admin indefinitely, given that it can reveal what a previous administrator was paid attention to - for example a repeatedly lowered geofence radius at one site?', assumption: 'Yes, visible, on the grounds that configuration history is operational rather than personal.', confidence: WORKING_ASSUMPTION, method: review with a pilot customer who has had an internal investigation, priority: Low}

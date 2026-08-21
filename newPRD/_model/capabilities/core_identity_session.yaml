@@ -1,0 +1,1082 @@
+key: core_identity_session
+name: Identity & Session
+layer: core
+confidence: KNOWN
+description: >
+  Authentication, session lifecycle, device trust and principal resolution. This is
+  the only capability that may exist before a tenant has any modules. It is never
+  optional, never removable by a pack, and never overridden by tenant configuration
+  beyond the policy knobs declared here.
+
+principles:
+  - Authentication answers "who is this principal". Authorization (core_authorization)
+    answers "what may this principal do". They are separate subsystems with separate
+    audit streams and must not be collapsed.
+  - A session is a claim about a principal AND a device AND a tenant AND a time window.
+    Dropping any of the four produces a security hole.
+  - Every mutating request re-resolves permissions from the authorization service.
+    A session never carries a cached permission set beyond its TTL.
+  - Logout is a server-side revocation, not a client-side token deletion.
+
+entities:
+
+  - key: principal
+    name: Principal
+    description: Any actor that can hold a session. Human user, service account, or external portal identity.
+    owner: platform
+    tenancy: cross_tenant_row_with_membership
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: kind, type: enum, values: [user, service_account, portal_identity], req: true, immutable: true}
+      - {key: primary_email, type: citext, req: false, unique_scope: platform, sensitive: true, note: '''nullable because Indian field workforce onboards by phone, not email'}
+      - {key: primary_phone_e164, type: string, req: false, unique_scope: platform, sensitive: true}
+      - {key: display_name, type: string, req: true}
+      - {key: status, type: enum, values: [invited, active, suspended, locked, deactivated], req: true}
+      - {key: mfa_enrolled, type: bool, req: true, default: false}
+      - {key: password_credential_id, type: uuid, req: false, note: null for phone-OTP-only principals}
+      - {key: failed_auth_count, type: int, default: 0}
+      - {key: locked_until, type: timestamptz, nullable: true}
+      - {key: last_authenticated_at, type: timestamptz, nullable: true}
+      - {key: created_at, type: timestamptz, req: true, immutable: true}
+      - {key: deactivated_at, type: timestamptz, nullable: true}
+    invariants:
+      - At least one of primary_email or primary_phone_e164 must be non-null for kind=user.
+      - kind=service_account must have both null and authenticate only by credential.
+      - status=deactivated is terminal for authentication but the row is never hard-deleted while any audit row references it.
+    states: [invited, active, suspended, locked, deactivated]
+    initial_state: invited
+    transitions:
+      - {from: invited, to: active, action: accept_invitation, actor: principal, guard: invitation token unexpired and at least one credential (password or verified phone) established, side_effects: 'principal.status=active, joined_at set on the accepting membership', reversibility: false}
+      - {from: invited, to: deactivated, action: withdraw_invitation, actor: tenant_admin, guard: no membership for this principal has reached active in any tenant, side_effects: invitation token burned, reversibility: false, note: a principal invited into two tenants is only withdrawable from invited by the last tenant to withdraw; otherwise this is revoke_membership}
+      - {from: invited, to: deactivated, action: expire_invitation, actor: system_scheduler, guard: 'now > created_at + invitation_ttl_days', side_effects: invitation token burned, reversibility: false}
+      - {from: active, to: locked, action: lock_on_failed_auth, actor: system, guard: 'failed_auth_count >= auth_lockout_threshold within auth_lockout_window_minutes', side_effects: 'locked_until set, existing sessions are NOT revoked', reversibility: true, note: 'sessions survive a lockout deliberately; lockout defends the credential, not the session, and revoking live sessions would let an attacker log a victim out by guessing passwords'}
+      - {from: locked, to: active, action: unlock_principal, actor: system_scheduler, guard: 'now > locked_until', side_effects: failed_auth_count reset to 0, reversibility: true}
+      - {from: locked, to: active, action: unlock_principal_manual, actor: tenant_admin, guard: acting session elevated, side_effects: 'locked_until nulled, failed_auth_count reset, reason recorded', reversibility: true}
+      - {from: active, to: suspended, action: suspend_principal, actor: tenant_admin, guard: target is not the last active tenant_owner in any tenant where this principal holds that archetype, side_effects: all sessions revoked with reason=principal_suspended, reversibility: true}
+      - {from: suspended, to: active, action: reinstate_principal, actor: tenant_admin, guard: acting session elevated, side_effects: no sessions are restored; the principal must authenticate afresh, reversibility: true}
+      - {from: active, to: deactivated, action: deactivate_principal, actor: tenant_admin, guard: target is not the last active tenant_owner, side_effects: 'all sessions revoked, all memberships revoked, credentials destroyed, audit rows retained', reversibility: false}
+      - {from: suspended, to: deactivated, action: deactivate_principal, actor: tenant_admin, guard: acting session elevated, side_effects: as above, reversibility: false}
+      - {from: locked, to: deactivated, action: deactivate_principal, actor: tenant_admin, guard: acting session elevated, side_effects: as above, reversibility: false}
+    stuck_state_policy:
+      invited: >
+        An invitation that is never accepted is the single most common silent failure in
+        onboarding, because nobody is watching for a thing that did not happen. Threshold:
+        invitation_reminder_days (default 3) triggers one reminder on the invitation channel;
+        invitation_ttl_days (default 14) transitions the principal to deactivated via
+        expire_invitation. Told: the inviting principal, then the tenant_admin role on
+        expiry, batched into one daily digest so a bulk import of 200 field staff does not
+        produce 200 notifications. Escape hatch: re-invite, which mints a new token and a
+        new principal row only if the original expired; otherwise it re-sends against the
+        same row so the audit trail stays continuous. Deliberately NOT an escape hatch —
+        an administrator marking a principal active without acceptance, because that would
+        create an account nobody has ever authenticated as.
+      active: >
+        active is the normal operating state and cannot be stuck in the usual sense, but two
+        degenerate forms of it are operational exceptions and are monitored as such.
+        (a) Never authenticated: principal.last_authenticated_at is null more than
+        dormant_never_authenticated_days (default 30) after joining. Told: the tenant_admin,
+        as a list, monthly. This is usually a person who was onboarded to a system they were
+        never shown how to use, and it is the leading indicator of a failed rollout.
+        (b) Dormant: last_authenticated_at older than dormant_principal_days (default 90).
+        Told: tenant_admin. Escape hatch: bulk deactivate from the dormancy list, with the
+        count typed to confirm. Verity does NOT auto-deactivate on dormancy; a worker on
+        long medical leave losing their account automatically is worse than a stale row.
+      suspended: >
+        Suspension is meant to be short — an investigation, a disputed absence, a
+        contractual pause. A suspension is an operational exception after
+        suspension_review_days (default 30). Told: the principal who suspended, escalating
+        to tenant_owner after twice that. Escape hatch: reinstate_principal or
+        deactivate_principal, both requiring a reason. The system never auto-resolves a
+        suspension in either direction, because both directions have consequences the
+        platform cannot judge.
+      locked: >
+        Lockout is time-boxed by construction: locked_until is always set, and
+        unlock_principal fires on expiry, so an instance cannot sit here indefinitely. The
+        exception being monitored is repetition, not duration — a principal locked more than
+        repeat_lockout_threshold times (default 3) in 24h is either under credential-stuffing
+        attack or has a device with a cached wrong password, which look identical from the
+        server and must be distinguished by asking. Told: the principal on their alternate
+        channel, and the tenant_admin. Escape hatch: unlock_principal_manual, or phone-OTP
+        sign-in, which is a separate credential and is deliberately not blocked by a
+        password lockout.
+      deactivated: >
+        Terminal for authentication. No instance can be stuck here because nothing is
+        pending. The row is retained while any audit row, event or operational record
+        references it; deletion is a retention-job or DSR-erasure concern, not a lifecycle
+        transition. Reactivation is deliberately absent from the transition set — see
+        open_questions on rehire identity continuity, which is an unresolved product choice
+        and is not being invented here.
+
+  - key: tenant_membership
+    name: Tenant Membership
+    description: The link between a principal and a tenant. A principal with zero memberships can authenticate but has nowhere to land.
+    owner: tenant
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: principal_id, type: uuid, req: true, fk: principal}
+      - {key: tenant_id, type: uuid, req: true, note: 'the platform tenant this membership is in, resolved through the tenant_directory port. Deliberately NOT a foreign key - the tenant entity is owned by hq_console and kernel K04 forbids a concrete cross-capability reference'}
+      - {key: status, type: enum, values: [invited, active, suspended, revoked], req: true}
+      - {key: employment_link_id, type: uuid, nullable: true, note: 'links to people.employee when the principal is staff, null for client contacts'}
+      - {key: default_landing_surface, type: enum, values: [console, field_app, kds, pos, portal, hq], req: true}
+      - {key: invited_by_principal_id, type: uuid, nullable: true}
+      - {key: joined_at, type: timestamptz, nullable: true}
+      - {key: revoked_at, type: timestamptz, nullable: true}
+    invariants:
+      - unique(principal_id, tenant_id)
+      - Revoking the last active membership with tenant_owner archetype is forbidden; see action revoke_membership.
+    states: [invited, active, suspended, revoked]
+    initial_state: invited
+    transitions:
+      - {from: invited, to: active, action: accept_membership, actor: principal, guard: principal.status=active and tenant is not suspended, side_effects: 'joined_at set, default_landing_surface resolved from the role granted', reversibility: false}
+      - {from: invited, to: revoked, action: withdraw_invitation, actor: tenant_admin, guard: null, side_effects: invitation token burned, reversibility: false}
+      - {from: invited, to: revoked, action: expire_invitation, actor: system_scheduler, guard: 'now > invited_at + invitation_ttl_days', side_effects: invitation token burned, reversibility: false}
+      - {from: active, to: suspended, action: suspend_membership, actor: tenant_admin, guard: not the last active tenant_owner membership, side_effects: sessions for this principal in THIS tenant revoked with reason=membership_revoked; sessions in other tenants untouched, reversibility: true}
+      - {from: suspended, to: active, action: reinstate_membership, actor: tenant_admin, guard: acting session elevated and principal.status=active, side_effects: no sessions restored, reversibility: true}
+      - {from: active, to: revoked, action: revoke_membership, actor: tenant_admin, guard: not the last active tenant_owner membership, side_effects: 'revoked_at set, sessions in this tenant revoked, in-flight approvals reassigned per approval_fallback, future roster assignments flagged unstaffed', reversibility: false}
+      - {from: suspended, to: revoked, action: revoke_membership, actor: tenant_admin, guard: acting session elevated, side_effects: as above, reversibility: false}
+    stuck_state_policy:
+      invited: >
+        Same clock as principal.invited, but tracked separately because a principal may be
+        active in tenant A and still pending in tenant B, and the tenant B administrator can
+        see nothing about tenant A. Threshold: invitation_ttl_days (default 14), reminder at
+        invitation_reminder_days (default 3). Told: the inviting principal, batched daily.
+        Escape hatch: re-invite or withdraw. A membership invitation is never auto-accepted
+        on the strength of the principal already being active elsewhere; consenting to join
+        one workspace is not consent to join another.
+      active: >
+        A membership whose principal has never landed on its default_landing_surface after
+        membership_unused_days (default 30) is reported to the tenant_admin. This most often
+        means the role granted has no navigation entries the person can actually reach, which
+        is a composition defect in the tenant manifest rather than a user problem, and the
+        report links to the resolved navigation tree for that role so it can be diagnosed
+        rather than guessed at. No automatic action.
+      suspended: >
+        Reviewed at suspension_review_days (default 30), escalating to tenant_owner at 60.
+        Escape hatch: reinstate_membership or revoke_membership. A suspended membership
+        continues to count against any seat-based plan limit until revoked, and the review
+        notification says so explicitly, because a silently billed suspended seat is the kind
+        of thing that destroys trust in an invoice.
+      revoked: >
+        Terminal. Nothing pends. The row is retained permanently as the attribution target
+        for that person's operational history. Re-granting access creates a NEW membership
+        row rather than resurrecting this one, so that the access history reads as two
+        distinct periods with a gap, which is what an auditor needs to see.
+
+  - key: session
+    name: Session
+    description: A server-side revocable record. The client token is a pointer to this row, never a self-contained authority.
+    owner: platform
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: principal_id, type: uuid, req: true, fk: principal}
+      - {key: tenant_id, type: uuid, req: true, note: 'a session is scoped to exactly one tenant, switching tenant mints a new session'}
+      - {key: device_id, type: uuid, req: true, fk: device}
+      - {key: surface, type: enum, values: [console, field_app, kds, pos, portal, hq], req: true}
+      - {key: issued_at, type: timestamptz, req: true, immutable: true}
+      - {key: absolute_expiry_at, type: timestamptz, req: true, immutable: true}
+      - {key: idle_expiry_at, type: timestamptz, req: true, note: 'slides forward on activity, never past absolute_expiry_at'}
+      - {key: revoked_at, type: timestamptz, nullable: true}
+      - {key: revocation_reason, type: enum, values: [user_logout, user_logout_all, admin_revoke, password_change, mfa_change, membership_revoked, principal_suspended, device_untrusted, suspicious_activity, absolute_timeout, idle_timeout, tenant_suspended], nullable: true}
+      - {key: elevated_until, type: timestamptz, nullable: true, note: 'step-up window after re-auth, required for high-risk actions'}
+      - {key: impersonated_by_principal_id, type: uuid, nullable: true, note: set when a platform operator is acting as this principal}
+      - {key: impersonation_ticket_ref, type: string, nullable: true}
+      - {key: ip_at_issue, type: inet}
+      - {key: user_agent_at_issue, type: text}
+    invariants:
+      - A revoked session is never un-revoked. Re-authentication mints a new row.
+      - idle_expiry_at <= absolute_expiry_at always.
+      - impersonated_by_principal_id non-null requires impersonation_ticket_ref non-null.
+    states: [active, idle_expired, absolutely_expired, revoked]
+    initial_state: active
+    transitions:
+      - {from: active, to: idle_expired, action: observe_idle_expiry, actor: system, guard: 'now > idle_expiry_at and now <= absolute_expiry_at', side_effects: none, reversibility: false, note: 'this transition is an observation, evaluated server-side at the next request or by the reaper sweep, whichever comes first; it is never evaluated on the client, because device clocks are wrong'}
+      - {from: active, to: absolutely_expired, action: observe_absolute_expiry, actor: system, guard: 'now > absolute_expiry_at', side_effects: none, reversibility: false}
+      - {from: active, to: revoked, action: revoke_session, actor: 'session_holder, tenant_admin, platform_operator or system', guard: revoked_at is null, side_effects: 'revoked_at and revocation_reason set, push token de-registered', reversibility: false, note: 'the single canonical entry point; logout, logout_all, switch_tenant, revoke_membership, suspend_principal, block_device, password_change, mfa_change and tenant suspension all funnel through it and differ only in revocation_reason. Modelling them as one transition is deliberate — a second write path to revoked is a second place to forget to de-register a push token'}
+      - {from: idle_expired, to: revoked, action: reap_session, actor: system_scheduler, guard: null, side_effects: 'revoked_at set, revocation_reason=idle_timeout', reversibility: false}
+      - {from: absolutely_expired, to: revoked, action: reap_session, actor: system_scheduler, guard: null, side_effects: 'revoked_at set, revocation_reason=absolute_timeout', reversibility: false}
+    illegal_transition_note: >
+      There is deliberately no transition back to active from any state. Re-authentication
+      mints a new session row. A resurrectable session is a session whose revocation cannot
+      be trusted, which would make every other control in this capability advisory.
+    stuck_state_policy:
+      active: >
+        Bounded by construction: absolute_expiry_at is immutable and mandatory, so no session
+        can remain active indefinitely. The monitored exception is a session that is active
+        far longer than its surface's norm — a console session at the 720h policy ceiling is
+        almost always a misconfiguration copied from a shared-terminal policy. Threshold:
+        any session whose absolute TTL exceeds session_ttl_alert_hours for its surface
+        (default: 24 for console, 168 for shared surfaces). Told: tenant_admin, once per
+        policy change rather than once per session. Escape hatch: change the policy knob;
+        existing sessions are NOT retroactively shortened, because shortening a live
+        shift-long session mid-shift is an outage.
+      idle_expired: >
+        A session should not linger here — it is a row that is dead but not yet marked dead,
+        and any bug in expiry evaluation turns it back into a live credential. Threshold:
+        the reaper sweeps every reaper_interval_minutes (default 15); a row older than 4
+        sweep intervals is a platform alert, not a tenant alert, because it means the reaper
+        is not running. Told: platform_operator via the platform health channel. Escape
+        hatch: manual reaper run. Note that authorisation does not depend on the reaper —
+        every request re-evaluates expiry server-side, so a stuck reaper degrades
+        observability and audit tidiness, not security.
+      absolutely_expired: >
+        Identical policy to idle_expired, same reaper, same platform alert. Separated as a
+        distinct state only so that the revocation_reason written at reap time is accurate
+        without re-deriving it from timestamps at reap time, which would be wrong for any
+        session that idled out and then also passed its absolute expiry before being swept.
+      revoked: >
+        Terminal and immutable. Retained for the security audit retention period (7 years
+        per the security audit class), then purged by the retention job. Nothing pends.
+
+  - key: device
+    name: Device
+    description: A physical or logical client. Shared fixed-station devices and shared point-of-service terminals are first-class, not an afterthought.
+    owner: tenant
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true}
+      - {key: label, type: string, req: true, note: 'human-set and said out loud, for example a short station name plus a number'}
+      - {key: kind, type: enum, values: [personal_mobile, shared_tablet, pos_terminal, kds_screen, desktop_browser, integration_client], req: true}
+      - {key: shared, type: bool, req: true, note: shared devices get shorter idle timeouts and PIN-based fast user switching}
+      - {key: trust_status, type: enum, values: [untrusted, trusted, blocked], req: true, default: untrusted}
+      - {key: bound_site_id, type: uuid, nullable: true, note: a KDS bound to a site refuses sessions for other sites}
+      - {key: last_seen_at, type: timestamptz}
+      - {key: os_family, type: string, nullable: true}
+      - {key: app_version, type: string, nullable: true}
+      - {key: min_supported_version_ok, type: bool, computed: true}
+    invariants:
+      - kind=kds_screen or pos_terminal implies shared=true.
+      - A blocked device may not mint sessions and its existing sessions are revoked on block.
+    states: [untrusted, trusted, blocked, archived]
+    initial_state: untrusted
+    transitions:
+      - {from: untrusted, to: trusted, action: trust_device, actor: tenant_admin, guard: acting session elevated and device.min_supported_version_ok, side_effects: longer idle TTL becomes available to this device per policy, reversibility: true}
+      - {from: trusted, to: untrusted, action: untrust_device, actor: tenant_admin, guard: null, side_effects: existing sessions survive but are re-evaluated against the untrusted idle TTL at next refresh, reversibility: true}
+      - {from: untrusted, to: blocked, action: block_device, actor: tenant_admin, guard: acting session elevated, side_effects: all sessions on this device revoked with reason=device_untrusted, reversibility: true}
+      - {from: trusted, to: blocked, action: block_device, actor: tenant_admin, guard: acting session elevated, side_effects: all sessions on this device revoked with reason=device_untrusted, reversibility: true}
+      - {from: blocked, to: untrusted, action: unblock_device, actor: tenant_admin, guard: acting session elevated, side_effects: none, reversibility: true, note: 'unblocking never restores trusted directly; a device that was blocked must re-earn trust explicitly, because the reason for blocking is usually loss of physical control'}
+      - {from: untrusted, to: archived, action: archive_device, actor: tenant_admin, guard: 'no unsynced mutation queue is known to exist on this device, or the administrator has explicitly accepted the loss and typed the queued count', side_effects: 'sessions revoked, device excluded from default lists', reversibility: false}
+      - {from: trusted, to: archived, action: archive_device, actor: tenant_admin, guard: as above, side_effects: as above, reversibility: false}
+      - {from: blocked, to: archived, action: archive_device, actor: tenant_admin, guard: as above, side_effects: as above, reversibility: false}
+    stuck_state_policy:
+      untrusted: >
+        untrusted is a valid long-term steady state, not a queue — a personal phone belonging
+        to a field worker may legitimately never be trusted. The monitored exception is a
+        device that is untrusted AND stale: last_seen_at older than device_stale_days
+        (default 60). Told: tenant_admin as a monthly list. Escape hatch: archive_device in
+        bulk. Verity does not auto-archive, because an archived device that reappears with a
+        full offline mutation queue is a worse problem than a stale row.
+      trusted: >
+        The exception here is trust that has outlived its justification. Two triggers.
+        (a) A trusted device unseen for device_trust_decay_days (default 90) is automatically
+        transitioned to untrusted, not blocked, and the tenant_admin is told. Decay is
+        automatic here — unlike principal dormancy — because trust is a security grant with
+        no operational cost to re-issue, whereas an account is a person's access to their
+        own work. (b) A trusted device below the minimum supported app version
+        (min_supported_version_ok false) for longer than version_grace_days (default 30):
+        told to the tenant_admin and to the device itself on next sign-in, because an
+        unpatchable device that holds a long idle TTL is the weakest point in the session
+        model. Escape hatch: update, untrust or archive.
+      blocked: >
+        Blocking is meant to be a decision, not a limbo. A device blocked for longer than
+        blocked_review_days (default 30) is reported to the tenant_admin with the blocking
+        reason and actor. Escape hatch: unblock_device or archive_device. There is no
+        automatic resolution: a device blocked because it was stolen must not quietly
+        un-block itself on a timer.
+
+ports:
+  - port_key: principal_directory
+    direction: provides
+    contract: >
+      Resolve a principal reference to a display name, an authentication status, the role
+      archetypes it holds, whether its current session is elevated, and its devices with their
+      trust state. Provide a change feed so that suspension, deactivation or membership
+      revocation invalidates cached authorization decisions and blocks offline device stores.
+      Eight capabilities consume this; it is the reason a notification, an audit row or a
+      queued mutation can be attributed to a person years later.
+    cardinality: exactly_one
+
+  - port_key: session_authority
+    direction: provides
+    contract: >
+      Validate a session token to a principal, a tenant, a device and a surface; report its
+      idle and absolute expiry and its elevation window; and revoke it. Expiry is evaluated
+      server-side only, because device clocks are wrong.
+    cardinality: exactly_one
+
+  - port_key: tenant_directory
+    direction: requires
+    contract: Resolve the tenant a membership or session belongs to, its suspension state, its locale and its timezone.
+    cardinality: exactly_one
+    unbound_behaviour: >
+      FORBIDDEN. A session is a claim about a principal AND a device AND a tenant AND a time
+      window; without the tenant there is no third element and nothing to scope a session to.
+      Declared explicitly so that tenant_membership.tenant_id is visibly a port-resolved
+      reference rather than a foreign key into hq_console, which kernel K04 forbids.
+
+  - port_key: authorization_decision
+    direction: requires
+    contract: Resolve whether an acting principal may perform an identity action against a target, and resolve the impersonation redaction profile.
+    cardinality: exactly_one
+    unbound_behaviour: FORBIDDEN. Every administrative action here - suspend, deactivate, revoke, block, impersonate - is a permission decision, and an unauthorised identity subsystem is an unauthenticated one.
+
+  - port_key: audit_sink
+    direction: requires
+    contract: Record authentication, session, membership and device events of audit class security within the calling transaction.
+    cardinality: exactly_one
+    unbound_behaviour: FORBIDDEN. Authentication and permission-adjacent events are the first thing any investigation reads, and an unauditable identity subsystem cannot be relied on for anything else in the platform.
+
+  - port_key: notification
+    direction: requires
+    contract: Deliver one-time codes, new-device alerts, session-revoked, access-changed and account-state messages, honouring the mandatory_operational and mandatory_legal classes.
+    cardinality: zero_or_one
+    unbound_behaviour: >
+      Phone-OTP authentication becomes impossible, which removes the primary sign-in path for
+      the target workforce entirely. Password authentication still works. Every security alert
+      - new device, sessions revoked by an administrator, account suspended - becomes invisible
+      to the person it concerns. A pack enabling phone-OTP sign-in without binding this port
+      cannot be published.
+
+  - port_key: org_structure
+    direction: requires
+    contract: Resolve a device's bound site, so that a site-bound station cannot mint sessions for another site.
+    cardinality: zero_or_one
+    unbound_behaviour: 'device.bound_site_id cannot be set and no device is site-restricted. Every shared station can hold a session for any site the principal can reach, which is a materially weaker posture and is stated rather than silently applied.'
+
+actions:
+
+  # ---------------- AUTHENTICATION ----------------
+  - key: authenticate_password
+    confirmation_specification: 'None. Signing in is initiated by the person themselves; a dialogue asking whether they meant to press the button they just pressed is friction with no decision behind it. The kernel K06 requirement is met by having considered it and recorded the answer.'
+    idempotency_key_source: 'client-minted auth_attempt_id (uuid v7) per sign-in submission. A replay within replay_window_seconds (default 60) returns the SAME session rather than minting a second, so a double-tap on a slow 2G connection does not leave an orphan session the user cannot see or revoke.'
+    offline_policy: refuse
+    offline_rationale: 'There is no offline first authentication. Verifying a credential offline means trusting the device to verify it, which means the credential check is only as strong as the device. Devices are provisioned online and may then go offline.'
+    entity: session
+    label: Sign in with email and password
+    actors: [any_unauthenticated]
+    preconditions:
+      - Principal exists and status IN (active, invited).
+      - Principal is not locked (locked_until is null or in the past).
+      - Device is not trust_status=blocked.
+      - Tenant is not suspended, OR the principal holds a platform archetype.
+    inputs: [email, password, device_fingerprint, surface, tenant_hint_optional]
+    creates: [session, device_if_new, auth_attempt_record]
+    updates: [principal.failed_auth_count, principal.last_authenticated_at, device.last_seen_at]
+    events: [session.created, principal.authenticated]
+    notifications:
+      - {to: principal, channel: email_or_whatsapp, when: new_device_or_new_geo, template: new_signin_alert}
+    undoable: false
+    audit_class: security
+    concurrency: >
+      Two simultaneous sign-ins from different devices both succeed and create
+      independent sessions. There is no global single-session constraint by default;
+      a tenant policy may set max_concurrent_sessions_per_principal, in which case
+      the OLDEST session is revoked with reason=admin_revoke and the user is told
+      on the surviving device.
+    failure_modes:
+      - {code: E_VALIDATION, cause: malformed email, message: Enter a valid email address.}
+      - {code: E_AUTHN, cause: wrong password OR unknown email, message: Email or password is incorrect., note: 'identical message and identical response timing for both cases, constant-time compare, to prevent account enumeration'}
+      - {code: E_AUTHN, cause: principal.status=suspended, message: This account is suspended. Contact your administrator.}
+      - {code: E_AUTHN, cause: principal.status=deactivated, message: Email or password is incorrect., note: deliberately indistinguishable from unknown account}
+      - {code: E_RATE_LIMIT, cause: 5 failures in 15 min per principal, message: Too many attempts. Try again in 15 minutes., note: 'lock is per principal AND separately per source IP, so an attacker cannot lock a victim out cheaply — IP limit is 20/15min'}
+      - {code: E_TENANT_SUSPENDED, cause: tenant billing suspension, message: This workspace is suspended.}
+      - {code: E_PRECONDITION, cause: device blocked, message: This device is not permitted. Contact your administrator.}
+    edge_cases:
+      - Correct password but MFA enrolled -> session is NOT created. A short-lived mfa_challenge token is returned instead. The session row is created only after MFA success.
+      - Principal has zero active tenant memberships -> authentication succeeds, no session is minted, user lands on a "no workspaces" screen with a support link. This is not an error state.
+      - Principal has multiple active memberships and no tenant_hint -> tenant picker. Session minted only after choice.
+      - Password correct but expired per tenant password_max_age policy -> forced change flow, session minted only after change, all other sessions revoked with reason=password_change.
+      - Clock skew on the device does not affect expiry; expiry is evaluated server-side only.
+      - Sign-in during an in-progress offline sync on the same device by a DIFFERENT principal -> blocked with E_PRECONDITION until the queue drains or the outgoing user explicitly discards, because queued mutations are attributed to the queueing principal and must not be replayed under a new identity.
+
+  - key: authenticate_phone_otp
+    updates: [principal.failed_auth_count, principal.last_authenticated_at, device.last_seen_at, otp_challenge.burned]
+    notifications:
+      - {to: principal, channel: whatsapp_or_sms, when: new_device_or_new_geo, template: new_signin_alert, cost_class: utility}
+    undoable: false
+    confirmation_specification: 'None, for the same reason as authenticate_password.'
+    concurrency: >
+      Two devices verifying the same OTP concurrently - which happens whenever a code is
+      read aloud in a shared workspace - resolve by burning the challenge under a
+      conditional update. The loser receives the winner's session only if the device
+      fingerprint matches, and E_AUTHN otherwise. A code that succeeded on two different
+      devices is a shared code and must not silently mint two sessions.
+    idempotency_key_source: 'the otp_challenge_id. An OTP is single-use by construction, so the challenge id is naturally idempotent and a replayed verify returns the session minted by the first verify.'
+    offline_policy: refuse
+    entity: session
+    label: Sign in with phone and OTP
+    actors: [any_unauthenticated]
+    rationale: Primary path for the large share of the target workforce who hold a phone and no work email address.
+    preconditions:
+      - Principal with matching primary_phone_e164 exists and status IN (active, invited).
+      - OTP send is DLT-compliant (registered template, registered header).
+    inputs: [phone_e164, otp_code, device_fingerprint, surface]
+    creates: [session, device_if_new, auth_attempt_record]
+    events: [session.created, principal.authenticated]
+    audit_class: security
+    failure_modes:
+      - {code: E_AUTHN, cause: wrong OTP, message: That code is incorrect., note: 'max 5 verify attempts per OTP, then OTP is burned'}
+      - {code: E_AUTHN, cause: expired OTP, message: That code has expired. Request a new one., note: OTP TTL 5 minutes}
+      - {code: E_RATE_LIMIT, cause: OTP resend abuse, message: Wait before requesting another code., note: '3 sends per phone per 15 min, exponential backoff 30s/60s/300s'}
+      - {code: E_DEPENDENCY, cause: SMS gateway down, message: We could not send the code. Try WhatsApp instead., note: 'automatic channel fallback SMS -> WhatsApp authentication template'}
+    edge_cases:
+      - Same phone number reused after an employee leaves and a new employee gets the recycled SIM -> phone is NOT an identity. On employee deactivation the phone is released from the principal after a tenant-configured cooling period (default 30 days) and re-registration requires supervisor confirmation.
+      - OTP delivered but user is offline -> OTP verification requires connectivity. There is no offline first-login. Devices are provisioned online, then may go offline.
+      - Two principals in different tenants share one phone number (a supervisor who moonlights) -> permitted; after OTP success the tenant picker appears.
+
+  - key: verify_mfa
+    preconditions:
+      - An unexpired, unburned mfa_challenge exists for this principal and this device.
+      - The principal is still status=active and the tenant is still not suspended. Both are re-checked, because either can change between password success and MFA success.
+    inputs: [mfa_challenge_token, code, device_fingerprint]
+    updates: [principal.last_authenticated_at, mfa_challenge.burned, used_code_cache]
+    notifications:
+      - {to: principal, channel: all_enrolled, when: recovery_code_used, template: recovery_code_consumed, must_include: [remaining_recovery_codes], mandatory_operational: true}
+    undoable: false
+    confirmation_specification: 'None. Same reasoning as the authentication actions.'
+    concurrency: >
+      The used-code cache is per principal and is checked and written atomically, so two
+      concurrent submissions of the same TOTP value cannot both succeed. That is what makes
+      a shoulder-surfed code useless rather than merely unlucky.
+    idempotency_key_source: 'the mfa_challenge_id. Replay of a successful verify returns the same session; replay of a code against a NEW challenge is a replay attack and is refused by the 90s used-code cache.'
+    offline_policy: refuse
+    entity: session
+    label: Complete MFA challenge
+    actors: [principal_with_valid_mfa_challenge]
+    creates: [session]
+    events: [session.created, mfa.verified]
+    audit_class: security
+    failure_modes:
+      - {code: E_AUTHN, cause: wrong TOTP, message: That code is incorrect., note: 'allow +/- 1 time step for clock drift, no more'}
+      - {code: E_CONFLICT_UNIQUE, cause: TOTP code replay, message: That code has already been used., note: used codes cached for 90s per principal}
+      - {code: E_RATE_LIMIT, cause: 5 failed MFA attempts, message: Too many attempts., note: 'challenge burned, must restart sign-in'}
+    edge_cases:
+      - Recovery code used -> valid once, consumed, principal is told how many remain, and an alert is sent on all channels.
+      - MFA device lost -> recovery is an administrative action by tenant_admin with a mandatory reason, NOT a self-service email link, because email is often shared in small Indian firms.
+
+  # ---------------- SESSION LIFECYCLE ----------------
+  - key: refresh_session
+    inputs: [session_token]
+    creates: []
+    notifications: []
+    undoable: true
+    concurrency: >
+      idle_expiry_at moves by max(), never by assignment, so concurrent refreshes from a
+      web tab and a background sync converge without a lock and neither can move the expiry
+      backwards.
+    failure_modes:
+      - {code: E_AUTHN, cause: 'session already revoked, or now is past idle_expiry_at', message: Session expired. Sign in again., note: 'the session is marked revoked with reason=idle_timeout on this path rather than waiting for the reaper, so the reason is accurate at the moment it is observed'}
+      - {code: E_AUTHN, cause: now is past absolute_expiry_at, message: Session expired. Sign in again.}
+      - {code: E_TENANT_SUSPENDED, cause: the tenant was suspended after the session was issued, message: This workspace is suspended., note: 'checked on refresh rather than only at sign-in, so a suspension takes effect within one refresh interval rather than within one session lifetime'}
+      - {code: E_RATE_LIMIT, cause: a client refreshing far more often than the idle window requires, message: null, note: silently throttled rather than surfaced. This is a client defect and the person holding the device can do nothing about it}
+    idempotency_key_source: 'session_id. Refresh is a monotonic max() on idle_expiry_at, so it is idempotent by construction and needs no client-supplied key.'
+    offline_policy: refuse
+    entity: session
+    label: Slide idle expiry
+    actors: [session_holder]
+    preconditions: [session.revoked_at is null, now < idle_expiry_at, now < absolute_expiry_at]
+    updates: [session.idle_expiry_at, device.last_seen_at]
+    events: []
+    audit_class: read_sensitive_only
+    note: >
+      Deliberately does NOT emit an event. Refreshes are high-frequency and would
+      flood the event log. Session activity is observable from device.last_seen_at.
+    edge_cases:
+      - Refresh arriving after idle_expiry_at but before absolute_expiry_at -> E_AUTHN, session revoked with reason=idle_timeout. No silent resurrection.
+      - Refresh from a different IP/geo than issue -> allowed by default (Indian mobile networks change IP constantly) but a geo jump exceeding tenant policy geo_velocity_kmh triggers step-down: session survives, elevated_until is cleared, and next high-risk action requires re-auth.
+
+  - key: elevate_session
+    preconditions: [session is valid and not revoked, the principal holds a re-authenticatable credential, the session is not an impersonation session]
+    inputs: [session_token, credential_material_or_totp, requested_action_key]
+    creates: [elevation_challenge_record]
+    notifications: []
+    undoable: true
+    idempotency_key_source: 'session_id plus elevation_challenge_id. Re-submitting the same challenge extends nothing; elevated_until is set to issued_at + window, not incremented, so elevation cannot be ratcheted indefinitely by replay.'
+    offline_policy: refuse
+    concurrency: 'Two concurrent elevations on one session converge because elevated_until is set, not incremented. Elevation is per session, never per principal, so elevating on a desktop does not silently elevate a phone that is signed in as the same person.'
+    failure_modes:
+      - {code: E_AUTHN, cause: re-authentication credential wrong, message: That is not correct., note: 'the session is NOT revoked on a failed elevation; the user keeps their normal-privilege session, because otherwise a shoulder-surfer could log a user out by failing an elevation'}
+      - {code: E_RATE_LIMIT, cause: 5 failed elevations in 15 min, message: Too many attempts. Try again shortly., note: the underlying session survives; only elevation is barred}
+      - {code: E_PRECONDITION, cause: session already revoked, message: Session expired. Sign in again.}
+    edge_cases:
+      - Elevation does not survive switch_tenant. A new session starts unelevated, because the risk of the elevated action is evaluated per tenant.
+      - An impersonating platform operator can never elevate on behalf of the impersonated principal. Elevation requires a credential and the operator does not hold the subject's credential. High-risk actions are therefore unavailable under impersonation by construction rather than by a permission rule that could be misconfigured.
+      - 'A geo-velocity step-down (see refresh_session) clears elevated_until immediately; it does not wait for the window to lapse.'
+    entity: session
+    label: Step-up re-authentication
+    actors: [session_holder]
+    rationale: High-risk actions must not ride on a 12-hour-old session.
+    required_for:
+      - Changing another principal's permissions
+      - Viewing or editing salary fields
+      - Approving payment runs
+      - Exporting any dataset containing sensitive fields
+      - Deploying a pack or module version to production
+      - Revoking another principals sessions
+      - Generating an API key
+    updates: [session.elevated_until]
+    events: [session.elevated]
+    audit_class: security
+    policy: {default_elevated_window_minutes: 15, max: 60}
+
+  - key: logout
+    inputs: [session_token, offline_queue_disposition]
+    creates: []
+    notifications: []
+    confirmation_specification: 'None for the ordinary case. A confirmation IS required when the offline mutation queue is non-empty; its exact form is specified in the offline logout edge case below, including the requirement to type the count of changes being discarded.'
+    concurrency: >
+      Revocation is a conditional write on revoked_at IS NULL, so a logout racing a reap or
+      an administrative revoke leaves the FIRST reason in place. The reason matters more
+      than the timestamp, because support reading user_logout and support reading
+      admin_revoke take different actions.
+    idempotency_key_source: 'session_id. Revocation is monotonic; the second call is a 2xx no-op.'
+    offline_policy: queue
+    entity: session
+    label: Log out (this device)
+    actors: [session_holder]
+    preconditions: [session exists and is not already revoked]
+    updates: [session.revoked_at, session.revocation_reason=user_logout]
+    events: [session.revoked]
+    undoable: false
+    audit_class: security
+    client_obligations:
+      - Server revokes first, client clears local state only after a 2xx OR after a 401/404 (both mean the session is gone).
+      - On success the client must purge: access token, refresh token, cached permission set, cached tenant config, cached user profile, in-memory PII, service worker caches keyed to the session, and IndexedDB stores marked session_scoped.
+      - The client must NOT purge stores marked device_scoped (offline mutation queue, downloaded shift roster) until the queue is confirmed empty. See edge cases.
+      - Push notification token is de-registered for this principal on this device before local purge.
+    failure_modes:
+      - {code: E_DEPENDENCY, cause: network unavailable at logout, message: null, note: 'see offline edge case, this is NOT surfaced as a failure'}
+    edge_cases:
+      - "OFFLINE LOGOUT: user taps Log out with no connectivity and a non-empty mutation queue. Do NOT silently discard. Present three options: (a) Stay signed in until synced — recommended, default; (b) Log out and keep queued work on this device for this user to sync later — allowed only on non-shared devices, queue stays encrypted at rest keyed to the principal; (c) Log out and discard N unsynced changes — requires typing the count to confirm, emits a client_side_discard telemetry event, and is refused entirely if any queued mutation is financial or attendance-related."
+      - "SHARED DEVICE LOGOUT: on device.shared=true, logout also clears the fast-switch PIN cache and returns to the roster picker, not to the marketing login screen."
+      - "FIXED-STATION LOGOUT: a station display bound to a site does not truly log out to an anonymous state — it returns to a station picker while retaining the device-level station credential. A human logging out of one must not orphan the work in progress on it; that work is already server-side, so this is safe, but the client must confirm 'N items in progress remain on the server' rather than showing an empty screen."
+      - "LOGOUT DURING AN IN-FLIGHT MUTATION: the mutation is allowed to complete server-side; the session is revoked at the transaction boundary, not mid-transaction. The result is written to the audit log with the pre-revocation session id."
+      - "LOGOUT WHILE IMPERSONATED: if impersonated_by_principal_id is set, 'log out' ends the impersonation and returns the operator to their own HQ session; it does not log out the impersonated users real sessions."
+      - "DOUBLE LOGOUT / already-revoked session: idempotent. Returns 2xx. Never an error."
+      - "Logout does not revoke other sessions. That is logout_all."
+
+  - key: logout_all
+    inputs: [target_principal_id, preserve_acting_session, reason]
+    creates: []
+    undoable: false
+    confirmation_specification: 'Modal stating the count of sessions that will end, the surfaces they are on, and whether any holds an unsynced offline queue. Requires acknowledging the unsynced count when it is non-zero. Required because undoable is false and because ending a field session mid-shift has an operational cost the administrator should see before deciding.'
+    failure_modes:
+      - {code: E_AUTHN, cause: acting session not elevated when targeting another principal, message: Confirm your identity to continue.}
+      - {code: E_AUTHZ_SCOPE, cause: 'target principal is outside the acting principal''s tenant', message: Not found.}
+      - {code: E_PRECONDITION, cause: target is an integration_principal, message: This action is not available in the current state., note: service-account sessions are revoked by revoke_api_key. Conflating the two would let a routine human logout_all silently kill a nightly integration}
+      - {code: E_DEPENDENCY, cause: the push provider is unavailable for token de-registration, message: null, note: revocation still commits and de-registration is queued and retried. A session must never survive because a notification provider was down}
+    idempotency_key_source: 'target principal_id plus the acting session_id plus requested_at truncated to the second. Two administrators revoking the same principal in the same second produce one revocation sweep and one notification, not two.'
+    offline_policy: refuse
+    concurrency: 'The sweep takes a per-principal advisory lock. A session minted DURING the sweep by a race is revoked by a second pass; the sweep runs twice and asserts a zero delta on the second pass, because a revoke-all that leaves one session alive is worse than a slow revoke-all.'
+    entity: session
+    label: Log out of all devices
+    actors: [session_holder, tenant_admin_for_other_principal, platform_operator]
+    preconditions: [session.elevated_until > now when performed against another principal]
+    updates: [all sessions for principal set revoked_at, reason=user_logout_all or admin_revoke]
+    events: [session.revoked (one per session), principal.all_sessions_revoked]
+    audit_class: security
+    notifications:
+      - {to: principal, channel: email_and_whatsapp, when: performed_by_someone_else, template: sessions_revoked_by_admin, must_include: [actor_display_name, reason, timestamp]}
+    edge_cases:
+      - The acting session may optionally be preserved ("log out everywhere else"). Default for self-service is to preserve the current session; default for admin action is to revoke everything including any admin-held impersonation session.
+      - Service-account sessions are NOT revoked by a human logout_all; they are separate principals. Revoking them is revoke_api_key.
+      - A revoked session on an offline device keeps working until the device next reaches the server. This is unavoidable and must be stated in the security model, not hidden. Mitigation: offline token TTL is capped at tenant policy offline_grace_hours (default 12, max 72) and financial actions are never permitted offline.
+
+  - key: switch_tenant
+    preconditions: [the principal holds an active membership in the target tenant, the target tenant is not suspended, no unsynced queue blocks the switch per the edge case below]
+    inputs: [target_tenant_id, offline_queue_disposition]
+    notifications: []
+    undoable: true
+    concurrency: >
+      The old session is revoked and the new one minted in one transaction, so there is no
+      instant at which the principal holds two live sessions across two tenants. That is the
+      property which makes cross-tenant leakage structurally impossible rather than merely
+      unlikely.
+    idempotency_key_source: 'acting session_id plus target tenant_id. A replayed switch returns the session already minted for that pair rather than minting a second and orphaning the first.'
+    offline_policy: refuse
+    failure_modes:
+      - {code: E_AUTHZ_SCOPE, cause: no active membership in the target tenant, message: Not found., note: deliberately 404 not 403 — a tenant picker must never confirm that a workspace exists to someone with no membership in it}
+      - {code: E_TENANT_SUSPENDED, cause: target tenant suspended, message: This workspace is suspended.}
+      - {code: E_PRECONDITION, cause: unsynced offline queue on a shared device, message: Sync before switching workspaces., note: see edge cases}
+    entity: session
+    label: Switch workspace
+    actors: [session_holder_with_multiple_memberships]
+    creates: [new session]
+    updates: [old session revoked with reason=user_logout]
+    events: [session.revoked, session.created]
+    audit_class: security
+    rationale: A session is single-tenant. Switching mints a new session so no cross-tenant data can ever be served under one session id.
+    edge_cases:
+      - Unsynced offline queue for tenant A blocks switching to tenant B on a shared device; on a personal device the queue is retained per-tenant and switching is allowed.
+
+  - key: revoke_membership
+    inputs: [membership_id, reason]
+    creates: []
+    notifications:
+      - {to: target_principal, channel: email_and_whatsapp, when: always, template: workspace_access_removed, must_include: [tenant_label, actor_display_name, timestamp], mandatory_operational: true}
+      - {to: dispatcher_and_supervisor, channel: in_app, when: the principal has future assignments, template: assignee_unavailable}
+    undoable: false
+    confirmation_specification: 'Modal naming the person, the count of their future assignments, their in-flight approvals, and the records that will be attributed to a removed member. Requires typing the person''s display name. Required because undoable is false.'
+    failure_modes:
+      - {code: E_PRECONDITION, cause: target is the last active tenant_owner, message: This is the only owner of this workspace. Transfer ownership first.}
+      - {code: E_VALIDATION, cause: reason empty, message: Give a reason. It is recorded and shown to the person.}
+      - {code: E_AUTHN, cause: session not elevated, message: Confirm your identity to continue.}
+      - {code: E_AUTHZ_SCOPE, cause: the membership belongs to another tenant, message: Not found.}
+    idempotency_key_source: 'tenant_membership.id. Revocation is monotonic; replay is a 2xx no-op and does not re-send the notification.'
+    offline_policy: refuse
+    concurrency: 'Last-owner protection is evaluated inside the same transaction as the write, under a SELECT ... FOR UPDATE over the tenant''s owner memberships. Evaluating it outside the transaction permits two concurrent revocations to each observe two owners and leave the tenant with none — the classic write-skew, and the reason this guard is a database concern rather than an application check.'
+    entity: tenant_membership
+    label: Remove a person from the workspace
+    actors: [tenant_admin, tenant_owner]
+    preconditions:
+      - Acting session is elevated.
+      - Target is not the last active principal holding tenant_owner archetype.
+    updates: [tenant_membership.status=revoked, all sessions for that principal in that tenant revoked with reason=membership_revoked]
+    events: [membership.revoked, session.revoked]
+    audit_class: security
+    edge_cases:
+      - "LAST OWNER PROTECTION: refuse with E_PRECONDITION and name the constraint. Ownership transfer is a distinct action requiring the incoming owner to accept."
+      - "Revoking a membership does NOT delete the persons operational history. Work orders they completed, attendance they recorded and invoices they raised remain, attributed to the now-revoked principal, displayed with a 'no longer active' marker."
+      - "In-flight approvals assigned to the revoked principal are reassigned per the tenants approval_fallback policy (escalate to their manager by default) and never silently stall."
+      - "Their shifts in the future roster are flagged as unstaffed and the dispatcher is notified. Verity never silently leaves a site unmanned."
+      - "External client contacts: revoking access must not cancel their open tickets."
+
+  # ---------------- PRINCIPAL AND MEMBERSHIP LIFECYCLE ----------------
+  - key: invite_principal
+    entity: tenant_membership
+    label: Invite someone to the workspace
+    actors: [tenant_admin, tenant_owner]
+    rationale: >
+      Onboarding is where a platform is won or lost. Bulk onboarding of a field workforce
+      that has phone numbers but no email addresses is the normal case, not the exception,
+      so the invitation path must not assume a mailbox.
+    preconditions:
+      - Acting principal holds create on tenant_membership at tenant scope.
+      - Tenant is not suspended and is below its seat quota, if a quota is configured.
+      - The invitee identifier is a valid e164 phone or a valid email.
+    inputs: [identifier, identifier_kind, display_name, role_ids, assignable_scope_bindings, default_landing_surface, invitation_channel]
+    creates: [principal_if_no_platform_match, tenant_membership, invitation_token, auth_attempt_record]
+    updates: []
+    events: [membership.invited]
+    notifications:
+      - {to: invitee, channel: invitation_channel, when: immediately, template: workspace_invitation, cost_class: utility}
+      - {to: inviting_principal, channel: in_app, when: on_bulk_completion, template: invitation_batch_summary, batching_policy: 'one message per batch, never one per invitee'}
+    undoable: true
+    reversal_action: withdraw_invitation
+    audit_class: security
+    idempotency_key_source: 'tenant_id plus normalised identifier. Re-inviting an identifier that already holds a pending invitation in this tenant re-sends the existing token and returns 200 rather than creating a second membership row. This is what makes a re-uploaded CSV safe.'
+    offline_policy: refuse
+    concurrency: >
+      Two administrators inviting the same identifier concurrently: unique(principal_id,
+      tenant_id) on tenant_membership makes one lose with E_CONFLICT_UNIQUE, which the API
+      converts to the idempotent 200 above. The platform-level principal row is created under
+      a unique index on the normalised identifier, so the two requests cannot mint two
+      principals for one phone number.
+    failure_modes:
+      - {code: E_VALIDATION, cause: identifier is neither a valid e164 phone nor a valid email, message: 'Enter a mobile number with country code, or an email address.'}
+      - {code: E_CONFLICT_UNIQUE, cause: an ACTIVE membership already exists for this identifier in this tenant, message: This person is already in this workspace., note: 'distinct from the pending-invitation case, which is idempotent and silent'}
+      - {code: E_QUOTA, cause: seat quota reached, message: Plan limit reached., note: 'the count of consumed seats must state whether suspended memberships are included, because they are — see tenant_membership.suspended stuck policy'}
+      - {code: E_AUTHZ_FIELD, cause: inviter attempts to grant a role carrying archetypes they do not themselves hold, message: null, note: 'privilege escalation by invitation is the classic path; the role list presented is projected to roles the inviter could grant, and the server re-checks rather than trusting the client''s list'}
+      - {code: E_DEPENDENCY, cause: invitation channel provider unavailable, message: The invitation is created but we could not send it yet., note: the membership row is committed and the send is queued and retried; a failed send never rolls back an onboarding batch}
+      - {code: E_RATE_LIMIT, cause: more than invite_burst_limit invitations per tenant per hour (default 500), message: Too many invitations at once., note: 'protects the shared messaging sender reputation, which is a platform-level asset one tenant can damage for every other tenant'}
+    edge_cases:
+      - The identifier already exists as a platform principal in another tenant. No new principal is created; a membership is added to the existing principal. The inviter is NOT told that the person exists elsewhere — that would disclose the existence of another tenant's user. The invitee, on accepting, sees a workspace picker rather than a signup form.
+      - The identifier belongs to a principal in status deactivated. Treated as unknown. A new principal row is created only if the identifier has passed its release cooling period; otherwise the invitation is refused with E_VALIDATION and a message that does not confirm the prior account's existence.
+      - Bulk invite of 200 rows where 3 are malformed. The 197 valid rows commit and the 3 are returned as a downloadable error file with the original row numbers. Verity never rolls back a whole import for a minority of bad rows, and never silently drops them.
+      - The inviting principal's own membership is revoked before the invitee accepts. The invitation remains valid; it is a tenant grant, not a personal one. The audit row retains the original inviter.
+      - Invitation sent to a phone number the invitee shares with a family member on a shared handset. Acceptance requires possession of the OTP AND setting a credential, and the accepted-by device fingerprint is recorded. This is a known and unresolved weakness of phone-as-identity in shared-handset households; see open_questions.
+
+  - key: accept_invitation
+    notifications:
+      - {to: inviting_principal, channel: in_app, when: always, template: invitation_accepted, batching_policy: one digest per batch of invitations}
+    confirmation_specification: 'None. The person is completing an invitation they sought out. A confirmation on top of an acceptance flow is friction with no decision behind it.'
+    entity: principal
+    label: Accept an invitation
+    actors: [any_unauthenticated_holding_a_valid_token]
+    preconditions:
+      - Invitation token exists, is unexpired and unburned.
+      - Tenant is not suspended.
+    inputs: [invitation_token, credential_choice, credential_material, device_fingerprint]
+    creates: [credential, session, device_if_new]
+    updates: [principal.status, tenant_membership.status, tenant_membership.joined_at, invitation_token.burned]
+    events: [principal.activated, membership.accepted, session.created]
+    undoable: false
+    audit_class: security
+    idempotency_key_source: 'invitation_token. The token is burned inside the accepting transaction, so a double submit resolves to one activation and returns the session minted by the first.'
+    offline_policy: refuse
+    concurrency: 'The token is burned with a conditional update (WHERE burned_at IS NULL). The loser of the race receives the winner''s session if the device fingerprint matches, and E_PRECONDITION otherwise, because a token accepted from two different devices is a leaked token and must not silently succeed twice.'
+    failure_modes:
+      - {code: E_PRECONDITION, cause: token expired, message: This invitation has expired. Ask for a new one., note: 'the message deliberately does not say which workspace, because an expired-token page is unauthenticated'}
+      - {code: E_PRECONDITION, cause: token already used, message: This invitation has already been used.}
+      - {code: E_VALIDATION, cause: credential does not meet the tenant password policy, message: field-specific}
+      - {code: E_TENANT_SUSPENDED, cause: tenant suspended between invite and accept, message: This workspace is suspended.}
+      - {code: E_RATE_LIMIT, cause: 'token guessing, 10 attempts per source IP per hour', message: Too many attempts.}
+    edge_cases:
+      - Invitation accepted after the inviting tenant revoked the membership. Refused with E_PRECONDITION. The membership row, not the token, is the authority.
+      - A principal already active in another tenant accepts. No credential is set — they already have one. The flow is a consent screen naming the tenant, then the membership activates. Setting a second credential per tenant is explicitly not supported; identity is platform-level, membership is tenant-level.
+      - Acceptance from a device already blocked in that tenant. Refused with E_PRECONDITION, and the tenant_admin is notified, because an invitation being accepted on a blocked device is a signal worth surfacing.
+
+  - key: suspend_principal
+    creates: []
+    entity: principal
+    label: Suspend a person's access
+    actors: [tenant_admin, tenant_owner, platform_operator]
+    rationale: A reversible stop that preserves history and assignments, for investigations and disputes. Deactivation is the irreversible one.
+    preconditions:
+      - Acting session is elevated.
+      - Target is not the last active principal holding tenant_owner archetype in this tenant.
+      - Reason is supplied and non-empty.
+    inputs: [principal_id, reason, expected_version]
+    updates: [principal.status, all sessions for this principal revoked with reason=principal_suspended]
+    events: [principal.suspended, session.revoked]
+    notifications:
+      - {to: principal, channel: email_and_whatsapp, when: always, template: access_suspended, must_include: [actor_display_name, reason, timestamp], mandatory_operational: true}
+      - {to: dispatcher_and_supervisor_for_their_open_assignments, channel: in_app, when: the principal has future assignments, template: assignee_unavailable}
+    undoable: true
+    reversal_action: reinstate_principal
+    audit_class: security
+    idempotency_key_source: 'principal_id plus target status. Suspending an already-suspended principal is a 2xx no-op and does not re-notify.'
+    offline_policy: refuse
+    concurrency: 'Last-owner protection is evaluated under a row lock over the tenant''s owner memberships inside the write transaction. Optimistic version check on expected_version guards against suspending a principal whose status changed under the administrator''s stale list view.'
+    failure_modes:
+      - {code: E_PRECONDITION, cause: target is the last active tenant_owner, message: This is the only owner of this workspace. Transfer ownership first., note: 'the message names the constraint rather than saying access denied, because the administrator has the authority and just needs to do it in the right order'}
+      - {code: E_VALIDATION, cause: reason empty, message: Give a reason. It is recorded and shown to the person.}
+      - {code: E_AUTHN, cause: acting session not elevated, message: Confirm your identity to continue.}
+      - {code: E_CONFLICT_VERSION, cause: principal changed since the list was loaded, message: Someone else changed this record., retryable: true}
+    edge_cases:
+      - Suspension does not release the person's future assignments automatically. It flags them and tells the dispatcher, because auto-releasing a week of assignments on a suspension that is reversed the next morning creates more work than it saves. Whether it SHOULD auto-release is a configurable policy — see rules.
+      - Suspension while the person holds an in-flight approval. The approval is reassigned per approval_fallback. A suspension that silently parks an approval is how a purchase order sits for three weeks.
+      - Suspending a principal who holds memberships in several tenants. Suspension is platform-level on the principal row and therefore affects every tenant. A tenant_admin may only suspend a principal whose memberships are entirely within their tenant; otherwise they may only suspend_membership. This asymmetry is deliberate and is enforced server-side, because one tenant must never be able to cut off another tenant's staff.
+      - Suspending oneself. Permitted but requires typing the word to confirm, and warns that reinstatement will require another administrator. Forbidding it entirely creates a worse failure: a compromised administrator who cannot lock themselves out.
+
+  - key: reinstate_principal
+    inputs: [principal_id, reason, expected_version]
+    creates: []
+    concurrency: Optimistic on expected_version. A reinstatement racing a deactivation loses. Deactivation wins, because the safe resolution of a race between restoring access and removing it is removing it.
+    entity: principal
+    label: Reinstate a suspended person
+    actors: [tenant_admin, tenant_owner, platform_operator]
+    preconditions: [acting session is elevated, principal.status = suspended, reason supplied]
+    updates: [principal.status]
+    events: [principal.reinstated]
+    notifications:
+      - {to: principal, channel: email_and_whatsapp, when: always, template: access_restored, mandatory_operational: true}
+    undoable: true
+    audit_class: security
+    idempotency_key_source: principal_id plus target status
+    offline_policy: refuse
+    failure_modes:
+      - {code: E_PRECONDITION, cause: 'principal is deactivated, not suspended', message: This account is closed and cannot be reopened., note: deactivation is deliberately not reversible here; see open_questions on rehire}
+      - {code: E_AUTHN, cause: not elevated, message: Confirm your identity to continue.}
+      - {code: E_QUOTA, cause: seat quota was consumed while the person was suspended, message: Plan limit reached., note: this is why suspended memberships count against the quota — so reinstatement can never fail for a reason the administrator could not see coming}
+    edge_cases:
+      - No sessions are restored. Reinstatement grants the right to authenticate, not a live session, and the revoked rows stay revoked.
+      - Reinstating a principal whose tenant_membership was separately revoked leaves them with no landing place. The action succeeds and warns explicitly, naming the memberships that would also need restoring, rather than silently producing an account that can sign in and see nothing.
+
+  - key: deactivate_principal
+    creates: [identifier_release_schedule_entry]
+    entity: principal
+    label: Close a person's account
+    actors: [tenant_admin, tenant_owner, platform_operator]
+    preconditions:
+      - Acting session is elevated.
+      - Target is not the last active tenant_owner.
+      - Confirmation phrase typed.
+      - Reason supplied.
+    inputs: [principal_id, reason, confirmation_phrase, phone_release_choice]
+    updates: [principal.status, principal.deactivated_at, all memberships revoked, all sessions revoked, credentials destroyed]
+    events: [principal.deactivated, membership.revoked, session.revoked]
+    notifications:
+      - {to: principal, channel: email_and_whatsapp, when: only if a contactable channel survives deactivation, template: account_closed, mandatory_legal: true}
+      - {to: tenant_owner, channel: in_app, when: target held tenant_admin or finance archetype, template: privileged_account_closed}
+    undoable: false
+    confirmation_specification: 'Modal naming the person, the count of their open assignments, the count of their in-flight approvals and the count of records that will be attributed to a closed account. Requires typing the person''s display name. Required because undoable is false — see kernel K06 invariant.'
+    audit_class: security
+    idempotency_key_source: principal_id plus target status
+    offline_policy: refuse
+    concurrency: 'Runs as one transaction over principal, memberships and sessions, then a post-commit sweep for sessions minted during the transaction. The sweep asserts zero delta, as in logout_all.'
+    failure_modes:
+      - {code: E_PRECONDITION, cause: last active tenant_owner, message: This is the only owner of this workspace. Transfer ownership first.}
+      - {code: E_VALIDATION, cause: confirmation phrase mismatch, message: The name does not match.}
+      - {code: E_PRECONDITION, cause: principal holds an integration_principal archetype with live integrations bound to it, message: This service account is in use by N integrations. Rotate them first., note: names the integrations; closing a service account silently is how a nightly sync dies without anyone noticing until month end}
+      - {code: E_AUTHN, cause: not elevated, message: Confirm your identity to continue.}
+    edge_cases:
+      - Operational history is never deleted. Records the person created remain, attributed to the closed principal and rendered with a no-longer-active marker. This is not a soft delete of their work; it is the correct answer for an audit trail.
+      - The person's phone number and email are retained on the principal row until the release cooling period lapses (default 30 days, tenant-configurable), then released so a recycled SIM can be onboarded as a new principal. Release is a scheduled job, is audited, and is what prevents the recycled-SIM identity collision described under authenticate_phone_otp.
+      - A data-subject erasure request against a deactivated principal is a DIFFERENT operation, handled by core_audit's retention and legal-hold machinery, and is constrained by any legal hold. Deactivation is not erasure and the UI must not imply that it is.
+      - Deactivating a principal who is the sole approver in a live approval chain. Refused unless the approval_fallback policy resolves to a reachable approver; the error names the chains that would stall.
+
+  - key: unlock_principal_manual
+    inputs: [principal_id, reason]
+    creates: []
+    confirmation_specification: 'None. Unlocking restores a state the account was in minutes earlier and is routinely done under time pressure. The controls that matter here are the mandatory reason and the rate limit on repeated unlocks, not a modal.'
+    concurrency: Conditional write on locked_until IS NOT NULL. An unlock racing the scheduled auto-unlock is harmless, since both produce the same end state, and the audit records whichever landed first, which is the honest answer to who unlocked it.
+    entity: principal
+    label: Unlock an account before the lockout lapses
+    actors: [tenant_admin, tenant_owner, platform_support]
+    preconditions: [acting session is elevated, principal.status = locked, reason supplied]
+    updates: [principal.locked_until, principal.failed_auth_count]
+    events: [principal.unlocked]
+    notifications:
+      - {to: principal, channel: email_or_whatsapp, when: always, template: account_unlocked, mandatory_operational: true}
+    undoable: false
+    audit_class: security
+    idempotency_key_source: 'principal_id plus the locked_until value being cleared. Unlocking an already-unlocked account is a 2xx no-op.'
+    offline_policy: refuse
+    failure_modes:
+      - {code: E_PRECONDITION, cause: principal is not locked, message: This account is not locked.}
+      - {code: E_AUTHN, cause: not elevated, message: Confirm your identity to continue.}
+      - {code: E_RATE_LIMIT, cause: the same principal unlocked more than repeat_lockout_threshold times in 24h, message: This account keeps locking. Check for a device with a saved wrong password before unlocking again., note: 'the limit is advisory and overridable by tenant_owner, because an operations manager at 6am must not be blocked by a rate limit from restoring a shift'}
+    edge_cases:
+      - Unlocking does not reset MFA or clear a suspension. Those are distinct states and distinct actions. An administrator who expects unlock to fix everything is shown which other conditions still block sign-in.
+      - Platform_support may unlock but may not suspend, deactivate or change credentials. Read-biased support with exactly one write is deliberate; it is the single most requested support action and routing it through a tenant administrator at 3am is how support tickets become outages.
+
+  # ---------------- DEVICE LIFECYCLE ----------------
+  - key: trust_device
+    creates: []
+    notifications: []
+    entity: device
+    label: Trust this device
+    actors: [tenant_admin, tenant_owner]
+    rationale: Trust is what buys a device a longer idle timeout and, where policy allows, a shared-device fast-switch PIN. It is a grant, not an observation.
+    preconditions: [acting session is elevated, device.min_supported_version_ok is true, device.trust_status = untrusted]
+    inputs: [device_id, label, bound_site_id_optional, expected_version]
+    updates: [device.trust_status]
+    events: [device.trusted]
+    undoable: true
+    reversal_action: untrust_device
+    audit_class: security
+    idempotency_key_source: device_id plus target trust_status
+    offline_policy: refuse
+    concurrency: Optimistic on expected_version. A trust grant racing a block loses; block always wins, because the safe resolution of a race between a grant and a revocation is the revocation.
+    failure_modes:
+      - {code: E_PRECONDITION, cause: device below minimum supported app version, message: Update the app on this device before trusting it.}
+      - {code: E_PRECONDITION, cause: device is blocked, message: Unblock this device first., note: 'blocked goes to untrusted, never straight to trusted'}
+      - {code: E_VALIDATION, cause: label empty or duplicated within the tenant, message: Give this device a name that is unique in this workspace., note: 'duplicate device labels make a revocation list unusable at 3am, which is exactly when it is read'}
+      - {code: E_AUTHN, cause: not elevated, message: Confirm your identity to continue.}
+    edge_cases:
+      - Trusting a device does not trust the people who use it. A shared device carries no principal authority; every session on it still authenticates a principal.
+      - Trusting a device that is bound to a site restricts sessions on it to that site. Attempting a session for another site on that device fails with E_AUTHZ_SCOPE (404), not a message naming the bound site, because the bound site may itself be information the signing-in person should not have.
+      - A device fingerprint can change under the platform's control (OS reinstall, app data clear). This mints a NEW device row in untrusted rather than silently re-associating, and the old row goes stale and surfaces in the untrusted stuck-state list. Silent re-association would make the fingerprint worthless as a control.
+
+  - key: untrust_device
+    inputs: [device_id, reason, expected_version]
+    creates: []
+    notifications: []
+    concurrency: Loses to a concurrent block and wins over a concurrent trust. Trust changes always resolve toward the more restrictive outcome.
+    entity: device
+    label: Withdraw trust from a device
+    actors: [tenant_admin, tenant_owner, system_scheduler]
+    preconditions: [device.trust_status = trusted]
+    updates: [device.trust_status]
+    events: [device.untrusted]
+    undoable: true
+    audit_class: security
+    idempotency_key_source: device_id plus target trust_status
+    offline_policy: refuse
+    failure_modes:
+      - {code: E_PRECONDITION, cause: device is not trusted, message: This device is not trusted.}
+      - {code: E_CONFLICT_VERSION, cause: concurrent trust change, message: Someone else changed this record.}
+    edge_cases:
+      - Existing sessions are NOT revoked. They are re-evaluated against the untrusted idle TTL at their next refresh, which may expire them within minutes. Revoking immediately would end a shift mid-task for a policy change that is usually routine hygiene.
+      - Automatic decay (device_trust_decay_days) uses this same action with actor=system_scheduler so that the audit trail is identical in shape to a human withdrawal and can be queried the same way.
+
+  - key: block_device
+    creates: []
+    entity: device
+    label: Block a device
+    actors: [tenant_admin, tenant_owner, platform_operator]
+    rationale: The lost-or-stolen-handset action. It must be one tap from the device list and must take effect without the device's cooperation.
+    preconditions: [acting session is elevated, reason supplied]
+    inputs: [device_id, reason]
+    updates: [device.trust_status, all sessions on this device revoked with reason=device_untrusted]
+    events: [device.blocked, session.revoked]
+    notifications:
+      - {to: principals holding an active session on that device, channel: push_and_email, when: always, template: device_blocked, mandatory_operational: true}
+    undoable: true
+    reversal_action: unblock_device
+    audit_class: security
+    idempotency_key_source: device_id plus target trust_status
+    offline_policy: refuse
+    concurrency: Block wins every race against trust_device and untrust_device regardless of ordering, enforced by a conditional write rather than by last-write-wins.
+    failure_modes:
+      - {code: E_VALIDATION, cause: reason empty, message: Give a reason. It is recorded.}
+      - {code: E_AUTHN, cause: not elevated, message: Confirm your identity to continue.}
+      - {code: E_PRECONDITION, cause: device is the last device with an active session for a surface that cannot be re-provisioned remotely, message: Blocking this leaves no way to operate this surface until a new device is provisioned on site., note: 'a warning that must be acknowledged, not a refusal; the administrator may well be blocking it precisely because it was stolen'}
+    edge_cases:
+      - "A blocked device that is offline keeps working until it reaches the server. This is unavoidable in an offline-first system and is stated in the security model rather than hidden. Mitigation: offline_grace_hours caps the window, and financial actions are never permitted offline. The block confirmation states the worst-case exposure window in hours so the administrator can decide whether to also suspend the principals."
+      - Blocking a device with an unsynced mutation queue. The queue is not discarded. If the device ever reconnects it may upload the queue, and every uploaded mutation is tagged uploaded_after_device_block for review rather than being silently accepted or silently dropped. Both silent options are wrong: silent acceptance launders a stolen device's writes, silent dropping destroys a day of a worker's legitimate work.
+      - Blocking a shared device that is a bound KDS or POS terminal ends the station's operation. The action names the station and the count of in-flight work before proceeding.
+
+  - key: unblock_device
+    inputs: [device_id, reason]
+    creates: []
+    notifications:
+      - {to: tenant_admin, channel: in_app, when: always, template: device_unblocked, must_include: [device_label, actor_display_name, reason]}
+    concurrency: Conditional on the device still being blocked. An unblock racing a second block loses, per the trust-resolves-restrictive rule.
+    entity: device
+    label: Unblock a device
+    actors: [tenant_admin, tenant_owner]
+    preconditions: [acting session is elevated, device.trust_status = blocked, reason supplied]
+    updates: [device.trust_status]
+    events: [device.unblocked]
+    undoable: true
+    audit_class: security
+    idempotency_key_source: device_id plus target trust_status
+    offline_policy: refuse
+    failure_modes:
+      - {code: E_PRECONDITION, cause: device is not blocked, message: This device is not blocked.}
+      - {code: E_AUTHN, cause: not elevated, message: Confirm your identity to continue.}
+    edge_cases:
+      - Unblocking returns the device to untrusted, never to its previous trusted status. Re-granting trust is a separate, separately audited decision.
+      - Any queued mutations tagged uploaded_after_device_block remain tagged after unblocking. Unblocking a device does not retrospectively bless writes made while it was blocked.
+
+  - key: archive_device
+    creates: []
+    notifications:
+      - {to: principals with an active session on the device, channel: push, when: always, template: device_retired, mandatory_operational: true}
+    concurrency: Archival takes the device row exclusively, so a sync cannot land between the unsynced-count check and the write. Without that lock the typed count is a check against a number that has already moved.
+    entity: device
+    label: Retire a device
+    actors: [tenant_admin, tenant_owner]
+    preconditions:
+      - Acting session is elevated.
+      - Either the device is known to have no unsynced mutations, or the administrator has typed the count of mutations that will be abandoned.
+    inputs: [device_id, reason, acknowledged_unsynced_count]
+    updates: [device state = archived, sessions revoked]
+    events: [device.archived, session.revoked]
+    undoable: false
+    confirmation_specification: 'Modal stating the last-seen time, the last-known unsynced mutation count and whether any of those mutations are financial or attendance-class. Requires typing the unsynced count when it is non-zero. Required because undoable is false.'
+    audit_class: security
+    idempotency_key_source: device_id plus target state
+    offline_policy: refuse
+    failure_modes:
+      - {code: E_PRECONDITION, cause: unsynced count non-zero and not acknowledged, message: This device has N unsynced changes. Confirm you accept losing them.}
+      - {code: E_VALIDATION, cause: 'acknowledged count does not match the server''s count', message: The number does not match., note: 'the count may have moved because the device synced in the meantime, which is the good outcome and is stated as such'}
+      - {code: E_AUTHN, cause: not elevated, message: Confirm your identity to continue.}
+    edge_cases:
+      - An archived device that reconnects cannot mint a session and cannot upload its queue. It is told to contact an administrator, and the attempt raises an alert, because a device coming back from the dead with a queue is either a recovered handset or an attacker with a stolen one and a human must decide which.
+      - Archiving does not delete the device row. Audit rows reference device_id and must resolve to a label forever.
+
+  # ---------------- SYSTEM MAINTENANCE ----------------
+  - key: reap_session
+    inputs: [tenant_id, sweep_cursor, batch_size]
+    creates: []
+    confirmation_specification: 'None. There is no human in this path. The kernel K06 requirement is met by the conditional write that preserves a human-set revocation reason over the timeout reason, which is the safety property a confirmation would otherwise stand in for.'
+    entity: session
+    label: Reap an expired session
+    actors: [system_scheduler]
+    rationale: >
+      Expiry is evaluated server-side on every request, so security does not depend on the
+      reaper. The reaper exists so that the session list an administrator reads is truthful,
+      and so that revocation_reason is written accurately at the moment of expiry rather
+      than inferred later from timestamps.
+    preconditions: ['session.revoked_at is null', 'now > idle_expiry_at OR now > absolute_expiry_at']
+    updates: [session.revoked_at, session.revocation_reason]
+    events: [session.revoked]
+    notifications: []
+    undoable: false
+    audit_class: security
+    idempotency_key_source: 'session_id. The write is conditional on revoked_at IS NULL, so a session revoked by a human between sweeps keeps the human''s reason rather than being overwritten with a timeout reason.'
+    offline_policy: refuse
+    concurrency: >
+      The sweep is batched and takes no long-lived lock; each row is updated independently
+      under its own conditional write. A reaper running twice concurrently is harmless by
+      construction, which matters because scheduler at-least-once delivery guarantees it
+      eventually will.
+    failure_modes:
+      - {code: E_INTERNAL, cause: sweep exceeds its time budget with rows remaining, message: null, note: the sweep is resumable by cursor and never restarts from the beginning; a sweep that cannot finish within reaper_interval_minutes raises a platform alert per the idle_expired stuck-state policy}
+      - {code: E_DEPENDENCY, cause: event bus unavailable, message: null, note: the revocation commits and the session.revoked event is queued in the transactional outbox; revocation must never be blocked on the availability of a notification path}
+    edge_cases:
+      - A session that passed idle expiry and then absolute expiry before being swept is reaped with reason=absolute_timeout, the stronger of the two, so a support engineer reading the audit sees the binding constraint rather than the first one crossed.
+      - Reaping emits one session.revoked event per session. On a large tenant this can be thousands of events at a shift boundary; the event stream is the correct place for them and the notification layer must not fan them out to humans. Notifications on this action are deliberately empty.
+      - An impersonation session reaped by timeout also ends the impersonation. The impersonating operator's own HQ session is unaffected, and the audit shows the impersonation window closed by timeout rather than by the operator, which is the distinction a compliance review asks about.
+
+
+policy_knobs:
+  - {key: session_absolute_ttl_hours, default: 12, range: [1, 720], per_surface: true, note: KDS/POS often need long shifts; console should be short}
+  - {key: session_idle_ttl_minutes, default: 60, range: [5, 1440], per_surface: true, note: shared devices default 10}
+  - {key: offline_grace_hours, default: 12, range: [0, 72]}
+  - {key: max_concurrent_sessions_per_principal, default: null, note: null = unlimited}
+  - {key: password_min_length, default: 12, range: [8, 128]}
+  - {key: password_max_age_days, default: null, note: 'null = never expire; NIST guidance is against forced rotation, offered only for clients with contractual requirements'}
+  - {key: mfa_required_for_archetypes, default: [tenant_owner, tenant_admin, finance, platform_operator, platform_support]}
+  - {key: geo_velocity_kmh, default: 900}
+  - {key: new_device_alert, default: true}
+  - {key: invitation_ttl_days, default: 14, range: [1, 90]}
+  - {key: invitation_reminder_days, default: 3, range: [1, 30]}
+  - {key: auth_lockout_threshold, default: 5, range: [3, 20], note: per principal; the per-source-IP limit is a separate platform constant and is deliberately not tenant-tunable}
+  - {key: auth_lockout_window_minutes, default: 15, range: [5, 120]}
+  - {key: auth_lockout_duration_minutes, default: 15, range: [1, 1440]}
+  - {key: repeat_lockout_threshold, default: 3, range: [1, 20], note: lockouts per principal per 24h before the pattern is treated as an incident}
+  - {key: dormant_never_authenticated_days, default: 30, range: [7, 365]}
+  - {key: dormant_principal_days, default: 90, range: [30, 730]}
+  - {key: suspension_review_days, default: 30, range: [1, 365]}
+  - {key: membership_unused_days, default: 30, range: [7, 365]}
+  - {key: device_stale_days, default: 60, range: [7, 730]}
+  - {key: device_trust_decay_days, default: 90, range: [7, 730], note: 'set to null to disable decay; disabling is a tenant decision with a stated security consequence, not a silent default'}
+  - {key: blocked_review_days, default: 30, range: [1, 365]}
+  - {key: version_grace_days, default: 30, range: [0, 180]}
+  - {key: reaper_interval_minutes, default: 15, range: [1, 60], lowest_settable_scope: kernel, note: 'platform-level, not tenant-settable'}
+  - {key: identifier_release_cooling_days, default: 30, range: [0, 365], note: 'how long a deactivated principal''s phone or email is held before it may be re-onboarded as a new principal'}
+  - {key: invite_burst_limit_per_hour, default: 500, lowest_settable_scope: kernel, note: 'protects shared sender reputation, which is a platform asset one tenant can damage for all others'}
+  - {key: replay_window_seconds, default: 60, range: [0, 300], lowest_settable_scope: kernel}
+  - {key: assignment_release_on_suspension, default: false, note: 'when true, suspending a principal releases their future assignments back to the dispatcher instead of only flagging them'}
+
+rules:
+  - key: last_owner_protection
+    kind: guard
+    scope: kernel
+    overridable_at: null
+    default: 'A write that would leave a tenant with zero active principals holding tenant_owner archetype is rejected with E_PRECONDITION.'
+    expression: 'count(memberships where tenant_id = subject.tenant_id and status = active and role_has_archetype(tenant_owner)) - (1 if this write removes one) >= 1'
+    evaluation: inside the writing transaction, under a row lock over the candidate set
+    on_conflict: not overridable, so no conflict is possible
+    rationale: Kernel K12 invariant. Evaluated at revoke time, not read time.
+
+  - key: offline_financial_refusal
+    kind: guard
+    scope: kernel
+    overridable_at: null
+    default: 'Any action whose effects touch a field marked financial is refused when the originating request is an offline replay, regardless of tenant configuration.'
+    on_conflict: not overridable
+    rationale: Kernel K02 invariant plus the composition model's forbidden_overrides list.
+
+  - key: elevation_required_for_high_risk
+    kind: guard
+    scope: capability
+    overridable_at: tenant
+    default: 'The actions listed under elevate_session.required_for demand session.elevated_until > now. A tenant may LENGTHEN the required elevation window or ADD actions to the list; it may not remove an action from it.'
+    on_conflict: 'the more restrictive of the conflicting overrides wins, which is the only safe resolution for a security rule and is stated here rather than left to implementation'
+
+  - key: assignment_release_on_suspension
+    kind: policy
+    scope: capability
+    overridable_at: tenant
+    default: false
+    expression: 'on principal.suspended, if tenant_config.assignment_release_on_suspension then emit assignment.release_requested for each future assignment else flag only'
+    rationale: >
+      Businesses legitimately differ here. A staffing operation with a deep reliever bench
+      wants automatic release; a small maintenance operation wants the assignment held
+      because the suspension will probably be resolved by lunchtime. Modelled as a policy
+      rule with a shipped default rather than as a hardcoded behaviour, per kernel K07.
+    on_conflict: most specific scope wins, no merging
+
+  - key: identifier_uniqueness
+    kind: validation
+    scope: kernel
+    overridable_at: null
+    default: 'primary_phone_e164 and primary_email are unique across the platform among principals not in status deactivated, and remain reserved for identifier_release_cooling_days after deactivation.'
+    on_conflict: not overridable
+    rationale: >
+      Platform-wide rather than per-tenant uniqueness, because one human with one phone
+      number must resolve to one principal even when they work for two tenants. The
+      alternative — per-tenant identity — makes the tenant picker impossible and makes
+      cross-tenant session hygiene unenforceable.
+
+open_questions:
+  - {q: 'Do NCR field staff reliably retain access to the phone number on file across SIM churn?', assumption: Yes within a 30-day cooling period, confidence: WORKING_ASSUMPTION, method: operator interview, priority: High}
+  - {q: 'Is a shared-device PIN fast-switch acceptable to clients from a contractual security standpoint?', assumption: 'Acceptable on shared fixed-station surfaces, not acceptable where the device is the evidence of an individual''s presence', confidence: VALIDATION_REQUIRED, method: client contract review, priority: High}
+  - {q: 'When a former worker is re-engaged, does their identity continue (same principal reactivated) or restart (new principal)? The transition set deliberately has no path out of deactivated, so this is unresolved rather than decided.', assumption: 'None. Both are defensible: continuity preserves a single history and is what an auditor expects; restart matches the legal reality that a new engagement is a new contract, and avoids resurrecting stale permission bindings.', confidence: VALIDATION_REQUIRED, method: operator interview plus review of what the payroll and statutory-filing consumers of principal identity actually require, priority: High, blocks: [principal.deactivated transition set, core_audit attribution continuity, people.employment lifecycle]}
+  - {q: 'Is platform-wide identifier uniqueness correct, or should a person be able to hold two independent principals for two tenants deliberately (for example a contractor who wants their work for two competing clients kept separate)?', assumption: 'Platform-wide uniqueness, per rule identifier_uniqueness.', confidence: WORKING_ASSUMPTION, method: pilot with a multi-tenant contractor, priority: Medium}
+  - {q: 'Shared-handset households: a single phone number can be an entire family''s. OTP possession therefore does not prove the identity of the person holding the handset. What compensating control is acceptable to clients whose contracts require individual accountability?', assumption: None. Device fingerprint plus a set credential is recorded but is not claimed to be proof of individual identity., confidence: VALIDATION_REQUIRED, method: 'client contract review, and field observation of handset sharing rates in the target workforce', priority: High}
+  - {q: 'Does DEC-K-001 (may a tenant add entities at runtime) apply to the four entities in this capability?', assumption: 'No. Identity, session and device shapes are kernel-adjacent and must be fixed regardless of how DEC-K-001 resolves, because a runtime-mutable session shape makes the security model unauditable.', confidence: WORKING_ASSUMPTION, method: 'resolve DEC-K-001 first, then confirm this capability is carved out of whatever it decides', priority: High, blocks: [DEC-K-001]}
