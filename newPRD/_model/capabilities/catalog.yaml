@@ -1,0 +1,589 @@
+key: catalog
+name: Catalog
+layer: domain
+confidence: KNOWN
+description: >
+  What the tenant sells or consumes, priced, versioned, and available under stated
+  conditions. It holds items, the choices a buyer may make about them, what they cost, what
+  they are made of, and when they can be had. It does not hold stock, does not hold orders
+  and does not compute tax - it declares the classification that a tax engine consumes.
+
+principles:
+  - A price is never a scalar on an item. It is a rule with a scope, an effective period and a precedence, because the same item costs different amounts to different buyers at different times and modelling that as one number pushes the difference into somebody's head.
+  - Availability is a schedule, not a flag. An item that is only available at certain times, at certain locations, or while a component lasts, is the normal case.
+  - A composition - what an item is made of - is a versioned recipe and not a live link. Changing what something is made of must not change what was sold last month.
+  - Every item declares a tax classification and never a tax rate. Rates change by jurisdiction and by date, and an item carrying a rate is an item that is wrong after the next change.
+  - Modifiers change price, composition and availability simultaneously. Modelling them as a display concern produces an order that cannot be costed.
+  - Versioning is mandatory rather than optional. A catalogue that can be edited in place makes every historical order unexplainable.
+
+entities:
+
+  - key: catalog_item
+    name: Catalog Item
+    description: One thing that can be sold, ordered, booked or consumed, with its classification, its unit and its lifecycle.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: sku, type: string, req: true, unique_scope: tenant, immutable: true, note: 'the code people type, scan and say out loud'}
+      - {key: name, type: string, req: true}
+      - {key: description, type: text, nullable: true}
+      - {key: item_kind, type: enum, values: [goods, service, time_based, composite, fee, adjustment], req: true, note: shapes rather than categories. What a tenant calls each is a terminology map concern and never appears here}
+      - {key: unit_of_measure, type: string, req: true, note: 'the unit quantities are expressed in. Mandatory, because a quantity with no unit is the most common cause of an order that costs ten times what was intended'}
+      - {key: category_id, type: uuid, nullable: true, fk: catalog_category}
+      - {key: tax_classification, type: string, nullable: true, note: the classification code a tax engine consumes through the tax_treatment port. Never a rate. An item carrying a rate is wrong after the next rate change and nobody notices until an authority does}
+      - {key: is_sellable, type: bool, req: true, default: true}
+      - {key: is_purchasable, type: bool, req: true, default: false}
+      - {key: is_stocked, type: bool, req: true, default: false, note: whether an inventory capability tracks it. Declared here and enforced there}
+      - {key: default_duration_minutes, type: int, nullable: true, note: 'for time_based items, passed to booking and scheduling through the bookable_offering port'}
+      - {key: required_qualification_keys, type: json, nullable: true, note: 'flat list of scalars, passed to scheduling so that a service item can only be delivered by somebody competent to deliver it'}
+      - {key: composition_id, type: uuid, nullable: true, fk: composition}
+      - {key: image_ref, type: string, nullable: true, note: reference through the evidence_capture port}
+      - {key: sort_weight, type: int, req: true, default: 0}
+      - {key: version_number, type: int, req: true, default: 1}
+      - {key: replaced_by_item_id, type: uuid, nullable: true, fk: catalog_item}
+    invariants:
+      - unit_of_measure is mandatory. There is no sensible default; each is a different order of magnitude and guessing is how a quantity of two becomes two thousand.
+      - item_kind=composite requires composition_id. A composite with nothing in it is an item whose cost cannot be derived and whose availability cannot be computed.
+      - item_kind=time_based requires default_duration_minutes, because booking and scheduling both need a duration and neither can invent one.
+      - An item is never edited in place once it has appeared on any transaction. A change is a new version, so that a historical line remains explainable.
+      - tax_classification may be null only while is_sellable is false. A sellable item with no classification produces a document that a tax engine will refuse or, worse, will guess at.
+    states: [draft, active, unavailable, discontinued, archived]
+    initial_state: draft
+    transitions:
+      - {from: draft, to: active, action: publish_item, actor: 'ops_manager, finance or tenant_admin', guard: 'a unit of measure is set, a tax classification is set where sellable, at least one price rule resolves, and any composition is published', side_effects: 'the item enters pickers, the search index, and the bookable_offering and orderable_item ports', reversibility: true}
+      - {from: active, to: unavailable, action: mark_item_unavailable, actor: 'supervisor, ops_manager or system', guard: 'a reason is supplied, or a composition component became unavailable, or an availability window closed', side_effects: the item stays visible and cannot be selected; existing orders referencing it are untouched, reversibility: true, note: a distinct state from discontinued because temporary unavailability is the common case and treating it as removal loses the item from every list where somebody is looking for it}
+      - {from: unavailable, to: active, action: mark_item_available, actor: 'supervisor, ops_manager or system', guard: null, side_effects: none, reversibility: true}
+      - {from: active, to: discontinued, action: discontinue_item, actor: 'ops_manager, finance or tenant_admin', guard: a reason is supplied and any replacement is named, side_effects: 'removed from pickers, retained in every historical view, and any recurring or contracted commitment referencing it is listed rather than cancelled', reversibility: true}
+      - {from: unavailable, to: discontinued, action: discontinue_item, actor: as above, guard: as above, side_effects: as above, reversibility: true}
+      - {from: discontinued, to: active, action: reinstate_item, actor: ops_manager or tenant_admin, guard: acting session is elevated and a reason is supplied, side_effects: none, reversibility: true}
+      - {from: discontinued, to: archived, action: archive_item, actor: tenant_admin, guard: discontinued for at least item_archive_delay_days and no open commitment references it, side_effects: excluded from default lists and aggregate reports, reversibility: false}
+      - {from: draft, to: archived, action: archive_item, actor: tenant_admin, guard: never published, side_effects: none, reversibility: false}
+    stuck_state_policy:
+      draft: >
+        Threshold: draft_item_stale_days (default 21). Told: the creating principal. Escape
+        hatch: publish or archive. The characteristic failure is a batch of items imported
+        into draft during onboarding and never published, so the tenant believes their
+        catalogue is loaded and every picker is empty.
+      active: >
+        Steady state. Three monitored exceptions. (a) An active sellable item with no
+        resolving price rule for the current date - it can be selected and cannot be priced,
+        which surfaces as an order that cannot be completed. Told: finance and ops_manager,
+        immediately rather than on a timer, because it blocks a transaction. (b) An active
+        item with no transaction for item_dormancy_days (default 180), reported as a
+        candidate for discontinuation, because a picker with four hundred items of which
+        eighty are used is a picker that slows every order. (c) An item whose composition
+        references a component that is itself unavailable or discontinued - the item appears
+        sellable and cannot actually be produced. Told: ops_manager immediately.
+      unavailable: >
+        Meant to be temporary. Threshold: unavailable_review_days (default 14). Told: the
+        principal who marked it and ops_manager. Escape hatch: make available, or discontinue.
+        Where the cause was automatic - a closed availability window or an unavailable
+        component - no review fires while the cause persists, because reminding somebody
+        daily about a seasonal item is how notifications stop being read.
+      discontinued: >
+        Not a queue. The monitored exception is a discontinued item still referenced by an
+        open recurring commitment or contract line. Told: the contract owner and ops_manager,
+        with the count and the commitments, immediately on discontinuation and then weekly.
+        Escape hatch: substitute the replacement, amend the commitment, or reinstate. This is
+        the case where discontinuing an item silently breaks a monthly obligation, and it is
+        discovered on the day of delivery unless it is surfaced here.
+
+  - key: variant_option
+    name: Variant and Modifier Option
+    description: A choice a buyer makes about an item that changes its price, its composition or its availability - and usually all three at once.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: item_id, type: uuid, req: true, fk: catalog_item}
+      - {key: group_key, type: string, req: true, note: options in one group are mutually exclusive or jointly selectable per the group rule below}
+      - {key: group_label, type: string, req: true}
+      - {key: option_key, type: string, req: true}
+      - {key: option_label, type: string, req: true}
+      - {key: selection_rule, type: enum, values: [exactly_one, at_most_one, at_least_one, any_number, exactly_n], req: true, note: the rule applies to the GROUP and is denormalised onto each option so that a client can validate without a second fetch}
+      - {key: selection_n, type: int, nullable: true, note: required when selection_rule is exactly_n}
+      - {key: price_delta_minor, type: money_minor, req: true, default: 0, financial: true}
+      - {key: price_delta_is_percent, type: bool, req: true, default: false, financial: true}
+      - {key: composition_delta_id, type: uuid, nullable: true, fk: composition, note: 'what this option adds to or removes from the item''s composition, which is how a modifier affects both cost and stock'}
+      - {key: duration_delta_minutes, type: int, req: true, default: 0, note: 'how the option changes the time the item takes, which matters to every downstream schedule'}
+      - {key: is_default, type: bool, req: true, default: false}
+      - {key: sort_weight, type: int, req: true, default: 0}
+      - {key: availability_schedule_id, type: uuid, nullable: true, fk: availability_schedule}
+    invariants:
+      - selection_rule=exactly_n requires selection_n greater than one.
+      - At most one option per group may be is_default where the group rule is exactly_one or at_most_one. Two defaults in an exclusive group is a selection nobody can resolve.
+      - An option whose availability_schedule makes it unavailable may not be a default. A default that cannot be selected produces an order that fails validation the moment it is opened.
+      - price_delta and duration_delta apply additively across selected options within one item. Multiplicative or ordered composition is deliberately not supported, because the result depends on evaluation order and no order is obviously correct.
+      - Financial fields are gated by view_financial.
+    states: [draft, active, unavailable, retired]
+    initial_state: draft
+    transitions:
+      - {from: draft, to: active, action: publish_item, actor: ops_manager or tenant_admin, guard: 'the owning item publishes and the group''s selection rule is satisfiable by its active options', side_effects: none, reversibility: true}
+      - {from: active, to: unavailable, action: mark_option_unavailable, actor: 'supervisor, ops_manager or system', guard: the option is not the only way to satisfy an at_least_one or exactly_one group, side_effects: 'the option is shown as unavailable rather than hidden, because a silently missing option looks like a mistake to whoever expects it', reversibility: true}
+      - {from: unavailable, to: active, action: mark_option_available, actor: as above, guard: null, side_effects: none, reversibility: true}
+      - {from: active, to: retired, action: retire_option, actor: ops_manager or tenant_admin, guard: 'the group''s selection rule remains satisfiable without it', side_effects: 'removed from selection, retained so historical lines resolve', reversibility: false}
+      - {from: unavailable, to: retired, action: retire_option, actor: as above, guard: as above, side_effects: as above, reversibility: false}
+      - {from: draft, to: retired, action: retire_option, actor: as above, guard: null, side_effects: none, reversibility: false}
+    stuck_state_policy:
+      draft: >
+        Tied to the owning item rather than to its own clock - an unpublished option under a
+        published item is the real problem, and it is caught by the item's publication guard,
+        which refuses to publish a group whose selection rule cannot be satisfied. Told: the
+        creating principal. Escape hatch: publish with the item, or retire.
+      active: >
+        Monitored exception: an option selected on fewer than
+        option_selection_floor of the item's transactions (default 0.01) over a quarter,
+        reported as clutter. Every unused option lengthens the selection screen, and a long
+        selection screen is how an order takes ninety seconds instead of twenty. Advisory
+        only, to ops_manager, quarterly.
+      unavailable: >
+        Threshold: unavailable_review_days (default 14), suppressed while the cause is an
+        active availability schedule. Told: ops_manager. Escape hatch: make available or
+        retire. The specific risk named in the notification is a group whose remaining
+        available options no longer satisfy its own selection rule, which makes the parent
+        item unorderable while still appearing active.
+      retired: >
+        Terminal. Retained permanently so that a historical line naming this option still
+        resolves to what was actually chosen and what it cost. Nothing pends.
+
+  - key: price_rule
+    name: Price Rule
+    description: What an item costs, to whom, when, at what quantity and under which agreement - with an explicit precedence so that two applicable prices never produce an ambiguous answer.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: item_id, type: uuid, nullable: true, fk: catalog_item, note: null means the rule applies to a whole category}
+      - {key: category_id, type: uuid, nullable: true, fk: catalog_category}
+      - {key: scope_kind, type: enum, values: [list, location, party, party_group, contract, channel, quantity_break, promotion], req: true}
+      - {key: scope_ref, type: uuid, nullable: true, note: 'the location, party, contract or channel this applies to, resolved through the relevant port. Null for list price'}
+      - {key: currency, type: string, req: true, financial: true}
+      - {key: amount_minor, type: money_minor, nullable: true, financial: true}
+      - {key: percent_of_list, type: decimal, nullable: true, financial: true, note: 'an alternative to an absolute amount, for agreements expressed as a discount'}
+      - {key: min_quantity, type: decimal, nullable: true}
+      - {key: max_quantity, type: decimal, nullable: true}
+      - {key: effective_from, type: timestamptz, req: true}
+      - {key: effective_to, type: timestamptz, nullable: true}
+      - {key: precedence, type: int, req: true, note: 'MANDATORY. Where two rules both apply, the lower number wins, and ties are a validation error rather than a silent choice. This single field is what stops pricing being a source of arguments nobody can settle'}
+      - {key: tax_inclusive, type: bool, req: true, default: false, financial: true, note: 'whether the amount already contains tax. Mandatory and explicit, because the same number means two different things and getting it wrong is a systematic error across every line'}
+      - {key: rounding_rule, type: enum, values: [none, nearest_minor_unit, nearest_major_unit, up_to_major_unit, down_to_major_unit], req: true, default: none, financial: true}
+      - {key: source, type: enum, values: [manual, import, contract, promotion_engine], req: true}
+    invariants:
+      - Exactly one of amount_minor and percent_of_list is set.
+      - precedence is mandatory and has no default. Two rules applying at the same precedence to the same item, scope and period is a validation error detected at save time, not resolved arbitrarily at price time.
+      - effective_to, where set, is after effective_from.
+      - A rule is never edited after any transaction has resolved against it. A change is a new rule with a new effective period, so that a historical price remains reproducible.
+      - min_quantity and max_quantity together may not leave a gap in a quantity ladder for the same item and scope. A gap means a quantity with no price, which surfaces as an order that cannot be completed.
+      - Financial fields are gated by view_financial. A principal without it sees that an item is priced and not what it costs.
+    states: [draft, scheduled, active, expired, superseded]
+    initial_state: draft
+    transitions:
+      - {from: draft, to: scheduled, action: publish_price_rule, actor: finance or tenant_owner, guard: 'no precedence collision with another active or scheduled rule, and effective_from is in the future', side_effects: 'the upcoming change is visible in the price surface, because a price that changes overnight with no warning is a support call the next morning', reversibility: true}
+      - {from: draft, to: active, action: publish_price_rule, actor: finance or tenant_owner, guard: no precedence collision and effective_from is now or in the past, side_effects: the rule begins resolving; in-flight transactions keep the price they captured, reversibility: true}
+      - {from: scheduled, to: active, action: observe_effective_from, actor: system_scheduler, guard: 'now >= effective_from', side_effects: as above, reversibility: false}
+      - {from: scheduled, to: superseded, action: cancel_scheduled_price, actor: finance or tenant_owner, guard: now < effective_from, side_effects: none, reversibility: false}
+      - {from: active, to: expired, action: observe_effective_to, actor: system_scheduler, guard: 'effective_to is set and now > effective_to', side_effects: 'the next-highest-precedence applicable rule takes over, which is computed and shown rather than left to be discovered', reversibility: false}
+      - {from: active, to: superseded, action: supersede_price_rule, actor: finance or tenant_owner, guard: a replacement rule at the same scope and precedence becomes active, side_effects: none, reversibility: false}
+    stuck_state_policy:
+      draft: >
+        Threshold: draft_price_stale_days (default 7) - short, because an unpublished price
+        change usually has a date attached that is about to pass. Told: the creating principal
+        and finance. Escape hatch: publish or discard. The characteristic failure is a price
+        list prepared for the first of the month and published on the third.
+      scheduled: >
+        Bounded by effective_from. The monitored exception is a scheduled rule whose
+        effective_from has passed while it is still scheduled, meaning the activation sweep is
+        not running and every transaction is being priced at the old rate. Threshold:
+        price_activation_lag_minutes (default 15). Told: platform_operator, because it is
+        machinery, AND finance, because the money consequence is theirs and accumulates every
+        minute.
+      active: >
+        Steady state. Two monitored exceptions. (a) A rule that has never resolved for any
+        transaction over rule_never_applied_days (default 90), which usually means it is
+        shadowed by a higher-precedence rule nobody knew about - the most common pricing
+        complaint and the hardest to diagnose without this monitor. Told: finance, with the
+        shadowing rule named. (b) A rule whose resolved price is more than
+        price_anomaly_multiple away from the list price (default 5), reported once at
+        activation, because a decimal error in a price rule is discovered by a customer.
+      expired: >
+        Terminal. Retained permanently so that a historical transaction can be re-priced
+        identically during a dispute. The monitored exception is an expired rule leaving an
+        item with NO applicable rule, which is the active-item monitor above seen from the
+        other side, and it is reported the moment the expiry lands rather than the next time
+        somebody tries to sell the item.
+      superseded: >
+        Terminal. Retained permanently. Nothing pends.
+
+  - key: composition
+    name: Composition
+    description: A versioned statement of what an item is made of or consumes, used to derive cost, to decide availability from components, and to drive stock movement.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: parent_item_id, type: uuid, req: true, fk: catalog_item}
+      - {key: version_number, type: int, req: true}
+      - {key: components, type: json, req: true, note: 'ordered flat list, each entry a set of scalars - component_item_sku, quantity, unit_of_measure, is_optional, yield_percent. Flat rather than nested, per the object-valued prohibition, so a composition diff is readable and a nested composition is expressed by the component item having its own composition rather than by nesting here'}
+      - {key: output_quantity, type: decimal, req: true, default: 1, note: 'how much the composition produces. Explicit, because a composition that produces ten units and one that produces one are otherwise indistinguishable and the cost differs by a factor of ten'}
+      - {key: output_unit_of_measure, type: string, req: true}
+      - {key: max_depth_resolved, type: int, req: true, default: 1, note: 'how deep the component tree went when last resolved, so an unbounded recursion is detected rather than encountered'}
+      - {key: effective_from, type: timestamptz, req: true}
+      - {key: notes, type: text, nullable: true}
+    invariants:
+      - A composition may not include its own parent item at any depth. Cycle detection runs at publication, not at resolution, so a cycle is a save-time error rather than a runtime hang.
+      - Component resolution depth is bounded at composition_max_depth. Beyond it, publication is refused with the path named.
+      - output_quantity must be positive. A composition producing nothing has no derivable unit cost.
+      - A published composition is immutable. A change is a new version, because changing what something is made of must not change what was sold last month.
+      - Every component names a unit_of_measure explicitly, even where it matches the component item's own. Inheriting the unit silently is how a recipe in grams becomes a recipe in kilograms.
+    states: [draft, published, superseded]
+    initial_state: draft
+    transitions:
+      - {from: draft, to: published, action: publish_composition, actor: ops_manager or tenant_admin, guard: 'no cycle, depth within bound, every component resolves to an existing item, and every quantity is positive', side_effects: the parent item can be published; cost derivation and component availability become computable, reversibility: false}
+      - {from: published, to: superseded, action: publish_composition, actor: as above, guard: a later version for the same parent becomes published, side_effects: existing transactions keep the version they captured, reversibility: false}
+      - {from: draft, to: superseded, action: discard_composition_draft, actor: as above, guard: null, side_effects: none, reversibility: false}
+    stuck_state_policy:
+      draft: >
+        Threshold: draft_composition_stale_days (default 14). Told: the creating principal.
+        Escape hatch: publish or discard. The specific confusion is acute here - somebody has
+        changed what an item is made of, and until it publishes, every cost figure and every
+        stock movement still uses the old version while the screen shows the new one.
+      published: >
+        Steady state. Two monitored exceptions. (a) A composition whose derived cost has moved
+        by more than cost_drift_alert_percent (default 20) since the parent item's price was
+        last reviewed - the margin has changed and nobody has looked. Told: finance and
+        ops_manager, monthly. This is the single most valuable output of this entity and it is
+        why compositions are worth maintaining at all. (b) A composition containing a
+        component that is discontinued or unavailable, which makes the parent unproducible
+        while it still appears sellable. Told: ops_manager immediately.
+      superseded: >
+        Terminal. Retained permanently, because a historical transaction resolved against it
+        and its cost must remain reproducible during any margin or dispute analysis. Nothing
+        pends.
+
+  - key: availability_schedule
+    name: Availability Schedule
+    description: When and where an item or an option may be selected, expressed as periods rather than as a flag.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: label, type: string, req: true}
+      - {key: weekly_windows, type: json, nullable: true, note: 'flat list of scalars - weekday, start time, end time. Null means always, which is stated explicitly rather than implied by an empty list'}
+      - {key: date_from, type: date, nullable: true}
+      - {key: date_to, type: date, nullable: true}
+      - {key: location_refs, type: json, nullable: true, note: 'flat list of location references, resolved through the org_structure port. Null means every location'}
+      - {key: channel_refs, type: json, nullable: true, note: flat list of channel keys. Null means every channel}
+      - {key: timezone, type: string, req: true, note: 'the schedule''s own timezone. A window authored in one timezone and applied in another is off by an hour twice a year, and it is always discovered by somebody being told an item is unavailable when it plainly is not'}
+    invariants:
+      - date_to, where set, is on or after date_from.
+      - A schedule with null weekly_windows, null dates, null locations and null channels is a schedule that means always, and is refused at save time in favour of simply not attaching a schedule. An always-schedule is a layer of indirection that hides nothing.
+      - Schedules attached to both an item and its option compose by intersection. The item's schedule always constrains; an option can never widen its parent's availability.
+    states: [active, retired]
+    initial_state: active
+    transitions:
+      - {from: active, to: retired, action: retire_availability_schedule, actor: ops_manager or tenant_admin, guard: 'no active item or option references it, or each has been reassigned', side_effects: 'items referencing it become unconditionally available, which is stated at retirement rather than discovered', reversibility: false}
+    stuck_state_policy:
+      active: >
+        Not a queue. The monitored exception is a schedule whose windows have made its items
+        unavailable for the whole of the last schedule_dry_days (default 30) - almost always a
+        date range that ended or a timezone error, and it silently removes items from every
+        picker. Told: ops_manager, with the items affected and the reason the schedule is not
+        matching. This is the failure that looks to staff like the catalogue being broken.
+      retired: >
+        Terminal. Retained, because a historical availability decision must remain
+        explicable - a customer asking why they could not order something last Tuesday is
+        answered from here. Nothing pends.
+
+  - key: catalog_category
+    name: Category
+    description: A grouping used for navigation, for reporting and as a scope for price rules. Deliberately a shallow tree.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: key, type: string, req: true, unique_scope: tenant, immutable: true}
+      - {key: label, type: string, req: true}
+      - {key: parent_category_id, type: uuid, nullable: true, fk: catalog_category}
+      - {key: path, type: string, req: true, note: 'materialised ancestor path, so a category-scoped price rule resolves by prefix match rather than by recursive walk'}
+      - {key: sort_weight, type: int, req: true, default: 0}
+      - {key: default_tax_classification, type: string, nullable: true, note: 'inherited by items that do not set their own, and always resolvable to an explicit value on the item at publication rather than left as an inheritance at transaction time'}
+    invariants:
+      - Depth is bounded at category_max_depth. An unbounded category tree makes category-scoped price resolution unbounded on a hot path.
+      - path is derived and never writable.
+      - A category may not be deleted while any item references it. Categories are retired, because a historical report grouped by category must still resolve.
+    states: [active, retired]
+    initial_state: active
+    transitions:
+      - {from: active, to: retired, action: retire_category, actor: ops_manager or tenant_admin, guard: no active item references it and no child category is active, side_effects: 'removed from navigation, historical grouping preserved', reversibility: false}
+    stuck_state_policy:
+      retired: >
+        Terminal. Retained permanently so that a historical report grouped by category still
+        resolves and so that a category-scoped price rule that once applied remains
+        explicable. Nothing pends.
+      active: >
+        Not a queue. The monitored exception is a category holding no active items for
+        empty_category_days (default 90), which clutters navigation and misleads anybody
+        browsing. Told: ops_manager, quarterly, advisory. A second exception is a category
+        whose default_tax_classification differs from that of most of its items, which is
+        usually a sign the default is wrong and is silently being overridden everywhere.
+
+ports:
+  - port_key: orderable_item
+    direction: provides
+    contract: >
+      Resolve an item and a set of selected options to a display label, a unit, a resolved
+      price with its rule provenance, a duration, a tax classification and an availability
+      verdict for a given location, channel and instant. Provenance is part of the contract -
+      a consumer that cannot say which rule produced a price cannot answer the only question
+      anybody asks about it.
+    cardinality: exactly_one
+
+  - port_key: bookable_offering
+    direction: provides
+    contract: Resolve a time_based item to a duration, a required qualification set, a capacity and a price basis.
+    cardinality: zero_or_many
+
+  - port_key: tax_treatment
+    direction: requires
+    contract: Given a tax classification, a location, a party's registration status and a date, return the applicable treatment and rate.
+    cardinality: zero_or_one
+    unbound_behaviour: >
+      Items carry their classification and no rate is computed. Prices resolve as
+      tax-exclusive or tax-inclusive exactly as authored, and any document produced downstream
+      shows no tax breakdown. The classification is still recorded, so binding a tax engine
+      later works without re-cataloguing. Deliberately not an error - a tenant below a
+      registration threshold genuinely has no tax to compute.
+
+  - port_key: party_directory
+    direction: requires
+    contract: Resolve party and party-group price scopes, and a party's registration status for tax treatment.
+    cardinality: zero_or_one
+    unbound_behaviour: Party-scoped and party-group-scoped price rules cannot be created and existing ones do not resolve. Pricing falls back to list, location, channel and contract scopes. The price surface says which scopes are unavailable rather than showing an empty picker.
+
+  - port_key: org_structure
+    direction: requires
+    contract: Resolve location-scoped price rules and location-scoped availability.
+    cardinality: zero_or_one
+    unbound_behaviour: Location-scoped pricing and availability are unavailable. Every item is available everywhere at its non-location price, which for a multi-location tenant is materially wrong and is stated rather than silently applied.
+
+  - port_key: contract_terms
+    direction: requires
+    contract: Resolve a contract reference to its agreed prices and discounts for this tenant and party.
+    cardinality: zero_or_one
+    unbound_behaviour: 'Contract-scoped price rules cannot be created. Agreed prices must be entered as party-scoped rules manually, which works and drifts from the contract over time. The drift is the cost of leaving this unbound and is stated in the port doc.'
+
+  - port_key: stock_availability
+    direction: requires
+    contract: Report whether the components of a composition are available in sufficient quantity at a location, so that a composite item's availability can be derived.
+    cardinality: zero_or_one
+    unbound_behaviour: >
+      Composite availability is derived only from the states of the component items, not from
+      quantities. An item whose components exist but are exhausted still appears available.
+      This is the single most visible degradation in this capability and the surface states it
+      wherever composite availability is shown.
+
+  - port_key: evidence_capture
+    direction: requires
+    contract: Store and resolve item images.
+    cardinality: zero_or_one
+    unbound_behaviour: Items carry no image. Every surface renders a text-only catalogue, which is usable and materially worse for any consumer-facing channel.
+
+actions:
+
+  - key: resolve_price
+    entity: price_rule
+    label: Work out what something costs
+    actors: [any_authenticated, integration_principal, system, consumer]
+    rationale: >
+      The single most frequently disputed computation in any commercial system. Modelled as
+      an explicit action so that precedence, ties, provenance and the tax-inclusive question
+      are contractual rather than incidental.
+    preconditions: [the item is active or unavailable-but-referenced-by-an-existing-line, a currency is determinable]
+    inputs: [item_id, selected_option_ids, quantity, location_ref, party_ref, contract_ref, channel, at_instant]
+    creates: []
+    updates: []
+    events: []
+    notifications: []
+    undoable: false
+    confirmation_specification: 'None. A pure computation. The control that matters is that the answer carries the rule that produced it.'
+    audit_class: read_sensitive_only
+    idempotency_key_source: not applicable - a pure read, deterministic for a given instant
+    offline_policy: read_only
+    concurrency: >
+      Resolution reads a consistent snapshot of rules effective at at_instant. A rule
+      activating mid-transaction does not change a price already captured on a line, because
+      a line captures its resolved price and its rule provenance at the moment it is created.
+      This is what makes a price stable while somebody is completing an order.
+    failure_modes:
+      - {code: E_PRECONDITION, cause: 'no applicable price rule for this item, scope and instant', message: null, note: 'returns UNPRICED rather than zero. Zero is a price and it is the wrong one; a caller that receives zero will sell something for nothing, whereas one that receives unpriced must decide what to do'}
+      - {code: E_CONFLICT_UNIQUE, cause: two applicable rules at the same precedence, message: null, note: 'returns AMBIGUOUS with both rules named, and does not choose. This condition is prevented at save time and is caught again here because a rule can become ambiguous through a scope change elsewhere'}
+      - {code: E_VALIDATION, cause: quantity falls in a gap between quantity-break rules, message: null, note: 'returns UNPRICED naming the gap, so the fix is to the ladder rather than to the order'}
+      - {code: E_DEPENDENCY, cause: the tax_treatment port is bound but unavailable, message: null, note: the net price resolves and the tax component is returned as unknown rather than as zero. A tax of zero and a tax that could not be computed must never render identically}
+      - {code: E_VALIDATION, cause: selected options violate their group selection rule, message: field-specific, note: 'validated here as well as at order time, because a client that computes a price for an invalid selection will show it to somebody'}
+    edge_cases:
+      - A percent_of_list rule where no list price exists. Returns unpriced, not zero. A discount off nothing is nothing, and returning it as a price is how an item gets given away.
+      - Tax-inclusive and tax-exclusive rules both applicable at different precedences. The winning rule's own tax_inclusive flag governs and the response states which. Mixing the two silently across a single order is a systematic error that reconciles to nothing.
+      - Resolution at an instant in the past, for re-pricing a historical line during a dispute. Fully supported and is the reason rules are versioned and retained rather than edited. The answer must be identical to what was captured at the time, and any difference is itself a finding.
+      - A composite item priced from its composition rather than from a rule. Supported where the tenant configures derived pricing, and the derived price carries the composition version as its provenance. Where a rule also applies, the rule wins - an explicitly set price always beats a derived one, because somebody chose it.
+      - Resolution offline, on a cached rule set. Permitted, and the response is marked as resolved from a cache with its age. Any transaction completed on a cached price is re-resolved on sync, and a difference is surfaced as a conflict rather than silently accepted or silently overwritten - the person who quoted the price to a customer needs to know.
+
+  - key: publish_item
+    entity: catalog_item
+    label: Publish an item
+    actors: [ops_manager, finance, tenant_admin]
+    preconditions:
+      - A unit of measure is set.
+      - A tax classification is set where the item is sellable, or resolvable from its category.
+      - At least one price rule resolves at the publication instant where the item is sellable.
+      - Any composition is published and cycle-free.
+      - Every option group's selection rule is satisfiable by its active options.
+    inputs: [item_id]
+    creates: []
+    updates: [item state, search projection, port publication]
+    events: [catalog_item.published]
+    notifications:
+      - {to: ops_manager, channel: in_app, when: the item was published with a derived rather than an explicit price, template: derived_price_in_use, batching_policy: daily digest}
+    undoable: true
+    reversal_action: mark_item_unavailable, or discontinue_item
+    audit_class: always
+    idempotency_key_source: item_id plus version_number plus target state
+    offline_policy: refuse
+    concurrency: >
+      Publication validates the whole item, its options and its composition inside one
+      transaction against a consistent snapshot, so an item cannot publish against a
+      composition that is being superseded concurrently. Two concurrent publications of the
+      same item collapse via the idempotency key.
+    failure_modes:
+      - {code: E_PRECONDITION, cause: no unit of measure, message: Choose the unit this is measured in., note: never defaulted}
+      - {code: E_PRECONDITION, cause: sellable with no tax classification and no category default, message: Choose a tax classification., note: 'refused rather than defaulted, because a guessed classification produces documents that are wrong in a way an authority notices before the tenant does'}
+      - {code: E_PRECONDITION, cause: no applicable price rule, message: This has no price yet., note: 'names the scopes that were searched, so the fix is obvious rather than requiring somebody to reason about precedence'}
+      - {code: E_PRECONDITION, cause: an option group cannot satisfy its own selection rule, message: This action is not available in the current state., note: names the group and what is missing}
+      - {code: E_PRECONDITION, cause: the composition contains a cycle or exceeds the depth bound, message: This action is not available in the current state., note: 'names the path, because a cycle three levels down is otherwise impossible to find'}
+      - {code: E_QUOTA, cause: catalogue item limit reached, message: Plan limit reached.}
+    edge_cases:
+      - Publishing an item whose composition references a component that is itself only in draft. Refused, and the draft component is named. Publishing would produce a sellable item that cannot be produced, which is discovered by somebody standing at a counter.
+      - Publishing during an active price change window, where a scheduled rule takes effect within minutes. Permitted, and the publication response states the upcoming price and its effective time, because publishing at the old price minutes before it changes is a decision somebody should make knowingly.
+      - Publishing a non-sellable item used only as a component. No price rule and no tax classification is required. This is the common case for raw components and refusing it would force fictional prices onto everything a business consumes.
+      - Republishing after a version change. The new version publishes and the previous version is superseded rather than archived, so existing transaction lines still resolve to the version they captured.
+
+  - key: publish_composition
+    entity: composition
+    label: Publish what something is made of
+    actors: [ops_manager, tenant_admin]
+    preconditions: [no cycle at any depth, depth within the bound, every component resolves, every quantity positive, output quantity positive]
+    inputs: [parent_item_id, components, output_quantity, output_unit_of_measure, effective_from, notes]
+    creates: [composition]
+    updates: [previous version superseded, parent item derived cost recomputed]
+    events: [composition.published, catalog_item.cost_changed]
+    notifications:
+      - {to: finance and ops_manager, channel: in_app, when: the derived cost moves by more than cost_drift_alert_percent, template: cost_moved, must_include: [item, previous_cost, new_cost, percent_change], batching_policy: daily digest}
+    undoable: true
+    reversal_action: publish a further version restoring the previous components
+    audit_class: always
+    idempotency_key_source: parent_item_id plus a hash of the ordered component list plus output_quantity
+    offline_policy: refuse
+    concurrency: >
+      Cycle detection runs against a snapshot inside the transaction and takes a shared lock
+      on every component item, so two compositions published concurrently cannot together
+      create a cycle that neither creates alone. This is the specific race that makes
+      publication-time cycle detection worth doing properly rather than relying on a runtime
+      depth limit.
+    failure_modes:
+      - {code: E_VALIDATION, cause: a cycle exists at any depth, message: This would make the item contain itself., note: names the full path}
+      - {code: E_PRECONDITION, cause: depth exceeds the bound, message: This action is not available in the current state., note: names the depth and the path}
+      - {code: E_VALIDATION, cause: a component quantity is zero or negative, message: field-specific}
+      - {code: E_VALIDATION, cause: 'a component unit of measure differs from the component item''s own unit with no conversion available', message: Choose a unit this component is measured in., note: refused rather than converted by assumption. An assumed conversion between mass and volume is the classic silent factor-of-a-thousand error}
+      - {code: E_PRECONDITION, cause: a component item is archived, message: This action is not available in the current state., note: names the component}
+    edge_cases:
+      - A composition whose components have their own compositions. Depth resolves through them and the resolved depth is recorded. Nesting is expressed by components having compositions rather than by nesting inside one document, which keeps each composition individually readable and diffable.
+      - A yield_percent below one hundred, expressing loss in production. Supported, and it changes the derived cost. Without it the derived cost of anything with waste is systematically understated, which shows up as a margin that looks better than it is.
+      - Publishing a composition for an item that is already active and being sold. Permitted; the new version takes effect for transactions from effective_from, and everything already sold keeps its captured version. This is the whole reason compositions are versioned.
+      - A component that is itself unavailable at publication. Permitted with a warning, because a temporarily unavailable component should not block a recipe change. The parent item's availability derivation is what surfaces the consequence, and it does so continuously.
+
+rules:
+  - key: precedence_is_mandatory_and_ties_are_errors
+    kind: validation
+    scope: kernel
+    overridable_at: null
+    default: 'Every price rule declares a precedence. Two rules applicable to the same item, scope and period at the same precedence is a save-time validation error, and at resolution time returns AMBIGUOUS rather than choosing.'
+    on_conflict: not overridable
+    rationale: An arbitrary tie-break in pricing is an argument nobody can settle, repeated on every transaction.
+
+  - key: unpriced_is_not_zero
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'Where no rule applies, resolution returns UNPRICED. It never returns zero.'
+    on_conflict: not overridable
+    rationale: Zero is a price and it is the wrong one. A caller that receives zero sells something for nothing.
+
+  - key: classification_not_rate
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'An item carries a tax classification and never a tax rate. Rates come from the tax_treatment port at the moment of the transaction.'
+    on_conflict: not overridable
+    rationale: An item carrying a rate is wrong after the next rate change, and nobody notices until an authority does.
+
+  - key: catalogue_is_versioned_not_edited
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'Items, price rules, compositions and options are versioned. None is edited in place once referenced by a transaction.'
+    on_conflict: not overridable
+
+  - key: tax_inclusive_is_explicit
+    kind: validation
+    scope: kernel
+    overridable_at: null
+    default: 'Every price rule declares tax_inclusive. There is no default and no inference from the amount.'
+    on_conflict: not overridable
+    rationale: The same number means two different things, and a wrong assumption is a systematic error across every line rather than an occasional one.
+
+  - key: option_deltas_are_additive
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'Price and duration deltas from selected options apply additively. Multiplicative or ordered composition is not supported.'
+    on_conflict: not overridable
+    rationale: Any other composition depends on evaluation order, and no order is obviously correct, so the result would differ between the client and the server.
+
+  - key: derived_price_loses_to_explicit
+    kind: policy
+    scope: capability
+    overridable_at: tenant
+    default: 'Where a composition-derived price and an explicit price rule both exist, the explicit rule wins.'
+    on_conflict: most specific scope wins
+    rationale: Somebody chose the explicit price. A derived price is a calculation, and a calculation should not silently override a decision.
+
+policy_knobs:
+  - {key: draft_item_stale_days, default: 21, range: [1, 180]}
+  - {key: draft_price_stale_days, default: 7, range: [1, 90]}
+  - {key: draft_composition_stale_days, default: 14, range: [1, 90]}
+  - {key: item_dormancy_days, default: 180, range: [30, 1095]}
+  - {key: unavailable_review_days, default: 14, range: [1, 180]}
+  - {key: item_archive_delay_days, default: 180, range: [0, 1095]}
+  - {key: price_activation_lag_minutes, default: 15, range: [1, 1440], lowest_settable_scope: kernel}
+  - {key: rule_never_applied_days, default: 90, range: [7, 730]}
+  - {key: price_anomaly_multiple, default: 5, range: [2, 1000]}
+  - {key: cost_drift_alert_percent, default: 20, range: [1, 500]}
+  - {key: composition_max_depth, default: 5, range: [1, 10], lowest_settable_scope: kernel}
+  - {key: category_max_depth, default: 4, range: [1, 8], lowest_settable_scope: kernel}
+  - {key: option_selection_floor, default: 0.01, range: [0.0, 1.0]}
+  - {key: schedule_dry_days, default: 30, range: [1, 365]}
+  - {key: empty_category_days, default: 90, range: [7, 730]}
+  - {key: derived_pricing_enabled, default: false}
+
+open_questions:
+  - {q: 'Should a price rule be able to depend on an expression rather than only on a fixed scope - for example a price that varies with a party''s trailing volume, or with time of day? Expressions are powerful and are the surface most likely to produce a price nobody can explain.', assumption: Fixed scopes plus quantity breaks only. Expression-based pricing is deliberately absent rather than half-supported., confidence: VALIDATION_REQUIRED, method: 'operator interviews on what pricing structures target businesses actually run today, and how many the fixed scopes fail to express', priority: High, blocks: [price_rule scope_kind set, promotion modelling]}
+  - {q: 'Is a shallow closed category ladder sufficient, or do target businesses need arbitrary tagging? Categories are used for navigation, reporting and price scope simultaneously, and those three want different structures.', assumption: One bounded tree serving all three. It is the simplest thing that works and it will be wrong for somebody., confidence: VALIDATION_REQUIRED, method: review the catalogue structures of pilot tenants across at least three segments, priority: Medium}
+  - {q: 'Where does promotional pricing belong - here as a price rule scope, or in a separate capability with its own eligibility, stacking and budget rules? The model includes a promotion scope value and no promotion machinery, which is honest and incomplete.', assumption: 'A scope value exists so promotions can be expressed as prices. Stacking, eligibility and budget are not modelled anywhere.', confidence: VALIDATION_REQUIRED, method: 'determine whether the target segments run promotions at all, which for several of them may be no', priority: Medium, blocks: [promotion capability existence]}
+  - {q: 'Should composite availability derive from component STOCK quantities by default, given that the stock_availability port may be unbound and the degradation is invisible to whoever is selling?', assumption: 'Derives from component states only when the port is unbound, and the surface states it. Whether stating it is sufficient has not been tested with anybody selling.', confidence: WORKING_ASSUMPTION, method: 'observe a pilot where a composite is sold after its components are exhausted, and measure whether the stated degradation was noticed', priority: High}
+  - {q: 'Does DEC-K-001 permit tenant-defined item attributes? The model has no attributes field on catalog_item at all, which pushes every pack-specific property into either a category or a separate capability. That is deliberate and it is also the constraint most likely to be felt first.', assumption: None. This is DEC-K-001 arriving in the capability where tenants most expect to add their own fields., confidence: VALIDATION_REQUIRED, method: resolve DEC-K-001, priority: Critical, blocks: [DEC-K-001, catalog_item extensibility]}

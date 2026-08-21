@@ -1,0 +1,508 @@
+key: order
+name: Order
+layer: domain
+confidence: KNOWN
+description: >
+  Capturing what somebody asked for, changing it while it is still changeable, and routing
+  it to whatever fulfils it. The order is the commercial record; fulfilment is somebody
+  else's job and arrives through a port. Modification, splitting, voiding and comping are
+  first-class because they are what actually happens, and a model that treats them as
+  exceptions produces a system people work around.
+
+principles:
+  - A line captures its price and its provenance at the moment it is added. Re-resolving prices later means an order total that changes while somebody is looking at it.
+  - Modification is normal until fulfilment begins, and after that it is a negotiation. The model draws that line explicitly per line rather than per order, because half an order is frequently already being worked on.
+  - Voiding and comping are different acts with different accountability. Merging them loses the distinction between a mistake and a decision to give something away.
+  - An order may be paid before, during or after fulfilment, and the model must not assume any of the three. Payment state and fulfilment state are independent.
+  - Splitting is a commercial act, not a display trick. Two people paying separately produce two documents and both must reconcile.
+  - The order is the slowest thing to type and the fastest thing to need. Every design decision favours capture speed on a cheap device over completeness.
+
+entities:
+
+  - key: order
+    name: Order
+    description: One commercial request from one party through one channel, with its lines, its totals and its fulfilment position.
+    owner: tenant
+    tenancy: tenant_scoped_with_site_partition
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: reference, type: string, req: true, unique_scope: tenant, immutable: true}
+      - {key: channel, type: enum, values: [in_person, telephone, self_service_web, self_service_app, messaging, integration, standing_order], req: true}
+      - {key: party_ref, type: uuid, nullable: true, note: 'resolved through the party_directory port. Null for an anonymous in-person order, which must remain possible'}
+      - {key: location_ref, type: uuid, nullable: true, note: resolved through the org_structure port}
+      - {key: destination_ref, type: uuid, nullable: true, note: 'where it is going, which may be a location, a party address or an internal point. Opaque and resolved through the fulfilment_target port'}
+      - {key: requested_for_at, type: timestamptz, nullable: true}
+      - {key: promised_for_at, type: timestamptz, nullable: true, note: 'what was told to the party, which is frequently different from what was requested and is the number a complaint is measured against'}
+      - {key: currency, type: string, req: true, financial: true}
+      - {key: subtotal_minor, type: money_minor, req: true, default: 0, financial: true}
+      - {key: adjustment_total_minor, type: money_minor, req: true, default: 0, financial: true, note: 'discounts, comps and surcharges, held separately from the subtotal so that a discount is never invisible inside a net figure'}
+      - {key: tax_total_minor, type: money_minor, nullable: true, financial: true, note: 'nullable rather than zero, because unknown tax and zero tax must never render identically'}
+      - {key: total_minor, type: money_minor, req: true, default: 0, financial: true}
+      - {key: paid_minor, type: money_minor, req: true, default: 0, financial: true}
+      - {key: payment_state, type: enum, values: [unpaid, part_paid, paid, overpaid, refunded, partially_refunded], req: true, default: unpaid, financial: true, note: 'independent of fulfilment state, because the two genuinely vary independently across the target segments'}
+      - {key: split_of_order_id, type: uuid, nullable: true, fk: order}
+      - {key: merged_into_order_id, type: uuid, nullable: true, fk: order}
+      - {key: void_reason, type: text, nullable: true}
+      - {key: voided_by_principal_id, type: uuid, nullable: true}
+      - {key: taken_by_principal_id, type: uuid, nullable: true, note: resolved through the principal_directory port}
+      - {key: notes, type: text, nullable: true}
+      - {key: pricing_snapshot_at, type: timestamptz, req: true, note: 'the instant prices were resolved against. Frozen, so re-opening an order does not silently re-price it'}
+    invariants:
+      - total_minor equals subtotal_minor plus adjustment_total_minor plus tax_total_minor where tax is known, and the invariant is checked on every write rather than trusted, because a total that disagrees with its lines is discovered by a customer.
+      - An order with no lines may not leave draft. An empty confirmed order is a reference number attached to nothing.
+      - Financial fields are gated by view_financial and are never offline_editable, with the deliberate exception described in the offline edge cases - line capture offline is permitted and pricing is re-resolved on sync.
+      - void_reason and voided_by_principal_id are set together with the void transition. A void with no reason is indistinguishable from a deletion.
+      - pricing_snapshot_at is frozen at first line capture and is only moved by an explicit re-price action which is separately audited.
+      - payment_state is derived from paid_minor against total_minor and is never written directly, so the two can never disagree.
+    states: [draft, confirmed, partially_fulfilled, fulfilled, closed, voided, on_hold]
+    initial_state: draft
+    transitions:
+      - {from: draft, to: confirmed, action: confirm_order, actor: 'employee, supervisor, consumer or integration', guard: 'at least one line, every line priced or explicitly marked unpriced-and-accepted, and a destination where the fulfilment target requires one', side_effects: 'lines are routed through the fulfilment_route port, stock is reserved where the sink is bound, the party is told where a surface is bound', reversibility: true}
+      - {from: confirmed, to: on_hold, action: hold_order, actor: 'employee, supervisor or system', guard: a hold reason from the configured list is chosen, side_effects: routing is suspended; already-started fulfilment is not recalled, reversibility: true}
+      - {from: on_hold, to: confirmed, action: resume_order, actor: employee or supervisor, guard: null, side_effects: routing resumes, reversibility: true}
+      - {from: confirmed, to: partially_fulfilled, action: observe_fulfilment, actor: system, guard: some but not all lines report fulfilled through the port, side_effects: none, reversibility: true}
+      - {from: partially_fulfilled, to: fulfilled, action: observe_fulfilment, actor: system, guard: every line reports fulfilled or voided, side_effects: a billable outcome is emitted where the sink is bound, reversibility: true}
+      - {from: confirmed, to: fulfilled, action: observe_fulfilment, actor: system, guard: as above, side_effects: as above, reversibility: true}
+      - {from: fulfilled, to: closed, action: close_order, actor: 'employee, finance or system_scheduler', guard: 'payment_state is paid, refunded or explicitly written off with a reason', side_effects: the order becomes immutable; later changes are credit notes through billing, reversibility: false}
+      - {from: partially_fulfilled, to: closed, action: close_order, actor: supervisor or finance, guard: unfulfilled lines are voided with reasons and the payment position is settled, side_effects: as above, reversibility: false}
+      - {from: draft, to: voided, action: void_order, actor: employee or supervisor, guard: a reason is supplied, side_effects: none, reversibility: false}
+      - {from: confirmed, to: voided, action: void_order, actor: supervisor, guard: a reason is supplied and the acting session is elevated where any line has started fulfilment, side_effects: 'routing cancelled, reservations released, the party told, any payment taken becomes a refund obligation', reversibility: false}
+      - {from: on_hold, to: voided, action: void_order, actor: supervisor, guard: as above, side_effects: as above, reversibility: false}
+      - {from: partially_fulfilled, to: voided, action: void_order, actor: supervisor or ops_manager, guard: 'a reason is supplied, the acting session is elevated, and the fulfilled portion is explicitly written off or retained as a partial charge', side_effects: as above, reversibility: false, note: voiding an order that has already partly happened is expensive and is deliberately harder than voiding one that has not}
+    stuck_state_policy:
+      draft: >
+        A draft order is somebody mid-conversation. Threshold: draft_order_stale_minutes
+        (default 30) for an in-person or telephone channel, and draft_order_stale_hours
+        (default 24) for a self-service one, because the two are different behaviours - one is
+        an interrupted conversation and the other is an abandoned basket. Told: the taking
+        principal for the first, nobody for the second. Escape hatch: confirm or void. Never
+        auto-confirmed. An auto-confirmed draft is an order somebody did not place, and it
+        will be produced, dispatched and charged for.
+      confirmed: >
+        Two monitored exceptions. (a) A confirmed order with no line acknowledged by any
+        fulfilment route within routing_ack_minutes (default 5) - the order was accepted and
+        nothing is happening. Told: the taking principal and the location supervisor, and this
+        is the most damaging quiet failure here because the party has been told it is coming.
+        (b) A confirmed order past its promised_for_at with lines still unfulfilled. Told: the
+        supervisor, then the party where a surface is bound, because a party told nothing is a
+        party who telephones.
+      on_hold: >
+        Threshold: order_hold_review_minutes (default 30), escalating to the supervisor. Told:
+        the holding principal. Escape hatch: resume or void. A held order is invisible to
+        fulfilment and visible to the party as accepted, which is the worst combination and
+        the reason the threshold is in minutes rather than hours.
+      partially_fulfilled: >
+        The state that reads as progress on a summary screen and is frequently stalled.
+        Threshold: partial_stall_minutes (default 20) with no further line movement. Told: the
+        supervisor with the SHORTFALL named as a count of outstanding lines, never as a
+        percentage. Escape hatch: fulfil, void the remainder with a reason, or close short.
+      fulfilled: >
+        Fulfilled and unclosed is an unsettled commercial position. Threshold:
+        unclosed_order_days (default 3) where payment is outstanding, and
+        unclosed_paid_order_days (default 7) where it is not. Told: the location supervisor,
+        then finance. Escape hatch: close, or write off with a reason. The specific monitored
+        case is a fulfilled order that is unpaid and forgotten, which is simply revenue
+        walking away.
+      closed: >
+        Terminal and immutable. The one thing still pending is downstream - a closed order
+        whose billable outcome was never acknowledged within outcome_ack_hours (default 4) is
+        reported to platform_operator, because an order that never reached billing is revenue
+        that disappears silently.
+      voided: >
+        Terminal. Retained permanently with the reason and the voiding principal, and never
+        deleted, because a voided order is precisely what somebody will later allege was
+        removed to conceal something. The monitored condition is a pattern - voids by one
+        principal exceeding void_rate_alert of their orders (default 0.05), reported to
+        ops_manager. Individually every void may be legitimate; collectively a high rate is
+        the classic signature of both a broken capture flow and of theft, and the two are
+        distinguished by looking, not by guessing.
+
+  - key: order_line
+    name: Order Line
+    description: One requested item on an order, with the options chosen, the price captured at the time and its own fulfilment position.
+    owner: tenant
+    tenancy: tenant_scoped_with_site_partition
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: order_id, type: uuid, req: true, fk: order}
+      - {key: line_number, type: int, req: true}
+      - {key: item_ref, type: uuid, req: true, note: resolved through the orderable_item port. Opaque here}
+      - {key: item_label_at_time, type: string, req: true, note: 'the name as it was when ordered, frozen. Resolving the current name would silently rewrite what somebody ordered when an item is renamed'}
+      - {key: selected_option_refs, type: json, nullable: true, note: flat list of scalars}
+      - {key: option_summary_at_time, type: string, nullable: true, note: 'a human-readable frozen rendering of the choices, so a historical line reads correctly without resolving six references'}
+      - {key: quantity, type: decimal, req: true}
+      - {key: unit_of_measure, type: string, req: true}
+      - {key: unit_price_minor, type: money_minor, nullable: true, financial: true, note: 'nullable because an unpriced line is a legitimate state that must be resolved before confirmation, and zero would be a price'}
+      - {key: price_rule_ref, type: uuid, nullable: true, financial: true, note: 'which rule produced the price, captured at the time. This is what makes a price dispute answerable a year later'}
+      - {key: line_adjustment_minor, type: money_minor, req: true, default: 0, financial: true}
+      - {key: adjustment_kind, type: enum, values: [none, discount, comp, surcharge, price_override], nullable: true, financial: true, note: comp and price_override are separate values deliberately. A comp is a decision to give something away; an override is a decision that the price is different. Merging them makes both invisible}
+      - {key: adjustment_reason, type: text, nullable: true, financial: true}
+      - {key: adjustment_by_principal_id, type: uuid, nullable: true, financial: true}
+      - {key: tax_classification_at_time, type: string, nullable: true, financial: true}
+      - {key: line_total_minor, type: money_minor, nullable: true, financial: true}
+      - {key: fulfilment_route_ref, type: uuid, nullable: true, note: 'where this line was sent, resolved through the fulfilment_route port'}
+      - {key: fulfilled_quantity, type: decimal, req: true, default: 0}
+      - {key: void_reason, type: text, nullable: true}
+      - {key: notes, type: text, nullable: true, note: 'instructions attached to this line, which must reach whoever fulfils it'}
+      - {key: added_at, type: timestamptz, req: true, immutable: true}
+      - {key: added_by_principal_id, type: uuid, req: true}
+    invariants:
+      - quantity is positive. A negative line is a return and is a different record, because a return has its own authorisation and its own effect on stock.
+      - fulfilled_quantity may never exceed quantity. Over-fulfilment is a separate recorded event and never a silent adjustment of the line.
+      - An adjustment of kind comp or price_override requires adjustment_reason and adjustment_by_principal_id. An unattributed price change on a line is the single most common concealment path in a point-of-sale system.
+      - item_label_at_time and option_summary_at_time are frozen at capture. Resolving them live would rewrite what somebody ordered.
+      - A line may not be modified once its fulfilment route reports it started, except through modify_line, which is a negotiated act with its own authority and its own notification.
+      - Financial fields are gated by view_financial. quantity, item label, option summary and notes are not, because whoever fulfils the line needs all four and frequently has no financial access.
+    states: [captured, priced, routed, in_fulfilment, fulfilled, voided, returned]
+    initial_state: captured
+    transitions:
+      - {from: captured, to: priced, action: price_line, actor: system, guard: 'the orderable_item port resolves a price, or the line is explicitly accepted as unpriced', side_effects: order totals recomputed, reversibility: true}
+      - {from: priced, to: routed, action: confirm_order, actor: 'employee, consumer or integration', guard: the order confirms and a fulfilment route accepts the line, side_effects: 'stock reserved where the sink is bound, the route is told', reversibility: true}
+      - {from: routed, to: in_fulfilment, action: observe_fulfilment_start, actor: the fulfilment route through the port, guard: null, side_effects: the line becomes modification-restricted, reversibility: false}
+      - {from: in_fulfilment, to: fulfilled, action: observe_fulfilment_complete, actor: the fulfilment route through the port, guard: fulfilled_quantity equals quantity, side_effects: 'stock consumed where the sink is bound, order fulfilment position recomputed', reversibility: true}
+      - {from: routed, to: fulfilled, action: observe_fulfilment_complete, actor: as above, guard: as above, side_effects: as above, reversibility: true, note: 'a route that does not report a start is legitimate - not every fulfilment surface has a start event, and requiring one would make those routes unusable'}
+      - {from: captured, to: voided, action: void_line, actor: employee or supervisor, guard: a reason is supplied, side_effects: order totals recomputed, reversibility: false}
+      - {from: priced, to: voided, action: void_line, actor: as above, guard: as above, side_effects: as above, reversibility: false}
+      - {from: routed, to: voided, action: void_line, actor: employee or supervisor, guard: a reason is supplied and the route is told to cancel, side_effects: 'reservation released, route cancellation requested, order totals recomputed', reversibility: false}
+      - {from: in_fulfilment, to: voided, action: void_line, actor: supervisor, guard: a reason is supplied and the acting session is elevated, side_effects: 'the route is asked to cancel and may refuse, in which case the line is recorded as produced-and-voided so the cost is visible rather than absorbed silently', reversibility: false}
+      - {from: fulfilled, to: returned, action: return_line, actor: supervisor or finance, guard: a reason and a returned quantity are supplied and the acting session is elevated, side_effects: 'a return record is created, stock returned or scrapped per the reason, a credit obligation raised through billing', reversibility: false}
+    stuck_state_policy:
+      captured: >
+        An unpriced captured line blocks confirmation of the whole order. Threshold: immediate
+        - the surface shows it as unpriced at the moment it is captured rather than at
+        confirmation. Told: the capturing principal, in place, not by notification. Escape
+        hatch: resolve a price, override with a reason, or void. The failure this prevents is
+        somebody typing an order, walking away, and the order failing to confirm at the moment
+        the party is waiting to pay.
+      priced: >
+        Bounded by order confirmation. Not separately monitored - the order's own draft policy
+        governs.
+      routed: >
+        Routed and not started is the fulfilment queue's problem and is visible here as the
+        order's routing acknowledgement monitor. Threshold: route_start_alert_minutes
+        (default 15) past promised_for_at where one is set. Told: the supervisor. Escape
+        hatch: chase the route, reroute, or void the line.
+      in_fulfilment: >
+        Threshold: line_fulfilment_alert_minutes (default 30) or twice the item's expected
+        duration where the orderable_item port supplies one, whichever is greater. Told: the
+        fulfilment route first, then the supervisor. Escape hatch: complete, or void with
+        elevation. A line in fulfilment indefinitely is consuming a station and delaying every
+        line behind it, which is why the threshold is derived from the item rather than fixed.
+      fulfilled: >
+        Terminal in fulfilment terms. Bounded by the order's own closure. Nothing separately
+        pends.
+      voided: >
+        Terminal. Retained with the reason. Where the void happened after fulfilment started
+        and the route refused cancellation, the line is retained as produced-and-voided and
+        its cost is reported, because that cost is real and absorbing it silently means the
+        tenant never learns what late voids cost them.
+      returned: >
+        Terminal. Retained. The monitored condition is a pattern - returns concentrated on one
+        item or one principal above return_rate_alert (default 0.05), told to ops_manager,
+        because a concentrated return rate is either a quality problem or a capture problem
+        and both are actionable once visible.
+
+ports:
+  - port_key: orderable_item
+    direction: requires
+    contract: 'Resolve an item and selected options to a label, a unit, a price with its rule provenance, a duration, a tax classification and an availability verdict for a location, channel and instant.'
+    cardinality: exactly_one
+    unbound_behaviour: FORBIDDEN. An order is a request for things. With no catalogue there is nothing to request, and free-text ordering would produce lines that cannot be priced, routed, taxed or reported.
+
+  - port_key: fulfilment_route
+    direction: requires
+    contract: >
+      Accept a line for fulfilment, report start, progress and completion, and accept a
+      cancellation request which it may refuse. The route is opaque - this capability never
+      learns what kind of fulfilment it is.
+    cardinality: zero_or_many
+    unbound_behaviour: >
+      Lines are never routed and are marked fulfilled manually by whoever did the work.
+      Everything commercial still functions. What is lost is any independent evidence that the
+      thing was done, so a fulfilled line becomes an assertion by the person recording it, and
+      the order surface says so rather than showing the same tick as a routed fulfilment.
+
+  - port_key: fulfilment_target
+    direction: requires
+    contract: Resolve a destination reference to a label and a serviceable position, and state whether a destination is required for this order's channel.
+    cardinality: zero_or_one
+    unbound_behaviour: Orders carry no destination and are implicitly collected or consumed where they were taken. Any channel requiring a destination cannot be enabled, which is a pack publication concern rather than a runtime surprise.
+
+  - port_key: party_directory
+    direction: requires
+    contract: Resolve the ordering party to a display name, contactable channels and permission scope.
+    cardinality: zero_or_one
+    unbound_behaviour: Every order is anonymous. Account ordering, order history for a party and any party-scoped pricing are unavailable. In-person ordering works completely, which is why this is degraded rather than forbidden.
+
+  - port_key: stock_movement_sink
+    direction: requires
+    contract: Reserve, consume, release and return quantities of components at a location against a line.
+    cardinality: zero_or_one
+    unbound_behaviour: 'No reservation and no consumption. Availability cannot be constrained by quantity, so an item sells until somebody notices it has run out. The composite availability degradation declared by the catalogue capability is the same failure seen from here.'
+
+  - port_key: billable_outcome_sink
+    direction: requires
+    contract: Accept a fulfilled or closed order as a billable outcome with its lines, adjustments, tax classifications and evidence references.
+    cardinality: zero_or_one
+    unbound_behaviour: Orders total correctly and nothing is invoiced. Totals are visible for collection elsewhere. Payment can still be recorded against the order, so a cash operation works end to end without any billing capability.
+
+  - port_key: payment_authorisation
+    direction: requires
+    contract: Authorise, capture, void and refund a payment against an order, returning a reference. This capability never holds a payment credential.
+    cardinality: zero_or_one
+    unbound_behaviour: Payment is recorded as an amount and a method with no authorisation and no reference. This is exactly how a cash operation works and it is not an error. Card and digital methods are unavailable and are not offered rather than being offered and failing.
+
+  - port_key: customer_surface
+    direction: requires
+    contract: Expose a permissioned projection to the ordering party for placing, tracking and modifying an order.
+    cardinality: zero_or_one
+    unbound_behaviour: Self-service channels are unavailable and their channel values are never produced. Staff-entered and integration ordering are unaffected.
+
+  - port_key: notification
+    direction: requires
+    contract: Deliver confirmations, promise changes, delay and completion messages to the ordering party and hold or stall alerts to staff.
+    cardinality: zero_or_one
+    unbound_behaviour: Nothing is sent. For staff-entered orders somebody tells the party directly. For self-service orders the party has no confirmation at all, which makes binding this a publication requirement for any pack enabling a self-service channel.
+
+actions:
+
+  - key: capture_line
+    entity: order_line
+    label: Add something to an order
+    actors: [employee, supervisor, consumer, integration_principal]
+    rationale: >
+      The action performed more often than any other in a high-volume operation, frequently
+      several times a minute under pressure. Its speed determines whether the software is used
+      or bypassed, and its idempotency determines whether a slow connection produces one line
+      or three.
+    preconditions: [the order is in draft or confirmed-and-modifiable, the item resolves and is available for this location and channel, the option selection satisfies its group rules]
+    inputs: [order_id, item_ref, selected_option_refs, quantity, notes, client_line_token]
+    creates: [order_line, an order in draft where none was supplied]
+    updates: [order totals, pricing snapshot on first line]
+    events: [order_line.captured]
+    notifications: []
+    undoable: true
+    reversal_action: void_line
+    audit_class: always
+    idempotency_key_source: >
+      client_line_token, minted on the device when the line is composed. Deliberately
+      client-minted rather than derived from content, because two identical lines are a
+      legitimate and frequent thing to want - somebody ordering two of the same item as
+      separate lines - and a content hash would silently collapse them.
+    offline_policy: queue
+    concurrency: >
+      Two people adding lines to one order concurrently both succeed; line_number is allocated
+      under the order row lock so it is contiguous and stable. Totals are recomputed from the
+      line set rather than incremented, so a lost update cannot leave a total that disagrees
+      with its lines. Recomputing rather than incrementing is slower and is the only version
+      that is correct under concurrency.
+    failure_modes:
+      - {code: E_PRECONDITION, cause: 'the item is unavailable at this location, channel or instant', message: This action is not available in the current state., note: 'states the reason - out of window, out of components, discontinued - because the person is standing in front of somebody who asked for it and needs to say something'}
+      - {code: E_VALIDATION, cause: the option selection violates a group rule, message: field-specific, note: names the group and what is required}
+      - {code: E_VALIDATION, cause: quantity zero or negative, message: Enter how many.}
+      - {code: E_PRECONDITION, cause: the order has closed or voided, message: This action is not available in the current state.}
+      - {code: E_PRECONDITION, cause: the line cannot be priced and the tenant does not permit unpriced capture, message: This has no price yet., note: 'the line is still CAPTURED and shown as unpriced where the tenant permits it, because refusing capture at the counter is worse than capturing something that needs a price'}
+      - {code: E_DEPENDENCY, cause: the catalogue is unavailable, message: A required service is unavailable., note: 'on an online device the capture is refused. On a device with a catalogue cache the line is captured against the cached item and re-resolved on sync, which is the whole reason the cache exists'}
+      - {code: E_QUOTA, cause: more than max_lines_per_order, message: Plan limit reached.}
+    edge_cases:
+      - Captured offline against a cached catalogue. The line records the cache age and the cached price, and is re-priced on sync. Where the re-priced amount differs, the difference is raised as a conflict rather than silently applied, because somebody has already told a customer a number. This is the single most consequential offline behaviour in the capability.
+      - Two identical lines added deliberately. Both persist as separate lines. Collapsing them into a quantity of two is a display choice and must never be a storage choice, because they may be fulfilled separately, modified separately or voided separately.
+      - A line captured for an item that becomes unavailable between capture and confirmation. The line is retained and flagged at confirmation rather than removed. Removing somebody's line without telling them is how an order silently ships short.
+      - Capture by a consumer through a self-service surface with an option combination that is valid but nonsensical. The model validates only against declared group rules; it has no opinion about sense. Anything more is a catalogue configuration concern and pretending otherwise would put pack-specific logic here, which AET-01 would catch.
+      - A line captured against an order that another device has already confirmed. Permitted where the order is still modifiable, and the confirmation state is re-evaluated. This is the normal shape of somebody adding one more thing after saying they were finished.
+
+  - key: modify_line
+    entity: order_line
+    label: Change a line after it has been sent
+    actors: [employee, supervisor]
+    rationale: >
+      Modelled separately from capture because after routing a change is a negotiation with
+      whoever is already working on it, not an edit. Treating it as an edit is how a
+      fulfilment surface receives a quantity it has already produced.
+    preconditions: [the line is routed or in_fulfilment, the acting principal may modify, a reason is supplied]
+    inputs: [line_id, new_quantity, new_option_refs, new_notes, reason]
+    creates: [a modification record on the line]
+    updates: [line fields, order totals, the fulfilment route notified of the delta]
+    events: [order_line.modified]
+    notifications:
+      - {to: the fulfilment route, channel: route_native, when: always, template: line_modified, must_include: [what_changed, previous_values], priority: high, mandatory_operational: true}
+      - {to: the ordering party, channel: their consenting channel, when: the change affects the total or the promise and a surface is bound, template: order_changed, cost_class: utility}
+    undoable: true
+    reversal_action: modify_line back, which is a further modification rather than an undo
+    audit_class: always
+    idempotency_key_source: line_id plus a hash of the new values plus the acting principal plus the minute bucket
+    offline_policy: refuse
+    concurrency: >
+      Modification takes the line row exclusively and re-checks the fulfilment state inside
+      the transaction. A modification racing a fulfilment completion loses - the completion
+      wins, and the modifier is told the line is already done, with what was actually
+      produced. Any other resolution means telling somebody to change something they have
+      already finished.
+    failure_modes:
+      - {code: E_PRECONDITION, cause: the line is already fulfilled, message: This has already been done., note: 'the correct path is void or return, and the message says which'}
+      - {code: E_PRECONDITION, cause: the fulfilment route refuses the modification, message: This action is not available in the current state., note: 'the route''s refusal reason is passed through verbatim, because it is the only party that knows how far along it is'}
+      - {code: E_VALIDATION, cause: new quantity below the already fulfilled quantity, message: field-specific, note: 'reducing below what has been produced is a void of the difference plus a decision about the cost, not a modification'}
+      - {code: E_VALIDATION, cause: reason empty, message: Say why. It is shown to whoever is working on it.}
+      - {code: E_AUTHZ_FIELD, cause: a price-affecting change by a principal without view_financial, message: null, note: the quantity and options change and the price is re-resolved by the system rather than by the actor. A person who cannot see money may still change what was ordered}
+    edge_cases:
+      - Increasing quantity on a line already partly produced. Supported and treated as a delta to the route, not as a replacement. A route that receives a replacement will produce the whole quantity again, which is exactly the failure this action exists to prevent.
+      - Modifying a line whose route has no cancellation or modification capability. The route refuses and the correct path is void plus a new line, which the error states. The already-produced portion is recorded as produced-and-voided so its cost is visible.
+      - A modification arriving while the order is on hold. Permitted; the hold suspends routing, not modification, and modifying a held order is usually why it was held.
+      - Modification of the line notes only, with no commercial effect. Still routed to the fulfilment surface at high priority, because a note is frequently the most important part of the line and a note change that does not reach the person working is worse than no note.
+      - A consumer modifying through a self-service surface after fulfilment has started. Refused with the route's own reason, and the surface offers to contact the location instead. Silently accepting a change that cannot be honoured is how a self-service order becomes a complaint.
+
+  - key: void_line
+    entity: order_line
+    label: Take a line off an order
+    actors: [employee, supervisor]
+    rationale: >
+      Separated from comping deliberately. A void removes something that should not have been
+      there; a comp gives away something that was. Merging them makes both invisible in
+      exactly the reports where they matter.
+    preconditions: [the line is not fulfilled or already voided, a reason is supplied, the acting session is elevated where fulfilment has started]
+    inputs: [line_id, reason]
+    creates: []
+    updates: [line state, order totals, reservation released, the route asked to cancel]
+    events: [order_line.voided]
+    notifications:
+      - {to: the fulfilment route, channel: route_native, when: the line was routed, template: line_cancelled, priority: high, mandatory_operational: true}
+      - {to: supervisor, channel: in_app, when: 'the void happened after fulfilment started, or the acting principal''s void rate exceeds the alert threshold', template: late_void, batching_policy: 'immediate for the first, daily digest for the second'}
+    undoable: false
+    confirmation_specification: 'Modal stating whether the line has been started or produced, the cost that will be recorded as produced-and-voided if the route refuses cancellation, and that a supervisor will be told where fulfilment had begun. Required because a void cannot be reversed - the correct correction is a new line.'
+    audit_class: always
+    idempotency_key_source: line_id plus target state. Replay is a 2xx no-op that does not re-notify and does not double-release a reservation.
+    offline_policy: queue
+    concurrency: >
+      The reservation release and the route cancellation are issued inside the same
+      transaction as the state change, so a voided line can never leave a reservation held. A
+      void racing a fulfilment completion loses; the completion wins and the correct path
+      becomes a return, which is a different authority and a different record.
+    failure_modes:
+      - {code: E_VALIDATION, cause: reason empty, message: Say why.}
+      - {code: E_AUTHN, cause: session not elevated while fulfilment has started, message: Confirm your identity to continue.}
+      - {code: E_PRECONDITION, cause: the line is already fulfilled, message: This has already been done., note: the correct path is return_line}
+      - {code: E_DEPENDENCY, cause: the stock sink is unavailable and a reservation is held, message: null, note: the void COMMITS and the release is queued. A void blocked by a stock outage leaves a line on an order that the customer has been told is gone}
+    edge_cases:
+      - A void that the fulfilment route refuses because the thing is already made. The line is recorded as produced-and-voided with its cost, and that cost is reported. Absorbing it silently means the tenant never learns what late voids cost, which is the only number that would let them change the behaviour.
+      - Voiding every line on a confirmed order. The order does not auto-void; it remains confirmed with zero lines and is flagged, because voiding an order is a separate act with a separate authority and inferring it from an empty line set removes that control.
+      - A void performed to correct a mis-keyed item, immediately after capture. The overwhelmingly common case, and it must be one tap with a reason picked from a short list rather than typed. Requiring free text here is how reasons become the letter x.
+      - Void rate as a signal. Concentrated voids by one principal are reported as a pattern rather than blocked. Blocking would push the behaviour to not entering the line at all, which is invisible, whereas a high void rate is at least measurable.
+
+  - key: split_order
+    entity: order
+    label: Split an order
+    actors: [employee, supervisor]
+    rationale: >
+      Two parties paying separately is a commercial act producing two documents that must both
+      reconcile. Modelling it as a display trick produces a payment that reconciles to nothing.
+    preconditions: [the order is confirmed or partially fulfilled, at least one line remains on each side, no line is split across both sides]
+    inputs: [order_id, line_ids_to_move, new_party_ref, reason]
+    creates: [a new order carrying the moved lines with split_of_order_id set]
+    updates: [both orders' totals, both orders' payment positions, fulfilment routes told of the reassignment]
+    events: [order.split]
+    notifications:
+      - {to: the fulfilment routes holding moved lines, channel: route_native, when: always, template: line_reassigned, note: 'the physical work does not change and the commercial ownership does, and a route that is not told will attribute completion to the wrong order'}
+    undoable: true
+    reversal_action: merge the two orders, which is a new act rather than an undo
+    audit_class: always
+    idempotency_key_source: order_id plus a hash of the ordered moved-line list plus the acting principal plus the minute bucket
+    offline_policy: refuse
+    concurrency: >
+      Both orders are locked in a canonical id order and the split is one transaction, so no
+      instant exists where a line belongs to both or to neither. Totals on both sides are
+      recomputed from their line sets rather than transferred, because transferring a computed
+      figure is how the two sides end up not summing to the original.
+    failure_modes:
+      - {code: E_VALIDATION, cause: the split would leave one side with no lines, message: Both parts need at least one line., note: 'a split producing an empty order is a reference number attached to nothing, and it will be chased by somebody'}
+      - {code: E_PRECONDITION, cause: a payment has already been taken against the whole order, message: This action is not available in the current state., note: 'the correct path is a refund and re-take, or a manual allocation, because splitting a captured payment is a payment-provider operation this capability may not perform'}
+      - {code: E_PRECONDITION, cause: a line to be moved is already fulfilled and its billable outcome emitted, message: This action is not available in the current state., note: moving an already-billed line would produce two billable outcomes for one piece of work}
+      - {code: E_VALIDATION, cause: a single line is to be divided between the two sides, message: Split a line into two lines first., note: 'dividing one line across two orders makes the quantity and the price ambiguous on both, so the model requires the division to be explicit'}
+    edge_cases:
+      - Splitting an order where only some lines have been fulfilled. Fulfilled lines whose outcomes have not yet been emitted may move; those already emitted may not. The error names which, so the person can decide rather than guess.
+      - Splitting to an anonymous party. Fully supported; the new order simply has no party. The common case is one person paying for their own items out of a group.
+      - Splitting a line that itself carries a comp or an override. The adjustment travels with the line, together with the principal who authorised it, so authority is never laundered by moving a line to a different order.
+      - Splitting an order that is subject to a contract-scoped price. The moved lines are NOT re-priced. Re-pricing on split would change what a customer was quoted at the moment they asked to pay separately, which is the worst possible moment to change a number.
+      - Repeated splitting. Supported; split_of_order_id chains and every part points at its immediate origin. Reporting resolves the chain to its root, with a depth guard that alerts rather than looping.
+
+rules:
+  - key: line_captures_its_price_and_provenance
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'A line stores its resolved unit price, the price rule that produced it, its tax classification, its item label and its option summary at capture. None is resolved live afterwards.'
+    on_conflict: not overridable
+    rationale: Live resolution means a total that changes while somebody is looking at it, and a historical order that no longer says what was ordered.
+
+  - key: totals_are_recomputed_never_incremented
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'Order totals are recomputed from the current line set on every change, inside the transaction, and the total-equals-lines invariant is asserted.'
+    on_conflict: not overridable
+    rationale: Incrementing is faster and permits a lost update to leave a total that disagrees with its lines, which is discovered by a customer.
+
+  - key: comp_and_override_are_distinct
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'adjustment_kind distinguishes discount, comp, surcharge and price_override, and comp and price_override both require a reason and an authorising principal.'
+    on_conflict: not overridable
+    rationale: A comp is a decision to give something away and an override is a decision that the price is different. Merging them makes both invisible in the reports where they matter.
+
+  - key: payment_and_fulfilment_are_independent
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'payment_state and fulfilment position are computed independently. Neither gates the other by default.'
+    on_conflict: not overridable
+    rationale: Pay-first, pay-during and pay-after all occur across the target segments, and assuming any one of them makes the product unusable for the others.
+
+  - key: unpriced_capture
+    kind: policy
+    scope: capability
+    overridable_at: site
+    default: 'true. A line that cannot be priced is captured and shown as unpriced, and must be resolved before the order confirms.'
+    on_conflict: most specific scope wins
+    rationale: Refusing capture at the counter is worse than capturing something that needs a price. The block belongs at confirmation, where somebody can act on it.
+
+  - key: void_requires_a_reason_from_a_list
+    kind: validation
+    scope: capability
+    overridable_at: tenant
+    default: 'A void reason is chosen from a tenant-configured short list, with free text optional. The list is mandatory and may not be empty.'
+    on_conflict: most specific scope wins
+    rationale: Free-text-only reasons become the letter x within a week, and then the void report is useless.
+
+  - key: split_never_reprices
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'Lines moved by a split keep their captured prices, rules and adjustments.'
+    on_conflict: not overridable
+    rationale: Re-pricing on split changes a quoted number at the exact moment a customer has asked to pay.
+
+policy_knobs:
+  - {key: draft_order_stale_minutes, default: 30, range: [1, 1440]}
+  - {key: draft_order_stale_hours, default: 24, range: [1, 720]}
+  - {key: routing_ack_minutes, default: 5, range: [1, 120]}
+  - {key: order_hold_review_minutes, default: 30, range: [1, 1440]}
+  - {key: partial_stall_minutes, default: 20, range: [1, 480]}
+  - {key: route_start_alert_minutes, default: 15, range: [1, 480]}
+  - {key: line_fulfilment_alert_minutes, default: 30, range: [1, 1440]}
+  - {key: unclosed_order_days, default: 3, range: [1, 90]}
+  - {key: unclosed_paid_order_days, default: 7, range: [1, 180]}
+  - {key: void_rate_alert, default: 0.05, range: [0.001, 1.0]}
+  - {key: return_rate_alert, default: 0.05, range: [0.001, 1.0]}
+  - {key: max_lines_per_order, default: 500, range: [10, 5000]}
+  - {key: outcome_ack_hours, default: 4, range: [1, 168], lowest_settable_scope: kernel}
+  - {key: comp_requires_supervisor, default: true}
+  - {key: offline_capture_enabled, default: true}
+
+open_questions:
+  - {q: 'What happens when an offline-captured line re-prices to a different amount on sync and the customer has already paid the quoted total? The model raises a conflict and does not say who absorbs the difference.', assumption: 'None. It is a commercial decision, and it will happen on the first day a price changes while a device is offline.', confidence: VALIDATION_REQUIRED, method: 'operator interviews; likely differs by whether the difference is in the tenant''s favour', priority: Critical, blocks: [offline reconciliation, billing adjustment path]}
+  - {q: 'Should a comp reduce reported revenue or appear as a cost? The two treatments produce materially different margin figures for the same events and both are defensible accounting.', assumption: None. The model records the adjustment kind and the amount and does not classify it., confidence: VALIDATION_REQUIRED, method: review with an accountant familiar with the target segments, priority: High, blocks: [reporting revenue definitions, billing treatment]}
+  - {q: 'Is a returned line a reversal of the original or a new negative transaction? The model creates a return record and does not specify how it appears in the ledger, which determines whether a return shows as reduced revenue or as a separate refund.', assumption: None., confidence: VALIDATION_REQUIRED, method: accounting review alongside the comp question, priority: High, blocks: [billing credit note modelling]}
+  - {q: 'Should an order be able to contain lines destined for different fulfilment targets - part collected, part delivered? The model permits it structurally and specifies no behaviour for a mixed order, which is a real gap rather than a decision.', assumption: None., confidence: VALIDATION_REQUIRED, method: operator interviews across the segments that fulfil physically, priority: High, blocks: [order.destination_ref cardinality, fulfilment_target port contract]}
+  - {q: 'How long should a device hold a catalogue cache for offline capture before refusing to capture rather than capturing against stale prices? Too short and the offline path is useless; too long and the reconciliation problem above happens constantly.', assumption: None specified. The cache age is recorded on every line and no refusal threshold is set., confidence: VALIDATION_REQUIRED, method: measure real connectivity at pilot locations and price-change frequency, priority: High, blocks: [offline_sync cache policy]}

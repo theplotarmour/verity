@@ -1,0 +1,408 @@
+key: search
+name: Search
+layer: core
+confidence: KNOWN
+description: >
+  Finding a record from what somebody remembers about it, across every capability, without
+  ever returning something they may not see. It is a projection over entities and events with
+  a permission-aware query layer rather than a capability that owns data, and its hardest
+  problem is that the fastest correct answer and the fastest answer are not the same thing.
+
+evidence_basis:
+  - claim: Permission-aware search in a document index is normally enforced by attaching a filter derived from the searching principal to every query, evaluated at query time, and combining the filters of a principal's several roles with a logical OR.
+    sources:
+      - "Document-level security restricts a user's access to certain documents within an index by configuring a query that defines which documents are accessible; the query supports the full query language and can use user attributes to make the filter dynamic. Where a user holds several roles with document-level queries for the same index, the queries are collected and combined with OR. https://docs.search-guard.com/latest/document-level-security"
+      - "The mechanism functions as an additional query executed on top of the original one, with variable substitution making it dynamic per user. https://www.elastic.co/docs/deploy-manage/users-roles/cluster-or-deployment-auth/controlling-access-at-document-field-level"
+    confidence: KNOWN
+    limitation: >
+      The sources describe query-time filtering. They do not establish that query-time
+      filtering alone is sufficient for a scope model as dynamic as Verity's, where a
+      principal's site set can change between the index being built and the query being run.
+      Verity therefore filters at query time AND re-checks the resolved result set against the
+      authorization port before returning it, and the cost of that second check is an open
+      question rather than an assumed acceptable overhead.
+
+principles:
+  - A search result the principal may not open is worse than no result. The index is an accelerator and never the authority, and every returned identifier is re-checked before it leaves the server.
+  - Search is an oracle if it is careless. A term that matches content in a gated field must not cause a row to appear, or the search box becomes a way to read gated fields one guess at a time.
+  - Staleness is a fact to be shown, not hidden. A result set built from an index that is minutes behind is usually fine and occasionally catastrophic, and only the person searching knows which.
+  - What people actually search for is a name, a number or a phone number, in that order. Every design decision favours those three over relevance sophistication.
+  - Saved searches and recents are convenience features that leak. A saved search shared with somebody of narrower scope must return their results, not its author's.
+  - The command surface and the search surface are the same thing to a user. Separating them produces two boxes and people use neither.
+
+entities:
+
+  - key: search_projection
+    name: Search Projection
+    description: The declaration by a capability of which of its fields enter the index, under which permission gate, and how they are matched.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: capability_key, type: string, req: true}
+      - {key: entity_key, type: string, req: true}
+      - {key: field_projections, type: json, req: true, note: 'flat list per field - field_key, match_mode, weight, gate_verb. gate_verb is mandatory on every entry, because a field with no declared gate is a field somebody will index by accident'}
+      - {key: display_fields, type: json, req: true, note: 'what a result row shows, which is a different and usually smaller set than what is matched'}
+      - {key: scope_fields, type: json, req: true, note: 'the fields carrying tenant, site, party and owner references, denormalised into the index so a filter can be applied at query time without a join'}
+      - {key: freshness_target_seconds, type: int, req: true, default: 30, note: how far behind the index may be before it is reported as stale for this entity}
+      - {key: reindex_priority, type: enum, values: [low, normal, high], req: true, default: normal}
+      - {key: include_archived, type: bool, req: true, default: false}
+      - {key: version_number, type: int, req: true, default: 1}
+    invariants:
+      - Every field projection declares a gate_verb. A projection entry with no gate is rejected at publication, because the default of no gate is exactly the mistake that turns search into a disclosure.
+      - A field marked sensitive or financial on its owning entity may appear in field_projections only with a matching gate_verb, and may never appear in display_fields without one.
+      - scope_fields must include every scope kind the entity is protected by. A projection that omits a scope field produces an index that cannot be filtered on it, and the query layer then has to fall back to re-checking every candidate, which is correct and slow.
+      - Changing a projection produces a new version and a reindex. An in-place change means the index contains two shapes and a query matching on the new shape silently misses old rows.
+    states: [draft, active, reindexing, superseded]
+    initial_state: draft
+    transitions:
+      - {from: draft, to: reindexing, action: publish_projection, actor: platform_operator or tenant_admin, guard: 'every field declares a gate, every scope field is present, and the owning capability is enabled', side_effects: a full reindex for this entity is scheduled at the declared priority, reversibility: true}
+      - {from: reindexing, to: active, action: observe_reindex_complete, actor: system, guard: the backfill reaches the current change cursor, side_effects: queries begin using this version, reversibility: false}
+      - {from: active, to: reindexing, action: publish_projection, actor: as above, guard: a new version is published, side_effects: 'the previous version continues serving queries until the new one completes, so search never goes dark during a reindex', reversibility: true}
+      - {from: active, to: superseded, action: observe_reindex_complete, actor: system, guard: a later version becomes active, side_effects: none, reversibility: false}
+      - {from: draft, to: superseded, action: discard_projection_draft, actor: as above, guard: null, side_effects: none, reversibility: false}
+    stuck_state_policy:
+      draft: >
+        Threshold: draft_projection_stale_days (default 14). Told: the author. Escape hatch:
+        publish or discard. The characteristic confusion is somebody having added a field to
+        the projection and finding that searching for it returns nothing.
+      reindexing: >
+        A reindex that does not finish leaves the previous version serving, which is safe and
+        means the newly projected fields are silently unsearchable. Threshold:
+        reindex_stall_minutes (default 30) with no cursor progress. Told: platform_operator.
+        Escape hatch: restart, or reduce the scope. The important property is that search
+        continues to work throughout, so the failure is invisible to users and must therefore
+        be visible to operators.
+      active: >
+        Three monitored conditions. (a) A projection whose index lag exceeds
+        freshness_target_seconds for longer than lag_alert_minutes (default 5) - results are
+        stale and every surface showing them must say so. Told: platform_operator. (b) A
+        projection whose queries are re-checking more than recheck_rate_alert of candidates
+        (default 0.3) because a scope filter cannot be applied in the index - correct, slow,
+        and a sign that scope_fields is incomplete. (c) A projection with fields that no query
+        has ever matched on over unused_field_days (default 90), which is index cost for
+        nothing.
+      superseded: >
+        Terminal. Retained so that a query executed against it remains explicable. Nothing
+        pends.
+
+  - key: search_query
+    name: Search Query
+    description: One execution of a search, recorded because search is an exfiltration surface and because what people look for is the most useful signal about what the product is missing.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: principal_id, type: uuid, req: true}
+      - {key: term, type: text, nullable: true, sensitive: true, note: 'sensitive because a search term is frequently a person''s name, a phone number or a document number, and the log of what somebody searched for is itself a disclosure'}
+      - {key: filters, type: json, nullable: true}
+      - {key: scope_fingerprint, type: string, req: true, note: 'a hash of the principal''s resolved scope at query time, so that an identical term returning different results at different times is explicable'}
+      - {key: entity_keys_searched, type: json, req: true}
+      - {key: result_count_returned, type: int, req: true}
+      - {key: candidates_considered, type: int, req: true, note: 'before permission re-checking, retained so the cost of the second check is measurable'}
+      - {key: candidates_removed_by_recheck, type: int, req: true, note: the number the index thought were visible and the authorization layer disagreed about. A persistently non-zero value is an index that is out of step with permissions and is the most important number this entity carries}
+      - {key: index_lag_seconds, type: int, nullable: true}
+      - {key: duration_ms, type: int, req: true}
+      - {key: executed_at, type: timestamptz, req: true, immutable: true}
+      - {key: surface, type: enum, values: [global_box, command_palette, scoped_list, api, saved_search], req: true}
+      - {key: selected_result_position, type: int, nullable: true, note: 'which result the person actually opened, if any. The single most useful relevance signal available and the only one that reflects what they meant'}
+    invariants:
+      - term is gated by view_sensitive on read. A search log is a record of what people were looking for and reading somebody else's is a disclosure in its own right.
+      - candidates_removed_by_recheck is recorded on every query. A value that is persistently non-zero means the index and the permission model disagree, which is a correctness problem rather than a performance one.
+      - A query record is written for every execution including those returning nothing, because an empty result is the most useful signal the product has about what it does not do.
+      - Query records are retained for a bounded period and are never used to build a per-principal behavioural profile beyond relevance and capacity purposes, which is stated because the data trivially supports it.
+    states: [executed, expired]
+    initial_state: executed
+    transitions:
+      - {from: executed, to: expired, action: expire_query_log, actor: system_scheduler, guard: 'now > executed_at plus query_log_retention_days', side_effects: 'the term is destroyed and the anonymised metrics - counts, durations, lag - are retained', reversibility: false}
+    stuck_state_policy:
+      executed: >
+        Query records do not pend individually. Two conditions on the population are monitored
+        here. (a) A principal executing more than exfiltration_rate_threshold queries in an
+        hour with a high result count and a low selection rate, which is the shape of somebody
+        paginating an entire dataset through the search box rather than looking for something.
+        Told: tenant_owner and platform_operator, and this is deliberately a security monitor
+        rather than a capacity one. (b) A rising rate of queries returning nothing for terms
+        that look like identifiers, which usually means an entity somebody expects to be
+        searchable is not projected. Told: platform_operator, weekly.
+      expired: >
+        Terminal. The term is gone and the metrics remain. Nothing pends.
+
+  - key: saved_search
+    name: Saved Search
+    description: A stored query somebody returns to, which must return THEIR results rather than its author's.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: owner_principal_id, type: uuid, req: true}
+      - {key: label, type: string, req: true}
+      - {key: term, type: text, nullable: true}
+      - {key: filters, type: json, nullable: true}
+      - {key: entity_keys, type: json, req: true}
+      - {key: shared_with_role_keys, type: json, nullable: true, note: 'shared by role rather than by person, per the same reasoning as notification audiences - a search shared with a named individual dies when they leave'}
+      - {key: is_pinned, type: bool, req: true, default: false}
+      - {key: last_run_at, type: timestamptz, nullable: true}
+      - {key: run_count, type: int, req: true, default: 0}
+      - {key: result_count_at_last_run, type: int, nullable: true}
+      - {key: notify_on_new_results, type: bool, req: true, default: false}
+    invariants:
+      - A saved search stores a QUERY and never a result set. It is executed under the scope of whoever runs it, so a search shared with somebody of narrower scope returns their results and never its author's.
+      - shared_with_role_keys grants the right to run the search, never the right to see its author's results. The distinction is the whole safety property of sharing.
+      - notify_on_new_results requires the notification port and is evaluated per subscriber under that subscriber's own scope, so a subscriber is never told about something they cannot open.
+      - A saved search whose filters reference an entity the runner cannot access executes over the entities they can, and states which were excluded. Silently narrowing produces a result count somebody will misread as a real number.
+    states: [active, broken, archived]
+    initial_state: active
+    transitions:
+      - {from: active, to: broken, action: observe_projection_change, actor: system, guard: 'a referenced entity, field or filter no longer exists after a capability change', side_effects: the owner and any sharing roles are told with the specific broken element, reversibility: true}
+      - {from: broken, to: active, action: repair_saved_search, actor: the owner, guard: the query is amended to reference only existing elements, side_effects: none, reversibility: true}
+      - {from: active, to: archived, action: archive_saved_search, actor: the owner or tenant_admin, guard: null, side_effects: none, reversibility: false}
+      - {from: broken, to: archived, action: archive_saved_search, actor: as above, guard: null, side_effects: none, reversibility: false}
+    stuck_state_policy:
+      active: >
+        The monitored exception is a saved search with notify_on_new_results whose result set
+        has grown by more than saved_search_growth_alert (default 10 times) since it was
+        created, which usually means a filter that was narrow when written and is now broad.
+        The subscriber is told before the notification volume arrives rather than afterwards.
+        A second condition is a saved search never run for unused_saved_search_days
+        (default 180), reported to its owner only.
+      broken: >
+        A broken saved search is silently returning nothing or returning the wrong thing.
+        Threshold: immediate on detection. Told: the owner and every sharing role, naming the
+        specific element that no longer exists. Escape hatch: repair or archive. It is
+        deliberately NOT auto-repaired by dropping the broken element, because a filter
+        silently dropped changes what the search means and the person will read the result as
+        though it still meant what it did.
+      archived: >
+        Terminal. Retained, because a saved search is frequently the only record of how
+        somebody defined a working set, and reconstructing it from memory is worse than
+        reading it. Nothing pends.
+
+ports:
+  - port_key: search_index
+    direction: provides
+    contract: >
+      Accept a term, a filter set and a principal context; return identifiers, display fields
+      and a stated index lag, having applied the principal's scope filter at query time and
+      re-checked every returned identifier against the authorization port. The re-check is part
+      of the contract, not an implementation detail - a provider that returns index results
+      unchecked does not satisfy it.
+    cardinality: exactly_one
+
+  - port_key: authorization_decision
+    direction: requires
+    contract: Resolve a principal's scope filter for an entity, and re-check a resolved identifier set before it is returned.
+    cardinality: exactly_one
+    unbound_behaviour: >
+      FORBIDDEN. Search without permission resolution is the platform's largest disclosure
+      surface, because it reaches across every capability at once and returns exactly the
+      records a person was curious about.
+
+  - port_key: change_feed
+    direction: requires
+    contract: A durable, ordered stream of entity changes from every capability, carrying the entity key, the identifier and a change cursor, so the index can be maintained incrementally and its lag measured.
+    cardinality: exactly_one
+    unbound_behaviour: >
+      FORBIDDEN in practice. Without a change feed the index can only be rebuilt periodically,
+      which means results are hours stale and a record created a minute ago cannot be found -
+      which is precisely when people search for it. Declared FORBIDDEN rather than degraded,
+      because a search that cannot find recent records trains people not to use it.
+
+  - port_key: principal_directory
+    direction: requires
+    contract: Resolve the searching principal, their roles and their devices for surface-specific behaviour.
+    cardinality: exactly_one
+    unbound_behaviour: FORBIDDEN. There is no scope to filter by without a principal.
+
+  - port_key: audit_sink
+    direction: requires
+    contract: Record queries touching sensitive or financial projections, and record any export from a result set.
+    cardinality: exactly_one
+    unbound_behaviour: FORBIDDEN. Search is an exfiltration vector and the vocabulary already marks export as always-audited; an unaudited search surface removes the only trace.
+
+  - port_key: notification
+    direction: requires
+    contract: Deliver saved-search result alerts and broken-search messages.
+    cardinality: zero_or_one
+    unbound_behaviour: notify_on_new_results cannot be enabled and existing subscriptions are shown as inactive rather than silently not firing. Everything else works.
+
+actions:
+
+  - key: execute_search
+    entity: search_query
+    label: Search
+    actors: [any_authenticated, integration_principal]
+    rationale: >
+      The most used surface in any operational product and the one most likely to leak. Its
+      contract is that it is fast, that it says how stale it is, and that it never returns
+      something the person cannot open.
+    preconditions: [the principal is authenticated, at least one projection is active for a requested entity]
+    inputs: [term, filters, entity_keys, surface, cursor, page_size]
+    creates: [search_query]
+    updates: []
+    events: []
+    notifications: []
+    undoable: false
+    confirmation_specification: 'None. A read. The controls that matter are the permission re-check before results leave the server and the rate limit on export-shaped querying.'
+    audit_class: read_sensitive_only
+    idempotency_key_source: not applicable - a pure read whose record is keyed on the request correlation_id so a retried request does not double-log
+    offline_policy: read_only
+    concurrency: >
+      Queries are reads against the index plus a re-check against a consistent authorization
+      snapshot. A permission change between the index filter and the re-check causes the
+      affected identifiers to be dropped from the result, which is correct and is why the
+      re-check exists. The dropped count is recorded, and a persistently non-zero value is the
+      signal that the index and the permission model have drifted.
+    failure_modes:
+      - {code: E_AUTHZ_SCOPE, cause: 'candidates fall outside the principal''s scope', message: null, note: 'they are omitted from the result set and from the count. The count must be projected too, because a total that includes invisible rows discloses how many exist'}
+      - {code: E_VALIDATION, cause: the term is shorter than the minimum matchable length, message: null, note: 'returns an empty result with the reason rather than scanning. A one-character term against every entity is a denial of service against the tenant''s own index'}
+      - {code: E_RATE_LIMIT, cause: export-shaped querying - repeated wide queries paginating deeply with a low selection rate, message: Too many attempts. Try again shortly., note: 'this pattern is exfiltration wearing a search box, and the rate limit is the control. Legitimate bulk access is an export, which is separately gated and separately audited'}
+      - {code: E_DEPENDENCY, cause: the authorization port is unavailable, message: A required service is unavailable., note: 'FAILS CLOSED. No results are returned unchecked under any circumstance, including a partial outage'}
+      - {code: E_DEPENDENCY, cause: the index is unavailable, message: null, note: 'falls back to an exact-identifier lookup against the owning capabilities, which covers the most common real search - somebody typing a reference number - and states that only exact matches are available. A total failure would be worse than a narrow one'}
+      - {code: E_QUOTA, cause: requested page depth exceeds max_result_depth, message: null, note: 'deep pagination is the mechanism by which a search box becomes a bulk export, and the depth limit is the boundary between the two'}
+    edge_cases:
+      - "A term matching content inside a gated field. The row must NOT appear. Matching on a field the principal cannot read turns the search box into an oracle for reading gated fields one guess at a time, and the gate_verb on every field projection exists precisely to make this checkable rather than incidental."
+      - A result count that would reveal how many records exist outside scope. Counts are projected exactly as rows are. Returning a total of 47 while showing 3 tells the searcher that 44 exist elsewhere, which is the same disclosure as showing them.
+      - Searching immediately after creating a record. The index lag is stated on the result set, and an exact-identifier lookup bypasses the index entirely. Somebody who has just created something and cannot find it concludes the product lost it, and the exact-lookup path exists for exactly that moment.
+      - A principal whose scope changed seconds ago. The index filter uses the old scope and the re-check uses the new one, so the result is correct and slower. This is the case the evidence_basis limitation names, and its cost is an open question rather than an assumed acceptable overhead.
+      - Searching by phone number where the number is a gated field on the party entity. Matchable only by principals holding the gate, and matched on a normalised form, because a number typed with spaces and a number stored in international form are the same number and a search that cannot see that is a search nobody uses twice.
+      - An integration principal searching. Permitted within its own scope, rate-limited more tightly than a human, and always audited, because a service account paginating a search surface is the single most efficient exfiltration path in the platform.
+
+  - key: publish_projection
+    entity: search_projection
+    label: Change what is searchable
+    actors: [platform_operator, tenant_admin]
+    preconditions: [every field declares a gate verb, every scope field is present, the owning capability is enabled]
+    inputs: [capability_key, entity_key, field_projections, display_fields, scope_fields, freshness_target_seconds]
+    creates: [search_projection, a reindex job]
+    updates: [previous version marked for supersession]
+    events: [search.projection_published]
+    notifications:
+      - {to: platform_operator, channel: in_app, when: the reindex is expected to exceed the long-reindex threshold, template: long_reindex_scheduled, must_include: [entity, estimated_duration]}
+    undoable: true
+    reversal_action: publish the previous field set as a new version
+    audit_class: security
+    idempotency_key_source: 'tenant_id plus capability_key plus entity_key plus a hash of the projection. Republishing an identical projection is a no-op and does NOT trigger a reindex, which matters because a reindex is expensive and a redeployment should not cause one'
+    offline_policy: refuse
+    concurrency: >
+      The previous version continues serving queries until the new one completes its backfill,
+      so search never goes dark during a reindex. Two concurrent publications for one entity
+      serialise, and the later supersedes the earlier without either being partially applied.
+    failure_modes:
+      - {code: E_VALIDATION, cause: a field projection has no gate_verb, message: Every searchable field needs a permission gate., note: the single most important validation here. A field with no gate is a field somebody indexed by accident and it will be returned to somebody who should not see it}
+      - {code: E_VALIDATION, cause: a sensitive or financial field is projected into display_fields without a gate, message: field-specific}
+      - {code: E_PRECONDITION, cause: a scope field the entity is protected by is absent from scope_fields, message: This action is not available in the current state., note: 'names the missing scope. Publishing anyway would produce an index that cannot be filtered on it, forcing every query into a full re-check'}
+      - {code: E_QUOTA, cause: the projection would exceed the tenant index size limit, message: Plan limit reached.}
+      - {code: E_PRECONDITION, cause: the owning capability is disabled, message: This action is not available in the current state.}
+    edge_cases:
+      - Publishing a projection that adds a gated field. The reindex rebuilds with the gate applied, and until it completes the field is unsearchable rather than searchable without its gate. Ungated-then-gated is the wrong order and would create a window in which the field is exposed.
+      - Removing a field from a projection. The reindex removes it and any saved search referencing it becomes broken and is reported. Silently dropping it from those searches would change what they mean without telling anybody.
+      - A reindex that takes hours on a large tenant. The previous version serves throughout, and the newly projected fields are unsearchable until it completes. This is invisible to users, which is exactly why the stall monitor reports to operators.
+      - Publishing a projection for an entity in a capability that is later disabled. The projection remains and its index is not served, so re-enabling the capability restores search without a rebuild. Deleting it on disable would make re-enablement expensive for no benefit.
+
+  - key: save_search
+    entity: saved_search
+    label: Save a search
+    actors: [any_authenticated]
+    preconditions: [the query executes successfully for the saving principal, a label is supplied]
+    inputs: [label, term, filters, entity_keys, shared_with_role_keys, notify_on_new_results]
+    creates: [saved_search]
+    updates: []
+    events: [search.saved]
+    notifications:
+      - {to: holders of the sharing roles, channel: in_app, when: the search is shared, template: search_shared_with_you, must_include: [label, author, that_it_runs_under_their_own_access]}
+    undoable: true
+    reversal_action: archive_saved_search
+    audit_class: always
+    idempotency_key_source: owner_principal_id plus a hash of the term, filters and entity keys
+    offline_policy: refuse
+    concurrency: Saved searches do not contend. Sharing grants the right to run, and the run resolves scope per runner, so there is no shared state to race on.
+    failure_modes:
+      - {code: E_VALIDATION, cause: label empty, message: Give it a name.}
+      - {code: E_AUTHZ_ENTITY, cause: sharing with a role the saver cannot themselves grant to, message: You cannot grant access you do not have., note: 'sharing a search is not sharing data, and it is still restricted, because a shared search is a strong hint about what exists'}
+      - {code: E_PRECONDITION, cause: notify_on_new_results requested while the notification port is unbound, message: This action is not available in the current state., note: the search saves without the subscription rather than failing entirely}
+      - {code: E_QUOTA, cause: more than max_saved_searches per principal, message: Plan limit reached.}
+    edge_cases:
+      - A search shared with a role whose holders have narrower scope. It runs under each runner's own scope and returns their results. This is the whole safety property, and the sharing notification says so explicitly, because the author will otherwise assume the recipient sees what they see.
+      - A saved search with a subscription whose result set grows enormously after a capability change. The growth alert fires before the notification volume arrives. Without it the first symptom is somebody receiving four hundred alerts.
+      - A saved search whose author leaves. Ownership transfers to a role rather than lapsing, where the search was shared; where it was private it is archived with its definition retained, because a private working set that vanishes silently is a loss nobody can reconstruct.
+      - Two principals saving identical searches. Both exist. Deduplicating across principals would mean one person's rename affects another's list.
+
+rules:
+  - key: index_is_never_the_authority
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'Every identifier returned from the index is re-checked against the authorization port before it leaves the server, and counts are projected identically to rows.'
+    on_conflict: not overridable
+    rationale: The index is an accelerator built asynchronously, and a permission change between indexing and querying would otherwise return a record the principal may not open.
+
+  - key: every_projected_field_declares_a_gate
+    kind: validation
+    scope: kernel
+    overridable_at: null
+    default: 'A field projection with no gate_verb is rejected at publication. There is no ungated default.'
+    on_conflict: not overridable
+
+  - key: gated_content_never_causes_a_match
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'A term matching content within a field the searching principal cannot read must not cause the row to appear in results.'
+    on_conflict: not overridable
+    rationale: Otherwise the search box is an oracle for reading gated fields one guess at a time.
+
+  - key: staleness_is_disclosed
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'Every result set carries the index lag, and any surface displaying results shows it when it exceeds the projection freshness target.'
+    on_conflict: not overridable
+
+  - key: saved_search_stores_a_query_not_results
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'A saved search is executed under the scope of whoever runs it. Sharing grants the right to run and never the right to see the author''s results.'
+    on_conflict: not overridable
+
+  - key: search_fails_closed
+    kind: guard
+    scope: kernel
+    overridable_at: null
+    default: 'If authorization cannot be resolved, no results are returned. Degradation to an exact-identifier lookup is permitted only when the INDEX is unavailable, never when authorization is.'
+    on_conflict: not overridable
+
+  - key: deep_pagination_is_bounded
+    kind: policy
+    scope: capability
+    overridable_at: tenant
+    default: 'max_result_depth 1000. Beyond it the correct path is an audited export.'
+    on_conflict: most specific scope wins
+    rationale: Deep pagination is the mechanism by which a search box becomes an unaudited bulk export, and the depth limit is the boundary between the two.
+
+policy_knobs:
+  - {key: min_term_length, default: 2, range: [1, 10]}
+  - {key: max_result_depth, default: 1000, range: [50, 10000]}
+  - {key: default_page_size, default: 20, range: [5, 200]}
+  - {key: lag_alert_minutes, default: 5, range: [1, 120], lowest_settable_scope: kernel}
+  - {key: reindex_stall_minutes, default: 30, range: [1, 480], lowest_settable_scope: kernel}
+  - {key: recheck_rate_alert, default: 0.3, range: [0.01, 1.0]}
+  - {key: unused_field_days, default: 90, range: [7, 730]}
+  - {key: draft_projection_stale_days, default: 14, range: [1, 180]}
+  - {key: query_log_retention_days, default: 90, range: [1, 730]}
+  - {key: exfiltration_rate_threshold, default: 500, range: [10, 100000], note: queries per principal per hour with a low selection rate}
+  - {key: saved_search_growth_alert, default: 10, range: [2, 1000]}
+  - {key: unused_saved_search_days, default: 180, range: [7, 730]}
+  - {key: max_saved_searches, default: 100, range: [5, 1000]}
+  - {key: integration_query_rate_limit_per_minute, default: 60, lowest_settable_scope: kernel}
+
+open_questions:
+  - {q: 'What does the mandatory permission re-check actually cost at realistic result sizes and scope complexity? The cited sources describe query-time filtering alone; Verity adds a second check because its scopes are dynamic, and the overhead has not been measured.', assumption: The re-check is affordable at a page size of 20. Nothing supports that beyond it being a small number., confidence: VALIDATION_REQUIRED, method: 'benchmark a query returning a full page against a principal with a large multi-site scope, at the p95 tenant size, measuring the re-check separately from the index query', priority: Critical, blocks: [search_index port contract, page size defaults, the performance budget]}
+  - {q: 'Should search span capabilities the principal has permission for but which the tenant has disabled? Including them surfaces records from a capability nobody expects to be live; excluding them means re-enabling a capability makes records reappear with no explanation.', assumption: 'Excluded while disabled, with the projection retained so re-enabling needs no rebuild. The reappearance is not explained to users.', confidence: WORKING_ASSUMPTION, method: pilot observation of what people expect after a capability is toggled, priority: Medium}
+  - {q: 'Is retaining search terms for 90 days acceptable, given that a term is frequently a person''s name or phone number and the log is therefore a record of who was looking for whom? The retention buys relevance tuning and capacity planning.', assumption: 90 days with the term gated by view_sensitive and no behavioural profiling. Not validated against any privacy position., confidence: VALIDATION_REQUIRED, method: privacy review alongside the audit retention questions, priority: High, blocks: [query_log_retention_days, relevance tuning approach]}
+  - {q: 'Should relevance be tuned at all in v1? Selection position is recorded, which makes learned relevance possible and makes the ranking unexplainable - the same objection raised against unexplained ranking in backfill_dispatch, applied here.', assumption: 'No learned relevance in v1. Deterministic ranking by field weight and recency, which is explainable and worse.', confidence: WORKING_ASSUMPTION, method: 'measure selection position under deterministic ranking; if the correct result is usually first, learned relevance buys nothing', priority: Medium}
+  - {q: 'The change_feed port is declared FORBIDDEN when unbound, which makes search unusable without an event stream the composition model does not yet describe anywhere. Where does that stream come from, and is it the same one the event catalogue describes?', assumption: None. This is a genuine gap between what this capability requires and what the platform has been specified to provide., confidence: VALIDATION_REQUIRED, method: 'specify the change feed as a platform service, and decide whether it is the event bus or a separate outbox-derived stream', priority: Critical, blocks: [search viability, reporting, integrations outbound events]}

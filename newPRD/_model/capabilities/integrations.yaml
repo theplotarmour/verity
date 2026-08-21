@@ -1,0 +1,528 @@
+key: integrations
+name: Integrations
+layer: core
+confidence: KNOWN
+description: >
+  Connecting Verity to systems outside it - holding the credentials, delivering outbound
+  events, accepting inbound calls, surviving the other side being down, and making a failure
+  visible to somebody who can act on it rather than burying it in a log. It is a framework
+  rather than a collection of connectors, and each connector is configuration against it.
+
+evidence_basis:
+  - claim: The established practice for outbound webhook delivery is a bounded retry schedule with exponential backoff and jitter over a period of days, with each event carrying a stable identifier across every retry so the receiver can deduplicate, and with events discarded once the budget is exhausted.
+    sources:
+      - "A widely used payments platform retries webhook deliveries on a schedule of immediately, then 5 minutes, 30 minutes, 2 hours, 5 hours, 10 hours and every 12 hours thereafter, for up to 72 hours, after which events are not delivered. https://www.digitalapplied.com/blog/webhook-reliability-idempotency-retries-engineering-reference-2026"
+      - "Every event carries an id that stays the same across every retry of that event, and the receiver is expected to store processed ids and short-circuit duplicates. The same platform's inbound API accepts an idempotency key, storing the status and body of the first request for that key - including a 500 - and replaying it for repeats, with a 24-hour key lifetime. https://deepwiki.com/stripe/stripe-node/3.5-idempotency-and-retry-logic"
+      - "Retries use exponential backoff with jitter to avoid synchronised retry storms. https://hookray.com/blog/webhook-retry-strategies-2026"
+    confidence: KNOWN
+    implication: >
+      Verity adopts the same shape - stable event id across retries, exponential backoff with
+      jitter, a bounded budget - and departs from it in one respect. Discarding an event after
+      the budget expires is acceptable for a payments notification and is not acceptable for a
+      billable outcome or an attendance record, so Verity moves an exhausted delivery to a
+      dead-letter state that a human must resolve rather than dropping it. The cost is a queue
+      somebody has to work; the alternative is revenue disappearing quietly.
+
+principles:
+  - The other side will be down, slow, and wrong, and none of those is exceptional. Every design decision assumes the remote system is unreliable rather than treating unreliability as an incident.
+  - A failed integration must reach a person who can act on it. An error in a log is not a failure anybody is handling, and the most common outcome of an unattended integration is silent data loss nobody discovers for a quarter.
+  - Credentials are held once, referenced everywhere and never returned. A capability that can read a credential is a capability that can leak it.
+  - Outbound delivery is at-least-once and the receiver is told so explicitly. Promising exactly-once is a promise no distributed system keeps.
+  - Inbound calls are untrusted input from an authenticated source, which is not the same as trusted input. Authentication says who is calling and says nothing about whether the payload is sane.
+  - A connector is configuration, not code. The framework owns credentials, retries, idempotency, rate limits and observability, and a connector supplies the mapping.
+
+entities:
+
+  - key: connection
+    name: Connection
+    description: One configured link to one external system, with its credentials by reference, its health and its ownership.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: connector_key, type: string, req: true, immutable: true, note: which connector definition this instantiates}
+      - {key: label, type: string, req: true}
+      - {key: direction, type: enum, values: [outbound, inbound, bidirectional], req: true}
+      - {key: credential_ref, type: string, nullable: true, sensitive: true, note: 'a reference into the secret store, never the secret. This capability holds references and the secret store holds secrets, and nothing in Verity ever returns one'}
+      - {key: credential_expires_at, type: timestamptz, nullable: true, note: where the credential has a known expiry. The single most common cause of an integration that worked for a year and then stopped}
+      - {key: endpoint_url, type: string, nullable: true, sensitive: true}
+      - {key: auth_kind, type: enum, values: [none, api_key, bearer_token, oauth2_client_credentials, oauth2_authorisation_code, hmac_signature, mutual_tls], req: true}
+      - {key: owner_principal_id, type: uuid, req: true, note: 'who is accountable for this connection. Mandatory, because an unowned integration is one nobody fixes'}
+      - {key: environment, type: enum, values: [production, staging, sandbox], req: true}
+      - {key: rate_limit_per_minute, type: int, nullable: true, note: 'what the remote system permits, so Verity throttles itself rather than being throttled'}
+      - {key: concurrency_limit, type: int, req: true, default: 4}
+      - {key: retry_budget_hours, type: int, req: true, default: 72, note: total window over which an outbound delivery is retried before it dead-letters}
+      - {key: mapping_version, type: string, nullable: true}
+      - {key: last_success_at, type: timestamptz, nullable: true}
+      - {key: last_failure_at, type: timestamptz, nullable: true}
+      - {key: consecutive_failures, type: int, req: true, default: 0}
+      - {key: acting_principal_id, type: uuid, nullable: true, note: 'the integration principal whose permissions inbound calls are evaluated against. An integration never has implicit authority and never inherits a human''s'}
+    invariants:
+      - credential_ref is a reference and is never the credential. No read path anywhere in the platform returns a secret, including to the connection's own owner, and rotation is performed by the secret store rather than by editing this row.
+      - owner_principal_id is mandatory and must be an active principal. An unowned connection is an integration nobody fixes and it fails silently for months.
+      - acting_principal_id is required for any connection accepting inbound writes, and must be an integration_principal rather than a human. An inbound call executing under a human's identity attributes machine writes to a person.
+      - environment is immutable after creation. A staging connection promoted in place is how test data reaches a production system.
+      - A connection may not be deleted while any undelivered outbound message or unresolved dead letter references it. It is disabled, because those messages still need somewhere to belong.
+    states: [draft, testing, active, degraded, suspended, disabled]
+    initial_state: draft
+    transitions:
+      - {from: draft, to: testing, action: test_connection, actor: tenant_admin or ops_manager, guard: credentials are set and the endpoint resolves, side_effects: a test call is made and its full request and response are recorded for diagnosis, reversibility: true}
+      - {from: testing, to: active, action: activate_connection, actor: tenant_admin or ops_manager, guard: 'the test succeeded, or the operator explicitly accepted a failed test with a reason', side_effects: the connection begins carrying traffic, reversibility: true}
+      - {from: active, to: degraded, action: observe_failures, actor: system, guard: 'consecutive_failures exceeds the degradation threshold, or the credential expires within the warning window', side_effects: 'the owner is told, delivery continues at a reduced rate to avoid worsening a remote outage', reversibility: true}
+      - {from: degraded, to: active, action: observe_recovery, actor: system, guard: a delivery succeeds, side_effects: 'consecutive_failures reset, rate restored gradually rather than instantly, because restoring full rate into a recovering system re-breaks it', reversibility: true}
+      - {from: degraded, to: suspended, action: suspend_connection, actor: system or tenant_admin, guard: 'consecutive_failures exceeds the suspension threshold, or the credential has expired', side_effects: 'delivery stops; messages QUEUE rather than being dropped, and the queue depth is reported', reversibility: true}
+      - {from: active, to: suspended, action: suspend_connection, actor: tenant_admin or ops_manager, guard: a reason is supplied, side_effects: as above, reversibility: true}
+      - {from: suspended, to: testing, action: test_connection, actor: as above, guard: null, side_effects: as for testing, reversibility: true}
+      - {from: suspended, to: disabled, action: disable_connection, actor: tenant_admin or tenant_owner, guard: 'acting session is elevated, a reason is supplied, and the queued and dead-lettered counts have been acknowledged', side_effects: queued messages are dead-lettered with a reason rather than discarded; the credential reference is released from the secret store, reversibility: false}
+      - {from: draft, to: disabled, action: disable_connection, actor: as above, guard: null, side_effects: none, reversibility: false}
+    stuck_state_policy:
+      draft: >
+        Threshold: draft_connection_stale_days (default 7). Told: the creating principal.
+        Escape hatch: test and activate, or disable. The characteristic failure is a connection
+        configured during onboarding whose credential was never supplied, so an entire
+        integration silently does nothing while the tenant believes it is live.
+      testing: >
+        Threshold: testing_stale_hours (default 24). Told: the owner. Escape hatch: activate or
+        return to draft. A connection left in testing carries no traffic and looks configured,
+        which is the specific confusion this state creates and the reason its threshold is
+        short.
+      active: >
+        Steady state. Three monitored conditions. (a) A credential expiring within
+        credential_warning_days (default 30), told to the owner and tenant_admin at 30, 7 and 1
+        days. This is the single most common cause of an integration that worked for a year and
+        then stopped, and it is entirely preventable. (b) A connection with no successful call
+        for silent_connection_days (default 7) where traffic was expected - an integration that
+        has quietly stopped is indistinguishable from one with nothing to do, and the
+        difference is knowable only from the expected volume. (c) A connection whose failure
+        rate exceeds failure_rate_alert (default 0.1) without reaching the degradation
+        threshold, which is a remote system that is unreliable rather than down.
+      degraded: >
+        Threshold: degraded_alert_minutes (default 15), then hourly. Told: the owner and
+        tenant_admin, with the remote system's own error verbatim, because those messages are
+        specific and paraphrasing them destroys the only actionable information. Escape hatch:
+        fix the remote condition, or suspend deliberately. Delivery continues at a reduced rate
+        rather than stopping, because a remote system recovering under a full retry storm never
+        recovers.
+      suspended: >
+        Suspended with a growing queue is a decision somebody has to take. Threshold:
+        suspension_review_hours (default 24), then daily, and immediately where the queue depth
+        exceeds queue_depth_alert. Told: the owner, tenant_admin and, where the queued messages
+        carry billable outcomes, finance. Escape hatch: test and reactivate, or disable and
+        dead-letter the queue explicitly. Verity never discards a queue on suspension, because
+        the messages in it are frequently revenue.
+      disabled: >
+        Terminal. Retained permanently with its dead letters and its history, because the
+        question of what stopped being sent and when is asked during every reconciliation.
+        Nothing pends beyond the dead letters, which have their own policy.
+
+  - key: outbound_message
+    name: Outbound Message
+    description: One event Verity is sending somewhere else, with its delivery attempts, its stable identifier and what the far side said.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true, note: 'the stable identifier carried on every retry, so the receiver can deduplicate. It never changes, which is the property the whole delivery contract rests on'}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: connection_id, type: uuid, req: true, fk: connection}
+      - {key: event_type, type: string, req: true, immutable: true}
+      - {key: event_version, type: int, req: true, immutable: true}
+      - {key: source_capability_key, type: string, req: true, immutable: true}
+      - {key: source_event_id, type: uuid, req: true, immutable: true, note: 'the platform event that produced it, so a delivery can be traced back to what happened'}
+      - {key: payload, type: json, req: true, immutable: true, note: 'redacted per the subscriber''s permitted field set at composition time, not at delivery. The redaction is part of the payload rather than applied on the way out, so what was sent is exactly what is stored'}
+      - {key: payload_hash, type: string, req: true, immutable: true}
+      - {key: created_at, type: timestamptz, req: true, immutable: true}
+      - {key: next_attempt_at, type: timestamptz, nullable: true}
+      - {key: attempt_count, type: int, req: true, default: 0}
+      - {key: last_status_code, type: int, nullable: true}
+      - {key: last_response_excerpt, type: text, nullable: true, note: 'a bounded excerpt of what the far side said, retained because it is what a person needs to diagnose and because a full body may contain anything'}
+      - {key: delivered_at, type: timestamptz, nullable: true}
+      - {key: dead_lettered_at, type: timestamptz, nullable: true}
+      - {key: dead_letter_reason, type: text, nullable: true}
+      - {key: replayed_from_message_id, type: uuid, nullable: true, fk: outbound_message}
+    invariants:
+      - id is stable across every attempt and is sent on every one, so a receiver can deduplicate. Minting a new identifier per attempt is the defect that makes at-least-once delivery unusable for the receiver.
+      - payload is composed once, redacted to the subscriber's permitted field set, and frozen. Redacting at delivery time would mean the stored record differs from what was sent, and the stored record is what a dispute reads.
+      - A message is never deleted. It is delivered, dead-lettered or explicitly abandoned with a reason.
+      - Retry scheduling is exponential with jitter and bounded by the connection's retry budget. Synchronised retries across a tenant's messages are how a recovering remote system is knocked over again.
+      - An exhausted budget produces a dead letter, never a discard. This is the deliberate departure from the practice cited in evidence_basis, because a discarded billable outcome is revenue that disappears quietly.
+    states: [pending, in_flight, delivered, retrying, dead_lettered, abandoned]
+    initial_state: pending
+    transitions:
+      - {from: pending, to: in_flight, action: deliver_message, actor: system, guard: the connection is active or degraded and the rate limit permits, side_effects: attempt_count incremented, reversibility: false}
+      - {from: in_flight, to: delivered, action: observe_delivery_response, actor: system, guard: the far side returned a success status, side_effects: 'delivered_at set; the connection''s consecutive_failures reset', reversibility: false}
+      - {from: in_flight, to: retrying, action: observe_delivery_response, actor: system, guard: 'a transient failure - a timeout, a 5xx, or a rate-limit response', side_effects: next_attempt_at set by exponential backoff with jitter, reversibility: false}
+      - {from: retrying, to: in_flight, action: deliver_message, actor: system_scheduler, guard: 'now >= next_attempt_at and the connection permits', side_effects: as above, reversibility: false}
+      - {from: in_flight, to: dead_lettered, action: observe_delivery_response, actor: system, guard: 'a permanent failure - a 4xx other than rate limiting, or a payload the far side rejects structurally', side_effects: 'no further retries; the connection owner is told immediately with the far side''s own response', reversibility: true}
+      - {from: retrying, to: dead_lettered, action: observe_budget_exhausted, actor: system_scheduler, guard: 'the connection''s retry budget has elapsed', side_effects: 'the owner is told, and where the payload carries a billable outcome, finance is told as well', reversibility: true}
+      - {from: dead_lettered, to: pending, action: replay_message, actor: 'tenant_admin, ops_manager or platform_operator', guard: the underlying condition is believed resolved and a reason is supplied, side_effects: 'a NEW message is created referencing this one rather than this one being resurrected, so the history of the failed attempts survives', reversibility: false}
+      - {from: dead_lettered, to: abandoned, action: abandon_message, actor: tenant_admin or ops_manager, guard: acting session is elevated and a reason is supplied, side_effects: the payload is retained permanently and the abandonment is reported, reversibility: false}
+    stuck_state_policy:
+      pending: >
+        Pending and undelivered means the dispatcher is not running while events are being
+        produced. Threshold: dispatch_lag_minutes (default 2). Told: platform_operator, because
+        it is machinery. Escape hatch: drain. A short threshold is warranted because outbound
+        integration is frequently how a counterparty learns something, and a two-hour delay is
+        indistinguishable to them from not being told.
+      in_flight: >
+        Bounded by the request timeout. The monitored exception is a message in flight beyond
+        twice the connection timeout, which means a worker died mid-request and the far side
+        may or may not have received it. It returns to retrying, and the receiver's own
+        deduplication on the stable id is what makes that safe - which is why the id contract
+        is stated as a contract rather than as a convention.
+      retrying: >
+        Bounded by the retry budget. The monitored condition is the aggregate rather than the
+        individual: a connection with more than retrying_depth_alert messages in retry (default
+        100) is a remote system that is down rather than flaky, and telling somebody about one
+        message when a thousand are failing is noise. Told: the owner, once per connection per
+        interval, with the count and the far side's most common error.
+      dead_lettered: >
+        This is the queue that decides whether integration failures are handled or merely
+        logged. Threshold: dead_letter_review_hours (default 4), then daily, escalating to
+        tenant_admin and then tenant_owner. Told: the connection owner, with the count grouped
+        by error rather than one message at a time, because a person can act on a group and
+        cannot read four hundred individual failures. Where any dead letter carries a billable
+        outcome or an attendance record, finance and ops_manager are told separately and
+        immediately, because those are revenue and pay. Escape hatch: replay after fixing the
+        condition, or abandon explicitly. Nothing expires from this state on a timer.
+      delivered: >
+        Terminal. Retained for the audit period as the record of what was sent and when, which
+        is what a reconciliation with the far side reads. Nothing pends.
+      abandoned: >
+        Terminal. Payload retained permanently with the reason and the abandoning principal.
+        The monitored condition is the aggregate - abandonment above a rate is somebody
+        clearing a queue rather than fixing a problem, and it is reported to tenant_owner.
+
+  - key: inbound_request
+    name: Inbound Request
+    description: One call from an external system into Verity, with what was sent, what was made of it, and whether it was a repeat.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: connection_id, type: uuid, nullable: true, fk: connection, note: 'null where the caller could not be attributed to a configured connection, which is itself a finding'}
+      - {key: received_at, type: timestamptz, req: true, immutable: true}
+      - {key: source_ip, type: inet, nullable: true, sensitive: true}
+      - {key: external_event_id, type: string, nullable: true, note: 'the caller''s own identifier for the event, used for deduplication where they provide one'}
+      - {key: idempotency_key, type: string, nullable: true, note: 'the caller-supplied key. Where present, the first response for that key is stored and replayed for repeats, including a failure response'}
+      - {key: signature_verified, type: bool, req: true, default: false}
+      - {key: payload_excerpt, type: text, nullable: true, sensitive: true, note: a bounded excerpt retained for diagnosis; the full body is retained only where the connector declares it necessary and for a shorter period}
+      - {key: payload_hash, type: string, req: true}
+      - {key: mapped_action, type: string, nullable: true}
+      - {key: outcome, type: enum, values: [accepted, duplicate, rejected_signature, rejected_validation, rejected_authorisation, rejected_rate_limit, failed_internally, quarantined], req: true}
+      - {key: outcome_detail, type: text, nullable: true}
+      - {key: response_status, type: int, req: true}
+      - {key: replayed_response, type: bool, req: true, default: false, note: whether the response was served from the idempotency record rather than freshly computed}
+      - {key: processing_ms, type: int, req: true}
+    invariants:
+      - Every inbound request is recorded including rejected ones. A rejected call that leaves no trace is how a misconfigured integration goes unnoticed for a quarter while the far side believes it is sending data.
+      - A caller-supplied idempotency key causes the first response - including a failure response - to be stored and replayed for repeats within the key's lifetime. Replaying only successes means a caller retrying after a 500 gets a different answer each time and can never converge.
+      - signature_verified false on a connection requiring signatures produces outcome rejected_signature and no processing. Verification precedes parsing, always.
+      - Payload excerpts are gated by view_sensitive and are retained for a bounded period, because an inbound body can contain anything the far side chose to send.
+      - An inbound write executes under the connection's acting_principal_id and is authorised exactly as any other principal would be. An integration never has implicit authority.
+    states: [received, processed, quarantined, expired]
+    initial_state: received
+    transitions:
+      - {from: received, to: processed, action: process_inbound, actor: system, guard: 'signature verified where required, payload validated, the mapped action authorised and executed or rejected with a recorded outcome', side_effects: 'the outcome and the response are recorded and, where an idempotency key was supplied, stored for replay', reversibility: false}
+      - {from: received, to: quarantined, action: quarantine_inbound, actor: system or platform_operator, guard: 'the payload is well-formed and repeatedly fails to map, or a burst of identical failures suggests a systematic problem rather than a bad message', side_effects: 'processing stops for this shape and the connection owner is told, so a malformed feed does not generate thousands of identical rejections', reversibility: true}
+      - {from: quarantined, to: received, action: release_quarantine, actor: platform_operator or the connection owner, guard: the mapping or the far side has been corrected, side_effects: quarantined requests are reprocessed in receipt order, reversibility: false}
+      - {from: processed, to: expired, action: expire_inbound_record, actor: system_scheduler, guard: 'now > received_at plus inbound_retention_days', side_effects: the payload excerpt is destroyed and the metadata retained, reversibility: false}
+    stuck_state_policy:
+      received: >
+        Received and unprocessed means the inbound worker is not running while a far side
+        believes it is being accepted. Threshold: inbound_processing_lag_seconds (default 30).
+        Told: platform_operator. Escape hatch: drain. Short by design, because many callers
+        treat a slow response as a failure and retry, which multiplies the backlog.
+      quarantined: >
+        Quarantine exists so that a broken feed produces one conversation rather than ten
+        thousand rejections. Threshold: quarantine_review_hours (default 4). Told: the
+        connection owner and platform_operator, with a representative sample rather than the
+        whole set. Escape hatch: correct the mapping and release, or disable the connection.
+        Nothing expires from quarantine automatically, because the messages in it are usually
+        the ones somebody most wants to recover.
+      processed: >
+        Terminal until retention. The monitored condition is the outcome mix: a connection
+        whose rejected_validation rate exceeds inbound_rejection_alert (default 0.1) is a far
+        side sending something the mapping does not expect, which is a conversation to have
+        rather than a queue to drain. Told: the owner, daily.
+      expired: >
+        Terminal. Metadata retained, payload gone. Nothing pends.
+
+ports:
+  - port_key: integration_framework
+    direction: provides
+    contract: >
+      Register an outbound subscription with a field-level redaction set, emit an event for
+      delivery, expose an inbound endpoint mapped to a platform action, and report delivery and
+      processing outcomes back to the subscribing capability. Reporting outcomes back is part
+      of the contract, because the capability that produced an event is the only one that knows
+      what a failed delivery costs.
+    cardinality: exactly_one
+
+  - port_key: secret_store
+    direction: requires
+    contract: Store, reference, rotate and revoke a credential, returning only a reference. No read path returns the secret to Verity or to any principal.
+    cardinality: exactly_one
+    unbound_behaviour: >
+      FORBIDDEN. Holding credentials inside the application database, even encrypted, means the
+      application can read them, and a capability that can read a credential is a capability
+      that can leak it. Declared FORBIDDEN rather than degraded because the degraded form is
+      the one every implementation reaches for.
+
+  - port_key: change_feed
+    direction: requires
+    contract: A durable, ordered stream of platform events with a cursor, so outbound delivery is derived from committed state rather than from in-process hooks.
+    cardinality: exactly_one
+    unbound_behaviour: >
+      FORBIDDEN. Emitting outbound messages from in-process hooks means an event is sent for a
+      transaction that later rolls back, and the far side then holds a record of something that
+      did not happen. This is the same change feed the search capability requires and its
+      absence from the composition model is flagged there and here.
+
+  - port_key: authorization_decision
+    direction: requires
+    contract: Authorise an inbound call under the connection's acting principal, and resolve the redaction set for an outbound subscriber.
+    cardinality: exactly_one
+    unbound_behaviour: FORBIDDEN. An inbound write with no authorisation is an unauthenticated write with extra steps, and an outbound payload with no redaction resolution sends every field to every subscriber.
+
+  - port_key: audit_sink
+    direction: requires
+    contract: Record connection changes, credential rotations, inbound calls, dead letters, replays and abandonments.
+    cardinality: exactly_one
+    unbound_behaviour: FORBIDDEN. Integration is the boundary of the system and an unaudited boundary is one nobody can reason about after an incident.
+
+  - port_key: notification
+    direction: requires
+    contract: Deliver credential expiry, degradation, dead-letter and quarantine messages to connection owners and to finance where revenue is affected.
+    cardinality: zero_or_one
+    unbound_behaviour: >
+      Every condition degrades to a console list. This is the single most damaging unbound
+      behaviour in this capability, because the entire premise is that a failure reaches a
+      person, and a list on a screen nobody opens is exactly the log this capability exists to
+      replace. A pack binding integrations without notification should be treated as
+      incomplete rather than as configured.
+
+actions:
+
+  - key: deliver_message
+    entity: outbound_message
+    label: Deliver an outbound message
+    actors: [system]
+    rationale: >
+      The mechanics of surviving an unreliable far side. Stated explicitly because the retry
+      schedule, the stable identifier and the dead-letter behaviour are product commitments
+      that other capabilities depend on rather than implementation choices.
+    preconditions: [the connection is active or degraded, the rate limit permits, the message is pending or due for retry]
+    inputs: [message_id]
+    creates: []
+    updates: [attempt_count, next_attempt_at, delivery state, connection health counters]
+    events: [integration.delivered, integration.dead_lettered]
+    notifications:
+      - {to: the connection owner, channel: in_app, when: the message dead-letters, template: delivery_failed, must_include: [connection, event_type, far_side_response, count_of_similar], batching_policy: 'grouped by connection and error, never one message at a time'}
+      - {to: finance and ops_manager, channel: in_app, when: a dead-lettered payload carries a billable outcome or an attendance record, template: revenue_affecting_delivery_failure, priority: high}
+    undoable: false
+    confirmation_specification: 'None. No human is in this path. The kernel K06 requirement is met by the stable message id, which lets the receiver deduplicate a re-delivery, and by the dead-letter behaviour, which ensures an exhausted delivery reaches a person rather than disappearing.'
+    audit_class: always
+    idempotency_key_source: >
+      the message id, sent on every attempt and expected to be used by the receiver for
+      deduplication. Verity does not and cannot guarantee exactly-once delivery; it guarantees
+      a stable identifier and says so in the contract, because promising exactly-once is a
+      promise no distributed system keeps.
+    offline_policy: refuse
+    concurrency: >
+      A message is claimed by one worker with a conditional state write, so two workers cannot
+      deliver it simultaneously - though the far side may still see two deliveries if a worker
+      dies after sending and before recording, which is precisely why the stable id exists.
+      Per-connection concurrency is bounded so that one busy tenant cannot exhaust a remote
+      system's capacity for another.
+    failure_modes:
+      - {code: E_DEPENDENCY, cause: timeout or a 5xx from the far side, message: null, note: 'retried with exponential backoff and jitter within the budget. Jitter matters because synchronised retries across a tenant''s backlog are how a recovering system is knocked over again'}
+      - {code: E_RATE_LIMIT, cause: the far side signalled rate limiting, message: null, note: 'honoured - the retry uses the far side''s own retry-after where supplied rather than the default schedule. Ignoring it is how a connection is blocked entirely'}
+      - {code: E_VALIDATION, cause: the far side rejected the payload structurally, message: null, note: dead-lettered immediately with no retry. Retrying a structurally invalid payload wastes the budget and delays the moment somebody looks at it}
+      - {code: E_AUTHN, cause: the credential was rejected, message: null, note: 'the connection moves to degraded and then suspended rather than the message merely failing, because one rejected credential means every subsequent message will fail too'}
+      - {code: E_PRECONDITION, cause: the retry budget is exhausted, message: null, note: 'DEAD-LETTERED, never discarded. This is the deliberate departure from common practice - a discarded billable outcome is revenue that disappears quietly'}
+    edge_cases:
+      - A far side that returns success and does not process the message. Indistinguishable from success and outside Verity's knowledge. The only mitigation is reconciliation, and the delivered record exists precisely so a reconciliation is possible. The model does not claim more than it can see.
+      - A worker dying after sending and before recording the response. The message returns to retrying and is delivered again. The receiver's deduplication on the stable id is what makes this safe, and the contract states the expectation rather than assuming it.
+      - A remote system down for longer than the retry budget. Every message for that connection dead-letters and the owner is told once with the count, not once per message. The queue is then replayed in original order after the connection recovers, because order frequently matters to the far side.
+      - Replay of a dead letter. Creates a NEW message referencing the original rather than resurrecting it, so the history of failed attempts survives. The new message carries the same payload and a new id, which means a receiver deduplicating on the id will accept it - correct, because a replay is a deliberate re-send.
+      - A payload whose redaction set changed after composition. The stored payload is what was sent and is not recomposed. Recomposing at delivery would mean the record differs from what the far side received, and the record is what a dispute reads.
+
+  - key: process_inbound
+    entity: inbound_request
+    label: Accept an inbound call
+    actors: [integration_principal, system]
+    rationale: >
+      The boundary where untrusted input enters. Authentication says who is calling; it says
+      nothing about whether the payload is sane, and conflating the two is the most common
+      integration security failure.
+    preconditions: [the request reached a configured endpoint, the connection is active or degraded]
+    inputs: [connection_hint, headers, signature, body, idempotency_key]
+    creates: [inbound_request, whatever the mapped action creates]
+    updates: [idempotency record]
+    events: [integration.inbound_accepted, integration.inbound_rejected]
+    notifications:
+      - {to: the connection owner, channel: in_app, when: 'the rejection rate crosses the alert threshold, or a quarantine begins', template: inbound_problem, batching_policy: 'one per connection per interval, with a sample'}
+    undoable: false
+    confirmation_specification: 'None. No human is in this path. The controls are signature verification before parsing, authorisation under the connection acting principal, and the idempotency record which makes a caller retry converge rather than duplicate.'
+    audit_class: always
+    idempotency_key_source: >
+      the caller-supplied idempotency key where present, otherwise the caller's own event
+      identifier, otherwise a hash of the payload plus the connection plus a short time window.
+      The first response for a key is stored and replayed for repeats INCLUDING a failure
+      response, because replaying only successes means a caller retrying after an error gets a
+      different answer each time and can never converge.
+    offline_policy: refuse
+    concurrency: >
+      The idempotency record is written under a unique constraint on the key before the mapped
+      action runs, so two concurrent calls with one key produce one execution and the second
+      waits for and receives the first's response. Doing the check after execution is the defect
+      that produces two of everything under a caller's retry.
+    failure_modes:
+      - {code: E_AUTHN, cause: the signature does not verify, message: null, note: 'rejected with no parsing and no processing. Verification precedes parsing, always, because parsing untrusted input before verifying it is the vulnerability'}
+      - {code: E_AUTHZ_ENTITY, cause: the connection acting principal lacks permission for the mapped action, message: null, note: 'rejected and recorded. An integration never has implicit authority, and a permission it lacks is a configuration error rather than a reason to bypass the check'}
+      - {code: E_VALIDATION, cause: the payload does not match the mapping, message: null, note: rejected and recorded with a bounded excerpt. Repeated identical failures trigger quarantine so one broken feed produces one conversation rather than ten thousand rejections}
+      - {code: E_CONFLICT_UNIQUE, cause: the idempotency key has been seen, message: null, note: the stored response is replayed and the request is recorded as a duplicate. The caller sees exactly what they saw the first time}
+      - {code: E_RATE_LIMIT, cause: the caller exceeded the connection rate limit, message: null, note: 'rejected with a retry-after. Verity states its own limits rather than silently queueing, because a caller that does not know it is being limited will simply send more'}
+      - {code: E_INTERNAL, cause: the mapped action failed for an unexpected reason, message: null, note: 'a 5xx is returned so the caller retries, AND the failure response is stored against the idempotency key so the retry converges rather than re-executing. Returning success on an internal failure is how data is silently lost at a boundary'}
+    edge_cases:
+      - A call arriving at an endpoint with no attributable connection. Recorded with connection_id null, rejected, and reported. This is either a misconfiguration or a probe, and both are worth seeing; discarding unattributable calls silently is how the first is never noticed.
+      - A caller retrying after a timeout where the original succeeded. The idempotency record replays the original response. Without the record the caller creates a duplicate of whatever the action was, which for an order or a payment is the expensive case.
+      - A caller that sends no idempotency key and no event identifier. Deduplicated on a payload hash within a short window, which is weaker and is stated as weaker on the connection's own surface, so the tenant knows the guarantee they actually have with that far side.
+      - A burst of identical validation failures - a far side that changed its format. Quarantine after the burst threshold, with a sample shown to the owner. Processing every one of ten thousand identical failures generates ten thousand audit rows and one very unhappy operator.
+      - An inbound call that would create a record the acting principal could see but not create. Rejected on the create check. The permission model is evaluated in full for an integration exactly as for a person, which is the point of giving the connection a principal rather than a bypass.
+
+  - key: rotate_credential
+    entity: connection
+    label: Rotate a credential
+    actors: [tenant_admin, tenant_owner, platform_operator]
+    rationale: >
+      Credential expiry is the single most common cause of an integration that worked for a
+      year and then stopped. Rotation is modelled as a first-class act with an overlap window
+      because the naive implementation - replace and hope - fails in the middle of a delivery.
+    preconditions: [acting session is elevated, the secret store is available, the connection is not disabled]
+    inputs: [connection_id, new_credential_material, overlap_minutes, reason]
+    creates: [a new credential reference in the secret store]
+    updates: [credential_ref, credential_expires_at]
+    events: [integration.credential_rotated]
+    notifications:
+      - {to: the connection owner and tenant_admin, channel: in_app, when: always, template: credential_rotated, must_include: [connection, actor, new_expiry]}
+    undoable: false
+    confirmation_specification: 'Modal stating the connection, its current traffic volume, the overlap window during which both credentials are accepted, and that the previous credential will be revoked at the end of it. Requires typing the connection label. Required because a rotation that goes wrong stops an integration, and stopping an integration is usually discovered by a counterparty.'
+    audit_class: security
+    idempotency_key_source: connection_id plus a hash of the new credential reference. A repeated rotation with the same material is a no-op.
+    offline_policy: refuse
+    concurrency: >
+      The old credential remains valid for the overlap window, so messages already in flight
+      under it complete. The connection row is locked during the swap so two concurrent
+      rotations cannot leave the reference pointing at a revoked secret. Revocation of the old
+      credential is scheduled rather than immediate, and is itself audited.
+    failure_modes:
+      - {code: E_DEPENDENCY, cause: the secret store is unavailable, message: A required service is unavailable., note: the rotation is refused and the existing credential remains. A half-completed rotation leaves a connection with a reference to a secret that may not exist}
+      - {code: E_AUTHN, cause: the new credential fails a test call, message: null, note: 'the rotation is completed anyway where the operator accepts it explicitly, because some far sides only accept a credential after their own activation step, and refusing would make those integrations unrotatable'}
+      - {code: E_AUTHN, cause: session not elevated, message: Confirm your identity to continue.}
+      - {code: E_PRECONDITION, cause: the connection is disabled, message: This action is not available in the current state.}
+    edge_cases:
+      - A rotation during active delivery. The overlap window is why in-flight messages do not fail. Without it a rotation drops whatever was mid-request, which for a delivery near its budget expiry means a dead letter caused by the rotation itself.
+      - A credential that expires with no rotation. The connection degrades and then suspends, messages queue rather than being lost, and the owner has been told at 30, 7 and 1 days. This is entirely preventable and the warning schedule exists because it is the most common failure this capability sees.
+      - Rotation of a credential the tenant does not control - one issued by the far side. Verity can only store what it is given; the model records the expiry and warns, and the act of obtaining a new one is outside the system. The warning is the whole value.
+      - A revoked credential still being presented by a far side that cached it. Rejected as an authentication failure and recorded, which is the correct outcome and is worth reporting rather than silently 401-ing, because it means the far side has stale configuration.
+
+rules:
+  - key: credentials_are_references_never_values
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'A credential is stored in the secret store and referenced. No read path returns a secret to any principal or to any capability, including the connection owner.'
+    on_conflict: not overridable
+
+  - key: stable_id_across_retries
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'An outbound message carries the same identifier on every attempt, and the delivery contract states that the receiver must deduplicate on it. Verity guarantees at-least-once and never claims exactly-once.'
+    on_conflict: not overridable
+
+  - key: exhausted_budget_dead_letters
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'A message whose retry budget expires moves to dead_lettered and is surfaced to a person. It is never discarded, and it never expires from dead_lettered on a timer.'
+    on_conflict: not overridable
+    rationale: The practice cited in evidence_basis discards after the budget. That is acceptable for a payments notification and unacceptable for a billable outcome, so Verity departs from it deliberately.
+
+  - key: verify_before_parse
+    kind: guard
+    scope: kernel
+    overridable_at: null
+    default: 'Signature verification precedes any parsing of an inbound body. A body that fails verification is never parsed, mapped or logged in full.'
+    on_conflict: not overridable
+
+  - key: idempotency_replays_failures_too
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'The first response for an idempotency key is stored and replayed for repeats within the key lifetime, including error responses.'
+    on_conflict: not overridable
+    rationale: Replaying only successes means a caller retrying after an error receives a different answer each time and can never converge on a known state.
+
+  - key: integrations_have_no_implicit_authority
+    kind: guard
+    scope: kernel
+    overridable_at: null
+    default: 'An inbound call executes under the connection''s integration principal and is authorised in full, exactly as a human would be. There is no bypass and no inherited scope.'
+    on_conflict: not overridable
+
+  - key: outbound_payloads_are_redacted_at_composition
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'A payload is redacted to the subscriber''s permitted field set when it is composed and stored in that form. A subscriber never receives a field it could not have read through the API.'
+    on_conflict: not overridable
+    rationale: Kernel K08. Redacting at delivery would mean the stored record differs from what was sent, and the stored record is what a dispute reads.
+
+  - key: retry_schedule
+    kind: policy
+    scope: capability
+    overridable_at: tenant
+    default: >
+      Exponential backoff with jitter over a 72-hour budget, beginning immediately and widening
+      to a maximum interval of 12 hours, honouring a far side's retry-after where supplied.
+      A tenant may shorten the budget and may not remove the jitter.
+    on_conflict: most specific scope wins
+    rationale: >
+      The shape follows the practice cited in evidence_basis. Jitter is not overridable because
+      synchronised retries across a backlog are how a recovering remote system is knocked over
+      a second time.
+
+policy_knobs:
+  - {key: retry_budget_hours, default: 72, range: [1, 336]}
+  - {key: max_retry_interval_hours, default: 12, range: [1, 48]}
+  - {key: degradation_threshold, default: 5, range: [1, 100], note: consecutive failures before a connection is degraded}
+  - {key: suspension_threshold, default: 25, range: [1, 1000]}
+  - {key: credential_warning_days, default: 30, range: [1, 180]}
+  - {key: silent_connection_days, default: 7, range: [1, 90]}
+  - {key: failure_rate_alert, default: 0.1, range: [0.001, 1.0]}
+  - {key: dispatch_lag_minutes, default: 2, range: [1, 60], lowest_settable_scope: kernel}
+  - {key: retrying_depth_alert, default: 100, range: [1, 100000]}
+  - {key: dead_letter_review_hours, default: 4, range: [1, 168]}
+  - {key: queue_depth_alert, default: 1000, range: [10, 1000000]}
+  - {key: degraded_alert_minutes, default: 15, range: [1, 1440]}
+  - {key: suspension_review_hours, default: 24, range: [1, 336]}
+  - {key: inbound_processing_lag_seconds, default: 30, range: [1, 600], lowest_settable_scope: kernel}
+  - {key: inbound_rejection_alert, default: 0.1, range: [0.001, 1.0]}
+  - {key: quarantine_burst_threshold, default: 50, range: [2, 10000]}
+  - {key: quarantine_review_hours, default: 4, range: [1, 168]}
+  - {key: idempotency_key_lifetime_hours, default: 24, range: [1, 720]}
+  - {key: inbound_retention_days, default: 30, range: [1, 365]}
+  - {key: draft_connection_stale_days, default: 7, range: [1, 90]}
+  - {key: testing_stale_hours, default: 24, range: [1, 336]}
+  - {key: default_credential_overlap_minutes, default: 60, range: [0, 1440]}
+
+open_questions:
+  - {q: 'The change_feed port is FORBIDDEN when unbound and the stream it requires is not specified anywhere in the composition model. Is it the event bus described by the event convention, a transactional outbox derived from it, or a separate service? Outbound integration, search and reporting all depend on the answer and all three currently assume it exists.', assumption: None. This is a real gap in the platform specification rather than a gap in this capability., confidence: VALIDATION_REQUIRED, method: 'specify the change feed as a platform service with its ordering, durability and cursor semantics, then revisit every capability that declares the port', priority: Critical, blocks: [search, reporting, outbound delivery, the event catalogue]}
+  - {q: 'Who operates a dead-letter queue for a small tenant? The model requires a person to resolve dead letters and the smallest target customers have no such person, which means the queue grows and the revenue in it is lost anyway - just visibly rather than invisibly.', assumption: 'The connection owner, who for a small tenant is the owner of the business. Whether that is realistic is untested.', confidence: VALIDATION_REQUIRED, method: 'pilot observation of whether small tenants ever work a dead-letter queue, and whether platform_support should do it on their behalf', priority: High, blocks: [dead_letter_review escalation path, support model]}
+  - {q: 'Should Verity offer any connectors at all in v1, or only the framework? Every connector is a maintenance commitment to somebody else''s API, and a framework with no connectors is a framework nobody can use without an engineer.', assumption: 'None. The model specifies the framework and names no connector, which is honest and leaves the product question open.', confidence: VALIDATION_REQUIRED, method: 'operator interviews on which external systems the target segments actually run, and how many of them share one', priority: Critical, blocks: [connector roadmap, onboarding effort, AET-06 decision count]}
+  - {q: 'What is Verity''s position when a far side returns success and does not process the message? The model records the delivery and claims nothing further, and reconciliation is left entirely to the tenant.', assumption: Out of scope. Verity records what it sent and what it was told., confidence: WORKING_ASSUMPTION, method: determine whether any target integration is important enough to warrant a reconciliation mechanism, priority: Medium}
+  - {q: 'Is a tenant permitted to configure a connection to an arbitrary endpoint, and what stops that being used to exfiltrate their own data or to reach an internal address? The model has no egress restriction of any kind.', assumption: None. This is a genuine security gap in the capability as specified rather than a decision., confidence: VALIDATION_REQUIRED, method: 'security review covering egress allow-listing, private address blocking and whether outbound endpoints require platform approval', priority: Critical, blocks: [connection.endpoint_url validation, security review sign-off]}

@@ -1,0 +1,563 @@
+key: party
+name: Party
+layer: core
+confidence: KNOWN
+description: >
+  One record for one real-world person or organisation, whatever role they play. A party
+  may be a customer this month, a supplier next month, and a person on the payroll at the
+  same time. Modelling those as three tables produces three versions of one phone number
+  and three answers to "have we worked with them before".
+
+principles:
+  - A party is an identity, not a role. Roles are relationships the party holds, and a party may hold several at once. This is the single decision that separates this capability from a customer table with three copies.
+  - Identity resolution is never automatic and irreversible in the same step. A merge is proposed, reviewed and executed, and it is reversible for a bounded window, because a wrong merge destroys two histories at once.
+  - Contactability is a property of a channel, not of a party. A party who may be reached on one channel may be unreachable on another, and consent is per channel and per purpose.
+  - A party record is not proof of a relationship. The absence of a contract, an order or an employment link means the party is a lead, and every downstream capability must be able to tell the difference.
+  - Deduplication rules are configuration, not code. What counts as the same organisation differs by how a business trades, and hardcoding a rule means being wrong for half of them.
+
+entities:
+
+  - key: party
+    name: Party
+    description: A person or an organisation Verity holds a record of, in any capacity.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: kind, type: enum, values: [person, organisation], req: true, immutable: true, note: 'immutable because every downstream assumption differs. A person becoming an organisation is a new party plus a relationship, not an edit'}
+      - {key: display_name, type: string, req: true, note: 'the name shown everywhere. For an organisation this is the trading name, which is frequently not the legal name'}
+      - {key: legal_name, type: string, nullable: true, sensitive: true, note: 'held separately because invoices, contracts and statutory filings need the legal name while every screen needs the trading name'}
+      - {key: primary_phone_e164, type: e164, nullable: true, sensitive: true}
+      - {key: primary_email, type: citext, nullable: true, sensitive: true}
+      - {key: tax_registration_id, type: string, nullable: true, sensitive: true, unique_scope: tenant, note: jurisdiction-specific registration number. Nullable because an unregistered counterparty is normal and refusing to record them would push the work into a spreadsheet}
+      - {key: tax_registration_kind, type: enum, values: [none, domestic_registered, domestic_composition, domestic_unregistered, overseas], req: true, default: none, note: 'drives document requirements downstream through the financial_document_sink port. The enum is jurisdiction-shaped but not jurisdiction-named, so a second jurisdiction is a terminology map rather than a schema change'}
+      - {key: identity_document_kind, type: enum, nullable: true, sensitive: true, note: 'for a person, which kind of identity document was verified'}
+      - {key: identity_document_ref, type: string, nullable: true, sensitive: true, note: 'a reference to the stored document through the evidence_capture port, never the document number itself. Storing a national identifier in a searchable column is how a breach becomes a catastrophe'}
+      - {key: identity_verified_at, type: timestamptz, nullable: true, sensitive: true}
+      - {key: credit_limit_minor, type: money_minor, nullable: true, financial: true}
+      - {key: payment_terms_days, type: int, nullable: true, financial: true}
+      - {key: risk_flag, type: enum, values: [none, watch, blocked], req: true, default: none, financial: true, note: blocked prevents new commitments but never hides history}
+      - {key: source, type: enum, values: [manual, import, portal_self_registration, integration, merge], req: true}
+      - {key: created_at, type: timestamptz, req: true, immutable: true}
+      - {key: created_by_principal_id, type: uuid, req: true, note: resolved through the principal_directory port}
+      - {key: merged_into_party_id, type: uuid, nullable: true, fk: party, note: set when this party was absorbed by a merge. The row is retained forever so that historical references still resolve}
+      - {key: search_projection_hash, type: string, note: 'computed; changes when any indexed field changes, so the search capability can detect staleness without diffing every field'}
+    invariants:
+      - A party with kind=person and no contactable channel and no identity document is a name in a box. Permitted at creation, because that is genuinely how a lead arrives, but it may not be bound to any relationship until at least one identifying attribute exists.
+      - tax_registration_id is unique within a tenant among non-merged parties. Two live parties with one registration number is the single most expensive duplicate a business can have, because it splits their ledger.
+      - merged_into_party_id is set exactly when the party is in state merged. A party pointing at a merge target while still active is a half-finished merge and is rejected.
+      - Financial fields are gated by view_financial and are never offline_editable. A credit limit changed on a device that has been offline for two days is a credit limit set against stale information.
+    states: [draft, active, dormant, blocked, merged, archived]
+    initial_state: draft
+    transitions:
+      - {from: draft, to: active, action: activate_party, actor: any principal with create on party, guard: at least one identifying attribute is present, side_effects: the party becomes selectable in every picker and enters the search index, reversibility: true}
+      - {from: active, to: dormant, action: observe_dormancy, actor: system_scheduler, guard: no relationship activity for party_dormancy_days, side_effects: excluded from default pickers but still fully searchable by explicit query, reversibility: true}
+      - {from: dormant, to: active, action: reactivate_party, actor: any principal with edit on party, guard: null, side_effects: returns to default pickers, reversibility: true}
+      - {from: active, to: blocked, action: block_party, actor: finance or tenant_owner, guard: acting session elevated and a reason is supplied, side_effects: 'new commitments refused, existing obligations untouched, open work continues', reversibility: true}
+      - {from: dormant, to: blocked, action: block_party, actor: finance or tenant_owner, guard: as above, side_effects: as above, reversibility: true}
+      - {from: blocked, to: active, action: unblock_party, actor: finance or tenant_owner, guard: acting session elevated and a reason is supplied, side_effects: none, reversibility: true}
+      - {from: active, to: merged, action: execute_merge, actor: tenant_admin, guard: a reviewed merge proposal exists and the acting session is elevated, side_effects: 'every reference is repointed, this row is retained as a tombstone pointing at the survivor', reversibility: true, note: reversible only within merge_undo_days; after that the unmerge information is discarded because keeping it forever means keeping a full copy of a deleted record forever}
+      - {from: dormant, to: merged, action: execute_merge, actor: tenant_admin, guard: as above, side_effects: as above, reversibility: true}
+      - {from: merged, to: active, action: unmerge, actor: tenant_admin, guard: within merge_undo_days and the merge journal is intact, side_effects: every repointed reference is restored from the merge journal, reversibility: false}
+      - {from: dormant, to: archived, action: archive_party, actor: tenant_admin, guard: 'no open obligations, no open work, no unpaid balance', side_effects: removed from default lists and from aggregate reports, reversibility: false}
+      - {from: blocked, to: archived, action: archive_party, actor: tenant_admin, guard: as above, side_effects: as above, reversibility: false}
+    stuck_state_policy:
+      draft: >
+        A draft party is a half-typed record, usually created when somebody opened a form
+        to check whether a counterparty already existed and then navigated away. Threshold:
+        draft_party_stale_days (default 7). Told: the creating principal only, never the
+        administrator, because a stream of "you left a form open" notifications to an
+        administrator is noise. Escape hatch: complete it or discard it. Discard is a hard
+        delete rather than an archive in this one state, because a never-activated draft has
+        no history worth keeping and keeping it pollutes every duplicate check afterwards.
+      active: >
+        Steady state. Two monitored exceptions. (a) A party active with no relationship of
+        any kind for lead_stale_days (default 90) - a lead that never became anything. Told:
+        the owning principal where a relationship owner exists, otherwise nobody, and it
+        appears in a periodic list rather than as a notification. (b) A party whose duplicate
+        score against another active party exceeds duplicate_alert_threshold and which has
+        not been reviewed. Told: tenant_admin, as a queue. This is the single most valuable
+        list in this capability and it is deliberately a queue somebody works, not an alert
+        somebody dismisses.
+      dormant: >
+        Dormancy is a valid long-term state and is not a queue. The monitored exception is a
+        dormant party with an open financial obligation, which should be impossible and is a
+        data-integrity alert rather than an operational one, because dormancy is computed
+        from relationship activity and an open balance is relationship activity. Told:
+        finance and platform_operator. Escape hatch: none needed - the condition indicates a
+        defect in the dormancy computation, not a decision anyone has to make.
+      blocked: >
+        Blocking is a decision that should be revisited, not a permanent state reached by
+        accident. Threshold: block_review_days (default 90). Told: the blocking principal
+        and finance. Escape hatch: unblock_party or archive_party. Verity never auto-unblocks
+        - a party blocked for non-payment does not become creditworthy because ninety days
+        passed.
+      merged: >
+        Terminal in effect but reversible within merge_undo_days (default 30). The monitored
+        exception is a merge whose undo window is about to close and which has an open
+        dispute or a raised objection against it. Told: the executing principal and
+        tenant_admin, at 7 days and 1 day before the window closes. Escape hatch: unmerge, or
+        let the window close deliberately. After the window the merge journal is discarded
+        and the merge is permanent, which is stated at execution time rather than discovered
+        later.
+
+  - key: party_channel
+    name: Party Channel
+    description: One way of reaching a party, with its own verification state and its own per-purpose consent.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: party_id, type: uuid, req: true, fk: party}
+      - {key: channel_kind, type: enum, values: [phone_voice, phone_sms, whatsapp, email, postal, in_app], req: true}
+      - {key: value, type: string, req: true, sensitive: true}
+      - {key: label, type: string, nullable: true, note: 'the human distinction between two numbers, which is what makes a picker usable'}
+      - {key: is_primary, type: bool, req: true, default: false}
+      - {key: verified_at, type: timestamptz, nullable: true}
+      - {key: verification_method, type: enum, values: [none, otp, inbound_contact, document, staff_attestation], req: true, default: none}
+      - {key: consent_marketing, type: enum, values: [unknown, granted, refused, withdrawn], req: true, default: unknown}
+      - {key: consent_transactional, type: enum, values: [unknown, granted, refused, withdrawn], req: true, default: unknown, note: separate from marketing because the legal and practical basis differ. A person who refuses marketing has not refused a delivery notification}
+      - {key: consent_recorded_at, type: timestamptz, nullable: true}
+      - {key: consent_evidence_ref, type: string, nullable: true, note: reference through the evidence_capture port to the recording of how consent was obtained}
+      - {key: bounce_count, type: int, req: true, default: 0}
+      - {key: last_successful_delivery_at, type: timestamptz, nullable: true}
+      - {key: suppressed_at, type: timestamptz, nullable: true, note: set when the channel is suppressed for hard bounces or an opt-out received on the channel itself}
+    invariants:
+      - At most one is_primary per (party_id, channel_kind). A picker with two primaries is a picker nobody trusts.
+      - consent_marketing=granted requires consent_recorded_at and consent_evidence_ref. A consent nobody can evidence is a consent that will not survive a complaint.
+      - A suppressed channel is never selected by any automated send, regardless of consent. Suppression is stronger than consent because it reflects delivery reality rather than intent.
+      - value is normalised on write per channel_kind - e164 for phone kinds, lowercased for email - because duplicate detection over unnormalised contact values finds nothing.
+    states: [unverified, verified, suppressed, retired]
+    initial_state: unverified
+    transitions:
+      - {from: unverified, to: verified, action: verify_channel, actor: system or any principal with edit on party, guard: 'an OTP was confirmed, an inbound contact was received from this value, or a staff member attested with a reason', side_effects: the channel becomes eligible for transactional sends, reversibility: true}
+      - {from: verified, to: unverified, action: invalidate_channel, actor: system, guard: 'the value changed, or a delivery failure indicates the endpoint no longer belongs to this party', side_effects: transactional eligibility withdrawn, reversibility: true}
+      - {from: unverified, to: suppressed, action: suppress_channel, actor: system, guard: 'hard bounce, or an opt-out received on the channel itself', side_effects: excluded from every automated send, reversibility: true}
+      - {from: verified, to: suppressed, action: suppress_channel, actor: system, guard: as above, side_effects: as above, reversibility: true}
+      - {from: suppressed, to: unverified, action: unsuppress_channel, actor: tenant_admin, guard: a reason is supplied and the suppression was not an explicit opt-out by the party, side_effects: none, reversibility: true, note: 'an explicit opt-out may never be reversed by staff. Only the party can withdraw their own opt-out, through an inbound act'}
+      - {from: unverified, to: retired, action: retire_channel, actor: any principal with edit on party, guard: null, side_effects: 'excluded from pickers, retained so that historical sends still resolve to a channel', reversibility: false}
+      - {from: verified, to: retired, action: retire_channel, actor: any principal with edit on party, guard: not the last verified channel where the party has an active obligation requiring contactability, side_effects: as above, reversibility: false}
+      - {from: suppressed, to: retired, action: retire_channel, actor: any principal with edit on party, guard: null, side_effects: as above, reversibility: false}
+    stuck_state_policy:
+      retired: >
+        Terminal. The channel is out of every picker and out of every send, and is retained
+        so that a historical send still resolves to the channel it went to. Nothing pends.
+        Re-adding the same value creates a NEW channel row in unverified, so the gap in its
+        verification history is visible rather than papered over.
+      unverified: >
+        An unverified channel is the normal state for anything typed by a member of staff
+        from a business card, and most will never be verified. It is therefore not a queue.
+        The monitored exception is an unverified channel that is the ONLY channel on a party
+        who has an active obligation - meaning the business has committed to somebody it
+        cannot reliably reach. Threshold: immediate on the obligation being created, not on a
+        timer. Told: the principal who created the obligation. Escape hatch: verify, or add a
+        second channel, or accept it explicitly with a recorded acknowledgement.
+      verified: >
+        Steady state. The monitored exception is decay - a verified channel with no
+        successful delivery for channel_decay_days (default 365) and at least one failure in
+        that period. It is reported, not auto-invalidated, because auto-invalidating the only
+        channel on a quiet party makes them unreachable at exactly the moment somebody
+        finally needs to reach them.
+      suppressed: >
+        Suppression is meant to be permanent unless something changes. Threshold:
+        suppression_review_days (default 180), and only for suppressions caused by bounces
+        rather than by an opt-out. Told: the party's relationship owner. Escape hatch:
+        unsuppress with a reason, or retire. An opt-out suppression is never reviewed and
+        never surfaced for reconsideration, because presenting it as a decision to revisit is
+        how a business talks itself into contacting somebody who asked it not to.
+
+  - key: party_relationship
+    name: Party Relationship
+    description: The capacity in which a party stands to the tenant - counterparty, supplier, workforce member, portal user - each with its own lifecycle and its own owner.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: party_id, type: uuid, req: true, fk: party}
+      - {key: relationship_kind, type: enum, values: [counterparty, supplier, workforce, portal_user, prospect, other], req: true, note: deliberately generic. A pack maps these to the words a given business uses through the terminology map; the capability never learns those words}
+      - {key: relationship_owner_principal_id, type: uuid, nullable: true, note: 'resolved through the principal_directory port. Null means unowned, which is a real and reportable condition'}
+      - {key: started_at, type: date, req: true}
+      - {key: ended_at, type: date, nullable: true}
+      - {key: end_reason, type: text, nullable: true}
+      - {key: external_ref, type: string, nullable: true, note: 'the identifier the party themselves uses for this relationship, such as their own vendor code for the tenant'}
+      - {key: parent_relationship_id, type: uuid, nullable: true, fk: party_relationship, note: 'for an organisation with divisions that trade separately but bill centrally. Self-referential within this capability, which is legal; a cross-capability parent would not be'}
+    invariants:
+      - A party may hold several relationships of different kinds simultaneously, and at most one active relationship of each kind. Two live supplier relationships with one party is two ledgers for one counterparty.
+      - ended_at requires end_reason. A relationship that ended for no recorded reason is a relationship nobody can explain to the party when they call.
+      - parent_relationship_id may only point at a relationship of the same kind belonging to a party of kind=organisation. A person cannot be the parent of a trading division.
+    states: [prospective, active, suspended, ended]
+    initial_state: prospective
+    transitions:
+      - {from: prospective, to: active, action: activate_relationship, actor: any principal with edit on party, guard: 'the party is in state active and, where the relationship kind requires it, an identity or registration attribute is present', side_effects: the party becomes selectable in pickers scoped to this relationship kind, reversibility: true}
+      - {from: active, to: suspended, action: suspend_relationship, actor: 'the relationship owner, ops_manager or finance', guard: a reason is supplied, side_effects: 'new commitments of this kind refused, existing obligations continue', reversibility: true}
+      - {from: suspended, to: active, action: resume_relationship, actor: 'the relationship owner, ops_manager or finance', guard: a reason is supplied, side_effects: none, reversibility: true}
+      - {from: active, to: ended, action: end_relationship, actor: 'the relationship owner, ops_manager or finance', guard: an end reason is supplied, side_effects: 'excluded from pickers, open obligations listed to the actor rather than closed automatically', reversibility: false}
+      - {from: suspended, to: ended, action: end_relationship, actor: as above, guard: as above, side_effects: as above, reversibility: false}
+      - {from: prospective, to: ended, action: end_relationship, actor: as above, guard: as above, side_effects: none, reversibility: false}
+    stuck_state_policy:
+      prospective: >
+        A prospective relationship that never activates is the ordinary outcome of most
+        commercial conversations and is not a fault. Threshold: prospect_stale_days (default
+        120). Told: the relationship owner, as a list. Escape hatch: activate or end. Verity
+        never auto-ends a prospect, because a twelve-month sales cycle is normal in the
+        target segment and auto-ending would delete the pipeline of exactly the businesses
+        with the longest deals.
+      active: >
+        Steady state. Monitored exception: an active relationship with no owner for
+        unowned_relationship_days (default 30). An unowned relationship is one nobody will
+        notice going wrong. Told: ops_manager. Escape hatch: assign an owner. This condition
+        arises constantly when the previous owner leaves, which is why revoking a membership
+        lists the relationships that will become unowned.
+      suspended: >
+        Threshold: relationship_suspension_review_days (default 60). Told: the suspending
+        principal and the relationship owner, escalating to ops_manager. Escape hatch: resume
+        or end. A suspension nobody resolves eventually gets worked around by creating a
+        second party record, which is the duplicate this capability exists to prevent.
+      ended: >
+        Terminal. Retained forever - the history of who the tenant traded with is the
+        capability's most valuable long-term asset and the thing a duplicate check needs
+        most. Nothing pends. Re-engagement creates a NEW relationship row so the gap is
+        visible rather than papered over.
+
+  - key: merge_proposal
+    name: Merge Proposal
+    description: A reviewable statement that two parties are the same party, with the evidence for it and the record of what a merge would do.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: survivor_party_id, type: uuid, req: true, fk: party}
+      - {key: absorbed_party_id, type: uuid, req: true, fk: party}
+      - {key: score, type: decimal, req: true, note: the duplicate score at proposal time}
+      - {key: matched_on, type: json, req: true, note: 'which rules fired and on which values, so a reviewer can see WHY rather than being shown a number'}
+      - {key: conflicts, type: json, req: true, note: 'fields where the two parties disagree, which is the part a human must resolve and the part an automatic merge silently gets wrong'}
+      - {key: field_resolution, type: json, nullable: true, note: 'the reviewer''s per-field choice, required before execution wherever a conflict exists'}
+      - {key: proposed_by, type: enum, values: [system_rule, principal, import], req: true}
+      - {key: proposed_by_principal_id, type: uuid, nullable: true}
+      - {key: reviewed_by_principal_id, type: uuid, nullable: true}
+      - {key: executed_at, type: timestamptz, nullable: true}
+      - {key: merge_journal, type: json, nullable: true, note: 'every reference repointed, recorded before the repointing so an unmerge can restore it. Discarded when the undo window closes'}
+      - {key: undo_deadline_at, type: timestamptz, nullable: true}
+    invariants:
+      - survivor_party_id and absorbed_party_id must differ and must both be in state active or dormant. Merging a party that is already merged produces a chain nobody can follow.
+      - Execution is refused while any conflict lacks a field_resolution. An automatic resolution of a conflicting tax registration number or a conflicting credit limit is a financial error wearing the costume of a convenience feature.
+      - The merge_journal is written BEFORE any reference is repointed, in the same transaction. A journal written afterwards is a journal that does not exist when the merge fails halfway.
+    states: [proposed, under_review, rejected, executed, undone, expired]
+    initial_state: proposed
+    transitions:
+      - {from: proposed, to: under_review, action: claim_merge_proposal, actor: tenant_admin, guard: null, side_effects: the proposal is locked to the claiming reviewer so two people do not resolve conflicts differently at the same time, reversibility: true}
+      - {from: under_review, to: proposed, action: release_merge_proposal, actor: the claiming reviewer or system_scheduler on claim timeout, guard: null, side_effects: none, reversibility: true}
+      - {from: under_review, to: rejected, action: reject_merge_proposal, actor: tenant_admin, guard: a reason is supplied, side_effects: 'the pair is suppressed from future proposals until one of them changes materially, so the same rejected pair does not reappear every night', reversibility: true}
+      - {from: under_review, to: executed, action: execute_merge, actor: tenant_admin, guard: every conflict has a field_resolution and the acting session is elevated, side_effects: 'journal written, references repointed, absorbed party moved to merged, undo_deadline_at set', reversibility: true}
+      - {from: executed, to: undone, action: unmerge, actor: tenant_admin, guard: now < undo_deadline_at and the journal is intact, side_effects: every repointed reference restored from the journal, reversibility: false}
+      - {from: executed, to: expired, action: close_undo_window, actor: system_scheduler, guard: 'now > undo_deadline_at', side_effects: the merge journal is discarded and the merge becomes permanent, reversibility: false}
+      - {from: rejected, to: proposed, action: repropose_merge, actor: system_rule, guard: one of the parties changed materially since the rejection, side_effects: none, reversibility: true}
+      - {from: proposed, to: expired, action: expire_merge_proposal, actor: system_scheduler, guard: 'now > proposed_at + proposal_ttl_days and nobody has claimed it', side_effects: none, reversibility: false, note: 'expiry rather than indefinite accumulation, because a queue of four thousand unreviewed proposals is a queue nobody opens'}
+    stuck_state_policy:
+      proposed: >
+        This is the queue that decides whether the deduplication feature is real or
+        decorative. Threshold: proposal_ttl_days (default 60), with the queue depth reported
+        weekly to tenant_admin regardless. Told: tenant_admin. Escape hatch: review, or raise
+        duplicate_alert_threshold so fewer proposals are generated. Raising the threshold is
+        offered explicitly in the notification, because the common failure is a threshold set
+        too low producing a queue so large that genuine duplicates are never found in it.
+      under_review: >
+        A claimed proposal blocks anyone else from resolving it. Threshold:
+        merge_claim_timeout_minutes (default 60), after which the claim is released
+        automatically and the proposal returns to the queue. Told: nobody - this is routine
+        and notifying on it would train people to ignore the notification. The reviewer who
+        lost the claim is told only if they had entered a partial field_resolution, which is
+        preserved as a draft.
+      rejected: >
+        Terminal until something changes. Not monitored on a timer. The monitored exception
+        is the same pair being proposed and rejected more than repeat_rejection_threshold
+        times (default 3), which means a matching rule is wrong rather than the pair being
+        interesting. Told: tenant_admin, with the rule that keeps firing named, so the fix is
+        to the rule rather than to the queue.
+      executed: >
+        Bounded by undo_deadline_at. See the party.merged stuck policy, which is where the
+        operationally significant thresholds live. Nothing further pends here.
+      undone: >
+        Terminal. The unmerge is complete and both parties are separate again. Retained
+        permanently as evidence that a merge was attempted and reversed, because that pair
+        will be proposed again and the reviewer needs to know it was tried.
+      expired: >
+        Terminal. Either a proposal nobody reviewed or a merge whose undo window closed. The
+        two are distinguished by whether executed_at is set. Nothing pends.
+
+ports:
+  - port_key: principal_directory
+    direction: requires
+    contract: Resolve relationship owners and record creators to a display name and status, and expose the departure of a principal so their owned relationships can be reported as unowned.
+    cardinality: exactly_one
+    unbound_behaviour: FORBIDDEN. Party records without attributable authorship cannot be audited, and ownership is the mechanism by which anything in this capability gets looked after.
+
+  - port_key: party_directory
+    direction: provides
+    contract: >
+      Resolve a party reference to a display name, contactable channels honouring per-purpose
+      consent and suppression, and a permission scope. This is the port every other
+      capability consumes rather than reaching into party's tables.
+    cardinality: exactly_one
+
+  - port_key: evidence_capture
+    direction: requires
+    contract: Store and later resolve identity documents and consent recordings with tamper evidence, returning a reference rather than the content.
+    cardinality: zero_or_one
+    unbound_behaviour: >
+      Identity documents and consent evidence cannot be attached. identity_verified_at may
+      still be set by staff_attestation, which records WHO asserted the verification and
+      when, and the party record is marked as attested-without-evidence so that a later audit
+      can tell the difference. Consent with consent_marketing=granted is REFUSED without
+      evidence, because unevidenced marketing consent is the one case where recording it is
+      worse than not recording it.
+
+  - port_key: address_resolution
+    direction: requires
+    contract: Normalise, validate and geocode a postal address, and resolve it to a serviceable location.
+    cardinality: zero_or_one
+    unbound_behaviour: 'Addresses are stored as free text exactly as entered, are not geocoded, and are excluded from any distance-based matching rule. Duplicate detection falls back to the non-address rules and says so on the proposal, so a reviewer knows the score was computed with one hand tied.'
+
+  - port_key: notification
+    direction: requires
+    contract: Deliver merge-review, unowned-relationship and consent-expiry messages, honouring channel consent and suppression.
+    cardinality: zero_or_one
+    unbound_behaviour: 'Queues and lists are still produced and are visible in the console; nothing is pushed. Every threshold in this capability''s stuck-state policies degrades from a notification to a list, which is weaker but not broken.'
+
+  - port_key: financial_document_sink
+    direction: requires
+    contract: Report the party attributes a legally valid financial document requires, so that a missing registration attribute is discovered when the party is created rather than when the document is issued.
+    cardinality: zero_or_one
+    unbound_behaviour: 'No document requirements are known, so no attribute is mandatory beyond display_name. The party form shows no tax fields at all rather than showing them as optional, because an optional field somebody skipped is how an invoice becomes unissuable a month later.'
+
+actions:
+
+  - key: create_party
+    entity: party
+    label: Add a party
+    actors: [tenant_admin, ops_manager, supervisor, dispatcher, finance, employee]
+    rationale: >
+      Deliberately broadly permitted. A capability that only administrators may add records
+      to gets bypassed by a spreadsheet within a week, and the spreadsheet becomes the real
+      system of record.
+    preconditions: [the tenant is not suspended, at least display_name is supplied]
+    inputs: [kind, display_name, legal_name, channels, tax_registration_kind, tax_registration_id, relationship_kind, source]
+    creates: [party, party_channel rows, party_relationship, merge_proposal rows where duplicates are detected]
+    updates: []
+    events: [party.created, party_relationship.created]
+    notifications:
+      - {to: tenant_admin, channel: in_app, when: a duplicate proposal was raised at creation, template: possible_duplicate, batching_policy: one digest per hour, cost_class: free_in_service_window}
+    undoable: true
+    reversal_action: 'archive_party while still in draft, which hard-deletes'
+    audit_class: always
+    idempotency_key_source: 'tenant_id plus a hash of the normalised identifying attributes plus the creating principal plus the minute bucket. This makes a double-submitted form produce one party, which matters because the form is frequently filled on a phone with a poor connection and submitted twice.'
+    offline_policy: queue
+    concurrency: >
+      Two people creating the same party concurrently both succeed and a merge proposal is
+      raised. Blocking the second write would require a synchronous duplicate check against a
+      fuzzy rule set, which cannot be made both fast and correct. Verity chooses to let both
+      exist and to surface the duplicate, because a refused write loses the second person's
+      information entirely.
+    failure_modes:
+      - {code: E_VALIDATION, cause: display_name empty, message: A name is required.}
+      - {code: E_CONFLICT_UNIQUE, cause: tax_registration_id already belongs to another active party, message: Another record already uses this registration number., note: 'names the existing party if the creator can see it, and says only that it exists if they cannot. This is the one duplicate check that is exact rather than fuzzy, and it is enforced rather than proposed'}
+      - {code: E_VALIDATION, cause: a channel value fails normalisation for its kind, message: field-specific, note: 'a phone number that cannot be normalised to e164 is refused rather than stored raw, because an unnormalised number defeats both duplicate detection and every send'}
+      - {code: E_AUTHZ_FIELD, cause: the creator sets a financial field without view_financial, message: null, note: 'the field is dropped from the request rather than the request being refused, and the creator is told which fields were not saved'}
+      - {code: E_QUOTA, cause: tenant party limit reached, message: Plan limit reached.}
+      - {code: E_RATE_LIMIT, cause: more than party_create_burst per principal per minute, message: Too many attempts. Try again shortly., note: catches a runaway import running through the interactive API rather than the import path}
+    edge_cases:
+      - Created offline and queued. The duplicate check runs on replay, not on the device, because the device holds a partial copy of the party set and a duplicate check against a partial set produces confident wrong answers. The creating person is told about proposals raised on their behalf when they next connect.
+      - A party created by portal self-registration. It arrives in draft with source=portal_self_registration and never auto-activates, because a self-registered party is an unverified claim. Activation is a staff act.
+      - Two parties with the same display_name and nothing else in common. Extremely common with generic organisation names. The duplicate rule set must not score name-only matches highly enough to propose, and the shipped default does not; this is called out because the naive rule set does and produces an unusable queue on day one.
+      - A party created with a channel that is already suppressed on a different party. The channel is created unverified and the suppression is NOT inherited, because suppression attaches to the party-channel pair. It is flagged on the duplicate proposal, since a shared suppressed channel is strong evidence of a duplicate.
+      - Creating a party while the financial_document_sink port is unbound and later binding it. Existing parties are not retrospectively invalid; they are listed as missing required attributes at the moment a document is first attempted, which is when the information is actually needed and when somebody is present to supply it.
+
+  - key: record_consent
+    entity: party_channel
+    label: Record consent for a channel
+    actors: [tenant_admin, ops_manager, supervisor, employee, integration_principal]
+    rationale: >
+      Consent is the difference between a notification and a complaint. Recording it as a
+      first-class act with evidence, rather than as a checkbox on a form, is what makes it
+      defensible later.
+    preconditions: [the channel exists, the purpose is one of marketing or transactional, evidence is supplied where the grant is for marketing]
+    inputs: [channel_id, purpose, decision, evidence_ref, recorded_at, source_description]
+    creates: [consent_record]
+    updates: [party_channel.consent_marketing or consent_transactional, consent_recorded_at, consent_evidence_ref]
+    events: [party.consent_recorded]
+    notifications: []
+    undoable: false
+    confirmation_specification: 'None for granting or refusing. Withdrawal is confirmed with a statement of what will stop being sent, because a person withdrawing transactional consent will stop receiving delivery and safety messages and should be told that before it happens rather than after.'
+    audit_class: always
+    idempotency_key_source: 'channel_id plus purpose plus decision plus recorded_at. Re-recording an identical consent is a no-op, which makes a re-run of a consent import safe.'
+    offline_policy: queue
+    concurrency: >
+      Consent is a monotonic ratchet toward the most restrictive value within a single
+      recorded_at ordering. A withdrawal recorded at 10:00 and a grant recorded at 09:00
+      arriving out of order resolve to the withdrawal, because the resolution is by
+      recorded_at and not by arrival. This is one of the few places where last-write-wins
+      would be actively harmful.
+    failure_modes:
+      - {code: E_VALIDATION, cause: marketing grant with no evidence_ref while the evidence_capture port is bound, message: Record how consent was given., note: the one case where the model refuses rather than storing a weaker record}
+      - {code: E_PRECONDITION, cause: granting consent on a channel suppressed by an explicit opt-out, message: This person opted out on this channel. They have to opt back in themselves., note: staff may not re-grant on behalf of somebody who opted out directly}
+      - {code: E_VALIDATION, cause: recorded_at in the future, message: The date cannot be in the future.}
+      - {code: E_DEPENDENCY, cause: evidence_capture unavailable, message: A required service is unavailable., note: 'a marketing grant is refused; a refusal or withdrawal is accepted without evidence, because refusing to record a withdrawal because a service is down is indefensible'}
+    edge_cases:
+      - Consent recorded for a party who is later merged. Consent travels to the survivor at the CHANNEL level, not the party level, and the most restrictive value across merged channels with the same normalised value wins. Merging must never launder a refusal into a grant.
+      - A party grants marketing consent and later the channel is reassigned - a recycled phone number. Verification state is invalidated on any value change, which also resets consent to unknown, because consent attaches to a person and not to a string.
+      - Withdrawal of transactional consent on the only channel of a party with an active obligation. Recorded, and the obligation-owning capability is notified through the party_directory port that the party has become uncontactable. Verity does not refuse the withdrawal - it is not the tenant's to refuse - but it does not let the consequence go unnoticed either.
+      - Consent arriving from an integration whose source cannot be evidenced. Recorded with verification_method=none and marked as unevidenced. It counts for refusals and withdrawals and does not count as a marketing grant.
+
+  - key: propose_merge
+    entity: merge_proposal
+    label: Propose that two records are the same party
+    actors: [system_rule, tenant_admin, ops_manager, integration_principal]
+    preconditions: [both parties exist, both are in state active or dormant, the pair is not currently suppressed by a prior rejection]
+    inputs: [survivor_party_id, absorbed_party_id, matched_on, score]
+    creates: [merge_proposal]
+    updates: []
+    events: [party.merge_proposed]
+    notifications:
+      - {to: tenant_admin, channel: in_app, when: score exceeds duplicate_alert_threshold, template: possible_duplicate, batching_policy: 'one digest per configured interval, never per proposal'}
+    undoable: true
+    reversal_action: reject_merge_proposal
+    audit_class: always
+    idempotency_key_source: 'tenant_id plus the unordered pair of party ids. The pair is unordered deliberately - proposing A into B and B into A is the same proposal, and treating them as two produces a queue with every duplicate in it twice.'
+    offline_policy: refuse
+    concurrency: One live proposal per unordered pair, enforced by a unique index over a canonical ordering of the two ids.
+    failure_modes:
+      - {code: E_CONFLICT_UNIQUE, cause: a live proposal already exists for this pair, message: null, note: returns the existing proposal with 200}
+      - {code: E_PRECONDITION, cause: 'either party is already merged, archived or blocked', message: This action is not available in the current state.}
+      - {code: E_PRECONDITION, cause: the pair was rejected and neither party has changed materially since, message: null, note: 'silently suppressed for a system_rule proposer, refused with a message for a human proposer who is presumably looking at evidence the rule cannot see'}
+      - {code: E_VALIDATION, cause: survivor and absorbed are the same party, message: These are the same record.}
+    edge_cases:
+      - Three parties that are all duplicates of each other. Three pairwise proposals are raised, not one three-way merge. Merging pairwise is reviewable; a three-way merge presents a conflict matrix no reviewer can hold in their head. After the first merge the remaining proposals are re-scored against the survivor.
+      - A rule proposes a merge between a party of kind=person and one of kind=organisation. Refused. A sole trader who is both is modelled as an organisation party with a person party related to it, not as one record that is both.
+      - The survivor choice matters and the rule cannot make it well. The shipped default proposes the OLDER record as survivor, on the grounds that it has more history attached, and the reviewer may swap them. Swapping is offered prominently rather than buried, because the default is right perhaps two thirds of the time.
+      - A proposal raised against a party in an active workflow. Permitted to propose, refused to execute while any workflow instance holds a lock on either party, and the proposal states which workflow is blocking so the reviewer waits rather than forcing.
+
+  - key: execute_merge
+    entity: merge_proposal
+    label: Merge two party records
+    actors: [tenant_admin, tenant_owner]
+    rationale: The single most destructive routine action in the platform, and the one most often implemented as an irreversible one-click convenience.
+    preconditions:
+      - Acting session is elevated.
+      - The proposal is under_review and claimed by the acting principal.
+      - Every conflict has a field_resolution.
+      - Neither party is locked by a running workflow.
+    inputs: [proposal_id, field_resolution, reason]
+    creates: [merge_journal within the proposal]
+    updates: [absorbed party moved to merged, every reference repointed, channels and relationships consolidated, undo_deadline_at set]
+    events: [party.merged, party_relationship.updated, party.channels_consolidated]
+    notifications:
+      - {to: the relationship owners of both parties, channel: in_app, when: always, template: parties_merged, must_include: [survivor_display_name, absorbed_display_name, actor_display_name, undo_deadline]}
+    undoable: true
+    reversal_action: unmerge
+    confirmation_specification: 'Modal listing every conflicting field with the chosen value, the counts of references that will be repointed by kind, the channels that will be consolidated and any consent value that will become more restrictive as a result, and the undo deadline. Requires typing the absorbed party''s display name. Required because the action is reversible only for a bounded window and is permanent afterwards.'
+    audit_class: always
+    idempotency_key_source: proposal_id. A replayed execution returns the completed merge rather than repointing anything twice.
+    offline_policy: refuse
+    concurrency: >
+      Both party rows are locked for the duration, in a canonical id order to avoid deadlock
+      between two merges sharing a party. References are repointed inside the same
+      transaction as the journal write. A merge is never partially applied - the alternative
+      is a party whose invoices point at one record and whose work orders point at another,
+      which is unrecoverable without the journal that a partial merge would not have written.
+    failure_modes:
+      - {code: E_PRECONDITION, cause: an unresolved conflict remains, message: Choose a value for each conflicting field first., note: names the fields}
+      - {code: E_PRECONDITION, cause: a running workflow holds either party, message: This action is not available in the current state., note: names the workflow and its expected completion so the reviewer can wait rather than escalate}
+      - {code: E_CONFLICT_VERSION, cause: either party changed since the proposal was reviewed, message: Someone else changed this record., note: 'the proposal returns to under_review with the conflicts recomputed, and the previously entered resolutions are preserved where the underlying values did not move'}
+      - {code: E_AUTHN, cause: session not elevated, message: Confirm your identity to continue.}
+      - {code: E_INTERNAL, cause: the repointing transaction fails partway, message: Something went wrong. The team has been notified., note: 'the whole merge rolls back. The journal exists precisely so that this is recoverable, and it is written first'}
+      - {code: E_QUOTA, cause: the merge would repoint more than max_merge_references rows, message: Plan limit reached., note: a merge of two very large parties is a migration and must be scheduled rather than run interactively while somebody waits}
+    edge_cases:
+      - References held by capabilities that are currently disabled. They are repointed anyway, because they will come back when the capability is re-enabled. The journal records them. Skipping them would produce orphans that surface months later with no explanation.
+      - References held through a port by a capability that is not installed at all. These cannot be repointed and are not knowable. This is the strongest argument for the tombstone - the absorbed party row is retained forever with merged_into_party_id set, so any reference that was missed still resolves, and resolution follows the pointer. Every consumer of the party_directory port must follow merged_into_party_id transitively, and that requirement is part of the port contract rather than an implementation note.
+      - A merge chain - A merged into B, then B merged into C. Resolution follows the chain to the final survivor, with a depth limit that raises an alert rather than looping. Chains happen and pretending they do not is how a resolver becomes an infinite loop in production.
+      - Conflicting consent between the two parties' channels with the same normalised value. The more restrictive value always wins, and this is not offered as a reviewer choice. A merge is not a mechanism for upgrading a refusal into a grant.
+      - Conflicting financial fields - two different credit limits. Presented as a conflict requiring explicit resolution, never defaulted, and the resolution is recorded with the reason. A silently chosen credit limit is a silently chosen credit decision.
+      - Unmerge after downstream capabilities have already acted on the merged record - an invoice raised against the survivor covering work originally attributed to the absorbed party. The unmerge restores the references it repointed and explicitly does NOT unwind downstream effects; it lists them for the reviewer instead. Claiming to unwind an issued invoice would be a lie.
+
+rules:
+  - key: duplicate_rule_set
+    kind: policy
+    scope: capability
+    overridable_at: tenant
+    default: >
+      Exact match on normalised tax_registration_id scores 1.0 and is enforced as a unique
+      constraint rather than proposed. Exact match on a normalised phone or email value
+      scores 0.8. Name similarity alone scores at most 0.3 and never reaches the proposal
+      threshold on its own. Address proximity contributes only where the address_resolution
+      port is bound.
+    expression: 'score = max over rules; propose where score >= duplicate_alert_threshold'
+    on_conflict: most specific scope wins, no merging of rule sets
+    rationale: >
+      What counts as the same organisation genuinely differs by how a business trades, which
+      is why this is a rule with a shipped default rather than code. The default is
+      deliberately conservative on names, because the naive rule set proposes every pair of
+      similarly named organisations and produces a queue nobody works.
+
+  - key: consent_ratchets_to_most_restrictive
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'Where two consent values must be reconciled - out-of-order arrival, a merge, an import - the most restrictive wins, ordered withdrawn, refused, unknown, granted.'
+    on_conflict: not overridable
+
+  - key: suppression_beats_consent
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'A suppressed channel is excluded from every automated send regardless of recorded consent. Suppression reflects delivery reality; consent reflects intent.'
+    on_conflict: not overridable
+
+  - key: staff_may_not_reverse_an_opt_out
+    kind: guard
+    scope: kernel
+    overridable_at: null
+    default: 'A suppression whose cause is an explicit opt-out by the party may only be cleared by an inbound act from the party. No staff role can clear it.'
+    on_conflict: not overridable
+
+  - key: merge_requires_conflict_resolution
+    kind: guard
+    scope: kernel
+    overridable_at: null
+    default: 'execute_merge is refused while any conflicting field lacks an explicit resolution. There is no automatic conflict resolution at any scope.'
+    on_conflict: not overridable
+
+  - key: party_dormancy
+    kind: derivation
+    scope: capability
+    overridable_at: tenant
+    default: 'A party with no relationship activity for party_dormancy_days (default 365) becomes dormant.'
+    on_conflict: most specific scope wins
+
+policy_knobs:
+  - {key: duplicate_alert_threshold, default: 0.7, range: [0.3, 1.0]}
+  - {key: merge_undo_days, default: 30, range: [0, 180]}
+  - {key: proposal_ttl_days, default: 60, range: [7, 365]}
+  - {key: merge_claim_timeout_minutes, default: 60, range: [5, 480]}
+  - {key: repeat_rejection_threshold, default: 3, range: [1, 20]}
+  - {key: party_dormancy_days, default: 365, range: [30, 1825]}
+  - {key: draft_party_stale_days, default: 7, range: [1, 90]}
+  - {key: lead_stale_days, default: 90, range: [7, 730]}
+  - {key: prospect_stale_days, default: 120, range: [7, 1095]}
+  - {key: unowned_relationship_days, default: 30, range: [1, 365]}
+  - {key: relationship_suspension_review_days, default: 60, range: [7, 365]}
+  - {key: block_review_days, default: 90, range: [7, 730]}
+  - {key: channel_decay_days, default: 365, range: [30, 1825]}
+  - {key: suppression_review_days, default: 180, range: [30, 1095]}
+  - {key: max_merge_references, default: 50000}
+  - {key: party_create_burst_per_minute, default: 60, lowest_settable_scope: kernel}
+
+open_questions:
+  - {q: 'Is one party record per tenant correct, or should a party be platform-scoped with per-tenant relationships, so that a supplier serving forty tenants exists once? Platform-scoped is efficient and creates a cross-tenant inference channel - a tenant could learn who else trades with a supplier by observing shared record behaviour.', assumption: 'Tenant-scoped, per the tenancy declared above. The inference risk is judged to outweigh the efficiency.', confidence: WORKING_ASSUMPTION, method: 'privacy review, plus measuring how much duplicate maintenance effort tenant-scoping actually costs in pilot', priority: High, blocks: [party.tenancy, party_directory port contract, hq_console cross-tenant reporting]}
+  - {q: 'What identity attributes may lawfully be stored for a workforce party, and in what form? The model stores a reference to a document rather than a number, which is a deliberate constraint, but whether even the reference is permissible for every document kind has not been checked.', assumption: Reference-only storage with the document held by the evidence_capture port under restricted access., confidence: VALIDATION_REQUIRED, method: legal review against the applicable data protection framework and against the rules governing the specific identity document kinds in use, priority: Critical, blocks: [party.identity_document_ref, people capability, evidence_capture retention]}
+  - {q: 'Should duplicate detection run across relationship kinds? The same organisation may legitimately be both a supplier and a counterparty, and a rule that proposes merging those two roles is proposing to merge two things that are already one party with two relationships - which means the rule is right and the reviewer will think it is wrong.', assumption: 'Yes, detection is across kinds, because the party IS one party. The reviewer-confusion problem is a presentation problem.', confidence: WORKING_ASSUMPTION, method: usability test of the merge review screen with a real duplicate of this shape, priority: Medium}
+  - {q: 'Is a 30-day merge undo window long enough, given that the evidence a merge was wrong usually arrives when somebody looks for a history that has vanished, which can be a quarter later?', assumption: '30 days, on the grounds that retaining the journal indefinitely means retaining a full copy of every merged record forever.', confidence: VALIDATION_REQUIRED, method: 'measure, in pilot, the elapsed time between a merge and the first complaint about it', priority: Medium}
+  - {q: 'Who owns the terminology for relationship_kind? The composition model files this under DEC-C-004 - per tenant, per pack, or per role. A counterparty is called different things by the owner, by the person on site and by the person being billed.', assumption: None. This is DEC-C-004 and is deliberately not being answered here., confidence: VALIDATION_REQUIRED, method: resolve DEC-C-004, priority: High, blocks: [DEC-C-004]}

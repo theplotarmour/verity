@@ -1,0 +1,693 @@
+key: billing
+name: Billing
+layer: domain
+confidence: KNOWN
+description: >
+  Turning things that happened into money owed, producing the documents that make it
+  collectable, and tracking what has been paid, disputed and written off. It consumes
+  billable outcomes from every other capability through one port and never reaches into
+  their records. Rating, invoicing, credit, collection and dispute are separate stages
+  because each fails differently.
+
+evidence_basis:
+  - claim: In the target jurisdiction a tax invoice above a turnover threshold is only legally valid once it has been registered with a government portal and carries the returned reference number and QR code, and the registration must happen within a time limit from the invoice date.
+    sources:
+      - "Registered persons whose aggregate turnover exceeds Rs.5 crore must issue e-invoices for B2B supplies and exports; the Invoice Registration Portal generates the IRN, a 64-character unique hash, and the QR code. An invoice issued by a notified taxpayer without a valid IRN is treated as an invalid tax invoice under Rule 48(4), leaving the recipient unable to claim input tax credit. https://cleartax.in/s/e-invoicing-gst"
+      - "A 30-day limit for reporting invoices to the IRP took effect on 1 April 2025. https://cleartax.in/s/e-invoicing-gst"
+      - "A secondary source states the 30-day restriction applies only to businesses with aggregate turnover of Rs.10 crore and above, with the Rs.5-10 crore band generating e-invoices without the 30-day cap. https://www.vatcalc.com/india/india-b2b-e-invoicing-threshold-drops-to-%E2%82%B95-january-2023-faqs-update/"
+    confidence: KNOWN
+    discrepancy: >
+      The two sources disagree on which turnover band the 30-day reporting limit applies to.
+      The model therefore treats the limit as a configured value per tenant with a mandatory
+      value rather than encoding either reading, and the discrepancy is recorded in
+      open_questions as requiring a primary-source check rather than being resolved by
+      preferring one secondary source over another.
+    implication: >
+      A document produced by Verity is not a valid tax invoice until an external registration
+      returns a reference. The model therefore separates the internal document from the
+      legally valid one, marks the internal one as not-tax-valid, and treats registration as
+      an external step that can fail, be late, or be unavailable - which is what the
+      financial_document_sink port's unbound behaviour already anticipates.
+
+principles:
+  - A billable outcome is evidence that something happened. Rating turns it into money. Keeping the two apart is what allows a rate to be corrected without re-doing the work and work to be re-billed without re-doing the rate.
+  - An invoice is never edited. A correction is a credit note. Every accounting and tax regime works this way and a model that permits editing produces documents that do not reconcile with the copy the counterparty is holding.
+  - A document that is not legally valid must say so on its face. An internally produced invoice that looks identical to a registered one is the most dangerous artefact this capability can emit.
+  - Disputes are expected and are recorded at line level. A dispute about one line must not stop payment of the rest, or every small disagreement delays the whole invoice.
+  - Payment allocation is explicit. Automatically applying a receipt to the oldest invoice is a guess that produces an aged debt report nobody believes.
+  - Nothing is written off silently. A write-off is a decision with an owner, and the aggregate of write-offs is one of the few honest measures of how well the rest of the platform is working.
+
+entities:
+
+  - key: billable_outcome
+    name: Billable Outcome
+    description: The record that something chargeable happened, received from another capability, before anybody has decided what it is worth.
+    owner: tenant
+    tenancy: tenant_scoped_with_site_partition
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: source_capability_key, type: string, req: true, immutable: true}
+      - {key: source_ref, type: uuid, req: true, immutable: true, note: 'the originating record, opaque here and resolved through the billable_outcome_sink port'}
+      - {key: counterparty_ref, type: uuid, req: true, note: resolved through the party_directory port}
+      - {key: contract_ref, type: uuid, nullable: true, note: resolved through the contract_terms port}
+      - {key: location_ref, type: uuid, nullable: true}
+      - {key: occurred_at, type: timestamptz, req: true, immutable: true}
+      - {key: quantity, type: decimal, req: true}
+      - {key: unit_of_measure, type: string, req: true}
+      - {key: rate_basis, type: enum, values: [per_unit, per_period, per_outcome, per_resource_period, fixed, pass_through], req: true, note: 'shapes, not names. What the unit is belongs to the source capability and to the catalogue'}
+      - {key: item_ref, type: uuid, nullable: true, note: 'resolved through the orderable_item port, for outcomes that correspond to a catalogued thing'}
+      - {key: description_at_time, type: string, req: true, note: frozen. What an invoice line says must not change when a catalogue item is renamed}
+      - {key: evidence_refs, type: json, nullable: true, note: 'flat list of references supporting the outcome - completion evidence, attendance evidence, sign-off. This is what a dispute is settled with and the outcome is materially weaker without it'}
+      - {key: evidence_strength, type: string, nullable: true, note: 'passed through verbatim from the source capability where it declares one, so that a disputed line can be answered with what was actually recorded rather than with an assertion'}
+      - {key: classification_hint, type: string, nullable: true, note: 'the source''s own view of whether this is chargeable - for example a backfill classification. A hint, never a decision'}
+      - {key: rated_amount_minor, type: money_minor, nullable: true, financial: true}
+      - {key: rate_rule_ref, type: uuid, nullable: true, financial: true, note: 'which rule produced the amount, captured at rating time'}
+      - {key: tax_classification, type: string, nullable: true, financial: true}
+      - {key: invoice_line_id, type: uuid, nullable: true, fk: invoice_line}
+      - {key: excluded_reason, type: text, nullable: true}
+    invariants:
+      - unique(tenant_id, source_capability_key, source_ref). A source record produces at most one outcome. This is the constraint that stops at-least-once event delivery becoming double billing, and it is the single most important constraint in the capability.
+      - quantity is positive. A credit is a separate record with its own authority, never a negative outcome.
+      - description_at_time and evidence references are frozen at receipt. An invoice line whose description changes after issue is a document that no longer matches the copy the counterparty holds.
+      - An outcome may belong to at most one invoice line. Splitting an outcome across invoices requires splitting the outcome first, explicitly.
+      - Financial fields are gated by view_financial. quantity, description and evidence are not, because an operations manager defending a disputed line needs all three and frequently has no financial access.
+    states: [received, rated, unratable, invoiced, excluded, credited]
+    initial_state: received
+    transitions:
+      - {from: received, to: rated, action: rate_outcome, actor: system or finance, guard: 'a rate rule resolves for the counterparty, contract, item and period', side_effects: rated_amount and rate_rule_ref captured, reversibility: true}
+      - {from: received, to: unratable, action: rate_outcome, actor: system, guard: no rate rule resolves, side_effects: finance is told with the specific outcome and the scopes searched, reversibility: true, note: 'a distinct state rather than an error, because an unratable outcome is revenue sitting in a queue and it must be visible as such rather than buried in a failed job'}
+      - {from: unratable, to: rated, action: rate_outcome, actor: system or finance, guard: a rate rule is created or an amount is set manually with a reason, side_effects: as above, reversibility: true}
+      - {from: rated, to: invoiced, action: issue_invoice, actor: finance or system, guard: the outcome is placed on an issued invoice line, side_effects: none, reversibility: false}
+      - {from: received, to: excluded, action: exclude_outcome, actor: finance or ops_manager, guard: a reason is supplied and the acting session is elevated, side_effects: the outcome never becomes revenue and is reported in the exclusion register, reversibility: true}
+      - {from: rated, to: excluded, action: exclude_outcome, actor: as above, guard: as above, side_effects: as above, reversibility: true}
+      - {from: unratable, to: excluded, action: exclude_outcome, actor: as above, guard: as above, side_effects: as above, reversibility: true}
+      - {from: excluded, to: received, action: reinstate_outcome, actor: finance, guard: acting session is elevated and a reason is supplied, side_effects: none, reversibility: false}
+      - {from: invoiced, to: credited, action: issue_credit_note, actor: finance, guard: a credit note covering this line is issued, side_effects: 'the outcome is marked credited and does NOT return to rated, because re-invoicing a credited outcome must be a deliberate new outcome rather than an automatic retry', reversibility: false}
+    stuck_state_policy:
+      received: >
+        An unrated outcome is revenue that has happened and not yet been quantified.
+        Threshold: rating_lag_hours (default 6). Told: platform_operator, because unrated
+        outcomes usually mean the rating job is not running, AND finance, because the money
+        consequence is theirs and grows hourly. Escape hatch: run rating, or rate manually.
+      unratable: >
+        The most valuable queue in this capability and the one most often ignored, because it
+        looks like an error log. Threshold: immediate on entry, then a daily digest to finance
+        naming the counterparty, the source capability and the scopes that were searched.
+        Escape hatch: create a rate rule, set an amount manually with a reason, or exclude
+        with a reason. Verity never rates an unratable outcome at zero and never at a
+        neighbouring rate, because both are inventing a price. An outcome that stays unratable
+        past unratable_alert_days (default 7) is escalated to tenant_owner with its value
+        unknown, which is precisely the point.
+      rated: >
+        Rated and uninvoiced is revenue waiting to be asked for. Threshold: the tenant's
+        billing cycle plus billing_lag_days (default 3), or uninvoiced_alert_days (default 30)
+        where no cycle is configured. Told: finance. Escape hatch: issue an invoice, or
+        exclude. The monitored case that matters is an outcome older than the contract's own
+        invoicing deadline, where a late invoice may be uncollectable under the agreement.
+      invoiced: >
+        Terminal in outcome terms. Nothing pends here; the invoice's own policies govern.
+      excluded: >
+        Terminal unless reinstated. Exclusions are reported in aggregate each period rather
+        than individually, and where they exceed exclusion_rate_alert of outcomes by value
+        (default 0.02) finance, ops_manager and tenant_owner are told with the reasons grouped
+        and the excluding principals named. Excluding an outcome is the easiest way to make
+        revenue disappear, and the control is visibility rather than prohibition, because
+        genuine exclusions are real and common.
+      credited: >
+        Terminal. Retained permanently. Nothing pends.
+
+  - key: invoice
+    name: Invoice
+    description: A document asking a counterparty for money, with its lines, its tax, its legal registration status and its payment position. Never edited once issued.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: document_number, type: string, req: true, unique_scope: tenant, immutable: true, note: 'allocated from a gapless per-series sequence at ISSUE, not at draft. A gap in an invoice series is a question from an auditor, unlike the work order reference where gaps are harmless'}
+      - {key: series_key, type: string, req: true, immutable: true}
+      - {key: counterparty_ref, type: uuid, req: true, immutable: true}
+      - {key: contract_ref, type: uuid, nullable: true, immutable: true}
+      - {key: issue_date, type: date, nullable: true, immutable: true}
+      - {key: due_date, type: date, nullable: true, financial: true}
+      - {key: period_start, type: date, nullable: true}
+      - {key: period_end, type: date, nullable: true}
+      - {key: currency, type: string, req: true, immutable: true, financial: true}
+      - {key: subtotal_minor, type: money_minor, req: true, default: 0, financial: true}
+      - {key: tax_total_minor, type: money_minor, nullable: true, financial: true, note: 'nullable rather than zero, so unknown tax and no tax never render identically'}
+      - {key: total_minor, type: money_minor, req: true, default: 0, financial: true}
+      - {key: allocated_minor, type: money_minor, req: true, default: 0, financial: true}
+      - {key: disputed_minor, type: money_minor, req: true, default: 0, financial: true}
+      - {key: written_off_minor, type: money_minor, req: true, default: 0, financial: true}
+      - {key: registration_required, type: bool, req: true, default: false, note: 'whether this document must be registered externally to be legally valid, derived from tenant configuration and counterparty status at issue'}
+      - {key: registration_reference, type: string, nullable: true, note: the reference returned by the external registry. Until it is present the document is NOT a valid tax invoice and must say so on its face}
+      - {key: registration_qr, type: text, nullable: true}
+      - {key: registration_deadline_at, type: timestamptz, nullable: true, note: 'from the configured reporting window. A document past this deadline may be permanently unregistrable, which makes it uncollectable as a tax invoice'}
+      - {key: registration_failure_reason, type: text, nullable: true}
+      - {key: document_ref, type: string, nullable: true, note: the rendered document through the evidence_capture port}
+      - {key: sent_at, type: timestamptz, nullable: true}
+      - {key: sent_via, type: enum, values: [not_sent, email, portal, messaging, post, in_person, integration], req: true, default: not_sent}
+      - {key: credit_of_invoice_id, type: uuid, nullable: true, fk: invoice, note: 'set on a credit note, pointing at the invoice it credits'}
+      - {key: document_kind, type: enum, values: [invoice, credit_note, proforma], req: true, default: invoice, immutable: true}
+    invariants:
+      - No field except payment, dispute, write-off and registration fields may change after issue. There is no edit path. A correction is a credit note plus a new invoice.
+      - document_number is allocated at issue from a gapless per-series sequence inside the issuing transaction. Unlike an operational reference, a gap in an invoice series is a question an auditor asks, so the sequence is transactional and a rolled-back issue reuses the number.
+      - A document with registration_required true and no registration_reference must be rendered with an explicit not-tax-valid marker, in every channel it is delivered through, and must not be described as an invoice in any covering message.
+      - allocated_minor plus written_off_minor may never exceed total_minor. Over-allocation is an unallocated receipt, not an invoice field.
+      - total_minor equals the sum of its lines plus tax, asserted on every write rather than trusted.
+      - document_kind=credit_note requires credit_of_invoice_id and a negative-direction effect expressed by the kind rather than by a negative total, so that a credit note is never mistaken for an invoice by sign.
+      - Financial fields are gated by view_financial. document_number, counterparty, period and line descriptions are not, because an operations manager fielding a query about an invoice needs to identify it.
+    states: [draft, issued, registered, registration_failed, sent, part_paid, paid, overdue, disputed, written_off, cancelled]
+    initial_state: draft
+    transitions:
+      - {from: draft, to: issued, action: issue_invoice, actor: finance or system, guard: 'at least one line, every line rated, a counterparty with the attributes the document requires, and the acting session elevated where the total exceeds the elevation threshold', side_effects: 'document_number allocated, outcomes marked invoiced, registration submitted where required, the document rendered', reversibility: false}
+      - {from: issued, to: registered, action: observe_registration, actor: system, guard: the external registry returns a reference, side_effects: the document becomes a valid tax invoice and is re-rendered with the reference and code, reversibility: false}
+      - {from: issued, to: registration_failed, action: observe_registration, actor: system, guard: 'the registry rejects it, or the deadline passes without success', side_effects: 'finance is told with the registry reason, and the document remains explicitly not-tax-valid', reversibility: true}
+      - {from: registration_failed, to: registered, action: retry_registration, actor: finance or system, guard: the underlying reason is corrected and the deadline has not passed, side_effects: as for registration, reversibility: false}
+      - {from: registered, to: sent, action: send_invoice, actor: finance or system, guard: a delivery channel resolves for the counterparty, side_effects: sent_at and sent_via recorded, reversibility: false}
+      - {from: issued, to: sent, action: send_invoice, actor: finance or system, guard: registration is not required, side_effects: as above, reversibility: false}
+      - {from: sent, to: part_paid, action: allocate_payment, actor: finance or system, guard: an allocation covers part of the total, side_effects: none, reversibility: true}
+      - {from: sent, to: paid, action: allocate_payment, actor: as above, guard: allocations plus write-offs cover the total, side_effects: none, reversibility: true}
+      - {from: part_paid, to: paid, action: allocate_payment, actor: as above, guard: as above, side_effects: none, reversibility: true}
+      - {from: sent, to: overdue, action: observe_due_date, actor: system_scheduler, guard: 'now > due_date and the balance is positive', side_effects: the collection sequence begins, reversibility: true}
+      - {from: part_paid, to: overdue, action: observe_due_date, actor: system_scheduler, guard: as above, side_effects: as above, reversibility: true}
+      - {from: overdue, to: part_paid, action: allocate_payment, actor: as above, guard: a payment reduces but does not clear the balance, side_effects: the collection sequence pauses and restarts from its current step rather than from the beginning, reversibility: true}
+      - {from: overdue, to: paid, action: allocate_payment, actor: as above, guard: the balance clears, side_effects: collection stops, reversibility: true}
+      - {from: sent, to: disputed, action: raise_invoice_dispute, actor: 'the counterparty through the customer_surface port, or finance', guard: a reason and the disputed lines are named, side_effects: 'the disputed amount is held, collection on the disputed portion stops and continues on the rest', reversibility: true}
+      - {from: overdue, to: disputed, action: raise_invoice_dispute, actor: as above, guard: as above, side_effects: as above, reversibility: true}
+      - {from: disputed, to: sent, action: resolve_invoice_dispute, actor: finance or tenant_owner, guard: 'an outcome and a reason are recorded, and any credit is issued as a separate document', side_effects: none, reversibility: false}
+      - {from: overdue, to: written_off, action: write_off_invoice, actor: finance or tenant_owner, guard: 'acting session is elevated, a reason is supplied, and the amount is within the write-off authority of the acting principal', side_effects: 'the balance is cleared to written_off, the counterparty risk flag is raised, the write-off register is updated', reversibility: false}
+      - {from: disputed, to: written_off, action: write_off_invoice, actor: as above, guard: as above, side_effects: as above, reversibility: false}
+      - {from: draft, to: cancelled, action: cancel_invoice, actor: finance, guard: null, side_effects: outcomes return to rated and no document number is consumed, reversibility: false}
+    stuck_state_policy:
+      draft: >
+        Threshold: draft_invoice_stale_days (default 2) - short, because a draft invoice holds
+        outcomes out of the next billing run and the counterparty is waiting to be asked. Told:
+        finance. Escape hatch: issue or cancel. Never auto-issued, because an auto-issued
+        invoice is a demand for money nobody checked.
+      issued: >
+        Issued and unregistered is the most consequential state in this capability where
+        registration is required. The document exists, is not legally valid, and has a
+        deadline after which it may never become valid. Threshold: registration_lag_minutes
+        (default 30), then hourly, then at half the remaining time to the deadline, then
+        daily. Told: finance and platform_operator, because the cause is usually an
+        integration failure rather than a data problem. Escape hatch: retry, correct and
+        retry, or cancel and re-issue. Under no circumstances is the document sent to the
+        counterparty described as a tax invoice while in this state.
+      registration_failed: >
+        Threshold: immediate, then every registration_retry_hours (default 4) until the
+        deadline. Told: finance with the registry's own rejection reason verbatim, because
+        those reasons are specific and actionable and paraphrasing them wastes the only useful
+        information available. Escape hatch: correct and retry, or cancel and re-issue with
+        corrected data. Past the deadline the document is permanently not-tax-valid and is
+        escalated to tenant_owner, because it is a revenue loss rather than an administrative
+        problem.
+      sent: >
+        Steady state until due. The monitored exception is a sent invoice with no delivery
+        confirmation where the channel supports one, for delivery_confirm_days (default 2).
+        An invoice the counterparty never received will not be paid and will be chased, which
+        damages the relationship for no reason.
+      part_paid: >
+        A partial payment usually means either a dispute nobody has raised formally or a
+        deliberate short payment. Threshold: part_paid_review_days (default 7). Told: finance,
+        with the unallocated portion named as an amount rather than a percentage. Escape
+        hatch: chase, raise the dispute formally, or write off the difference.
+      overdue: >
+        The collection sequence governs and its steps are configured rather than hardcoded.
+        The stuck condition is an invoice that has exhausted its collection sequence and is
+        still unpaid. Threshold: on sequence exhaustion. Told: finance and tenant_owner, with
+        the counterparty's total exposure across all invoices rather than this one alone,
+        because the decision is about the relationship rather than the document. Escape hatch:
+        escalate externally, write off, or agree a plan. Verity never writes off automatically
+        at any age.
+      disputed: >
+        Threshold: invoice_dispute_days (default 10), escalating to tenant_owner. Told: both
+        the counterparty where a surface is bound and finance. Escape hatch: resolve. No
+        expiry, for the same reason as every other dispute in the platform - an expiring
+        dispute resolves in favour of whoever issued the document.
+      written_off: >
+        Terminal. Retained permanently. The monitored condition is the aggregate: write-offs
+        exceeding writeoff_rate_alert of issued value in a period (default 0.02), told to
+        tenant_owner with the reasons grouped. The aggregate write-off is one of the few
+        honest measures of how well the rest of the platform is working, because it is where
+        unevidenced work, unratable outcomes and unresolved disputes all end up.
+      paid: >
+        Terminal. Retained permanently. Nothing pends.
+      registered: >
+        Transitional; the send policy governs. The monitored exception is a registered
+        document never sent for send_lag_days (default 2), which is an invoice that is legally
+        valid and that nobody has asked for.
+      cancelled: >
+        Terminal, and only reachable from draft. A cancelled draft consumed no document number.
+        Retained so that the outcomes it held can be traced. Nothing pends.
+
+  - key: invoice_line
+    name: Invoice Line
+    description: One chargeable item on an invoice, frozen at issue, disputable independently of the rest.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: invoice_id, type: uuid, req: true, fk: invoice}
+      - {key: line_number, type: int, req: true}
+      - {key: description, type: string, req: true, immutable: true}
+      - {key: quantity, type: decimal, req: true, immutable: true}
+      - {key: unit_of_measure, type: string, req: true, immutable: true}
+      - {key: unit_amount_minor, type: money_minor, req: true, immutable: true, financial: true}
+      - {key: line_total_minor, type: money_minor, req: true, immutable: true, financial: true}
+      - {key: tax_classification, type: string, nullable: true, immutable: true, financial: true}
+      - {key: tax_amount_minor, type: money_minor, nullable: true, immutable: true, financial: true}
+      - {key: rate_rule_ref, type: uuid, nullable: true, immutable: true, financial: true}
+      - {key: evidence_refs, type: json, nullable: true, immutable: true, note: 'carried from the outcomes, so a disputed line can be answered with the evidence rather than with an assertion'}
+      - {key: outcome_count, type: int, req: true, default: 0, note: 'how many billable outcomes this line aggregates, so a summarised line can always be expanded'}
+      - {key: disputed, type: bool, req: true, default: false}
+      - {key: dispute_reason, type: text, nullable: true}
+      - {key: credited_by_line_id, type: uuid, nullable: true, fk: invoice_line}
+    invariants:
+      - Every field except the dispute and credit fields is immutable after issue. An invoice line that changes is a document that no longer matches the copy the counterparty holds.
+      - line_total_minor equals quantity multiplied by unit_amount_minor, rounded by the declared rounding rule, and the rounding rule used is recorded on the invoice rather than assumed.
+      - A summarised line always retains the ability to expand to its constituent outcomes with their evidence. A line a counterparty cannot drill into is a line they will dispute in full.
+      - disputed=true requires dispute_reason.
+    states: [issued, disputed, credited, settled]
+    initial_state: issued
+    transitions:
+      - {from: issued, to: disputed, action: raise_invoice_dispute, actor: 'the counterparty through the customer_surface port, or finance', guard: a reason is supplied, side_effects: 'the disputed amount is held on the invoice, collection continues on the remainder', reversibility: true}
+      - {from: disputed, to: issued, action: resolve_invoice_dispute, actor: finance or tenant_owner, guard: the dispute is rejected with a reason, side_effects: the held amount is released back to collectable, reversibility: false}
+      - {from: disputed, to: credited, action: issue_credit_note, actor: finance, guard: the dispute is upheld and a credit note line is issued, side_effects: 'the credit note references this line, and the underlying outcome is marked credited', reversibility: false}
+      - {from: issued, to: credited, action: issue_credit_note, actor: finance, guard: 'a credit is issued without a formal dispute, for example a goodwill credit', side_effects: as above, reversibility: false}
+      - {from: issued, to: settled, action: allocate_payment, actor: finance or system, guard: the invoice is fully paid or written off, side_effects: none, reversibility: false}
+    stuck_state_policy:
+      issued: >
+        Not a queue in itself; the invoice's own policies govern. The one line-level monitored
+        exception is a line whose evidence references cannot be resolved - the evidence was
+        deleted, or the capability that held it was disabled. Told: finance, because a line
+        that cannot be evidenced is a line that will lose a dispute, and knowing that before
+        the dispute is worth a great deal.
+      disputed: >
+        Threshold: invoice_dispute_days as for the invoice. Told: finance and the counterparty.
+        The specific value of line-level disputes is that the rest of the invoice keeps
+        collecting, and the notification says explicitly which amount is held and which is
+        still due, because a counterparty told only that there is a dispute will pay nothing.
+      credited: >
+        Terminal. Retained. Nothing pends.
+      settled: >
+        Terminal. Retained. Nothing pends.
+
+  - key: payment_receipt
+    name: Payment Receipt
+    description: Money received, recorded before it is allocated, because a receipt with no obvious invoice is common and refusing to record it loses the money.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: counterparty_ref, type: uuid, nullable: true, note: 'nullable, because a receipt frequently arrives with no identifiable payer and must still be recorded'}
+      - {key: received_at, type: timestamptz, req: true}
+      - {key: amount_minor, type: money_minor, req: true, financial: true}
+      - {key: currency, type: string, req: true, financial: true}
+      - {key: method, type: enum, values: [bank_transfer, cash, card, digital_wallet, cheque, offset, other], req: true, financial: true}
+      - {key: external_reference, type: string, nullable: true, financial: true, note: 'the bank or provider reference. Unique per tenant per method where present, which is the control that catches a receipt recorded twice'}
+      - {key: payer_narrative, type: text, nullable: true, note: 'whatever the payer wrote on the transfer, which is frequently the only clue to what it is for and is why allocation cannot be automatic'}
+      - {key: allocated_minor, type: money_minor, req: true, default: 0, financial: true}
+      - {key: recorded_by_principal_id, type: uuid, req: true}
+      - {key: reversed_reason, type: text, nullable: true, financial: true}
+    invariants:
+      - amount_minor is positive. A refund is a separate record with its own authority, never a negative receipt.
+      - allocated_minor may never exceed amount_minor.
+      - unique(tenant_id, method, external_reference) where external_reference is present. This is what catches a bank line imported twice, which otherwise appears as a customer having paid twice.
+      - A receipt is never deleted. A receipt recorded in error is reversed with a reason, so that the bank reconciliation still balances.
+      - Financial fields are gated by view_financial. The payer narrative is not, because it is frequently the operational clue to which job the money is for.
+    states: [unallocated, partially_allocated, allocated, reversed]
+    initial_state: unallocated
+    transitions:
+      - {from: unallocated, to: partially_allocated, action: allocate_payment, actor: finance or system, guard: an allocation covers part of the receipt, side_effects: invoice balances updated, reversibility: true}
+      - {from: unallocated, to: allocated, action: allocate_payment, actor: as above, guard: the whole receipt is allocated, side_effects: as above, reversibility: true}
+      - {from: partially_allocated, to: allocated, action: allocate_payment, actor: as above, guard: the remainder is allocated, side_effects: as above, reversibility: true}
+      - {from: partially_allocated, to: unallocated, action: unallocate_payment, actor: finance, guard: a reason is supplied and the acting session is elevated, side_effects: invoice balances reduced, reversibility: false}
+      - {from: allocated, to: partially_allocated, action: unallocate_payment, actor: finance, guard: as above, side_effects: as above, reversibility: false}
+      - {from: unallocated, to: reversed, action: reverse_receipt, actor: finance, guard: a reason is supplied and the acting session is elevated, side_effects: the receipt is retained and marked reversed so bank reconciliation still balances, reversibility: false}
+      - {from: partially_allocated, to: reversed, action: reverse_receipt, actor: finance, guard: 'as above, and every allocation is first unallocated', side_effects: as above, reversibility: false}
+    stuck_state_policy:
+      unallocated: >
+        Money in the bank that nobody has matched to anything. Threshold:
+        unallocated_receipt_days (default 3). Told: finance, with the payer narrative and the
+        counterparty's open invoices as candidates. Escape hatch: allocate, or record it as a
+        payment on account against the counterparty. Verity never allocates automatically to
+        the oldest invoice, because that is a guess and it produces an aged debt report nobody
+        believes and disputes that look like non-payment.
+      partially_allocated: >
+        Same threshold as unallocated, applied to the remainder. The specific monitored case
+        is a residual too small to match anything, which accumulates indefinitely; it is
+        reported in aggregate rather than individually, and writing it off is an explicit act.
+      allocated: >
+        Terminal. Retained permanently with its allocations, which are the join between the
+        money and the documents. Nothing pends.
+      reversed: >
+        Terminal. Retained, never deleted, because a reversed receipt that vanished would
+        leave the bank reconciliation short with no explanation. The monitored condition is a
+        pattern - reversals by one principal above a rate - told to tenant_owner.
+
+ports:
+  - port_key: billable_outcome_sink
+    direction: provides
+    contract: >
+      Accept a billable outcome with quantity, rate basis, counterparty, contract reference,
+      description, evidence references and evidence strength, keyed uniquely by source
+      capability and source record. Acknowledge receipt, so a producer can tell whether its
+      revenue arrived.
+    cardinality: exactly_one
+
+  - port_key: party_directory
+    direction: requires
+    contract: Resolve the counterparty to a display name, billing address, tax registration status and identifier, payment terms, credit limit and contactable channels.
+    cardinality: exactly_one
+    unbound_behaviour: FORBIDDEN. An invoice is a demand addressed to somebody. Without a party directory there is no addressee, no tax status and no delivery channel, and every document produced would be unaddressable.
+
+  - port_key: contract_terms
+    direction: requires
+    contract: Resolve a contract to its agreed rates, billing basis, billing cycle, payment terms and any penalty obligations to be applied.
+    cardinality: zero_or_one
+    unbound_behaviour: >
+      Rating falls back to catalogue and party-scoped rates only. Contracted rates must be
+      maintained as party-scoped rate rules by hand, which works and drifts from the contract.
+      Penalty obligations raised by the contract capability cannot be applied automatically and
+      appear as an outstanding list.
+
+  - port_key: orderable_item
+    direction: requires
+    contract: Resolve an item to its description, unit, tax classification and applicable price rules for rating.
+    cardinality: zero_or_one
+    unbound_behaviour: 'Rating uses only billing-owned rate rules. Outcomes referencing catalogue items rate by their carried description and unit, and tax classification must be set per rate rule. This works and duplicates catalogue knowledge in two places, which is stated because the duplication will drift.'
+
+  - port_key: tax_treatment
+    direction: requires
+    contract: Given a tax classification, the supplier and counterparty registration status, the place of supply and a date, return the treatment, the rate and the breakdown required on the document.
+    cardinality: zero_or_one
+    unbound_behaviour: >
+      tax_total_minor stays null and every document is produced with no tax breakdown and an
+      explicit statement that tax has not been computed. Deliberately null rather than zero -
+      a document showing zero tax asserts that no tax is due, which is a statement the tenant
+      may not be entitled to make.
+
+  - port_key: financial_document_sink
+    direction: requires
+    contract: >
+      Register a document with the external authority and return the reference and code that
+      make it legally valid, or return a rejection reason. Report the applicable registration
+      deadline.
+    cardinality: zero_or_one
+    unbound_behaviour: >
+      An internal invoice is produced and clearly marked not-tax-valid, on the document itself
+      and in every covering message. This is the composition model's declared behaviour for
+      this port. It is a legitimate configuration for a tenant below the registration
+      threshold and it is NOT a legitimate configuration for one above it, so pack publication
+      must check the tenant's registration_required setting against the binding.
+
+  - port_key: payment_authorisation
+    direction: requires
+    contract: Initiate and confirm a collection from a counterparty and return a reference, and report inbound receipts for reconciliation.
+    cardinality: zero_or_one
+    unbound_behaviour: Receipts are recorded manually by finance from a bank statement. This is how most of the target market operates and is a first-class path rather than a fallback. Automated collection and payment links are unavailable and are not offered.
+
+  - port_key: customer_surface
+    direction: requires
+    contract: Expose invoices, statements and payment position to the counterparty, and accept line-level disputes and payment notifications from them.
+    cardinality: zero_or_one
+    unbound_behaviour: 'Documents are delivered by whatever channel the notification port offers and disputes arrive by telephone and email, which means they exist nowhere in the record. Every dispute metric in this capability under-reports by an unknown amount, and that is stated rather than left to be inferred.'
+
+  - port_key: evidence_capture
+    direction: requires
+    contract: Store rendered documents and resolve the evidence references carried on outcomes and lines.
+    cardinality: zero_or_one
+    unbound_behaviour: 'Documents are rendered at delivery and not stored, so a re-send may produce a subtly different rendering. Line evidence cannot be shown to a disputing counterparty, which turns every evidenced dispute into an unevidenced one.'
+
+  - port_key: notification
+    direction: requires
+    contract: Deliver invoices, statements, reminders and dispute correspondence, honouring channel consent and cost class.
+    cardinality: zero_or_one
+    unbound_behaviour: Nothing is delivered. Documents must be exported and sent by hand. Collection sequences produce a list of who to contact rather than contacting them, which is materially weaker and remains usable.
+
+actions:
+
+  - key: rate_outcome
+    entity: billable_outcome
+    label: Work out what an outcome is worth
+    actors: [system, finance]
+    rationale: >
+      Kept separate from receiving the outcome and from invoicing it, so that a rate can be
+      corrected without re-doing the work and work can be re-billed without re-doing the rate.
+      Its failure mode - no applicable rate - is a state a person works rather than an error in
+      a log.
+    preconditions: [the outcome is received or unratable, the counterparty resolves]
+    inputs: [outcome_id, manual_amount_minor, manual_reason]
+    creates: []
+    updates: [rated_amount_minor, rate_rule_ref, tax_classification, outcome state]
+    events: [billing.outcome_rated, billing.outcome_unratable]
+    notifications:
+      - {to: finance, channel: in_app, when: the outcome is unratable, template: unratable_outcome, must_include: [counterparty, source_capability, description, scopes_searched], batching_policy: daily digest, priority: normal}
+    undoable: true
+    reversal_action: rate_outcome again, which supersedes the previous rating and records both
+    audit_class: always
+    idempotency_key_source: outcome_id plus the resolved rate_rule_ref plus the amount. Re-rating with an identical result writes nothing and emits nothing.
+    offline_policy: refuse
+    concurrency: >
+      Rating takes the outcome row and reads rate rules from a consistent snapshot. A rate rule
+      activating mid-run does not change outcomes already rated in that run; the run records
+      the instant it rated against, so a re-run is reproducible.
+    failure_modes:
+      - {code: E_PRECONDITION, cause: 'no rate rule resolves for this counterparty, contract, item and period', message: null, note: 'the outcome moves to UNRATABLE, which is a queue somebody works. It is never rated at zero and never at a neighbouring rate, both of which are inventing a price'}
+      - {code: E_CONFLICT_UNIQUE, cause: two rate rules apply at the same precedence, message: null, note: moves to unratable with both rules named. Choosing arbitrarily between two prices is the one thing a billing system must never do}
+      - {code: E_AUTHZ_FIELD, cause: a manual amount supplied without view_financial, message: null, note: 'refused outright rather than dropped, because a manual amount IS the financial decision'}
+      - {code: E_VALIDATION, cause: a manual amount with no reason, message: Say why this amount was set by hand., note: 'manual amounts are separately reported, because they bypass every rate rule the tenant configured'}
+      - {code: E_DEPENDENCY, cause: the tax_treatment port is unavailable, message: null, note: 'the outcome rates and tax_classification is carried without a computed rate. Tax is computed at issue rather than at rating, so this does not block'}
+    edge_cases:
+      - An outcome arriving with a classification hint from its source - a backfill marked absorbed_by_tenant. The hint is honoured where a rate rule matches on it and never overrides an explicit rule. The hint is a source's opinion about chargeability and the rate rules are the tenant's decision, and where they disagree the tenant's decision wins and the disagreement is recorded.
+      - Re-rating an outcome after a rate correction. Permitted while the outcome is not yet invoiced, and both ratings are retained. Once invoiced, the correction is a credit note and a new invoice, never a re-rate.
+      - An outcome whose evidence strength is below what the contract requires. Rated normally and flagged on the line, so that the invoice can be issued and the weakness is visible to whoever will defend it. Refusing to rate would leave revenue in a queue over a data-quality question that finance may reasonably accept.
+      - Rating a period-based outcome that spans a rate change. The rule effective at the outcome's occurred_at governs, not the rule effective when rating runs. Otherwise a delayed rating run silently applies new prices to old work.
+      - A pass-through outcome, where the tenant is recharging a cost. Rated from the recorded cost plus any configured margin, and the underlying cost reference is carried so the counterparty can be shown it. A pass-through with no traceable cost is exactly what a counterparty refuses to pay.
+
+  - key: issue_invoice
+    entity: invoice
+    label: Issue an invoice
+    actors: [finance, system]
+    rationale: >
+      The point at which the document becomes immutable and, where required, must be
+      registered externally to be legally valid. Both properties are the reason this is a
+      distinct act rather than a status change.
+    preconditions:
+      - At least one line, every constituent outcome rated.
+      - The counterparty has the attributes the document requires for its tax treatment.
+      - The acting session is elevated where the total exceeds the elevation threshold.
+      - The document series is configured and its sequence is available.
+    inputs: [counterparty_ref, contract_ref, period_start, period_end, outcome_ids, series_key, issue_date, due_date_override]
+    creates: [invoice, invoice_line rows, an external registration submission where required]
+    updates: [outcomes marked invoiced]
+    events: [billing.invoice_issued]
+    notifications:
+      - {to: finance, channel: in_app, when: registration is required, template: registration_pending, must_include: [document_number, deadline], priority: high}
+      - {to: 'the counterparty''s billing contact', channel: their consenting channel, when: 'the document is registered, or registration is not required', template: invoice_issued, must_include: [document_number, total, due_date, how_to_dispute], cost_class: utility}
+    undoable: false
+    confirmation_specification: 'Modal stating the total, the number of lines and outcomes, the period, whether registration is required and its deadline, and that an issued invoice can never be edited - only credited. Requires typing the total where it exceeds the elevation threshold. Required because issuing consumes a gapless document number and cannot be undone.'
+    audit_class: always
+    idempotency_key_source: >
+      tenant_id plus counterparty_ref plus series_key plus a hash of the ordered outcome id
+      list. A retried billing run produces one invoice. Double-invoicing a counterparty is the
+      fastest way to lose one, and at-least-once delivery guarantees the retry will happen.
+    offline_policy: refuse
+    concurrency: >
+      The document number is allocated inside the issuing transaction from a gapless
+      per-series sequence, so a rolled-back issue releases the number. This is the opposite
+      of the work order reference, which is deliberately non-transactional and may gap -
+      because a gap in an invoice series is a question an auditor asks and a gap in an
+      operational reference is not. Outcomes are locked while being attached, so one outcome
+      cannot reach two invoices.
+    failure_modes:
+      - {code: E_PRECONDITION, cause: an outcome is unrated, message: Some items have no price yet., note: 'names them, because the fix is in the rating queue'}
+      - {code: E_PRECONDITION, cause: the counterparty lacks an attribute the tax treatment requires, message: This action is not available in the current state., note: 'names the missing attribute. Discovered at issue rather than at party creation is late and is better than discovering it at registration, which is later still'}
+      - {code: E_CONFLICT_UNIQUE, cause: an outcome is already on another invoice, message: null, note: the constraint that stops double billing; the offending outcomes are named}
+      - {code: E_AUTHN, cause: total exceeds the elevation threshold and the session is not elevated, message: Confirm your identity to continue.}
+      - {code: E_DEPENDENCY, cause: the external registry is unavailable, message: null, note: 'the invoice IS issued and moves to issued-unregistered with its deadline recorded and the registration queued. Refusing to issue because a government portal is down would stop billing entirely for the duration of somebody else''s outage'}
+      - {code: E_QUOTA, cause: more than max_lines_per_invoice, message: Plan limit reached., note: 'the correct action is to split the period or summarise, and the message offers both'}
+    edge_cases:
+      - Issuing while the external registry is unavailable. The document exists, is not tax-valid, says so on its face, and is not sent to the counterparty until it is registered or until finance explicitly chooses to send a not-tax-valid document. The distinction between having the document and being able to use it is the whole reason registration is modelled as a separate state.
+      - The registration deadline passing without success. The document is permanently not-tax-valid. It is escalated as a revenue loss rather than an administrative problem, because a document that can never be registered may never be collectable as a tax invoice and the underlying work may need re-invoicing under a new date, which is a decision with tax consequences that this capability records and does not take.
+      - Summarising many outcomes into one line. Supported, with outcome_count and full expandability retained. A counterparty who cannot drill into a summarised line disputes the whole line, so summarisation without expandability is a false economy.
+      - Issuing a zero-total invoice - every line credited or comped. Permitted, because a zero document is frequently required as a record of service under a contract. It still consumes a document number and still registers where required.
+      - Issuing against a counterparty whose credit limit is exceeded. Permitted and flagged to finance. Blocking the invoice does not reduce the exposure; the work has already been done and not invoicing it makes the exposure invisible.
+      - Two billing runs issuing for the same period concurrently. The idempotency key collapses them. Where the outcome sets differ - one run started earlier and saw fewer outcomes - the second run fails on the already-invoiced outcomes and reports which, rather than issuing a second partial invoice.
+
+  - key: allocate_payment
+    entity: payment_receipt
+    label: Allocate a payment
+    actors: [finance, system]
+    rationale: >
+      Explicit rather than automatic, deliberately. Automatically applying a receipt to the
+      oldest invoice produces an aged debt report nobody believes and turns a disputed invoice
+      into an apparently unpaid one.
+    preconditions: [the receipt has an unallocated balance, the target invoices belong to the same counterparty or the allocation is explicitly cross-party with a reason]
+    inputs: [receipt_id, allocations, reason]
+    creates: [allocation records]
+    updates: [receipt allocated amount, invoice balances and states]
+    events: [billing.payment_allocated]
+    notifications:
+      - {to: 'the counterparty''s billing contact', channel: their consenting channel, when: the tenant sends payment confirmations, template: payment_received, must_include: [amount, invoices_allocated, remaining_balance], cost_class: utility}
+      - {to: finance, channel: in_app, when: the receipt remains partly unallocated, template: unallocated_remainder}
+    undoable: true
+    reversal_action: unallocate_payment
+    audit_class: always
+    idempotency_key_source: receipt_id plus a hash of the ordered allocation list. A retried allocation applies once, which matters because a double allocation makes an invoice appear overpaid and a counterparty appear in credit.
+    offline_policy: refuse
+    concurrency: >
+      Allocation locks the receipt and every target invoice in a canonical id order, and
+      asserts inside the transaction that allocated plus written-off never exceeds the total on
+      any invoice. Two concurrent allocations of one receipt cannot together over-allocate it,
+      and two receipts cannot together over-pay one invoice.
+    failure_modes:
+      - {code: E_VALIDATION, cause: allocations exceed the receipt balance, message: field-specific}
+      - {code: E_VALIDATION, cause: 'an allocation exceeds an invoice''s outstanding balance', message: field-specific, note: 'the excess should be recorded as a payment on account, which the error offers, rather than as an overpayment on a document'}
+      - {code: E_PRECONDITION, cause: the target invoice belongs to a different counterparty and no reason is supplied, message: This action is not available in the current state., note: 'cross-party allocation is legitimate within a group and is always deliberate, so it requires a reason and is reported'}
+      - {code: E_PRECONDITION, cause: the target line is disputed and the tenant does not permit allocating to disputed amounts, message: This action is not available in the current state.}
+      - {code: E_AUTHN, cause: the allocation reverses a previous one and the session is not elevated, message: Confirm your identity to continue.}
+    edge_cases:
+      - A receipt with no identifiable counterparty. Recorded and left unallocated, appearing in the unallocated queue with its payer narrative. Guessing the payer from a partial name match is exactly the automation that produces a payment applied to the wrong customer, which is discovered by the customer who did pay.
+      - A short payment because the counterparty is withholding a disputed amount. Allocated to the undisputed lines, leaving the disputed amount outstanding. This is why disputes are line-level: an invoice-level dispute would make the whole document look unpaid and start a collection sequence against somebody who has paid what they agree they owe.
+      - A round-sum payment covering several invoices with no remittance advice. Allocated explicitly by a person, and the model deliberately offers candidates rather than choosing. The candidates are ordered by due date and the ordering is a suggestion that is visibly a suggestion.
+      - An overpayment. Recorded as a payment on account against the counterparty rather than as an overpaid invoice, so that the invoice balance stays truthful and the credit is visible where it will be used.
+      - Allocation of a receipt that is later reversed by the bank. The reversal unallocates first, restoring invoice balances, and both the allocation and its reversal are retained. The invoice returns to its previous state including its collection position, rather than restarting collection from the beginning against somebody whose payment failed through no fault of their own.
+
+  - key: issue_credit_note
+    entity: invoice
+    label: Credit an invoice
+    actors: [finance, tenant_owner]
+    rationale: >
+      The only way to correct an issued invoice. Modelled as issuing a separate document
+      rather than as an adjustment, because every accounting and tax regime works that way and
+      because the counterparty is holding a copy of the original.
+    preconditions:
+      - The original invoice is issued or later.
+      - The credit amount does not exceed the uncredited balance of the referenced lines.
+      - Acting session is elevated.
+      - A reason is supplied.
+    inputs: [invoice_id, line_credits, reason, credit_reason_category]
+    creates: [a credit_note document with its lines, an external registration submission where required]
+    updates: [original invoice lines marked credited, outcomes marked credited, invoice balances]
+    events: [billing.credit_note_issued]
+    notifications:
+      - {to: 'the counterparty''s billing contact', channel: their consenting channel, when: always, template: credit_note_issued, must_include: [credit_document_number, original_document_number, amount, reason_category], cost_class: utility, mandatory_operational: true}
+      - {to: tenant_owner, channel: in_app, when: 'the credit exceeds the notification threshold, or the acting principal''s credit rate exceeds the alert', template: credit_issued}
+    undoable: false
+    confirmation_specification: 'Modal stating the original document, the lines being credited with their amounts, the resulting balance on the original, the reason category, and that the counterparty will be told. Requires typing the credit total. Required because a credit note consumes a document number, is registered externally where required, and cannot be undone.'
+    audit_class: always
+    idempotency_key_source: original invoice_id plus a hash of the ordered line credit list plus the acting principal
+    offline_policy: refuse
+    concurrency: >
+      The original invoice and its lines are locked while credited amounts are asserted, so
+      two concurrent credits cannot together exceed the original. The credit note's own
+      document number comes from the credit series sequence, which is separate from the invoice
+      series, because mixing them makes both series unreadable.
+    failure_modes:
+      - {code: E_VALIDATION, cause: the credit exceeds the uncredited balance of the referenced lines, message: field-specific}
+      - {code: E_VALIDATION, cause: no reason category, message: Choose why this is being credited., note: 'from a closed list, because the aggregate of credits by reason is one of the most useful quality signals the platform produces and free text destroys it'}
+      - {code: E_AUTHN, cause: session not elevated, message: Confirm your identity to continue.}
+      - {code: E_PRECONDITION, cause: the original is a credit note, message: This action is not available in the current state., note: 'crediting a credit note is a new invoice, and the message says so'}
+      - {code: E_DEPENDENCY, cause: the external registry is unavailable, message: null, note: 'the credit note IS issued and registration is queued with its own deadline, exactly as for an invoice. A counterparty owed a credit must not wait on a government portal'}
+    edge_cases:
+      - Crediting an invoice that has already been paid in full. Produces a credit balance on the counterparty account, which is then either refunded or allocated against future invoices. Both are explicit acts, because automatically refunding a credit is moving money without an instruction.
+      - Crediting because work was never actually done - an unevidenced line a counterparty rejected. The reason category records it, and the aggregate by category is what tells the tenant whether their evidence capture is failing. This is the most valuable output of the reason list and it is the reason the list is closed rather than free text.
+      - A credit note that itself needs registration and fails. Same treatment as an invoice, and the counterparty is told the credit exists and is pending registration, because a credit they cannot see is a credit they will telephone about.
+      - Crediting a line whose underlying outcome has already been re-invoiced on a later document. Refused, because the outcome can belong to only one invoice line, and the state that produced this is a data error worth surfacing rather than working around.
+      - A goodwill credit with no dispute behind it. Fully supported with its own reason category, and separately reported. Goodwill credits are a legitimate commercial tool and are also the easiest way to reduce a customer's balance without anybody noticing, which is why the rate by principal is monitored.
+
+rules:
+  - key: one_outcome_one_line
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'unique(tenant, source_capability, source_ref) on billable_outcome, and an outcome may belong to at most one invoice line.'
+    on_conflict: not overridable
+    rationale: At-least-once event delivery guarantees an outcome will arrive twice. This constraint is what stops that becoming double billing.
+
+  - key: invoices_are_never_edited
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'No field of an issued invoice or its lines may change except payment, dispute, write-off and registration fields. Corrections are credit notes.'
+    on_conflict: not overridable
+
+  - key: not_tax_valid_must_be_stated
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'A document that requires external registration and does not hold a registration reference is rendered with an explicit not-tax-valid marker in every channel, and no covering message may describe it as a tax invoice.'
+    on_conflict: not overridable
+    rationale: An internally produced document that looks identical to a registered one is the most dangerous artefact this capability can emit, for the tenant and for the counterparty who cannot claim against it.
+
+  - key: document_numbers_are_gapless
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'Invoice and credit note numbers are allocated inside the issuing transaction from a gapless per-series sequence. A rolled-back issue releases the number.'
+    on_conflict: not overridable
+    rationale: Deliberately the opposite of the operational reference rule in work_order. A gap in an invoice series is a question an auditor asks; a gap in a job number is not.
+
+  - key: no_automatic_allocation
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'A payment receipt is never allocated automatically to any invoice. Candidates may be suggested and a person or an explicit remittance instruction allocates.'
+    on_conflict: not overridable
+    rationale: Automatic oldest-first allocation turns a disputed invoice into an apparently unpaid one and produces an aged debt report nobody believes.
+
+  - key: disputes_are_line_level
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'A dispute names specific lines. The undisputed remainder continues to be collectable and continues its collection sequence.'
+    on_conflict: not overridable
+    rationale: An invoice-level dispute lets a small disagreement stop payment of everything, which is a lever a counterparty will use.
+
+  - key: nothing_is_written_off_automatically
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'No age, threshold or sweep writes off a balance. A write-off is an explicit act by a principal holding the authority for that amount.'
+    on_conflict: not overridable
+
+  - key: billing_cycle
+    kind: policy
+    scope: capability
+    overridable_at: tenant
+    default: 'monthly in arrears, invoiced on the first working day after period end, payment terms from the contract where one exists and otherwise from the party record.'
+    on_conflict: most specific scope wins
+    rationale: Required by kernel K07 to ship a default. Monthly in arrears is the least surprising and is wrong for anybody billing on completion, which is why it is a rule rather than behaviour.
+
+policy_knobs:
+  - {key: rating_lag_hours, default: 6, range: [1, 168], lowest_settable_scope: kernel}
+  - {key: unratable_alert_days, default: 7, range: [1, 90]}
+  - {key: billing_lag_days, default: 3, range: [0, 60]}
+  - {key: uninvoiced_alert_days, default: 30, range: [1, 365]}
+  - {key: draft_invoice_stale_days, default: 2, range: [1, 60]}
+  - {key: registration_lag_minutes, default: 30, range: [1, 1440], lowest_settable_scope: kernel}
+  - {key: registration_retry_hours, default: 4, range: [1, 72]}
+  - {key: registration_window_days, default: null, note: 'the external reporting deadline. MANDATORY per tenant and deliberately null by default, because the sources disagree on which turnover band the limit applies to and encoding either reading would be inventing a legal obligation'}
+  - {key: send_lag_days, default: 2, range: [1, 30]}
+  - {key: delivery_confirm_days, default: 2, range: [1, 30]}
+  - {key: part_paid_review_days, default: 7, range: [1, 90]}
+  - {key: unallocated_receipt_days, default: 3, range: [1, 90]}
+  - {key: invoice_dispute_days, default: 10, range: [1, 180]}
+  - {key: exclusion_rate_alert, default: 0.02, range: [0.001, 1.0]}
+  - {key: writeoff_rate_alert, default: 0.02, range: [0.001, 1.0]}
+  - {key: max_lines_per_invoice, default: 1000, range: [10, 10000]}
+  - {key: invoice_elevation_threshold_minor, default: null, note: 'null means every issue requires elevation. Deliberately null rather than a number, because a shipped threshold is a shipped opinion about how much money may leave without a second check'}
+  - {key: allocate_to_disputed_permitted, default: false}
+  - {key: send_not_tax_valid_permitted, default: false, note: whether finance may send a document that has not been registered}
+
+open_questions:
+  - {q: 'The two sources consulted disagree on which turnover band the 30-day external reporting limit applies to - one says above the 5 crore e-invoicing threshold, the other says only above 10 crore. registration_window_days therefore ships null and is mandatory per tenant. The correct reading must come from the primary notification rather than from a secondary summary.', assumption: None. Encoding either reading would be inventing a legal obligation or inventing an exemption., confidence: VALIDATION_REQUIRED, method: 'read the primary advisory and notification text, and confirm with a practising tax adviser for the specific turnover bands the target tenants occupy', priority: Critical, blocks: [registration_window_days, invoice.registration_deadline_at, the issued stuck-state escalation]}
+  - {q: 'When a document''s registration deadline passes without success, is re-invoicing under a new date lawful, and what happens to the original? The model records the loss and escalates, and does not attempt the correction, because the answer has tax consequences this capability may not decide.', assumption: None., confidence: VALIDATION_REQUIRED, method: tax adviser review, priority: Critical, blocks: [registration_failed escape hatch]}
+  - {q: 'Should a tenant below the registration threshold be able to issue documents at all without the financial_document_sink bound, given that crossing the threshold mid-year makes every subsequently issued document invalid until a binding exists?', assumption: 'Yes, with pack publication checking the registration_required setting against the binding. Whether the platform should detect the crossing itself is not decided.', confidence: VALIDATION_REQUIRED, method: determine whether turnover is knowable inside Verity for a tenant that bills partly elsewhere, priority: High}
+  - {q: 'Should collection sequences be able to suspend service - stopping work for a counterparty in arrears - or is that strictly a commercial decision taken outside the system? Automating it is powerful and is the single most damaging thing an incorrect balance can cause.', assumption: 'None. No such mechanism is modelled, deliberately.', confidence: VALIDATION_REQUIRED, method: operator interviews; likely differs sharply between segments, priority: High, blocks: [collection sequence design, party risk_flag semantics]}
+  - {q: 'How should revenue be recognised where an outcome occurs in one period and is invoiced in another? The model records occurred_at and issue_date separately and takes no position, which is correct for a record-keeping system and insufficient for anybody producing accounts from it.', assumption: None., confidence: VALIDATION_REQUIRED, method: 'accounting review, alongside the comp and return treatment questions raised by the order capability', priority: High, blocks: [reporting revenue definitions]}

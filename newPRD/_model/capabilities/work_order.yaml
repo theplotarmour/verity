@@ -1,0 +1,535 @@
+key: work_order
+name: Work Order
+layer: domain
+confidence: KNOWN
+description: >
+  The reusable unit of committed work - something that must be done, to a subject, by
+  somebody, by a time, with evidence that it was done. It sits beneath maintenance, field
+  service, projects, helpdesk resolution and asset care without knowing which of those it
+  is being used for. What is being worked on arrives through a port as a subject reference,
+  never as a typed relationship.
+
+principles:
+  - The work order knows there is a subject. It does not know what kind of thing the subject is. That single restraint is what lets one capability serve every pack, and it is what AET-03 tests.
+  - A checklist is data, not a form. It is versioned, its answers are evidence, and changing the template never changes what a completed order recorded.
+  - Completion is a claim until it is evidenced. What counts as sufficient evidence is configuration, because the answer differs by contract and by what the tenant can afford to demand of the person doing the work.
+  - Parts, time and travel are recorded because somebody will be billed or paid for them. Recording them as free text when no downstream capability is bound is better than not recording them, because the evidence survives the binding arriving later.
+  - Reopening is a first-class transition, not a workaround. Work that was signed off and then failed is the normal case, and forcing a new order loses the connection between the failure and the original.
+
+entities:
+
+  - key: work_order
+    name: Work Order
+    description: One committed unit of work with a subject, a window, an assignee, an outcome and its evidence.
+    owner: tenant
+    tenancy: tenant_scoped_with_site_partition
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: reference, type: string, req: true, unique_scope: tenant, immutable: true, note: 'the human-facing number people say out loud. A separate display field, never the primary key, per kernel K03'}
+      - {key: title, type: string, req: true}
+      - {key: description, type: text, nullable: true}
+      - {key: subject_ref, type: uuid, nullable: true, note: 'what is being worked on, resolved through the work_subject port. Opaque here. Deliberately not a foreign key'}
+      - {key: subject_capability_key, type: string, nullable: true, note: 'which capability owns the subject, so an orphan is traceable'}
+      - {key: location_ref, type: uuid, nullable: true, note: resolved through the org_structure port}
+      - {key: requesting_party_ref, type: uuid, nullable: true, note: resolved through the party_directory port}
+      - {key: origin, type: enum, values: [manual, recurrence, escalation, external_request, automation_rule, reopen], req: true}
+      - {key: origin_ref, type: uuid, nullable: true, note: 'the ticket, plan or prior order that produced this one, resolved through the relevant port'}
+      - {key: work_type_id, type: uuid, req: true, fk: work_type}
+      - {key: priority, type: enum, values: [routine, elevated, urgent, critical], req: true, default: routine}
+      - {key: requested_for_at, type: timestamptz, nullable: true}
+      - {key: due_at, type: timestamptz, nullable: true, note: 'derived from the sla_clock port where bound, otherwise set manually. Which of the two it was is recorded, because a manually set due date and a contractual one carry different consequences'}
+      - {key: due_source, type: enum, values: [manual, contract, policy, none], req: true, default: none}
+      - {key: assigned_resource_ref, type: uuid, nullable: true, note: resolved through the schedulable_resource port}
+      - {key: started_at, type: timestamptz, nullable: true}
+      - {key: completed_at, type: timestamptz, nullable: true}
+      - {key: outcome, type: enum, values: [not_recorded, resolved, partially_resolved, not_possible, no_fault_found, duplicate], nullable: true, note: 'deliberately includes the honest outcomes. A system that only offers "done" gets "done" for everything, including the visits where nothing could be fixed'}
+      - {key: outcome_notes, type: text, nullable: true}
+      - {key: signed_off_by, type: enum, values: [none, assignee, supervisor, requesting_party], nullable: true}
+      - {key: signed_off_at, type: timestamptz, nullable: true}
+      - {key: signature_evidence_ref, type: string, nullable: true}
+      - {key: reopen_of_work_order_id, type: uuid, nullable: true, fk: work_order}
+      - {key: reopen_count, type: int, req: true, default: 0, note: 'on the original, incremented by each reopen. A rising reopen rate for a work_type is the single most useful quality signal this capability produces'}
+      - {key: labour_minutes, type: int, nullable: true}
+      - {key: travel_minutes, type: int, nullable: true}
+      - {key: cost_estimate_minor, type: money_minor, nullable: true, financial: true}
+      - {key: cost_actual_minor, type: money_minor, nullable: true, financial: true}
+      - {key: billable, type: enum, values: [undetermined, billable, not_billable, disputed], req: true, default: undetermined, financial: true, note: 'a classification this capability records and does not decide. The rule that sets it is tenant policy and the money is the billing capability''s'}
+    invariants:
+      - completed_at requires outcome to be set and not not_recorded. A completion with no outcome is a record that says only that somebody pressed a button.
+      - started_at, where set, is on or before completed_at.
+      - A work order may not be completed while any checklist item marked blocking is unanswered, and may not be completed while any evidence requirement of its work_type is unmet, unless an override is recorded with a reason.
+      - reopen_of_work_order_id and origin=reopen are set together or not at all.
+      - Financial fields are gated by view_financial and are never offline_editable, per the kernel rule. This matters especially here, because the field surface is the one most likely to be used offline.
+      - subject_ref is opaque. No query in this capability may join to a subject's own attributes; anything it needs comes through the work_subject port.
+    states: [draft, ready, scheduled, in_progress, on_hold, awaiting_signoff, completed, cancelled, reopened]
+    initial_state: draft
+    transitions:
+      - {from: draft, to: ready, action: submit_work_order, actor: any principal with create on work_order, guard: 'title, work_type and either a subject or a location are present', side_effects: 'demand is published through the schedulable_demand port, the sla_clock is started where bound', reversibility: true}
+      - {from: ready, to: draft, action: return_to_draft, actor: dispatcher or supervisor, guard: not yet scheduled, side_effects: 'demand withdrawn, clock paused with a recorded reason', reversibility: true}
+      - {from: ready, to: scheduled, action: observe_assignment, actor: system, guard: an assignment exists through the scheduling port, side_effects: the assignee is notified through their own capability, reversibility: true}
+      - {from: scheduled, to: ready, action: observe_assignment_released, actor: system, guard: no assignment remains, side_effects: 'demand re-published, the clock keeps running because losing an assignee does not pause a commitment to a counterparty', reversibility: true}
+      - {from: scheduled, to: in_progress, action: start_work, actor: the assignee, guard: 'presence evidence satisfies the work_type requirement, or the requirement is unset, or an override is recorded', side_effects: 'started_at set, the subject is notified through the work_subject port where it wants to know', reversibility: false}
+      - {from: ready, to: in_progress, action: start_work, actor: the assignee or a supervisor, guard: as above, side_effects: as above, reversibility: false, note: 'work frequently starts without ever being formally scheduled, and refusing that path pushes the record-keeping onto paper'}
+      - {from: in_progress, to: on_hold, action: hold_work, actor: the assignee or a supervisor, guard: a hold reason from the configured list is chosen, side_effects: 'the sla_clock is paused only where the hold reason is one the contract permits pausing for - which the sla_contract capability decides, not this one', reversibility: true}
+      - {from: on_hold, to: in_progress, action: resume_work, actor: the assignee or a supervisor, guard: null, side_effects: clock resumed, reversibility: true}
+      - {from: in_progress, to: awaiting_signoff, action: complete_work, actor: the assignee, guard: 'every blocking checklist item is answered, the work_type evidence requirement is met or overridden, and an outcome is chosen', side_effects: 'completed_at set, sign-off requested from whoever the work_type names', reversibility: true}
+      - {from: in_progress, to: completed, action: complete_work, actor: the assignee, guard: 'as above, and the work_type requires no sign-off', side_effects: 'the sla_clock is stopped, a billable outcome is emitted where the sink is bound', reversibility: true}
+      - {from: awaiting_signoff, to: completed, action: sign_off_work, actor: supervisor or the requesting party through the customer_surface port, guard: null, side_effects: as above, reversibility: true}
+      - {from: awaiting_signoff, to: in_progress, action: reject_signoff, actor: supervisor or the requesting party, guard: a reason is supplied, side_effects: 'completed_at cleared, the assignee is notified with the reason, the clock resumes', reversibility: true}
+      - {from: completed, to: reopened, action: reopen_work_order, actor: 'supervisor, ops_manager or the requesting party', guard: a reason is supplied and now is within reopen_window_days of completion, side_effects: 'a NEW work order is created with origin=reopen pointing at this one, and this one''s reopen_count is incremented. This order does not itself return to an active state', reversibility: false}
+      - {from: draft, to: cancelled, action: cancel_work_order, actor: any principal with delete on work_order, guard: null, side_effects: none, reversibility: false}
+      - {from: ready, to: cancelled, action: cancel_work_order, actor: supervisor or ops_manager, guard: a reason is supplied, side_effects: 'demand cancelled, clock stopped with reason, requesting party told where a customer surface is bound', reversibility: false}
+      - {from: scheduled, to: cancelled, action: cancel_work_order, actor: supervisor or ops_manager, guard: as above, side_effects: 'as above, plus the assignment is released and the assignee is told', reversibility: false}
+      - {from: on_hold, to: cancelled, action: cancel_work_order, actor: supervisor or ops_manager, guard: as above, side_effects: as above, reversibility: false}
+      - {from: in_progress, to: cancelled, action: cancel_work_order, actor: ops_manager, guard: a reason is supplied and the acting session is elevated, side_effects: 'as above, plus the partial labour and parts are retained so they can still be paid and billed', reversibility: false}
+    stuck_state_policy:
+      completed: >
+        Terminal unless reopened. The one thing that still pends is downstream: where a
+        billable_outcome_sink is bound, a completed order whose billable event has not been
+        acknowledged within outcome_ack_hours (default 4) is reported to platform_operator,
+        because a completion that never reached billing is revenue that disappears silently
+        and is only ever found by reconciling two systems by hand.
+      cancelled: >
+        Terminal. Retained with the reason and with any labour, travel and parts recorded
+        before cancellation, because those were still incurred and somebody may still be paid
+        or billed for them. Nothing pends.
+      draft: >
+        Threshold: draft_work_order_stale_days (default 3) - deliberately short, because a
+        draft work order is usually somebody who started reporting a problem and was
+        interrupted, and the problem is still there. Told: the creating principal, then the
+        supervisor of the location. Escape hatch: submit or cancel. No auto-submit, because
+        an incomplete work order dispatched to somebody is a wasted journey.
+      ready: >
+        Ready and unassigned is the queue that decides whether commitments are met. It is
+        deliberately NOT policed on a fixed timer here - the sla_clock port owns the
+        contractual deadline and the scheduling capability owns the coverage risk. What this
+        capability monitors is the case where NEITHER is bound: a ready order with no due_at
+        and no assignment for unassigned_no_deadline_days (default 7). Told: the supervisor
+        of the location. Escape hatch: assign, set a due date, or cancel. This is stated
+        explicitly because an order with no clock and no scheduler is invisible to every
+        other mechanism.
+      scheduled: >
+        Bounded by the assignment window. The monitored exception is a scheduled order whose
+        assignment window has passed without the work starting, which is the scheduling
+        capability's no_show but seen from the work side. Told: the supervisor, at
+        scheduled_not_started_minutes (default 60) past the window start. Escape hatch: start,
+        reschedule, or record the no-show. The two capabilities deliberately both notice,
+        because either one being unbound must not make the condition invisible.
+      in_progress: >
+        Work that starts and never finishes is the largest silent liability in a field
+        operation - the labour is being incurred and no outcome is recorded. Threshold:
+        in_progress_alert_hours (default 8), and a second escalation at four times that.
+        Told: the assignee first, then the supervisor. Escape hatch: complete, hold with a
+        reason, or cancel. Verity never auto-completes. An auto-completed work order produces
+        an outcome nobody chose and, where a billable sink is bound, an invoice line nobody
+        can defend.
+      on_hold: >
+        A hold is meant to be short and is the state most likely to become permanent, because
+        it feels like progress. Threshold: depends on the hold reason, configured per reason
+        with a default of hold_review_days (default 3). Told: the assignee and the supervisor,
+        escalating to ops_manager at twice the threshold. Escape hatch: resume, or cancel with
+        the reason preserved. A hold whose reason is awaiting-a-third-party is reported with
+        the elapsed time in the counterparty communication, because that is the number that
+        moves the conversation.
+      awaiting_signoff: >
+        Completed work waiting on somebody else's confirmation, during which it is not
+        billable and not closed. Threshold: signoff_deadline_hours (default 48). Told: the
+        signer, then the supervisor. Escape hatch: sign off, reject, or escalate to a
+        supervisor sign-off where the work_type permits substitution. Auto-sign-off after a
+        timeout is offered as tenant configuration and is OFF by default, because an
+        auto-signed work order is evidence of nothing and it is the counterparty who will say
+        so.
+      reopened: >
+        Terminal on this order - the successor carries the work. Not a queue. The monitored
+        exception is a chain: an order reopened more than reopen_chain_alert times (default 2)
+        in sequence. Told: ops_manager and the owner of the work_type, because a third reopen
+        is a problem with the work definition, the parts or the person, and none of those get
+        better by opening a fourth order.
+
+  - key: work_type
+    name: Work Type
+    description: The definition of a kind of work - its checklist template, its evidence requirements, who signs it off, and its default duration. The configuration surface that makes one work order capability behave differently per pack.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: key, type: string, req: true, unique_scope: tenant, immutable: true}
+      - {key: label, type: string, req: true}
+      - {key: checklist_template_id, type: uuid, nullable: true, fk: checklist_template}
+      - {key: required_qualification_keys, type: json, nullable: true, note: 'flat list of scalars, passed through to the demand this work type generates'}
+      - {key: default_duration_minutes, type: int, nullable: true}
+      - {key: presence_evidence_required, type: enum, values: [none, at_start, at_completion, both], req: true, default: none}
+      - {key: photo_evidence_min_count, type: int, req: true, default: 0}
+      - {key: signoff_by, type: enum, values: [none, assignee, supervisor, requesting_party], req: true, default: none}
+      - {key: signature_required, type: bool, req: true, default: false}
+      - {key: allows_parts, type: bool, req: true, default: false}
+      - {key: default_billable, type: enum, values: [undetermined, billable, not_billable], req: true, default: undetermined}
+      - {key: reopen_window_days, type: int, req: true, default: 30}
+      - {key: hold_reasons, type: json, req: true, note: 'flat list of reason keys, each with whether it pauses a contractual clock. The pause decision is proposed here and ratified by the sla_contract capability, which owns the contract'}
+      - {key: source_pack_key, type: string, nullable: true}
+    invariants:
+      - signature_required implies signoff_by is not none. A signature with nobody nominated to give it is a field that will stay empty.
+      - photo_evidence_min_count above zero requires the evidence_capture port to be bound, checked at publication rather than at completion, so the failure surfaces to the person configuring it rather than to somebody standing at a location.
+      - hold_reasons may not be empty. A hold with no reason is a work order that stopped for reasons nobody recorded, and it is the most common way an SLA argument becomes unwinnable.
+      - Editing a work_type never changes a work order already created from it. The order captures the resolved requirements at submission, because otherwise tightening a requirement retroactively invalidates completed work.
+    states: [draft, active, archived]
+    initial_state: draft
+    transitions:
+      - {from: draft, to: active, action: publish_work_type, actor: ops_manager or tenant_admin, guard: 'hold_reasons is non-empty, evidence requirements are satisfiable by the bound ports, and the checklist template is published', side_effects: the type becomes selectable, reversibility: true}
+      - {from: active, to: draft, action: unpublish_work_type, actor: ops_manager or tenant_admin, guard: no non-terminal work order uses it, side_effects: none, reversibility: true}
+      - {from: active, to: archived, action: archive_work_type, actor: ops_manager or tenant_admin, guard: no non-terminal work order uses it, side_effects: 'removed from pickers, historical orders continue to resolve', reversibility: false}
+      - {from: draft, to: archived, action: archive_work_type, actor: as above, guard: null, side_effects: none, reversibility: false}
+    stuck_state_policy:
+      draft: >
+        Threshold: draft_work_type_stale_days (default 30). Told: the creating principal.
+        Escape hatch: publish or archive. Low operational risk, high confusion risk - somebody
+        configured a kind of work and believes people can select it.
+      active: >
+        Two monitored exceptions. (a) A type whose reopen rate over a rolling quarter exceeds
+        reopen_rate_alert (default 0.15) - the work definition, the parts list or the
+        allotted duration is wrong, and this is the most actionable quality signal the
+        capability produces. Told: ops_manager and the type's owner, quarterly. (b) A type
+        whose evidence requirements can no longer be satisfied because a port was unbound.
+        Told immediately, because otherwise every completion silently falls back to the
+        override path.
+
+  - key: checklist_template
+    name: Checklist Template
+    description: A versioned, ordered set of questions attached to a work type. Its answers are evidence, so it is versioned rather than edited.
+    owner: tenant
+    tenancy: tenant_scoped
+    fields:
+      - {key: id, type: uuid, req: true, immutable: true}
+      - {key: tenant_id, type: uuid, req: true, immutable: true}
+      - {key: key, type: string, req: true, immutable: true}
+      - {key: version_number, type: int, req: true}
+      - {key: items, type: json, req: true, note: 'ordered list of items, each a flat set of scalars - key, prompt, answer_kind, blocking, evidence_required, expected_value. Flat rather than nested, per the object-valued prohibition, so a template diff is readable'}
+      - {key: published_at, type: timestamptz, nullable: true}
+      - {key: published_by_principal_id, type: uuid, nullable: true}
+    invariants:
+      - A published template is immutable. A change is a new version. A completed work order references the version it answered, so a later template edit can never alter what was recorded.
+      - Item keys are unique and stable within a template lineage. Reusing a key for a different question across versions makes every historical answer wrong in a way nobody detects.
+      - An item marked blocking must have an answer_kind that can be objectively unanswered. A free-text blocking item is satisfied by a space character.
+    states: [draft, published, superseded]
+    initial_state: draft
+    transitions:
+      - {from: draft, to: published, action: publish_checklist_template, actor: ops_manager or supervisor, guard: 'at least one item, unique item keys, and every blocking item has a checkable answer kind', side_effects: work types referencing this lineage begin using it for NEW orders only, reversibility: false}
+      - {from: published, to: superseded, action: publish_checklist_template, actor: ops_manager or supervisor, guard: a later version of the same lineage is published, side_effects: none, reversibility: false}
+      - {from: draft, to: superseded, action: discard_checklist_draft, actor: ops_manager or supervisor, guard: null, side_effects: none, reversibility: false}
+    stuck_state_policy:
+      draft: >
+        Threshold: draft_checklist_stale_days (default 14). Told: the creating principal.
+        Escape hatch: publish or discard. The specific confusion here is acute - a supervisor
+        who edited a checklist and did not publish it will believe the field workforce is
+        answering the new questions.
+      published: >
+        Steady state. Monitored exception: an item answered identically on more than
+        uniform_answer_alert of completions (default 0.98) over a quarter. Either the
+        question has one correct answer and does not need asking, or nobody is reading it and
+        everybody is tapping the default. Both are worth knowing and neither is detectable any
+        other way. Told: the template owner, quarterly, advisory only.
+      superseded: >
+        Terminal. Retained permanently, because completed work orders reference it and their
+        answers are meaningless without the questions. Nothing pends.
+
+ports:
+  - port_key: work_generation
+    direction: provides
+    contract: >
+      Raise a unit of work of a stated type against a subject and a location for a due date,
+      and report its progress, its outcome and its cancellation back to whoever raised it. The
+      raiser never learns how the work was scheduled, evidenced or completed.
+    cardinality: zero_or_many
+
+  - port_key: measurable_event
+    direction: provides
+    contract: Emit the lifecycle events a service level measures against - submitted, first assigned, started, held, resumed, completed - with the subject, the location and the priority, so a clock can be started, paused and stopped against them.
+    cardinality: zero_or_many
+
+  - port_key: work_subject
+    direction: requires
+    contract: >
+      Resolve a subject reference to a display label, a location, a status and whether the
+      subject wants to be told about work against it. THE port that makes this capability
+      reusable - the work order never learns what kind of thing it is working on.
+    cardinality: zero_or_many
+    unbound_behaviour: >
+      Work orders carry no subject and are located rather than subjected. Everything else
+      works. The subject field is not shown at all rather than shown empty, because an empty
+      required-looking field is the fastest way to make people invent values for it.
+
+  - port_key: schedulable_demand
+    direction: provides
+    contract: Publish a submitted work order as a unit of demand with its window, required qualifications, location, count and priority, and withdraw it on cancellation.
+    cardinality: zero_or_many
+
+  - port_key: schedulable_resource
+    direction: requires
+    contract: Resolve the assigned resource to a display name and availability, for showing who is doing the work.
+    cardinality: zero_or_one
+    unbound_behaviour: 'assigned_resource_ref cannot be set and work orders are worked by whoever picks them up, with the actor recorded at start_work. This is a materially different operating model and the surface reflects it rather than showing an empty assignee.'
+
+  - port_key: sla_clock
+    direction: requires
+    contract: Start, pause, resume and stop a clock against a target derived from a contract, and report the current breach position.
+    cardinality: zero_or_one
+    unbound_behaviour: >
+      No clock runs, no breach fires, no escalation. due_at may still be set manually with
+      due_source=manual. Timestamps are recorded throughout, so SLAs can be applied
+      retroactively if the capability is enabled later - which is the composition model's
+      declared behaviour for this port and is restated here because the retroactive path is
+      what makes enabling it later worthwhile.
+
+  - port_key: evidence_capture
+    direction: requires
+    contract: Capture and attach photos, signatures, geolocation and form responses with tamper evidence, and queue them when offline.
+    cardinality: zero_or_one
+    unbound_behaviour: >
+      Actions requiring evidence become unavailable and the reason is shown, rather than
+      silently permitting unevidenced completion. Work types with evidence requirements
+      cannot be published. Existing orders from such a type complete only through the
+      override path, and every such completion is reported.
+
+  - port_key: stock_movement_sink
+    direction: requires
+    contract: Consume, reserve, return or scrap a quantity of an item at a location.
+    cardinality: zero_or_one
+    unbound_behaviour: 'Parts used are recorded as free text on the work order for billing evidence, with no stock effect. This is deliberately not an error - a business with no stock system still needs to record what it fitted, and the free text is what a billing dispute is settled with.'
+
+  - port_key: billable_outcome_sink
+    direction: requires
+    contract: Accept a completed work order as a billable outcome with quantity, rate basis, contract reference and evidence references.
+    cardinality: zero_or_one
+    unbound_behaviour: The order completes normally and records its outcome. No billable event is created and the UI shows no billing affordance at all rather than showing one disabled.
+
+  - port_key: party_directory
+    direction: requires
+    contract: Resolve the requesting party to a display name, contactable channels and permission scope.
+    cardinality: zero_or_one
+    unbound_behaviour: Work orders carry no requesting party. Externally originated work cannot be attributed to whoever asked for it, which removes the ability to tell them anything about it.
+
+  - port_key: customer_surface
+    direction: requires
+    contract: Expose a permissioned external projection of a work order to the requesting party, and accept their sign-off or rejection.
+    cardinality: zero_or_one
+    unbound_behaviour: 'signoff_by=requesting_party cannot be configured, and existing work types using it fall back to supervisor sign-off with the substitution recorded on each order. The counterparty is never silently deemed to have signed.'
+
+  - port_key: approval_chain
+    direction: requires
+    contract: Route evidence overrides, cost overruns and cancellation of in-progress work for approval.
+    cardinality: zero_or_one
+    unbound_behaviour: The action executes immediately with an audit note recording that no approval chain was configured. Overrides are still counted and reported.
+
+  - port_key: notification
+    direction: requires
+    contract: Deliver assignment, hold, sign-off request, breach and reopen messages.
+    cardinality: zero_or_one
+    unbound_behaviour: All conditions degrade to console lists. Sign-off requests in particular become invisible to the signer, which turns awaiting_signoff into a permanent state.
+
+actions:
+
+  - key: submit_work_order
+    entity: work_order
+    label: Raise a work order
+    actors: [dispatcher, supervisor, ops_manager, employee, integration_principal, customer_contact]
+    preconditions: [a work_type is chosen and is active, either a subject or a location is present, the tenant is not suspended]
+    inputs: [work_type_id, title, description, subject_ref, location_ref, requesting_party_ref, priority, requested_for_at, origin, origin_ref]
+    creates: [work_order, checklist answer rows from the template, demand through the schedulable_demand port]
+    updates: []
+    events: [work_order.submitted]
+    notifications:
+      - {to: dispatcher, channel: in_app, when: always, template: work_order_submitted, batching_policy: 'a digest per configured interval except at priority urgent or critical, which are immediate'}
+      - {to: requesting_party, channel: as_configured, when: a customer surface is bound and the party has a consenting channel, template: request_received, must_include: [reference, expected_response_window_if_a_clock_is_bound], cost_class: utility}
+    undoable: true
+    reversal_action: cancel_work_order
+    audit_class: always
+    idempotency_key_source: >
+      tenant_id plus origin plus origin_ref where present, otherwise tenant_id plus a hash of
+      (work_type, subject_ref, location_ref, title) plus the creating principal plus the
+      minute bucket. The origin-keyed form is what stops a recurrence run or a retried webhook
+      creating duplicate orders, which is the most common duplicate in this capability.
+    offline_policy: queue
+    concurrency: >
+      The reference number is allocated from a tenant-scoped sequence outside the transaction
+      and is never reused, so a rolled-back submission leaves a gap in the numbering rather
+      than a duplicate number. A gap is explainable; a duplicate reference is not, and the
+      reference is what people say to each other on the phone.
+    failure_modes:
+      - {code: E_VALIDATION, cause: neither subject nor location supplied, message: Say where or what this is for.}
+      - {code: E_PRECONDITION, cause: the work_type is not active, message: This kind of work is not available.}
+      - {code: E_PRECONDITION, cause: the work_type requires evidence and the evidence_capture port is unbound, message: This action is not available in the current state., note: 'refused at submission rather than at completion, so the failure lands on somebody at a desk rather than on somebody at a location'}
+      - {code: E_AUTHZ_SCOPE, cause: 'location_ref is outside the submitter''s scope', message: Not found.}
+      - {code: E_DEPENDENCY, cause: the sla_clock port is bound but unavailable, message: null, note: the order COMMITS with due_source=none and the clock start is queued for retry. Refusing to accept work because a clock service is down is the wrong trade - the work still needs doing}
+      - {code: E_QUOTA, cause: open work order limit reached, message: Plan limit reached.}
+      - {code: E_RATE_LIMIT, cause: more than submit_burst per source per minute, message: Too many attempts. Try again shortly., note: catches a misconfigured integration replaying a queue}
+    edge_cases:
+      - Submitted offline by somebody standing at a location. Queued, and the reference number is provisional on the device and replaced by the authoritative one on sync, with the provisional number retained on the record - because the person will have written the provisional number on a paper docket and somebody will search for it.
+      - Two orders submitted for the same subject and the same fault by two different people. Both are created, and the duplicate outcome exists precisely so one can be closed honestly rather than deleted. Auto-merging is not offered, because two reports of the same symptom are sometimes two faults.
+      - Submitted by a customer_contact through the customer surface. Arrives in draft rather than ready when the tenant requires triage, and in ready when it does not. Which of the two is tenant configuration, because a business with a contractual response time cannot afford a triage step and a business without one cannot afford to dispatch on an unverified report.
+      - Submitted with requested_for_at in the past. Accepted. Retrospective recording of work already done is a real and frequent need, and the record carries the gap between requested_for_at and created_at so that it is visible rather than disguised.
+      - A recurrence run submitting an order for a subject that has since been retired. The work_subject port reports the subject unavailable and the order is created in draft with the reason attached, rather than being silently skipped. A silently skipped maintenance order is a maintenance plan that quietly stops running.
+
+  - key: complete_work
+    entity: work_order
+    label: Complete the work
+    actors: [employee, supervisor]
+    rationale: >
+      The moment the record becomes evidence. Everything downstream - billing, SLA
+      measurement, quality, payroll - reads what is recorded here, and it is recorded by
+      somebody standing in the rain on a cheap phone with one bar of signal.
+    preconditions:
+      - The order is in_progress.
+      - Every blocking checklist item is answered.
+      - The work_type evidence requirement is met, or an override with a reason is recorded.
+      - An outcome is chosen.
+    inputs: [work_order_id, outcome, outcome_notes, checklist_answers, evidence_refs, labour_minutes, travel_minutes, parts_used, override_reason]
+    creates: [checklist answer versions, evidence attachments, stock movements where the sink is bound, a billable outcome where the sink is bound]
+    updates: [work_order state, completed_at, outcome, labour and travel, billable classification]
+    events: [work_order.completed, work_order.outcome_recorded]
+    notifications:
+      - {to: the nominated signer, channel: push_and_in_app, when: the work_type requires sign-off, template: signoff_requested, must_include: [reference, outcome, evidence_summary], mandatory_operational: true}
+      - {to: requesting_party, channel: as_configured, when: a customer surface is bound and no sign-off is required, template: work_completed, cost_class: utility}
+      - {to: supervisor, channel: in_app, when: 'an evidence override was used, or the outcome is not_possible or no_fault_found', template: completion_needs_review}
+    undoable: true
+    reversal_action: 'reject_signoff while awaiting sign-off; after that, reopen_work_order'
+    audit_class: always
+    idempotency_key_source: 'work_order_id plus a hash of the submitted checklist answers and evidence references. A retried submission from a device with a poor connection produces one completion, one set of stock movements and one billable event - the triple-billing failure this key exists to prevent.'
+    offline_policy: queue
+    concurrency: >
+      Completion takes the work order row exclusively. Two people completing the same order -
+      an assignee and a supervisor closing it from the console at the same moment - resolve to
+      one completion, and the loser is shown the winner's outcome rather than a generic
+      conflict, because their next action depends on what was recorded rather than on the fact
+      that they lost. Stock movements and the billable event are emitted inside the same
+      transaction as the state change, so a completion can never exist without them or they
+      without it.
+    failure_modes:
+      - {code: E_PRECONDITION, cause: a blocking checklist item is unanswered, message: Answer the required checks first., note: 'names the items, and the field surface scrolls to the first one rather than only reporting'}
+      - {code: E_PRECONDITION, cause: the evidence requirement is unmet and no override reason was given, message: This action is not available in the current state., note: 'names what is missing - for example two photos required, one attached'}
+      - {code: E_VALIDATION, cause: outcome is not_recorded, message: Choose what the outcome was.}
+      - {code: E_AUTHZ_FIELD, cause: cost fields supplied without view_financial, message: null, note: 'dropped and reported. Labour and travel minutes are NOT financial fields and are always recordable, because the person doing the work must be able to record their own time'}
+      - {code: E_OFFLINE_STALE, cause: the order was cancelled or completed by somebody else while the device was offline, message: This was changed while you were offline., note: 'the queued completion is NOT discarded. It is held in the conflict queue with its evidence intact, because the work was done and the evidence is the only record of it'}
+      - {code: E_DEPENDENCY, cause: the stock_movement_sink is bound but unavailable, message: A required service is unavailable., note: 'the completion is REFUSED rather than committing without the stock movement, because a completion that consumed parts without recording them silently corrupts stock and the error compounds daily. This is the opposite trade from the sla_clock case above, and the difference is that a clock can be applied retroactively and a stock movement cannot'}
+      - {code: E_CONFLICT_VERSION, cause: the checklist template version changed, message: null, note: impossible by construction - the order captured its template version at submission. Listed here because the naive implementation resolves the template at completion time and would produce exactly this error}
+    edge_cases:
+      - "Completed offline with photos on a device with no signal. The completion and its evidence are queued together as one unit and are replayed atomically. Evidence that syncs without its completion, or a completion that syncs without its evidence, is the failure mode that makes field evidence untrustworthy, and the queue treats them as one item for that reason."
+      - Completed with outcome=not_possible. Fully first-class. No billable event is emitted by default, the requesting party is told, and a follow-up order is offered but never created automatically. A system that only offers a successful outcome gets a successful outcome recorded for every visit, including the ones where nothing was done.
+      - Completed with an evidence override. Permitted where the tenant allows it, always with a reason, always reported, and the resulting billable event carries a marker that the evidence requirement was overridden - so that a counterparty disputing the line can be shown the truth rather than a claim.
+      - A completion arriving days late from a device that was offline. occurred_at is the device's claimed completion time and recorded_at is the server's, and both are retained. Where the gap exceeds late_sync_alert_hours the completion is flagged for review rather than blocked, because both a broken phone and a fabricated record produce the same shape and only a human can tell them apart.
+      - Labour minutes exceeding the assignment window by a large margin. Accepted and flagged. Refusing would make an honest overrun unrecordable; accepting silently would let it flow into billing and payroll unnoticed.
+      - Parts recorded while the stock sink is unbound. Stored as free text on the order and carried into the billable event as evidence. When a stock capability is later bound, historical free-text parts are NOT retroactively converted into stock movements, because inventing a stock history from free text would corrupt the opening balance of the new system.
+
+  - key: reopen_work_order
+    entity: work_order
+    label: Reopen completed work
+    actors: [supervisor, ops_manager, customer_contact]
+    rationale: >
+      Work that was signed off and then failed is normal. Modelling it as a linked successor
+      rather than as a new unrelated order is what makes the reopen rate measurable, and the
+      reopen rate is the only quality signal this capability produces that anybody acts on.
+    preconditions: [the order is completed, now is within the work_type's reopen_window_days, a reason is supplied]
+    inputs: [work_order_id, reason, priority, evidence_refs]
+    creates: [a new work_order with origin=reopen and reopen_of_work_order_id set, and its demand]
+    updates: [the original's reopen_count]
+    events: [work_order.reopened, work_order.submitted]
+    notifications:
+      - {to: the original assignee and their supervisor, channel: in_app, when: always, template: work_reopened, must_include: [original_reference, reason, who_reopened]}
+      - {to: ops_manager, channel: in_app, when: the chain length exceeds reopen_chain_alert, template: repeated_reopen}
+    undoable: true
+    reversal_action: cancel_work_order on the successor
+    audit_class: always
+    idempotency_key_source: original work_order_id plus the reopening principal plus the minute bucket
+    offline_policy: refuse
+    concurrency: The original row is locked while reopen_count is incremented and the successor is created, so two concurrent reopens produce one successor rather than two orders for one failure.
+    failure_modes:
+      - {code: E_PRECONDITION, cause: outside the reopen window, message: This was completed too long ago to reopen. Raise new work instead., note: offers the alternative rather than only refusing}
+      - {code: E_VALIDATION, cause: reason empty, message: Say what went wrong. It is shown to the person who did the work.}
+      - {code: E_PRECONDITION, cause: the original is already reopened, message: null, note: 'returns the existing successor. Reopening a reopened order means working on the successor, not creating a sibling'}
+      - {code: E_AUTHZ_SCOPE, cause: a customer_contact reopening an order that is not theirs, message: Not found.}
+    edge_cases:
+      - Reopened by the requesting party through the customer surface. Fully supported and is the case that matters most, because a counterparty who cannot reopen will telephone, and the telephone call is not in any report. The reopen carries their reason verbatim.
+      - The successor is billable or not. Deliberately undetermined by default rather than defaulting to not_billable. Whether a return visit is chargeable is a contractual question this capability cannot answer, and defaulting it either way is a revenue decision made by a schema.
+      - The original assignee has since ended their engagement. The successor is unassigned and the notification about the reopen is not sent to them. The original remains attributed to them, because it was theirs.
+      - Reopening a work order whose subject has been retired. Permitted, with the subject shown as retired. Work is frequently reopened precisely because the subject was replaced.
+      - A reopen chain crossing a work_type version change. The successor uses the CURRENT work type and its current checklist, and records that it differs from the original's. Reusing a superseded template for a new piece of work would mean asking questions the tenant has decided to stop asking.
+
+rules:
+  - key: completion_requires_an_outcome
+    kind: guard
+    scope: kernel
+    overridable_at: null
+    default: 'A work order cannot reach completed with outcome null or not_recorded.'
+    on_conflict: not overridable
+    rationale: A completion with no outcome records only that somebody pressed a button, and every downstream consumer then guesses.
+
+  - key: evidence_requirement_is_configuration
+    kind: policy
+    scope: capability
+    overridable_at: site
+    default: >
+      Evidence requirements come from the work_type. A site may make them stricter. A site may
+      not relax them below the work_type. Overriding at completion is a per-tenant policy,
+      defaults to permitted-with-reason, and every override is counted and reported.
+    on_conflict: the stricter requirement wins
+    rationale: >
+      What counts as sufficient evidence differs by contract and by what a tenant can
+      reasonably demand of the person doing the work. Blocking absolutely produces paper
+      records; permitting silently produces unevidenced billing. Permitting visibly and
+      counting it is the only version that survives contact with a wet Tuesday.
+
+  - key: template_version_is_captured_at_submission
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'A work order captures its checklist template version and evidence requirements at submission. Later edits to the work_type or template never apply to it.'
+    on_conflict: not overridable
+
+  - key: auto_signoff_on_timeout
+    kind: policy
+    scope: capability
+    overridable_at: tenant
+    default: 'false. An unanswered sign-off request escalates and never auto-signs.'
+    on_conflict: most specific scope wins
+    rationale: An auto-signed work order is evidence of nothing, and the counterparty is the one who will point that out.
+
+  - key: billable_classification_is_recorded_not_decided
+    kind: policy
+    scope: capability
+    overridable_at: tenant
+    default: 'The work order records a billable classification from its work_type default and any tenant rule. It never computes money. The billable_outcome_sink decides what that classification is worth.'
+    on_conflict: most specific scope wins
+
+  - key: reference_numbers_are_never_reused
+    kind: constraint
+    scope: kernel
+    overridable_at: null
+    default: 'The human-facing reference is drawn from a non-transactional sequence. A rolled-back submission leaves a gap. Gaps are explainable; duplicate references are not.'
+    on_conflict: not overridable
+
+policy_knobs:
+  - {key: draft_work_order_stale_days, default: 3, range: [1, 30]}
+  - {key: unassigned_no_deadline_days, default: 7, range: [1, 90]}
+  - {key: scheduled_not_started_minutes, default: 60, range: [5, 1440]}
+  - {key: in_progress_alert_hours, default: 8, range: [1, 168]}
+  - {key: hold_review_days, default: 3, range: [1, 60]}
+  - {key: signoff_deadline_hours, default: 48, range: [1, 720]}
+  - {key: reopen_window_days, default: 30, range: [0, 365]}
+  - {key: reopen_chain_alert, default: 2, range: [1, 10]}
+  - {key: reopen_rate_alert, default: 0.15, range: [0.01, 1.0]}
+  - {key: uniform_answer_alert, default: 0.98, range: [0.5, 1.0]}
+  - {key: late_sync_alert_hours, default: 24, range: [1, 336]}
+  - {key: draft_work_type_stale_days, default: 30, range: [1, 180]}
+  - {key: draft_checklist_stale_days, default: 14, range: [1, 90]}
+  - {key: evidence_override_permitted, default: true, note: when false a completion cannot proceed without the required evidence under any circumstances}
+  - {key: external_request_requires_triage, default: true}
+  - {key: submit_burst_per_minute, default: 120, lowest_settable_scope: kernel}
+  - {key: outcome_ack_hours, default: 4, range: [1, 168], lowest_settable_scope: kernel}
+
+open_questions:
+  - {q: 'Should a reopen be billable by default? The model deliberately leaves the successor undetermined, which means somebody must decide per occurrence. Defaulting either way is a revenue decision made by a schema, and leaving it undetermined is a decision somebody has to make hundreds of times a month.', assumption: 'Undetermined, with a tenant-level default available. Whether the tenant-level default should exist at all is the open part.', confidence: VALIDATION_REQUIRED, method: operator interviews across maintenance and field service; the answer is likely to differ by whether work is under contract or ad hoc, priority: High, blocks: [billing rating rules, reopen_work_order defaults]}
+  - {q: 'Who owns the decision that a hold reason pauses a contractual clock - the work_type, which knows the operational reason, or the contract, which knows what was agreed? The model has the work_type propose and the contract ratify, which is more machinery than either alone.', assumption: 'Propose-and-ratify as modelled, because neither capability alone has both facts.', confidence: WORKING_ASSUMPTION, method: review with a business whose contracts specify pausable conditions explicitly, priority: High, blocks: [sla_contract clock semantics]}
+  - {q: 'Is there a maximum useful checklist length? Field observation from comparable products suggests long checklists get satisfied rather than answered, and the uniform_answer monitor detects that after the fact rather than preventing it.', assumption: None. No length limit is imposed., confidence: VALIDATION_REQUIRED, method: 'measure answer variance against checklist length in pilot, and observe completion time on a real device', priority: Medium}
+  - {q: 'Should a work order be able to have several subjects - one visit, three things worked on? The model says one, which forces three orders and triples the administrative load for a single journey.', assumption: One subject. Multi-subject work is several orders sharing an assignment., confidence: VALIDATION_REQUIRED, method: operator interview with a maintenance business that batches by location, priority: High, blocks: [work_subject port cardinality, billing per-visit versus per-subject]}
+  - {q: 'DEC-K-001 bites here through work_type. If tenants may define entities at runtime, work_type edges toward being a tenant-defined entity with its own fields rather than a configuration record with a fixed shape.', assumption: None. DEC-K-001 is unresolved., confidence: VALIDATION_REQUIRED, method: resolve DEC-K-001, priority: High, blocks: [DEC-K-001]}
