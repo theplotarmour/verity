@@ -25,7 +25,7 @@ An **Entity** represents a logical or physical business concept in Verity. Every
     *   Supports logical scoping by `tenant_id`.
     *   Fires business events on state mutation.
 *   **Source Reference**: Mapped from Odoo `models.Model` definition.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### MET-ENT-002: Transient Entity
 *   **Description**: Represents temporary, session-scoped transactional states (e.g., a wizard modal workflow, csv import configuration, or payment checkout dialog).
@@ -34,7 +34,7 @@ An **Entity** represents a logical or physical business concept in Verity. Every
     *   Excluded from the platform's long-term Event Bus (emits zero state events).
     *   Cleaned up periodically by a background autovacuum process (records older than 24 hours are deleted).
 *   **Source Reference**: Mapped from Odoo `models.TransientModel`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### MET-ENT-003: Abstract Entity (Mixin)
 *   **Description**: Acts as a functional interface or inheritance template. Does not map to a database table.
@@ -42,7 +42,7 @@ An **Entity** represents a logical or physical business concept in Verity. Every
     *   Used to share common fields, actions, or validation constraints across multiple persistent entities.
     *   *Examples*: `TrackableMixin` (timestamp audits), `NotificationRecipientMixin` (email/sms routing destinations).
 *   **Source Reference**: Mapped from Odoo `models.AbstractModel`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ---
 
@@ -50,8 +50,8 @@ An **Entity** represents a logical or physical business concept in Verity. Every
 
 ### MET-ENT-004: Unique Entity Key
 *   **Rule**: Every Entity must register a unique, namespace-qualified string key (e.g., `verity.work_orders.job_order`).
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### MET-ENT-005: Tenant Mapping Constraint
 *   **Rule**: Every Persistent Entity (unless marked as a platform-wide system reference) must include a non-nullable `tenant_id` foreign key.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

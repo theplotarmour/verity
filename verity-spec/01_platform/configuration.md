@@ -22,7 +22,7 @@ Verity parameters are managed hierarchically. A configuration value can be defin
     4.  **Global System Level**: Default platform behaviors.
 *   **Entity Mapping**:
     *   `ConfigParameter`: `key` (String), `value` (JSON), `scope` (global | tenant | organization | user), `scope_id` (UUID, optional).
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ---
 
@@ -34,8 +34,8 @@ Verity parameters are managed hierarchically. A configuration value can be defin
     *   `ChecklistTemplate`: Dynamic checklists containing validation rules, types, and logic flow (as specified in Formbricks reference).
     *   `NotificationTemplate`: Messaging layouts utilizing handlebars formatting (as specified in Novu reference).
     *   `DocumentTemplate`: HTML/CSS layouts used to compile PDFs (e.g. Work Order receipts, invoices).
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### PLA-CFG-003: Template Scoping and Visibility
 *   **Rule**: Templates are owned by the Tenant. An Organization branch can configure which template is active for a specific Service Type, overriding the default Tenant-level template.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

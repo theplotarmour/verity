@@ -16,7 +16,7 @@ This document details the `traceability` system specifications for `Bible Tracea
 
 ### REQ-TRACEABILITY-BIBLETRACEABILITY-001
 *   **Requirement**: The system utilizes `base` core patterns for `cross-reference mapping to Verity Bible volumes`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-TRACEABILITY-BIBLETRACEABILITY-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
@@ -24,4 +24,4 @@ This document details the `traceability` system specifications for `Bible Tracea
 
 ### REQ-TRACEABILITY-BIBLETRACEABILITY-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

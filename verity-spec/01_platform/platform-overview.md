@@ -41,17 +41,17 @@ To prevent spaghetti dependencies, all business capabilities must be classified 
 *   **Description**: The fundamental runtime substrate that must be present in every single Verity installation. 
 *   **Entities included**: Tenant, Organization, User, Group, Role, Permission, Event, AuditLog.
 *   **Services included**: Tenant isolation routing, authentication, query sandboxing middleware, dynamic Runtime Schema Validation validator runtime, event bus, and offline sync queue.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### PLA-OVE-002: Reusable Capabilities
 *   **Description**: Packaged, domain-specific modules that can be optionally activated on top of the Platform Core. A Capability has no direct references to client code and must be fully configurable.
 *   **Entities included**: WorkOrder, Customer, Resource, Location, SLA, Asset.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### PLA-OVE-003: Industry Packs
 *   **Description**: Precomposed configurations mapping specific Capabilities, roles, workflows, template forms, and dashboards together for a particular vertical (e.g. Security Operations Pack, Facilities Management Pack).
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### PLA-OVE-004: Client Systems
 *   **Description**: The final, concrete deployment tailored for a specific customer. It is composed of the Platform Core, activated Capabilities, composed Industry Packs, and custom Client Extensions (isolated from the core codebase).
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

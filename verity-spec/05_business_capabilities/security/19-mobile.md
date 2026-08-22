@@ -21,11 +21,11 @@ This document details the `security` capability specs for the `19 Mobile` contra
 
 ### REQ-SECURITY-19MOBILE-002
 *   **Requirement**: State changes are constrained to enums: `ROSTERED, PATROLLING, COMPLETED, INCIDENT_REPORTED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-SECURITY-19MOBILE-003
 *   **Requirement**: Mutations are restricted to actions: `start_patrol, scan_checkpoint, report_incident, end_patrol`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-SECURITY-19MOBILE-004
 *   **Requirement**: Offline sync conflict class is `APPEND_ONLY`.

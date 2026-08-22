@@ -45,16 +45,16 @@ Every Action execution follows a strict pipeline managed by the Platform Core:
 
 ### MET-ACT-001: Schema Validation
 *   **Rule**: The input payload is validated against a static schema (e.g. JSON schema / Runtime Schema Validation contract) defining types and required parameters.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### MET-ACT-002: Authorization Enforcement
 *   **Rule**: The engine matches the actor's active role and membership scope against the permission matrix. If unauthorized, execution aborts with `E_FORBIDDEN`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### MET-ACT-003: Precondition Verification
 *   **Rule**: Business invariants (e.g., "Cannot assign a resource with conflicting schedules") are checked. If checks fail, a `ValidationError` is raised, rolling back the transaction.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### MET-ACT-004: Event Emission on Commit
 *   **Rule**: On successful database transaction commit, the action emits its defined Business Event (e.g., `work_order.assigned`) to the Event Bus. Events must never be emitted if the transaction rolls back.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

@@ -21,11 +21,11 @@ This document details the `contract` capability specs for the `14 Scheduling` co
 
 ### REQ-CONTRACT-14SCHEDULING-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, ACTIVE, EXPIRED, CANCELLED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-CONTRACT-14SCHEDULING-003
 *   **Requirement**: Mutations are restricted to actions: `create_contract, activate_contract, terminate_contract`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-CONTRACT-14SCHEDULING-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

@@ -21,11 +21,11 @@ This document details the `facilities` capability specs for the `18 Ui Experienc
 
 ### REQ-FACILITIES-18UIEXPERIENCE-002
 *   **Requirement**: State changes are constrained to enums: `SCHEDULED, IN_PROGRESS, VERIFIED, FAILED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-FACILITIES-18UIEXPERIENCE-003
 *   **Requirement**: Mutations are restricted to actions: `schedule_inspection, perform_clean, verify_facility`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-FACILITIES-18UIEXPERIENCE-004
 *   **Requirement**: Offline sync conflict class is `SEMANTIC_MERGE`.

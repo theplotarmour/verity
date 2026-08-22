@@ -40,15 +40,15 @@ The transition of a Work Order from `Pending-Verification` to `Completed` requir
 
 ### EXE-APP-001: Role Constraint
 *   **Rule**: The `verify` action is restricted to users with the `Supervisor` or `Site Administrator` role within the organization. Workers cannot approve their own submittals.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### EXE-APP-002: Evidence Requisites
 *   **Rule**: The approval transaction will fail if the linked `ChecklistResponse` records are incomplete, or if mandatory photo/signature attachments are missing.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### EXE-APP-003: Rejection Feedback (Re-Work Loop)
 *   **Rule**: If the supervisor rejects the verification submittal:
     1.  The Work Order transitions back to `In-Progress`.
     2.  The supervisor must submit a `Re-work Log` explaining the defect.
     3.  A notification is triggered to the assigned technician.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

@@ -21,11 +21,11 @@ This document details the `crm` capability specs for the `23 Configuration` cont
 
 ### REQ-CRM-23CONFIGURATION-002
 *   **Requirement**: State changes are constrained to enums: `NEW, QUALIFIED, WON, LOST`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-CRM-23CONFIGURATION-003
 *   **Requirement**: Mutations are restricted to actions: `create_lead, transition_stage, mark_won, mark_lost`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-CRM-23CONFIGURATION-004
 *   **Requirement**: Offline sync conflict class is `LWW_ALLOWED`.

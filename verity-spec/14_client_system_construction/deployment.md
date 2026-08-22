@@ -16,7 +16,7 @@ This document details the `client_system_construction` system specifications for
 
 ### REQ-CLIENTSYSTEMCONSTRUCTION-DEPLOYMENT-001
 *   **Requirement**: The system utilizes `base` core patterns for `containerized deployment infrastructure specs`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-CLIENTSYSTEMCONSTRUCTION-DEPLOYMENT-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
@@ -24,4 +24,4 @@ This document details the `client_system_construction` system specifications for
 
 ### REQ-CLIENTSYSTEMCONSTRUCTION-DEPLOYMENT-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

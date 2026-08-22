@@ -21,13 +21,13 @@ A **Rule** represents a deterministic check that validates data or enforces stru
 ### MET-RUL-001: Database Constraints (SQL Constraints)
 *   **Description**: Declarative database-level constraints compiled into Relational Database DDL (e.g. Unique indexes, Foreign Key RESTRICT policies, and simple field range check constraints).
 *   **Execution**: Enforced natively by Relational Database at the transaction boundary.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 *   **Traceability**: Odoo `_sql_constraints`.
 
 ### MET-RUL-002: Application Validation Methods (constrains)
 *   **Description**: Core execution code functions validating complex logical invariants (e.g., verifying a technician's qualifications before shift assignment, checking for calendar overlaps).
 *   **Execution**: Run synchronously inside the Action execution pipeline before writing to the database. If a validator fails, it throws a `ValidationError` containing the specific field path and localized error string, triggering an automatic rollback of the transaction.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 *   **Traceability**: Odoo `@api.constrains` decorator.
 
 ---
@@ -39,4 +39,4 @@ A **Rule** represents a deterministic check that validates data or enforces stru
     *   The User ID authorizing the override.
     *   The rule ID bypassed.
     *   The override reason description.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

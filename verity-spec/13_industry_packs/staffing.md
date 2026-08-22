@@ -16,7 +16,7 @@ This document details the `industry_packs` system specifications for `Staffing`.
 
 ### REQ-INDUSTRYPACKS-STAFFING-001
 *   **Requirement**: The system utilizes `custom_staffing` core patterns for `shift workforce roster precomposed pack`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-INDUSTRYPACKS-STAFFING-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
@@ -24,4 +24,4 @@ This document details the `industry_packs` system specifications for `Staffing`.
 
 ### REQ-INDUSTRYPACKS-STAFFING-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

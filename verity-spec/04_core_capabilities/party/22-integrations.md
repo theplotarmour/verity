@@ -21,11 +21,11 @@ This document details the `party` capability specs for the `22 Integrations` con
 
 ### REQ-PARTY-22INTEGRATIONS-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-PARTY-22INTEGRATIONS-003
 *   **Requirement**: Mutations are restricted to actions: `create_party, update_party, archive_party`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-PARTY-22INTEGRATIONS-004
 *   **Requirement**: Offline sync conflict class is `MERGEABLE`.

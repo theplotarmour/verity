@@ -23,7 +23,7 @@ Every API endpoint and query request must execute an access check mapping the re
     *   `Resource`: The target entity class (e.g. `WorkOrder`).
     *   `Scope`: The action to perform (e.g. `read`, `assign`, `complete`).
     *   `Policy`: The conditional rule verifying user-tenant association.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 *   **Traceability**: Adapted from Keycloak UMA (User-Managed Access) protocol.
 
 ---
@@ -33,9 +33,9 @@ Every API endpoint and query request must execute an access check mapping the re
 ### MET-PER-002: Row Scoping Scoped Queries
 *   **Rule**: During read queries (SELECT), row-level security constraints act as forced filters injected into the query AST. A user requesting a list of Work Orders will only receive rows where:
     $$\text{WorkOrder.organization\_id} \in \text{User.membership.allowed\_organization\_ids}$$
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 *   **Traceability**: Mapped from Odoo domain rule query scoping.
 
 ### MET-PER-003: Administrative Overrides
 *   **Rule**: Administrative users cannot bypass the active tenancy isolation. They may, however, request temporary `Context Elevation` (which requires logging a reason) to view child branch data for system audit purposes.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

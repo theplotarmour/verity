@@ -21,11 +21,11 @@ This document details the `resource` capability specs for the `26 Edge Cases` co
 
 ### REQ-RESOURCE-26EDGECASES-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE, OUT_OF_OFFICE`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-RESOURCE-26EDGECASES-003
 *   **Requirement**: Mutations are restricted to actions: `create_resource, update_schedule, set_out_of_office`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-RESOURCE-26EDGECASES-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

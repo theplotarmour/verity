@@ -16,7 +16,7 @@ This document details the `platform_operations` system specifications for `Resil
 
 ### REQ-PLATFORMOPERATIONS-RESILIENCE-001
 *   **Requirement**: The system utilizes `temporal` core patterns for `retry limits and backoff coefficient policies`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-PLATFORMOPERATIONS-RESILIENCE-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
@@ -24,4 +24,4 @@ This document details the `platform_operations` system specifications for `Resil
 
 ### REQ-PLATFORMOPERATIONS-RESILIENCE-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

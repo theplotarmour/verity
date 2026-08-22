@@ -27,20 +27,20 @@ SLA policies manage operational deadline timers. Every SLA target has a dedicate
 
 ### EXE-SLA-001: Start Timer
 *   **Trigger**: Transition to `Scheduled` or `In-Progress` state. The clock begins counting down toward `deadline_at`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### EXE-SLA-002: Pause Timer
 *   **Trigger**: The Work Order enters a `Hold` state due to external dependencies (e.g. awaiting parts, site inaccessible). The countdown is suspended.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### EXE-SLA-003: Stop Timer
 *   **Trigger**: Transition to a terminal state (`Completed`, `Closed`, or `Cancelled`). The final elapsed time is frozen and written to the database for reporting.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### EXE-SLA-004: Breach Timer
 *   **Trigger**: System clock exceeds `deadline_at` while the timer is in the running state.
 *   **Action**: The system sets the `sla_status` to `BREACHED` and triggers an escalation action.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ---
 
@@ -48,11 +48,11 @@ SLA policies manage operational deadline timers. Every SLA target has a dedicate
 
 ### EXE-SLA-005: Contract Overrides Default
 *   **Rule**: If a customer has a signed `Contract` specifying custom SLA limits, the contract SLA rules take precedence over the default Tenant-wide SLA policy.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### EXE-SLA-006: Manual Override Wins
 *   **Rule**: If a dispatcher manually sets a `deadline_at` timestamp on a specific Work Order, this explicit value overrides all automated SLA rules.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ---
 
@@ -60,4 +60,4 @@ SLA policies manage operational deadline timers. Every SLA target has a dedicate
 
 ### EXE-SLA-007: Escalation Triggers
 *   **Rule**: When an SLA timer breaches, the system runs the registered escalation policy (e.g. notify manager via SMS, reassign to senior resource, trigger webhook).
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

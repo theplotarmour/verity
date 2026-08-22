@@ -56,7 +56,35 @@ Verity deliberately excludes **assembly-line manufacturing with physical raw mat
 ## 3. Category Definition
 Verity is a **Configurable Operating System for Service-Driven Organizations**. 
 
-Traditional enterprise software forces a trade-off between isolated systems. Verity unifies four conceptual categories:
+### A. The Core Principle: Standardize the Foundation, Not Every Behavior
+Verity provides a common operational foundation of standardized primitives, execution semantics, and platform services upon which deeply specialized capabilities and operating systems can be built.
+
+*   **Opinionated Depth**: Rather than forcing every operation into a universal, generic "configurable workflow builder" that compromises usability and depth, Verity allows capabilities to be purpose-built and highly specialized internally.
+*   **The Contract Boundary**: A capability may be hard-coded internally to optimize for specialized domains (e.g. security patrol sequencing, field service dispatch engines), but it must expose a stable contract to the platform and other capabilities.
+*   **Rule of Specialization**: Prefer purpose-built implementation where specialization materially improves workflow depth, performance, reliability, usability, or domain correctness. Prefer configuration where variation is expected across organizations without compromising those qualities.
+
+### B. Level/Flexibility Matrix
+Verity's architectural layers maintain distinct balances between standardization and flexibility:
+
+| Layer | Flexibility | Key Boundary |
+| :--- | :--- | :--- |
+| **Platform Primitives** | Highly Standardized | Immutable foundation (Party, Work, Location, User). |
+| **Reusable Capabilities** | Purpose-Built + Extensible | Opinionated logic exposing a stable contract interface. |
+| **Industry Packs** | Deeply Specialized | Structured groupings of capabilities for vertical markets. |
+| **Client Systems** | Configurable + Composed | Managed customization; client-specific extensions are isolated. |
+
+### C. The Stable Contract Interface
+Every reusable capability must expose its boundary to the platform through:
+1.  **Entities**: Domain schemas extending custom fields.
+2.  **Actions**: Validated execution commands.
+3.  **Events**: Idempotent event bus notifications.
+4.  **Permissions**: Scoped RBAC tokens (Verb + Entity + Scope).
+5.  **Configuration**: Meta parameters adjusting behavior.
+6.  **Extension Points**: Registered lifecycle hooks.
+7.  **UI Contributions**: Composable dashboard and table surfaces.
+
+### D. The Four Category Systems
+Verity unifies four system categories:
 
 ```text
        ┌────────────────────────┐

@@ -21,11 +21,11 @@ This document details the `projects` capability specs for the `01 Purpose And Sc
 
 ### REQ-PROJECTS-01PURPOSEANDSCOPE-002
 *   **Requirement**: State changes are constrained to enums: `PLANNING, ACTIVE, COMPLETED, SUSPENDED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-PROJECTS-01PURPOSEANDSCOPE-003
 *   **Requirement**: Mutations are restricted to actions: `create_project, create_task, complete_project`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-PROJECTS-01PURPOSEANDSCOPE-004
 *   **Requirement**: Offline sync conflict class is `MERGEABLE`.

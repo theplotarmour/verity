@@ -16,7 +16,7 @@ This document details the `platform_operations` system specifications for `Loggi
 
 ### REQ-PLATFORMOPERATIONS-LOGGING-001
 *   **Requirement**: The system utilizes `base` core patterns for `structured application log streams`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-PLATFORMOPERATIONS-LOGGING-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
@@ -24,4 +24,4 @@ This document details the `platform_operations` system specifications for `Loggi
 
 ### REQ-PLATFORMOPERATIONS-LOGGING-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

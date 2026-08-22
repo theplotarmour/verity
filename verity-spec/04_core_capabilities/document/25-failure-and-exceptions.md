@@ -21,11 +21,11 @@ This document details the `document` capability specs for the `25 Failure And Ex
 
 ### REQ-DOCUMENT-25FAILUREANDEXCEPTIONS-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, ARCHIVED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-DOCUMENT-25FAILUREANDEXCEPTIONS-003
 *   **Requirement**: Mutations are restricted to actions: `upload_document, archive_document`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-DOCUMENT-25FAILUREANDEXCEPTIONS-004
 *   **Requirement**: Offline sync conflict class is `APPEND_ONLY`.

@@ -16,7 +16,7 @@ This document details the `capability_catalog` system specifications for `Capabi
 
 ### REQ-CAPABILITYCATALOG-CAPABILITYDEPENDENCIES-001
 *   **Requirement**: The system utilizes `base` core patterns for `directed graph capability linkages`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-CAPABILITYCATALOG-CAPABILITYDEPENDENCIES-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
@@ -24,4 +24,4 @@ This document details the `capability_catalog` system specifications for `Capabi
 
 ### REQ-CAPABILITYCATALOG-CAPABILITYDEPENDENCIES-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

@@ -21,11 +21,11 @@ This document details the `crm` capability specs for the `19 Mobile` contract.
 
 ### REQ-CRM-19MOBILE-002
 *   **Requirement**: State changes are constrained to enums: `NEW, QUALIFIED, WON, LOST`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-CRM-19MOBILE-003
 *   **Requirement**: Mutations are restricted to actions: `create_lead, transition_stage, mark_won, mark_lost`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-CRM-19MOBILE-004
 *   **Requirement**: Offline sync conflict class is `LWW_ALLOWED`.

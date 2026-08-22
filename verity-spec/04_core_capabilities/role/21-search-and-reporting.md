@@ -21,11 +21,11 @@ This document details the `role` capability specs for the `21 Search And Reporti
 
 ### REQ-ROLE-21SEARCHANDREPORTING-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-ROLE-21SEARCHANDREPORTING-003
 *   **Requirement**: Mutations are restricted to actions: `create_role, compose_role, delete_role`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-ROLE-21SEARCHANDREPORTING-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

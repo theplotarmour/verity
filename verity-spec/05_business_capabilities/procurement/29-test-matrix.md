@@ -21,11 +21,11 @@ This document details the `procurement` capability specs for the `29 Test Matrix
 
 ### REQ-PROCUREMENT-29TESTMATRIX-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, SENT, PURCHASE, DONE, CANCELLED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-PROCUREMENT-29TESTMATRIX-003
 *   **Requirement**: Mutations are restricted to actions: `create_purchase, send_rfq, confirm_purchase, cancel_purchase`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-PROCUREMENT-29TESTMATRIX-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

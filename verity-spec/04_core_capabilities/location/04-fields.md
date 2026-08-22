@@ -21,11 +21,11 @@ This document details the `location` capability specs for the `04 Fields` contra
 
 ### REQ-LOCATION-04FIELDS-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-LOCATION-04FIELDS-003
 *   **Requirement**: Mutations are restricted to actions: `create_location, update_geofence`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-LOCATION-04FIELDS-004
 *   **Requirement**: Offline sync conflict class is `LWW_ALLOWED`.

@@ -20,11 +20,11 @@ A **Workflow** is an orchestrated sequence of Actions and state changes coordina
 
 ### MET-WKF-001: Transaction Boundaries
 *   **Rule**: A workflow step must run within a single transaction boundary. If Step A (creating an Account) succeeds, but Step B (generating the Work Order) fails validation, the entire workflow transaction rolls back, leaving no half-created records in the database.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### MET-WKF-002: Dynamic Routing Nodes
 *   **Rule**: Workflows support conditional routing decisions based on data properties (e.g. if Work Order total exceeds \$5,000, route to `Awaiting VP Approval`, otherwise route to `Awaiting Scheduler Dispatch`).
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ---
 
@@ -32,4 +32,4 @@ A **Workflow** is an orchestrated sequence of Actions and state changes coordina
 
 ### MET-WKF-003: Sub-Workflow Cascades
 *   **Rule**: When a parent Workflow transitions status (e.g. Project marked `Completed`), the change must automatically evaluate and trigger transitions on children sub-workflows (e.g. complete open checklist tasks or alert assigned resources).
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

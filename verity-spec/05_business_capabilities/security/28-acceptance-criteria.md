@@ -21,11 +21,11 @@ This document details the `security` capability specs for the `28 Acceptance Cri
 
 ### REQ-SECURITY-28ACCEPTANCECRITERIA-002
 *   **Requirement**: State changes are constrained to enums: `ROSTERED, PATROLLING, COMPLETED, INCIDENT_REPORTED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-SECURITY-28ACCEPTANCECRITERIA-003
 *   **Requirement**: Mutations are restricted to actions: `start_patrol, scan_checkpoint, report_incident, end_patrol`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-SECURITY-28ACCEPTANCECRITERIA-004
 *   **Requirement**: Offline sync conflict class is `APPEND_ONLY`.

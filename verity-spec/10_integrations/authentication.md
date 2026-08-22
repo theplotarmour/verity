@@ -16,7 +16,7 @@ This document details the `integrations` system specifications for `Authenticati
 
 ### REQ-INTEGRATIONS-AUTHENTICATION-001
 *   **Requirement**: The system utilizes `keycloak` core patterns for `SSO and OIDC federated login`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-INTEGRATIONS-AUTHENTICATION-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
@@ -24,4 +24,4 @@ This document details the `integrations` system specifications for `Authenticati
 
 ### REQ-INTEGRATIONS-AUTHENTICATION-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

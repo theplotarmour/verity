@@ -16,7 +16,7 @@ This document details the `traceability` system specifications for `Odoo Traceab
 
 ### REQ-TRACEABILITY-ODOOTRACEABILITY-001
 *   **Requirement**: The system utilizes `base` core patterns for `cross-reference mapping to Odoo python files`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-TRACEABILITY-ODOOTRACEABILITY-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
@@ -24,4 +24,4 @@ This document details the `traceability` system specifications for `Odoo Traceab
 
 ### REQ-TRACEABILITY-ODOOTRACEABILITY-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

@@ -21,11 +21,11 @@ This document details the `crm` capability specs for the `02 Domain Model` contr
 
 ### REQ-CRM-02DOMAINMODEL-002
 *   **Requirement**: State changes are constrained to enums: `NEW, QUALIFIED, WON, LOST`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-CRM-02DOMAINMODEL-003
 *   **Requirement**: Mutations are restricted to actions: `create_lead, transition_stage, mark_won, mark_lost`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-CRM-02DOMAINMODEL-004
 *   **Requirement**: Offline sync conflict class is `LWW_ALLOWED`.

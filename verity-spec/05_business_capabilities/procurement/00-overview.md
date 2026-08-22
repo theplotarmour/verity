@@ -21,11 +21,11 @@ This document details the `procurement` capability specs for the `00 Overview` c
 
 ### REQ-PROCUREMENT-00OVERVIEW-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, SENT, PURCHASE, DONE, CANCELLED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-PROCUREMENT-00OVERVIEW-003
 *   **Requirement**: Mutations are restricted to actions: `create_purchase, send_rfq, confirm_purchase, cancel_purchase`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-PROCUREMENT-00OVERVIEW-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

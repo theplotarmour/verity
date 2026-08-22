@@ -21,11 +21,11 @@ This document details the `projects` capability specs for the `29 Test Matrix` c
 
 ### REQ-PROJECTS-29TESTMATRIX-002
 *   **Requirement**: State changes are constrained to enums: `PLANNING, ACTIVE, COMPLETED, SUSPENDED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-PROJECTS-29TESTMATRIX-003
 *   **Requirement**: Mutations are restricted to actions: `create_project, create_task, complete_project`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-PROJECTS-29TESTMATRIX-004
 *   **Requirement**: Offline sync conflict class is `MERGEABLE`.

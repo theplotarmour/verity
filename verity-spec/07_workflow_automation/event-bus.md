@@ -16,7 +16,7 @@ This document details the `workflow_automation` system specifications for `Event
 
 ### REQ-WORKFLOWAUTOMATION-EVENTBUS-001
 *   **Requirement**: The system utilizes `base` core patterns for `outbox transactional event publish`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-WORKFLOWAUTOMATION-EVENTBUS-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
@@ -24,4 +24,4 @@ This document details the `workflow_automation` system specifications for `Event
 
 ### REQ-WORKFLOWAUTOMATION-EVENTBUS-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

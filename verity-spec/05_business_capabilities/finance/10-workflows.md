@@ -21,11 +21,11 @@ This document details the `finance` capability specs for the `10 Workflows` cont
 
 ### REQ-FINANCE-10WORKFLOWS-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-FINANCE-10WORKFLOWS-003
 *   **Requirement**: Mutations are restricted to actions: `configure_tax, recalculate_projections`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-FINANCE-10WORKFLOWS-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

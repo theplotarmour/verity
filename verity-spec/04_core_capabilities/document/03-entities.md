@@ -21,11 +21,11 @@ This document details the `document` capability specs for the `03 Entities` cont
 
 ### REQ-DOCUMENT-03ENTITIES-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, ARCHIVED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-DOCUMENT-03ENTITIES-003
 *   **Requirement**: Mutations are restricted to actions: `upload_document, archive_document`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-DOCUMENT-03ENTITIES-004
 *   **Requirement**: Offline sync conflict class is `APPEND_ONLY`.

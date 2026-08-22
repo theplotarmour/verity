@@ -16,7 +16,7 @@ This document details the `integrations` system specifications for `Webhooks`.
 
 ### REQ-INTEGRATIONS-WEBHOOKS-001
 *   **Requirement**: The system utilizes `n8n` core patterns for `outbound webhook event alerts`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-INTEGRATIONS-WEBHOOKS-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
@@ -24,4 +24,4 @@ This document details the `integrations` system specifications for `Webhooks`.
 
 ### REQ-INTEGRATIONS-WEBHOOKS-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

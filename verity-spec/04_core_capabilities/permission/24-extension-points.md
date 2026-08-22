@@ -21,11 +21,11 @@ This document details the `permission` capability specs for the `24 Extension Po
 
 ### REQ-PERMISSION-24EXTENSIONPOINTS-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-PERMISSION-24EXTENSIONPOINTS-003
 *   **Requirement**: Mutations are restricted to actions: `grant_permission, revoke_permission`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-PERMISSION-24EXTENSIONPOINTS-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

@@ -24,12 +24,12 @@ To prevent customer-specific modifications from corrupting the core platform cod
 
 ### PLA-CLI-001: Separate Extension Directory
 *   **Description**: Client-specific frontend components, custom reports, or proprietary API proxy connectors must reside in an isolated `src/extensions/client-[client_name]/` directory. Core source files under `src/core/` and `src/capabilities/` must never be modified to support a single customer.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### PLA-CLI-002: Loose Coupling via Events and Hooks
 *   **Rule**: Client-specific business logic must be triggered exclusively by subscribing to the platform's Event Bus or registering sandboxed callback functions in the Action Hook Registry (as defined in `01_platform/extensions.md`).
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### PLA-CLI-003: Dynamic Layout Injectors
 *   **Rule**: Custom form fields or customized dashboard buttons requested by a client are injected dynamically into the experience shells at runtime based on the tenant's configuration metadata. Direct layout overrides in the core HTML/TSX codebase are prohibited.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

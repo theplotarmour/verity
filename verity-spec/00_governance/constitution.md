@@ -16,12 +16,12 @@ The Verity platform is governed by a strict hierarchy of product laws. These law
 
 ### GOV-CON-001: Codebase Subordination
 The existing implementation codebase of Verity is a secondary draft. If any part of the active implementation, database schema, or client interface conflicts with the rules, schemas, or requirements defined in this Master Specification Corpus (`verity-spec/`), the implementation must be cleaned, refactored, or discarded. 
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: INTENTIONALLY_DEFERRED]`
 *   **Traceability**: Bible Volume 1, Section 1.1.
 
 ### GOV-CON-002: Product Over Code
 We do not build software to accommodate legacy models, external frameworks, or transient database limitations. We define the business domain first, establish its laws and invariants, and enforce them at the compiler/runtime validation level.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: INTENTIONALLY_DEFERRED]`
 *   **Traceability**: Bible Volume 1, Section 1.2.
 
 ### GOV-CON-003: Core Identity Category
@@ -30,7 +30,7 @@ Verity is a Configurable Operating System for Service-Driven Organizations. It i
 2.  **System of Control**: Enforcing operational boundaries, validation policies, and SLA breach timelines.
 3.  **System of Execution**: Providing deskless frontline workers with a streamlined interface for shift clock-in, checklist completion, and evidence submission.
 4.  **System of Engagement**: Exposing B2C customer portals for booking services and tracking active dispatch metrics.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: RESEARCH_REQUIRED]`
 *   **Traceability**: Bible Volume 1, Section 3.
 
 ### GOV-CON-004: Anti-Vision Exclusions
@@ -38,7 +38,7 @@ Verity is built strictly for service-driven organizations. The platform core and
 1.  **Manufacturing with Physical Raw Material Recipes**: Assembly-line manufacturing involving Bill of Materials (BOM) inventory routing is rejected.
 2.  **Direct Consumer Retail Storefronts**: B2C retail inventory and retail cash register systems are rejected.
 3.  **General Document Collaboration**: General document editing suites are rejected.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 *   **Traceability**: Bible Volume 1, Section 6.
 
 ---

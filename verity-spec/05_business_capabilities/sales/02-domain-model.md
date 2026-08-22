@@ -21,11 +21,11 @@ This document details the `sales` capability specs for the `02 Domain Model` con
 
 ### REQ-SALES-02DOMAINMODEL-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, SENT, SALE, DONE, CANCELLED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-SALES-02DOMAINMODEL-003
 *   **Requirement**: Mutations are restricted to actions: `create_order, send_quote, confirm_order, cancel_order`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-SALES-02DOMAINMODEL-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

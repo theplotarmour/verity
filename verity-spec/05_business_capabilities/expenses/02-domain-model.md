@@ -21,11 +21,11 @@ This document details the `expenses` capability specs for the `02 Domain Model` 
 
 ### REQ-EXPENSES-02DOMAINMODEL-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, SUBMITTED, APPROVED, POSTED, DONE, REFUSED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-EXPENSES-02DOMAINMODEL-003
 *   **Requirement**: Mutations are restricted to actions: `create_expense, submit_expense, approve_expense, refuse_expense`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-EXPENSES-02DOMAINMODEL-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

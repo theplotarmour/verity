@@ -23,7 +23,7 @@ Verity automations are modeled as Directed Acyclic Graphs (DAGs) of execution no
     *   `Trigger Nodes`: Persistently listen for incoming webhook payloads, scheduled chron/timers, or platform Events, initiating workflow stacks.
     *   `Action Nodes`: Execute integrations or mutate database entities.
     *   `Logic Nodes`: Direct flow paths (IF/Switch conditionals, parallel branching, and join nodes).
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 *   **Traceability**: Mapped from n8n trigger and action concepts.
 
 ### MET-AUT-002: Standardized Item Envelope
@@ -43,7 +43,7 @@ Verity automations are modeled as Directed Acyclic Graphs (DAGs) of execution no
       };
     };
     ```
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 *   **Traceability**: n8n `INodeExecutionData` model.
 
 ---
@@ -53,5 +53,5 @@ Verity automations are modeled as Directed Acyclic Graphs (DAGs) of execution no
 ### MET-AUT-003: Credential Registry
 *   **Description**: Third-party integration tokens and secrets are stored in a dedicated, encrypted Credential Registry.
 *   **Logical Rule**: Automations reference credentials by name or reference ID. Secrets are never exposed in plaintext inside workflow JSON mappings, and are decrypted only at execution runtime inside the action node container.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 *   **Traceability**: n8n credential registry pattern.

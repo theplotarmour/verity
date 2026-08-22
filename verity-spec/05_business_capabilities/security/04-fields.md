@@ -21,11 +21,11 @@ This document details the `security` capability specs for the `04 Fields` contra
 
 ### REQ-SECURITY-04FIELDS-002
 *   **Requirement**: State changes are constrained to enums: `ROSTERED, PATROLLING, COMPLETED, INCIDENT_REPORTED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-SECURITY-04FIELDS-003
 *   **Requirement**: Mutations are restricted to actions: `start_patrol, scan_checkpoint, report_incident, end_patrol`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-SECURITY-04FIELDS-004
 *   **Requirement**: Offline sync conflict class is `APPEND_ONLY`.

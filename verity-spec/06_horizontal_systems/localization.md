@@ -16,7 +16,7 @@ This document details the `horizontal_systems` system specifications for `Locali
 
 ### REQ-HORIZONTALSYSTEMS-LOCALIZATION-001
 *   **Requirement**: The system utilizes `base` core patterns for `multi-language selection registries`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-HORIZONTALSYSTEMS-LOCALIZATION-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
@@ -24,4 +24,4 @@ This document details the `horizontal_systems` system specifications for `Locali
 
 ### REQ-HORIZONTALSYSTEMS-LOCALIZATION-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

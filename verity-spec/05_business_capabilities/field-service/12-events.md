@@ -21,11 +21,11 @@ This document details the `field-service` capability specs for the `12 Events` c
 
 ### REQ-FIELD-SERVICE-12EVENTS-002
 *   **Requirement**: State changes are constrained to enums: `UNASSIGNED, ASSIGNED, IN_TRANSIT, ON_SITE, DONE`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-FIELD-SERVICE-12EVENTS-003
 *   **Requirement**: Mutations are restricted to actions: `create_fsm_order, dispatch_resource, arrive_on_site, complete_fsm_order`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-FIELD-SERVICE-12EVENTS-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

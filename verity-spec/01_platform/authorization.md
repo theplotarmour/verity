@@ -24,7 +24,7 @@ Verity enforces fine-grained authorization. Role definitions, permissions, and s
     *   `Role`: `id`, `name`, `tenant_id`.
     *   `RoleComposition`: `parent_role_id` (FK to Role), `child_role_id` (FK to Role).
 *   **Logical Rule**: A parent role (e.g., `Branch Supervisor`) automatically inherits all permissions associated with its child roles (e.g., `Field Technician`).
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ---
 
@@ -36,7 +36,7 @@ Verity enforces fine-grained authorization. Role definitions, permissions, and s
     *   `Tenant`: Access across all organizations within the tenant.
     *   `Organization`: Access limited to a specific organization and its sub-branches.
     *   `Site/Location`: Access limited to a specific physical location.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ---
 
@@ -56,12 +56,12 @@ To resolve whether a user can read, create, modify, or execute an action on an e
 
 ### PLA-AUT-003: Layer 1 — Entity-Level Permission
 *   **Rule**: Checks if the active `Role` has the requested permission flag (read, create, edit, delete, action_execute) on the target `Entity` type.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### PLA-AUT-004: Layer 2 — Row-Level Permission Scoping
 *   **Rule**: Checks if the target record matches the user's membership scope constraints. If the record's `organization_id` or `location_id` does not match the allowed scopes, the request is rejected with `E_FORBIDDEN`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### PLA-AUT-005: Layer 3 — Field-Level Permission Scoping
 *   **Rule**: Replaced values or stripped attributes in the output payload. If a field has a restricted permission level (e.g., `billable_rate` requires level 2 access), it is omitted from the JSON payload unless the user's role meets the constraint.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

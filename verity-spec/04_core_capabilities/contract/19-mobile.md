@@ -21,11 +21,11 @@ This document details the `contract` capability specs for the `19 Mobile` contra
 
 ### REQ-CONTRACT-19MOBILE-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, ACTIVE, EXPIRED, CANCELLED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-CONTRACT-19MOBILE-003
 *   **Requirement**: Mutations are restricted to actions: `create_contract, activate_contract, terminate_contract`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-CONTRACT-19MOBILE-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

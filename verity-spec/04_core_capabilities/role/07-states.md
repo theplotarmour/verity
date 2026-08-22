@@ -21,11 +21,11 @@ This document details the `role` capability specs for the `07 States` contract.
 
 ### REQ-ROLE-07STATES-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-ROLE-07STATES-003
 *   **Requirement**: Mutations are restricted to actions: `create_role, compose_role, delete_role`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-ROLE-07STATES-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

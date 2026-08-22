@@ -21,11 +21,11 @@ This document details the `inventory` capability specs for the `01 Purpose And S
 
 ### REQ-INVENTORY-01PURPOSEANDSCOPE-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, WAITING, CONFIRMED, ASSIGNED, DONE, CANCELLED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-INVENTORY-01PURPOSEANDSCOPE-003
 *   **Requirement**: Mutations are restricted to actions: `create_picking, reserve_stock, validate_picking`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-INVENTORY-01PURPOSEANDSCOPE-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

@@ -21,11 +21,11 @@ This document details the `catalog` capability specs for the `28 Acceptance Crit
 
 ### REQ-CATALOG-28ACCEPTANCECRITERIA-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, ARCHIVED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-CATALOG-28ACCEPTANCECRITERIA-003
 *   **Requirement**: Mutations are restricted to actions: `create_item, update_price`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-CATALOG-28ACCEPTANCECRITERIA-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

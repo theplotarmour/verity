@@ -16,7 +16,7 @@ This document details the `experience` system specifications for `Forms`.
 
 ### REQ-EXPERIENCE-FORMS-001
 *   **Requirement**: The system utilizes `formbricks` core patterns for `logic-driven dynamic form components`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-EXPERIENCE-FORMS-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
@@ -24,4 +24,4 @@ This document details the `experience` system specifications for `Forms`.
 
 ### REQ-EXPERIENCE-FORMS-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

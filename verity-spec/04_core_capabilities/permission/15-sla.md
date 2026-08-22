@@ -21,11 +21,11 @@ This document details the `permission` capability specs for the `15 Sla` contrac
 
 ### REQ-PERMISSION-15SLA-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-PERMISSION-15SLA-003
 *   **Requirement**: Mutations are restricted to actions: `grant_permission, revoke_permission`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-PERMISSION-15SLA-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

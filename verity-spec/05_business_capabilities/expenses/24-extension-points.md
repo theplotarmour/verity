@@ -21,11 +21,11 @@ This document details the `expenses` capability specs for the `24 Extension Poin
 
 ### REQ-EXPENSES-24EXTENSIONPOINTS-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, SUBMITTED, APPROVED, POSTED, DONE, REFUSED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-EXPENSES-24EXTENSIONPOINTS-003
 *   **Requirement**: Mutations are restricted to actions: `create_expense, submit_expense, approve_expense, refuse_expense`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-EXPENSES-24EXTENSIONPOINTS-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

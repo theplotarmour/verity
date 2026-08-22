@@ -21,11 +21,11 @@ This document details the `finance` capability specs for the `29 Test Matrix` co
 
 ### REQ-FINANCE-29TESTMATRIX-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-FINANCE-29TESTMATRIX-003
 *   **Requirement**: Mutations are restricted to actions: `configure_tax, recalculate_projections`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-FINANCE-29TESTMATRIX-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

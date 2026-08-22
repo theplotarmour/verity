@@ -21,11 +21,11 @@ This document details the `staffing` capability specs for the `16 Notifications`
 
 ### REQ-STAFFING-16NOTIFICATIONS-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, PUBLISHED, CLOSED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-STAFFING-16NOTIFICATIONS-003
 *   **Requirement**: Mutations are restricted to actions: `create_roster, allocate_shift, publish_roster, request_swap`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-STAFFING-16NOTIFICATIONS-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

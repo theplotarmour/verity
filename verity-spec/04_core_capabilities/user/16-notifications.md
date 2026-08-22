@@ -21,11 +21,11 @@ This document details the `user` capability specs for the `16 Notifications` con
 
 ### REQ-USER-16NOTIFICATIONS-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, SUSPENDED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-USER-16NOTIFICATIONS-003
 *   **Requirement**: Mutations are restricted to actions: `create_user, authenticate, invalidate_session`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-USER-16NOTIFICATIONS-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

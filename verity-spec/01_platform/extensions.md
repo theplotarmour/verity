@@ -17,17 +17,17 @@ To support industry-specific attributes without requiring relational database sc
 ### PLA-EXT-001: The Extensions Column
 *   **Description**: Every operational Entity table contains a `custom_fields` dynamic document extensions column. 
 *   **Logical Rule**: Custom attributes requested by a tenant are stored as key-value pairs inside this column, preserving relational column integrity for the core schema.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### PLA-EXT-002: Custom Field Metadata Schema
 *   **Description**: Custom field schemas are declared as database configuration rows.
 *   **Entity Mapping**:
     *   `CustomFieldSchema`: `entity_type` (String, e.g. `WorkOrder`), `tenant_id` (UUID), `field_name` (String), `field_type` (string | number | boolean | select | date), `required` (Boolean), `select_options` (Array of Strings, optional).
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### PLA-EXT-003: Runtime Dynamic Schema Validation
 *   **Rule**: During write operations (create/update), the query processor reads the `CustomFieldSchema` definitions for the target tenant and entity. It dynamically compiles a validation schema (e.g. dynamic Runtime Schema Validation object) and validates the inputs in the `custom_fields` column. If inputs violate the metadata schema, the write is aborted.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ---
 
@@ -41,4 +41,4 @@ To support industry-specific attributes without requiring relational database sc
     *   `after_save`: Executed after database commit.
     *   `before_transition`: Executed before a state machine change.
 *   **Execution Isolation**: Hook execution is sandboxed. If an hook throws an error, the transaction is rolled back.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

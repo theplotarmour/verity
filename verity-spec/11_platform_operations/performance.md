@@ -16,7 +16,7 @@ This document details the `platform_operations` system specifications for `Perfo
 
 ### REQ-PLATFORMOPERATIONS-PERFORMANCE-001
 *   **Requirement**: The system utilizes `base` core patterns for `query caching and index tuning limits`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-PLATFORMOPERATIONS-PERFORMANCE-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
@@ -24,4 +24,4 @@ This document details the `platform_operations` system specifications for `Perfo
 
 ### REQ-PLATFORMOPERATIONS-PERFORMANCE-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

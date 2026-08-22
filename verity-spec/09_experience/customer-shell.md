@@ -16,7 +16,7 @@ This document details the `experience` system specifications for `Customer Shell
 
 ### REQ-EXPERIENCE-CUSTOMERSHELL-001
 *   **Requirement**: The system utilizes `base` core patterns for `B2B client self-booking portal shell`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-EXPERIENCE-CUSTOMERSHELL-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
@@ -24,4 +24,4 @@ This document details the `experience` system specifications for `Customer Shell
 
 ### REQ-EXPERIENCE-CUSTOMERSHELL-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

@@ -21,11 +21,11 @@ This document details the `party` capability specs for the `21 Search And Report
 
 ### REQ-PARTY-21SEARCHANDREPORTING-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-PARTY-21SEARCHANDREPORTING-003
 *   **Requirement**: Mutations are restricted to actions: `create_party, update_party, archive_party`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-PARTY-21SEARCHANDREPORTING-004
 *   **Requirement**: Offline sync conflict class is `MERGEABLE`.

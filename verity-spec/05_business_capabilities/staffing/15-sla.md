@@ -21,11 +21,11 @@ This document details the `staffing` capability specs for the `15 Sla` contract.
 
 ### REQ-STAFFING-15SLA-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, PUBLISHED, CLOSED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-STAFFING-15SLA-003
 *   **Requirement**: Mutations are restricted to actions: `create_roster, allocate_shift, publish_roster, request_swap`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-STAFFING-15SLA-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

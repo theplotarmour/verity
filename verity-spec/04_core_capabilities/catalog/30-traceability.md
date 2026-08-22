@@ -21,11 +21,11 @@ This document details the `catalog` capability specs for the `30 Traceability` c
 
 ### REQ-CATALOG-30TRACEABILITY-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, ARCHIVED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-CATALOG-30TRACEABILITY-003
 *   **Requirement**: Mutations are restricted to actions: `create_item, update_price`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-CATALOG-30TRACEABILITY-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

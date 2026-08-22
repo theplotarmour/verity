@@ -21,11 +21,11 @@ This document details the `party` capability specs for the `07 States` contract.
 
 ### REQ-PARTY-07STATES-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-PARTY-07STATES-003
 *   **Requirement**: Mutations are restricted to actions: `create_party, update_party, archive_party`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-PARTY-07STATES-004
 *   **Requirement**: Offline sync conflict class is `MERGEABLE`.

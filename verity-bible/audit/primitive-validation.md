@@ -14,22 +14,22 @@ This document contains the deep validation of Verity’s four primary primitives
     *   *Appointment:* A scheduled time-locked calendar lock on a Resource.
     *   *Project:* A structural container of parent-child related Work Orders.
 2.  **Ownership:** Mapped to the tenant `Organization`. Within the tenant, it is owned by the specific target `Location` where the work is performed.
-3.  **Lifecycle:** `Draft` $\rightarrow$ `Scheduled` $\rightarrow$ `In-Progress` $\rightarrow$ `Pending-Verification` $\rightarrow$ `Completed` (or `Cancelled`/`Closed`).
+3.  **Lifecycle (ADR-003):** `Draft` $\rightarrow$ `Scheduled` $\rightarrow$ `In-Progress` $\rightarrow$ `Pending-Verification` $\rightarrow$ `Completed` (execution terminal). Separately, the administrative closure transitions Completed $\rightarrow$ `Closed`.
 4.  **States:**
     *   `Draft`: Created, awaiting detail mapping and dispatching.
     *   `Scheduled`: Resource assigned, date/time slot locked.
     *   `In-Progress`: Worker checked in, actively executing.
     *   `Pending-Verification`: Work finished, awaiting supervisor review.
-    *   `Completed`: Verified and approved by supervisor (terminal for execution).
+    *   `Completed`: Verified and approved by supervisor (operational terminal state).
     *   `Cancelled`: Withdrawn mid-lifecycle.
-    *   `Closed`: Invoiced and archived (read-only lock).
+    *   `Closed`: Administratively/commercially closed (read-only lock; invoicing is one possible path, not the definition of Closed).
 5.  **Transitions:**
     *   `create` $\rightarrow$ `Draft`
     *   `assign` $\rightarrow$ `Scheduled`
     *   `check_in` $\rightarrow$ `In-Progress` (Precondition: Session resource = Assigned resource).
     *   `submit` $\rightarrow$ `Pending-Verification` (Precondition: Evidence uploaded).
     *   `verify` $\rightarrow$ `Completed` (Precondition: Supervisor role).
-    *   `close` $\rightarrow$ `Closed` (Precondition: Invoicing complete).
+    *   `close` $\rightarrow$ `Closed` (Precondition: Administrative/business review complete; enforces INV-002 lock).
 6.  **Actors:** Schedulers (assigners), Workers (executors), Supervisors (verifiers), Clients (requestors).
 7.  **Relationships:**
     *   `belongs_to` Customer `Party`.
@@ -62,11 +62,12 @@ This document contains the deep validation of Verity’s four primary primitives
 
 ## 2. Primitive: PARTY [DECIDED]
 
-1.  **Definition:** The single canonical entity representing any human or corporate participant. We distinguish `Party` from other concepts:
+1.  **Definition (ADR-001):** The single canonical entity representing any human or corporate participant (identity boundary). We decouple capability role-based profiles from the platform Party primitive:
     *   *User:* Stores credentials and passwords. A `User` is linked to a `Party` (role = worker/manager).
     *   *Organization:* Represents the workspace tenant.
+    *   *Domain Roles:* Capabilities (like CRM and Workforce) define separate domain-specific profiles (e.g. `Prospect` and `Employee`) with their own lifecycles that map back to the stable platform Party contract.
 2.  **Ownership:** Scoped globally to the Platform database, mapped to Organizations via `TenantMembership` records.
-3.  **Lifecycle:** `Invited` $\rightarrow$ `Active` $\rightarrow$ `Suspended` $\rightarrow$ `Archived`.
+3.  **Lifecycle (ADR-001):** Identity lifecycle: `Invited` $\rightarrow$ `Active` $\rightarrow$ `Suspended` $\rightarrow$ `Archived`.
 4.  **States:** `Invited`, `Active`, `Suspended`, `Archived`.
 5.  **Transitions:**
     *   `accept_invite` $\rightarrow$ `Active`.
@@ -91,9 +92,7 @@ This document contains the deep validation of Verity’s four primary primitives
 
 ## 3. Primitive: RESOURCE [DECIDED]
 
-1.  **Definition:** A capacity-constrained unit available for shift/work allocation. We distinguish `Resource` from:
-    *   *Employee:* HR contract record (salary, leaves).
-    *   *Asset:* Physical equipment model.
+1.  **Definition (ADR-002):** A capacity-constrained operating unit available for scheduling (e.g. human workers, physical tools/machinery). Whether Crews/Teams, Rooms/Spaces, and Capacity Pools are modeled directly as Resources or composite groups is deferred to scheduling capability design.
 2.  **Ownership:** Scoped to a specific Location or Tenant Organization.
 3.  **Lifecycle:** `Active` $\rightarrow$ `In-Maintenance` $\rightarrow$ `Inactive`.
 4.  **States:** `Available`, `Booked`, `In-Maintenance`, `Inactive`.
@@ -118,9 +117,12 @@ This document contains the deep validation of Verity’s four primary primitives
 ---
 
 ## 4. Primitive: LOCATION [DECIDED]
-
-1.  **Definition:** A physical coordinate region where operations occur. We distinguish `Location` from:
-    *   *Warehouse:* Storage stock location. A warehouse is a `Location` with inventory capability turned on.
+ 
+1.  **Definition (ADR-004):** An operational spatial context where work occurs or assets reside. We explicitly decouple:
+    *   `Place`: Real-world spatial/physical identity.
+    *   `Address`: Address representation for communication.
+    *   `Location`: The operational spatial region/context.
+    *   `Geofence`: Spatial policy/constraint (radius, coordinates).
 2.  **Ownership:** Tenant Organization.
 3.  **Lifecycle:** `Setup` $\rightarrow$ `Active` $\rightarrow$ `Decommissioned`.
 4.  **States:** `Setup`, `Active`, `Decommissioned`.

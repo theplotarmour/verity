@@ -21,11 +21,11 @@ This document details the `sales` capability specs for the `21 Search And Report
 
 ### REQ-SALES-21SEARCHANDREPORTING-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, SENT, SALE, DONE, CANCELLED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-SALES-21SEARCHANDREPORTING-003
 *   **Requirement**: Mutations are restricted to actions: `create_order, send_quote, confirm_order, cancel_order`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-SALES-21SEARCHANDREPORTING-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

@@ -21,11 +21,11 @@ This document details the `asset` capability specs for the `02 Domain Model` con
 
 ### REQ-ASSET-02DOMAINMODEL-002
 *   **Requirement**: State changes are constrained to enums: `OPERATIONAL, MAINTENANCE, DISPOSED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-ASSET-02DOMAINMODEL-003
 *   **Requirement**: Mutations are restricted to actions: `create_asset, update_asset, send_to_maintenance`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-ASSET-02DOMAINMODEL-004
 *   **Requirement**: Offline sync conflict class is `LWW_ALLOWED`.

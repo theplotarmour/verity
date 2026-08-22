@@ -16,7 +16,7 @@ This document details the `integrations` system specifications for `Connectors`.
 
 ### REQ-INTEGRATIONS-CONNECTORS-001
 *   **Requirement**: The system utilizes `n8n` core patterns for `pre-built automation node adapters`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-INTEGRATIONS-CONNECTORS-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
@@ -24,4 +24,4 @@ This document details the `integrations` system specifications for `Connectors`.
 
 ### REQ-INTEGRATIONS-CONNECTORS-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

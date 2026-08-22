@@ -21,11 +21,11 @@ This document details the `user` capability specs for the `00 Overview` contract
 
 ### REQ-USER-00OVERVIEW-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, SUSPENDED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-USER-00OVERVIEW-003
 *   **Requirement**: Mutations are restricted to actions: `create_user, authenticate, invalidate_session`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-USER-00OVERVIEW-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

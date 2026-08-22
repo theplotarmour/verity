@@ -21,7 +21,7 @@ Verity is designed for enterprises where the primary business product is the exe
     *   Manual supervisor verification gates for job sign-offs.
     *   Asset registries tracking location history and maintenance logs.
 *   **Source Reference**: ERPNext Maintenance Schedule, Odoo Maintenance.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### GOV-SCO-002: Field Operations & Technical Services
 *   **In-Scope Sub-domains**:
@@ -30,7 +30,7 @@ Verity is designed for enterprises where the primary business product is the exe
     *   Mobile-first evidence collection (compulsory photo upload, digital signature capture).
     *   Optimistic travel time calculations and site-transit warnings.
 *   **Source Reference**: Odoo Field Service, Cal.com scheduling.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### GOV-SCO-003: Security & Guarding Services
 *   **In-Scope Sub-domains**:
@@ -39,7 +39,7 @@ Verity is designed for enterprises where the primary business product is the exe
     *   Incident log reporting with compulsory photo/text attachments.
     *   Shift swaps, overtime limits validation, and replacement routing.
 *   **Source Reference**: ActivityWatch pulse tracking, Keycloak role groupings.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: RESEARCH_REQUIRED]`
 
 ### GOV-SCO-004: Staffing & Shift-Based Workforce Operations
 *   **In-Scope Sub-domains**:
@@ -47,7 +47,7 @@ Verity is designed for enterprises where the primary business product is the exe
     *   Worker timesheet logging, spent hours aggregation, and billing drafting.
     *   Leave management, out-of-office blocking, and automated substitute assignments.
 *   **Source Reference**: Odoo HR, Cal.com scheduling.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: RESEARCH_REQUIRED]`
 
 ---
 
@@ -57,12 +57,12 @@ To prevent feature bloat and maintain a lean operational core, the following dom
 
 ### GOV-SCO-005: Raw Material Manufacturing & Assembly (BOM)
 *   **Excluded**: Assembly-line tracking, physical raw material bills of materials (BOM), work center routing operations, and shop-floor machinery execution tracking.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### GOV-SCO-006: Consumer Retail Storefronts & POS Hardware
 *   **Excluded**: B2C retail storefront web checkouts, retail inventory barcode scanners, physical cashier cash drawer registry, and retail store return policies.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: RESEARCH_REQUIRED]`
 
 ### GOV-SCO-007: General Ledger Accounting (Double-Entry Ledger)
 *   **Excluded**: Double-entry ledger postings, chart of accounts management, tax reconciliation reports, bank statement feed sync, and asset depreciation calculations. Verity generates *billing drafts* and *invoices* (operational data), but general ledger execution must be handled by external integrations.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: RESEARCH_REQUIRED]`

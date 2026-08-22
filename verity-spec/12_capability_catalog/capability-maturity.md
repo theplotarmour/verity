@@ -24,4 +24,4 @@ This document details the `capability_catalog` system specifications for `Capabi
 
 ### REQ-CAPABILITYCATALOG-CAPABILITYMATURITY-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`

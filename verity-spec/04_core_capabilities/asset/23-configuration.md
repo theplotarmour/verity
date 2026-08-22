@@ -21,11 +21,11 @@ This document details the `asset` capability specs for the `23 Configuration` co
 
 ### REQ-ASSET-23CONFIGURATION-002
 *   **Requirement**: State changes are constrained to enums: `OPERATIONAL, MAINTENANCE, DISPOSED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-ASSET-23CONFIGURATION-003
 *   **Requirement**: Mutations are restricted to actions: `create_asset, update_asset, send_to_maintenance`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-ASSET-23CONFIGURATION-004
 *   **Requirement**: Offline sync conflict class is `LWW_ALLOWED`.

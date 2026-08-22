@@ -21,11 +21,11 @@ This document details the `party` capability specs for the `28 Acceptance Criter
 
 ### REQ-PARTY-28ACCEPTANCECRITERIA-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-PARTY-28ACCEPTANCECRITERIA-003
 *   **Requirement**: Mutations are restricted to actions: `create_party, update_party, archive_party`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-PARTY-28ACCEPTANCECRITERIA-004
 *   **Requirement**: Offline sync conflict class is `MERGEABLE`.

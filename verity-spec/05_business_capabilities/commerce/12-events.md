@@ -21,11 +21,11 @@ This document details the `commerce` capability specs for the `12 Events` contra
 
 ### REQ-COMMERCE-12EVENTS-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, POSTED, PAID, CANCELLED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-COMMERCE-12EVENTS-003
 *   **Requirement**: Mutations are restricted to actions: `create_invoice, post_invoice, register_payment, void_payment`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: FUTURE_CAPABILITY]`
 
 ### REQ-COMMERCE-12EVENTS-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

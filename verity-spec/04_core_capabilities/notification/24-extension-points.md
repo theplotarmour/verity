@@ -21,11 +21,11 @@ This document details the `notification` capability specs for the `24 Extension 
 
 ### REQ-NOTIFICATION-24EXTENSIONPOINTS-002
 *   **Requirement**: State changes are constrained to enums: `PENDING, SENT, FAILED`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-NOTIFICATION-24EXTENSIONPOINTS-003
 *   **Requirement**: Mutations are restricted to actions: `send_notification, create_template`.
-*   **Status**: `[UNKNOWN]`
+*   **Status**: `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]`
 
 ### REQ-NOTIFICATION-24EXTENSIONPOINTS-004
 *   **Requirement**: Offline sync conflict class is `APPEND_ONLY`.
