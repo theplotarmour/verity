@@ -1,3 +1,23 @@
+// Verity Platform Foundation — Phase 0 baseline.
+//
+// Scope: the tenancy substrate only (Tenant, Organization) plus the base entity
+// pattern every future capability inherits. No business capability is modelled here.
+//
+// Authority:
+//   Bible V1        — Prisma/PostgreSQL is the system of record
+//   Bible V5 §1     — tenant isolation is absolute; RLS at the engine level
+//   ADR-005         — Tenant is the root data-isolation boundary;
+//                     Organization is a nested business unit inside a Tenant
+//   Spec PLA-TEN-001 — every operational table partitioned by tenant
+//   Spec PLA-TEN-003 — no cross-tenant foreign keys
+//   Spec PLA-ORG-001 — Organizations nest self-referentially
+//
+// Base entity pattern (implementation/02-foundation-build-order/bootstrap-sequence.md, step 7):
+//   id, tenantId, createdAt, updatedAt, version, customFields
+// `version` carries optimistic concurrency; `customFields` is the extension
+// surface required by PLA-EXT-001 so capabilities extend entities without
+// altering the platform ontology.
+
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["relationJoins"]
@@ -9,4 +29,41 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// Rebuild active schemas strictly as per Verity Master Platform Specification
+/// The root data-isolation boundary — the client contract boundary (ADR-005).
+/// A Tenant is not itself tenant-scoped, so it carries no `tenantId`.
+model Tenant {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  organizations Organization[]
+
+  @@map("tenant")
+}
+
+/// A functional, legal, or regional node inside a Tenant (ADR-005, PLA-ORG-001).
+/// Nests self-referentially: Holdings -> Region -> Branch -> Site Office.
+model Organization {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  parentId     String?  @map("parent_id") @db.Uuid
+  name         String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // PLA-TEN-003: the parent link is keyed on (tenantId, parentId) rather than
+  // parentId alone, so the database itself refuses a cross-tenant parent.
+  parent   Organization?  @relation("OrganizationHierarchy", fields: [tenantId, parentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  children Organization[] @relation("OrganizationHierarchy")
+
+  @@unique([tenantId, id], name: "organization_tenant_scoped_id")
+  @@index([tenantId])
+  @@index([tenantId, parentId])
+  @@map("organization")
+}
