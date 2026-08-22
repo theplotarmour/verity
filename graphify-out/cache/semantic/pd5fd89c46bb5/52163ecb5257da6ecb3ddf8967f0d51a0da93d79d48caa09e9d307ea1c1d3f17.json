@@ -1,1 +1,0 @@
-{"nodes": [{"id": "asset:public/file.svg", "label": "file.svg", "type": "asset", "confidence": "EXTRACTED", "source_file": "public/file.svg", "source_location": "public/file.svg:1", "description": "Default scaffold icon asset."}], "edges": [], "hyperedges": []}

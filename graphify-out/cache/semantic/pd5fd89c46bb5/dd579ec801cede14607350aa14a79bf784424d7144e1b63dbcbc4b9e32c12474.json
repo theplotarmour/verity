@@ -1,1 +1,0 @@
-{"nodes": [{"id": "asset:public/vercel.svg", "label": "vercel.svg", "type": "asset", "confidence": "EXTRACTED", "source_file": "public/vercel.svg", "source_location": "public/vercel.svg:1", "description": "Default Vercel logo asset."}], "edges": [], "hyperedges": []}
