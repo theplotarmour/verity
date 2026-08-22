@@ -37,14 +37,14 @@ To prevent terminology drift between design, product, engineering, and support, 
 ## 2. The Invariant Register
 Invariants must remain true across every tenant configuration, industry pack, and codebase build:
 
-### `INV-001` — Strict Tenancy Separation [FACT]
+### `INV-001` — Strict Tenancy Separation [INFERRED]
 *   **Statement:** All database operations (reads/writes) must contain a tenancy filter matching the authenticated principal's session scope.
 *   **Category:** PLATFORM INVARIANT
 *   **Rationale:** Prevents tenant data leakage, which is our highest operational risk.
 *   **Violation Example:** Executing `prisma.appointment.findMany()` without scoping by `factoryId` or `organizationId`.
 *   **Detection:** Middlewares or DB-level RLS policies reject queries missing tenant scope identifiers.
 
-### `INV-002` — Read-Only Closed States [FACT]
+### `INV-002` — Read-Only Closed States [DECIDED]
 *   **Statement:** Once a Work Order transitions to the `Closed` terminal state, its field properties become read-only. No further status changes or mutations are permitted.
 *   **Category:** DOMAIN INVARIANT
 *   **Rationale:** Enforces accounting and auditing integrity.

@@ -29,7 +29,7 @@ Every industry-specific concept in Verity is built on top of these primary primi
 
 ---
 
-### Primitive 1: WORK [FACT]
+### Primitive 1: WORK [DECIDED]
 
 1.  **Definition:** The canonical execution unit representing a single committed service obligation. We distinguish `Work` from:
     *   *Request:* An incoming intake ticket containing uncommitted customer signals.
@@ -84,7 +84,7 @@ Every industry-specific concept in Verity is built on top of these primary primi
 
 ---
 
-### Primitive 2: PARTY [FACT]
+### Primitive 2: PARTY [DECIDED]
 
 1.  **Definition:** The single canonical entity representing any human or corporate participant. We distinguish `Party` from other concepts:
     *   *User:* Stores credentials and passwords. A `User` is linked to a `Party` (role = worker/manager).
@@ -113,7 +113,7 @@ Every industry-specific concept in Verity is built on top of these primary primi
 
 ---
 
-### Primitive 3: RESOURCE [FACT]
+### Primitive 3: RESOURCE [DECIDED]
 
 1.  **Definition:** A capacity-constrained unit available for shift/work allocation. We distinguish `Resource` from:
     *   *Employee:* HR contract record (salary, leaves).
@@ -141,7 +141,7 @@ Every industry-specific concept in Verity is built on top of these primary primi
 
 ---
 
-### Primitive 4: LOCATION [FACT]
+### Primitive 4: LOCATION [DECIDED]
 
 1.  **Definition:** A physical coordinate region where operations occur. We distinguish `Location` from:
     *   *Warehouse:* Storage stock location. A warehouse is a `Location` with inventory capability turned on.

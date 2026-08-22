@@ -5,7 +5,7 @@ This document contains the deep validation of Verity’s four primary primitives
 
 ---
 
-## 1. Primitive: WORK [FACT]
+## 1. Primitive: WORK [DECIDED]
 
 1.  **Definition:** The canonical execution unit representing a single committed service obligation at a specific site. We distinguish `Work` from other concepts:
     *   *Task:* A small sub-step checklist item within a single Work Order.
@@ -60,7 +60,7 @@ This document contains the deep validation of Verity’s four primary primitives
 
 ---
 
-## 2. Primitive: PARTY [FACT]
+## 2. Primitive: PARTY [DECIDED]
 
 1.  **Definition:** The single canonical entity representing any human or corporate participant. We distinguish `Party` from other concepts:
     *   *User:* Stores credentials and passwords. A `User` is linked to a `Party` (role = worker/manager).
@@ -89,7 +89,7 @@ This document contains the deep validation of Verity’s four primary primitives
 
 ---
 
-## 3. Primitive: RESOURCE [FACT]
+## 3. Primitive: RESOURCE [DECIDED]
 
 1.  **Definition:** A capacity-constrained unit available for shift/work allocation. We distinguish `Resource` from:
     *   *Employee:* HR contract record (salary, leaves).
@@ -117,7 +117,7 @@ This document contains the deep validation of Verity’s four primary primitives
 
 ---
 
-## 4. Primitive: LOCATION [FACT]
+## 4. Primitive: LOCATION [DECIDED]
 
 1.  **Definition:** A physical coordinate region where operations occur. We distinguish `Location` from:
     *   *Warehouse:* Storage stock location. A warehouse is a `Location` with inventory capability turned on.
