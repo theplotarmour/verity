@@ -79,7 +79,7 @@ Every industry-specific concept in Verity is built on top of these primary primi
 14. **Events Emitted:**
     *   `work_order.job.created`, `work_order.job.assigned`, `work_order.job.started`, `work_order.job.completed`, `work_order.job.cancelled`.
 15. **Audit:** Records previous status, new status, modifier ID, coordinates, and timestamp on every transition.
-16. **Extensions:** Supports dynamic JSONB schema extensions for checklist templates.
+16. **Extensions:** Uses the `ChecklistTemplate` entity containing a dynamic questions JSON array (specifying ID, type, label, required status, and skip logic) to render field checklist tasks. Technician responses are saved to a decoupled `ChecklistResponse` entity mapping answer data back to the template.
 17. **Composition:** Composes with billing and scheduling to create invoice line drafts.
 
 ---
@@ -130,7 +130,7 @@ Every industry-specific concept in Verity is built on top of these primary primi
     *   `bound_to` Location branch context.
 8.  **Evidence:** Qualification and certification logs.
 9.  **Assignment:** Can be assigned to `ShiftSchedules` and `Work Orders`.
-10. **Scheduling:** Evaluated via a weekly timeline matrix (day-of-week, start_time, end_time, buffer_duration).
+10. **Scheduling:** Governed by a linked `Schedule` entity (reusable named weekly patterns in UTC, converted to local offsets at evaluation). Supports temporary absences (`OutOfOfficeEntry`) with automatic substitute delegation (`toResourceId`), and uses `AssignmentReservation` with a `releaseAt` TTL to prevent concurrent scheduling overlaps.
 11. **SLA:** SLA calculations on response time map to the Resource's shift schedule.
 12. **Exceptions:** Shift swaps, unplanned leaves, and overtime policies.
 13. **Authorization:** Schedulers edit scheduling allocations.
@@ -178,6 +178,12 @@ The `Resource` primitive acts as an abstraction layer representing schedulable c
 
 ### B. Shared Resource Allocation
 *   If a Resource is shared across multiple branches or Locations under the same Tenant Organization, its primary availability calendar tracks conflicts. Schedulers in Branch A cannot assign the Resource during a time slot already locked by Branch B.
+
+### C. Availability, Shifts, and Delegated Substitution
+*   **Weekly Templates:** Weekly availability is defined on a `Schedule` entity, storing weekly repeating intervals (days of week, start/end time) in UTC. Timezone offsets are resolved at query time to compute local availability slots.
+*   **Absences and Holidays:** Specific date overrides and `OutOfOfficeEntry` records block the base Schedule.
+*   **Delegated Substitution:** When a worker creates an `OutOfOfficeEntry`, they can specify a `toResourceId` substitute. Unassigned Work Orders scheduled in their territory during the absence are automatically routed to the substitute resource.
+
 
 ---
 

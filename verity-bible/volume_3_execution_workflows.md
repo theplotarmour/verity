@@ -57,7 +57,11 @@ Evidence is a core primitive representing verified historical data captured in t
 
 ---
 
-## 4. Concurrency & Duplicate Prevention
+## 4. Concurrency, Execution Engine & Conflict Rules
 
 *   **Optimistic Concurrency Control:** All mutating actions on `Work` records must pass a version token check. If Supervisor A edits a record while Supervisor B is modifying the same record, Supervisor B's update is rejected with `E_CONFLICT`, prompting them to refresh their workspace.
 *   **Duplicate Prevention:** All check-ins and state changes use idempotent token locks to prevent duplicate submissions when users double-tap action buttons.
+*   **Append-Only Event Sourcing (Audit Trail):** Every state transition and attribute update on a Work Order generates an immutable event appended to a `WorkOrderEvent` log. Current operational query reads use snapshotted rows, but SLA calculations and compliance audits read this append-only event stream directly.
+*   **DAG-based Workflow Execution:** Multi-stage workflow processes (e.g., job completion triggering customer signature, then billing approval, then notification dispatch) are executed as Directed Acyclic Graphs (DAGs) of tasks with structured JSON input/output data envelopes.
+*   **Manual Dependency & Conflict Warnings:** Automated scheduling dependencies (e.g. preceding job delay) will never automatically shift successor dates. Successor schedules remain fixed. The system flags the overlap as a `Schedule Conflict` on the dashboard, prompting manual dispatcher triage to prevent routing overlap.
+

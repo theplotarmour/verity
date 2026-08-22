@@ -12,6 +12,8 @@ Verity operates on a strict multi-tenant architecture. Data leaks between Organi
 1.  **Logical RLS Partitioning:** Every query executed by the server must be scoped by the tenant's `organizationId` (for corporate entities) or `factoryId` (for specific sites/outlets).
 2.  **Cross-Tenant Guardrails:** Database operations must use Row-Level Security (RLS) policies at the PostgreSQL engine level, or enforce tenancy checks within the database driver middleware. Tenant context is derived strictly from the authenticated session, never from user-supplied query parameters.
 3.  **Cross-Tenant Relationships:** It is strictly forbidden for any entity in tenant $A$ to reference a foreign key in tenant $B$. Shared systems (like global product templates) must use cross-tenant mappings that copy configuration rather than sharing direct entity rows.
+4.  **Authentication Boundary Policy:** Verity uses a single global authentication realm. Sub-organizations are modeled as `Groups` with composite role bindings. If a contractor works for multiple tenants, their single user identity is granted distinct memberships under each group. Tenancy isolation is strictly enforced at the database layer on every request.
+5.  **AST-based Analytical Sandboxing:** Reporting/analytical queries must be requested as structured JSON Abstract Syntax Tree (AST) payloads. The backend query processor intercepts the AST and automatically injects a `tenant_id` filter before compiling it to SQL/queries, preventing database injection and cross-tenant leakage.
 
 ### B. Product Rules vs. Technical Implementation Rules
 *   **The Product Rule:** Tenant isolation is absolute. Under no circumstances can data from Tenant A be visible to Tenant B.
@@ -39,6 +41,7 @@ An offline device enqueues mutating actions locally as **`OfflineCommands`**:
 2.  **Idempotency:** The server checks the `commandId` before processing. If a command is transmitted multiple times (due to network retries), the server processes it exactly once and returns the cached result.
 3.  **Chronological Replay:** Commands must replay on the server in the exact chronological order of their `deviceTimestamp` to preserve process continuity.
 4.  **Optimistic UI Mutation:** The mobile client applies changes to its local store immediately. These changes are flagged as `Unsynced` until the server returns confirmation.
+5.  **Heartbeat Pulse Merging:** High-frequency logging streams (e.g., GPS coordinates, session activity logs) sent from offline/online clients must be merged by the sync engine. Consecutive status logs with identical data payloads are merged by extending the `duration` of the primary log entry, preventing database write amplification.
 
 ### C. Conflict Handling Rules:
 *   **Field-Level Last-Write-Wins:** If two offline users edit different fields on the same record, the server merges the changes. If they edit the same field, the server applies the value with the latest `deviceTimestamp`.
