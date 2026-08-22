@@ -40,6 +40,7 @@ model Tenant {
   customFields Json     @default("{}") @map("custom_fields")
 
   organizations Organization[]
+  memberships   TenantMembership[]
 
   @@map("tenant")
 }
@@ -56,14 +57,119 @@ model Organization {
   version      Int      @default(1)
   customFields Json     @default("{}") @map("custom_fields")
 
-  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   // PLA-TEN-003: the parent link is keyed on (tenantId, parentId) rather than
   // parentId alone, so the database itself refuses a cross-tenant parent.
-  parent   Organization?  @relation("OrganizationHierarchy", fields: [tenantId, parentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  children Organization[] @relation("OrganizationHierarchy")
+  parent      Organization?      @relation("OrganizationHierarchy", fields: [tenantId, parentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  children    Organization[]     @relation("OrganizationHierarchy")
+  memberships TenantMembership[]
 
   @@unique([tenantId, id], name: "organization_tenant_scoped_id")
   @@index([tenantId])
   @@index([tenantId, parentId])
   @@map("organization")
+}
+
+/// Party lifecycle (Authority: Bible V2 Primitive 2 §3-§5, ADR-001).
+/// ADR-001 keeps these platform-level only: capability-specific lifecycles
+/// (CRM `Prospect`, Workforce `Employee`) belong inside those capabilities and
+/// map back to this primitive, they do not extend it.
+enum PartyState {
+  Invited
+  Active
+  Suspended
+  Archived
+}
+
+/// The single canonical record for any human or corporate participant.
+///
+/// GLOBAL, not tenant-scoped. Authority: Bible V2 Primitive 2 §2 — "Scoped
+/// globally to the Platform database, mapped to Organizations via
+/// TenantMembership records" — and INV-003, which requires exactly one Party
+/// per person across the whole platform even when they work for many tenants
+/// (PLA-IDE-004, the subcontractor case). A `tenantId` column here would force
+/// one row per tenant and break INV-003.
+///
+/// Visibility is therefore not a tenant column but reachability: a tenant sees
+/// a Party only if that Party's User holds a TenantMembership in it. See the
+/// RLS policies in the migration.
+///
+/// No address field: ADR-004 makes Address a distinct concept from Party and
+/// forbids folding mailing details into another primitive.
+model Party {
+  id           String     @id @default(uuid()) @db.Uuid
+  /// Human or corporate participant, so the label is a single display name;
+  /// given/family names are optional and only meaningful for humans.
+  displayName  String     @map("display_name")
+  givenName    String?    @map("given_name")
+  familyName   String?    @map("family_name")
+  /// Bible V2 Primitive 2 §8: identity evidence is a verified email or phone.
+  email        String?
+  phone        String?
+  state        PartyState @default(Invited)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  version      Int        @default(1)
+  customFields Json       @default("{}") @map("custom_fields")
+
+  user User?
+
+  @@index([email])
+  @@index([phone])
+  @@map("party")
+}
+
+/// The authenticating actor. GLOBAL, for the same reason as Party.
+///
+/// 1:1 with Party (GOV-TER-006, INV-003). Bible V2 Primitive 2 §1 describes
+/// User as storing "credentials and passwords"; authentication is offloaded to
+/// Supabase Auth (Authority: EXISTING INFRASTRUCTURE, and
+/// implementation/03-platform-foundation/identity.md), so no credential
+/// material is stored here — `authUserId` references the Supabase `auth.users`
+/// row. Keeping a second credential store would duplicate the source of truth.
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  /// Supabase Auth user id. Single global realm (Bible V5 §1.A.4).
+  authUserId   String   @unique @map("auth_user_id") @db.Uuid
+  partyId      String   @unique @map("party_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  party       Party              @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  memberships TenantMembership[]
+
+  @@map("user")
+}
+
+/// Binds a global User into one Organization inside one Tenant.
+///
+/// Authority: Bible V2 Primitive 2 §2 and §13 (authorization is defined at the
+/// membership level), Bible V5 §1.A.4 (one identity, distinct memberships per
+/// tenant), Spec PLA-IDE-002, implementation/03-platform-foundation/membership.md.
+///
+/// This IS tenant-scoped and carries the RLS boundary. `roleId` is specified by
+/// the handoff but deferred: Role belongs to the authorization step and does not
+/// exist yet, and inventing it here would pre-empt that design.
+model TenantMembership {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  version        Int      @default(1)
+  customFields   Json     @default("{}") @map("custom_fields")
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // PLA-TEN-003 again: keyed on (tenantId, organizationId) so the database
+  // refuses a membership pointing at another tenant's Organization.
+  organization Organization @relation(fields: [tenantId, organizationId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([userId, organizationId])
+  @@index([tenantId])
+  @@index([userId])
+  @@map("tenant_membership")
 }

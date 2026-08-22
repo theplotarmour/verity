@@ -162,11 +162,41 @@ any requirement written because it is "common in ERP/SaaS" rather than traced to
 - **ADR-005** `Tenant` is the root data-isolation boundary; `Organization` is a nested business-unit hierarchy inside a Tenant. RLS is one *mechanism* for tenant isolation, not the product invariant.
 - **ADR-006** Work sub-steps are `ChecklistItem`. `Task` is reserved for project-level milestones.
 
+## Identity shape (already decided, do not re-litigate)
+
+`Party` and `User` are **global** tables with no `tenantId`. Authority: Bible V2
+Primitive 2 §2 ("Scoped globally to the Platform database, mapped to Organizations
+via TenantMembership records") and INV-003, which requires exactly one Party per
+person even when they work for several tenants (PLA-IDE-004, the subcontractor).
+Adding a `tenantId` to either would force one row per tenant and break INV-003.
+
+Isolation for them is **reachability**, not a tenant column: a tenant sees an
+identity only when that identity holds a `TenantMembership` in it. `TenantMembership`
+is tenant-scoped and carries the ordinary RLS policy.
+
+- Create identities only via `provisionIdentity()` (`src/server/platform/identity.ts`),
+  which calls `verity.provision_identity` and writes Party + User + first membership
+  atomically. Direct INSERT into `party` / `user` is denied by RLS, deliberately:
+  Postgres applies SELECT policies to `INSERT ... RETURNING`, so a just-created
+  identity is unreachable and the write fails.
+- Never hard-delete an identity. Bible V2 Primitive 2 §3 ends the lifecycle at
+  `Archived`. There is intentionally no deprovision path.
+- The model is named `TenantMembership` after Bible V2 Primitive 2 §2/§7; the
+  implementation handoff's shorter `Membership` is the same thing, and the Bible
+  outranks it.
+- No address field on Party — ADR-004 makes Address a separate concept.
+- No credential material on User; Supabase Auth owns it, and `authUserId` references
+  `auth.users`. Bible V2 Primitive 2 §1 says User "stores credentials and passwords",
+  which predates the Supabase decision (EXISTING INFRASTRUCTURE) and is superseded
+  in practice by implementation/03-platform-foundation/identity.md.
+
 ## Open — do not solve silently
 
 - **ADR-002 / DEC-BIBLE-002** Resource scope (single actor vs crews/pools/spaces) is `DECISION_REQUIRED` and intentionally deferred. Build so it can be incorporated cleanly; do not invent a final Resource architecture.
 - **Spec status taxonomy is undefined.** `[UNKNOWN_REASON: FUTURE_CAPABILITY]` (1096 uses) and `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]` (722 uses) appear throughout `verity-spec/` but are defined nowhere. It is unresolved whether these mark ratified-but-unbuilt requirements or unratified ones. Escalate before relying on the status of a requirement.
 - `implementation/02-foundation-build-order/vertical-slice-strategy.md` still lists `DEC-BIBLE-001` as open; it was resolved by ADR-001. The ADR wins.
+- **Party de-duplication is unresolved and blocks any identity API.** Because reachability hides identities a tenant has no membership for, a tenant cannot tell that a Party already exists for the same human, so two tenants can each provision one and INV-003 breaks. Matching on verified email or phone (Bible V2 Primitive 2 §8) is the likely route, but *who may match against identities they cannot see* is a product decision needing an ADR. `provisionIdentity()` deliberately does not de-duplicate.
+- `TenantMembership.roleId` is specified by the handoff but deferred until the authorization step creates `Role`; inventing it early would pre-empt that design.
 - **The Bible is not editable.** One amendment (AMD-001, `factoryId` -> `tenantId`, Volume V §1.A.1 and Volume VI) was authorised by the product owner as a one-time edit and is already applied. Do not modify `verity-bible/` again without a fresh explicit instruction.
 
 ## Stop conditions — escalate, do not improvise
