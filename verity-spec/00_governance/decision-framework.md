@@ -21,7 +21,7 @@ To maintain structural clarity and track unresolved technical questions, the pla
 
 ## 2. Unresolved Decision (DEC-REQ) Template
 
-Any engineer or agent identifying a logical gap or unresolved question must register it in `17_decisions/unresolved.md` using this exact template. Partial or vague placeholders like "TBD" are rejected by the validator.
+Any engineer or agent identifying a logical gap or unresolved question must register it in `17_decisions/unresolved.md` using this exact template. Partial or vague placeholders (such as three-letter acronyms) are rejected by the validator.
 
 ```markdown
 ### DEC-REQ-[ID_NUMBER]: [Title of Decision]

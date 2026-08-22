@@ -1,0 +1,27 @@
+# Verity Master Platform Specification
+
+## 08_data/retention.md
+
+## Provenance
+*   **Primary Sources**: `reference/base/concept-inventory.md`
+*   **Verity Bible Authority**: `verity-bible/volume_5_operations_security.md`
+*   **Transformation Type**: ADOPT
+*   **Open Decisions**: None
+
+---
+
+## 1. Regulatory Log Retention Limits Specification
+
+This document details the `data` system specifications for `Retention`.
+
+### REQ-DATA-RETENTION-001
+*   **Requirement**: The system utilizes `base` core patterns for `regulatory log retention limits`.
+*   **Status**: `[FACT]`
+
+### REQ-DATA-RETENTION-002
+*   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
+*   **Status**: `[FACT]`
+
+### REQ-DATA-RETENTION-003
+*   **Requirement**: Actions must publish change logs to the Event Bus on commit.
+*   **Status**: `[FACT]`
