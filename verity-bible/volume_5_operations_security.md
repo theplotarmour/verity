@@ -9,7 +9,7 @@ This volume governs the infrastructure and operations of the Verity platform: mu
 Verity operates on a strict multi-tenant architecture. Data leaks between Organizations are catastrophic failures.
 
 ### A. Tenant Isolation [FACT]
-1.  **Logical RLS Partitioning:** Every query executed by the server must be scoped by the tenant's `organizationId` (for corporate entities) or `factoryId` (for specific sites/outlets).
+1.  **Logical RLS Partitioning:** Every query executed by the server must be scoped by `tenantId`, the root data-isolation boundary. `Organization` (a nested business unit) and `Location` (an operational site) are scoping *refinements within* a Tenant and are never isolation boundaries in their own right. (Authority: ADR-005; GOV-TER-010; GOV-TER-017.)
 2.  **Cross-Tenant Guardrails:** Database operations must use Row-Level Security (RLS) policies at the PostgreSQL engine level, or enforce tenancy checks within the database driver middleware. Tenant context is derived strictly from the authenticated session, never from user-supplied query parameters.
 3.  **Cross-Tenant Relationships:** It is strictly forbidden for any entity in tenant $A$ to reference a foreign key in tenant $B$. Shared systems (like global product templates) must use cross-tenant mappings that copy configuration rather than sharing direct entity rows.
 4.  **Authentication Boundary Policy:** Verity uses a single global authentication realm. Sub-organizations are modeled as `Groups` with composite role bindings. If a contractor works for multiple tenants, their single user identity is granted distinct memberships under each group. Tenancy isolation is strictly enforced at the database layer on every request.
@@ -57,3 +57,16 @@ Verity is an operational platform, not a general ledger accounting tool. We draw
 *   **Operational Completion:** Billing calculations are triggered exclusively by the `work.completed` or `booking.verified` events.
 *   **Decoupled Transactions:** The billing engine listens to operational events and writes to a separate, asynchronous billing database. Operational workflows never wait for payment gateway APIs to succeed before updating job states.
 *   **Cancellation Charges:** The billing engine calculates cancellation fees based on operational evidence (e.g., travel time spent before cancellation) without corrupting the Work Order state machine.
+
+---
+
+## Amendment Record
+
+**AMD-001 — Tenancy scoping terminology (Volume V §1.A.1).**
+The original clause scoped queries by `organizationId` "or `factoryId` (for specific sites/outlets)".
+`factoryId` was a legacy VEDA site-isolation identifier that survived into the constitutional
+text. It conflicted with ADR-005 (Tenant is the root data-isolation boundary; Organization is a
+nested unit inside a Tenant), with GOV-TER-017 (`Location` is the canonical term for a site, and
+`factory_outlet` is a prohibited synonym), and with Spec PLA-TEN-001. Volume VI §INV-001 and the
+Security Model summary carried the same remnant and are amended identically.
+Authorised by the product owner as a one-time constitutional edit.

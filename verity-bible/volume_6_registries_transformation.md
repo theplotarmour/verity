@@ -41,7 +41,7 @@ Invariants must remain true across every tenant configuration, industry pack, an
 *   **Statement:** All database operations (reads/writes) must contain a tenancy filter matching the authenticated principal's session scope.
 *   **Category:** PLATFORM INVARIANT
 *   **Rationale:** Prevents tenant data leakage, which is our highest operational risk.
-*   **Violation Example:** Executing `prisma.appointment.findMany()` without scoping by `factoryId` or `organizationId`.
+*   **Violation Example:** Executing `prisma.appointment.findMany()` without scoping by `tenantId`. (Authority: ADR-005; see Volume V Amendment Record AMD-001.)
 *   **Detection:** Middlewares or DB-level RLS policies reject queries missing tenant scope identifiers.
 
 ### `INV-002` — Read-Only Closed States [DECIDED]
@@ -131,7 +131,7 @@ Explicit status enum machines executing inside atomic transactions and emitting 
 First-class modeling of deviations (no-shows, SLA risks, partial work) with automated escalations.
 
 ### Security Model
-Row-Level Security (RLS) partition by `organizationId`/`factoryId` with explicit RBAC role-gates.
+Row-Level Security (RLS) partition by `tenantId` with explicit RBAC role-gates. (Authority: ADR-005; see Volume V Amendment Record AMD-001.)
 
 ### UX Constitution
 Visual restraint, high information density for managers, low density task-flows for workers, and an absolute ban on decorative glassmorphism.
