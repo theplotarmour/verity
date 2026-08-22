@@ -1,0 +1,32 @@
+# Verity Master Platform Specification
+
+## document/07-states.md
+
+## Provenance
+*   **Primary Sources**: `odoo-prd/entities/document.md`
+*   **Verity Bible Authority**: `verity-bible/volume_2_metamodel_primitives.md`
+*   **Transformation Type**: ADOPT
+*   **Open Decisions**: None
+
+---
+
+## 1. System categories vs custom labels mapping.
+
+This document details the `document` capability specs for the `07 States` contract.
+
+### REQ-DOCUMENT-07STATES-001
+*   **Requirement**: The capability manages `Document, Attachment` elements.
+*   **Status**: `[FACT]`
+*   **Source Reference**: `odoo/addons/base/models/ir_attachment.py`
+
+### REQ-DOCUMENT-07STATES-002
+*   **Requirement**: State changes are constrained to enums: `ACTIVE, ARCHIVED`.
+*   **Status**: `[FACT]`
+
+### REQ-DOCUMENT-07STATES-003
+*   **Requirement**: Mutations are restricted to actions: `upload_document, archive_document`.
+*   **Status**: `[FACT]`
+
+### REQ-DOCUMENT-07STATES-004
+*   **Requirement**: Offline sync conflict class is `APPEND_ONLY`.
+*   **Status**: `[DECIDED]`
