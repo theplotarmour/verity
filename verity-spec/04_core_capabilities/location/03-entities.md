@@ -21,11 +21,11 @@ This document details the `location` capability specs for the `03 Entities` cont
 
 ### REQ-LOCATION-03ENTITIES-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-LOCATION-03ENTITIES-003
 *   **Requirement**: Mutations are restricted to actions: `create_location, update_geofence`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-LOCATION-03ENTITIES-004
 *   **Requirement**: Offline sync conflict class is `LWW_ALLOWED`.

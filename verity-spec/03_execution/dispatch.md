@@ -24,20 +24,20 @@ The platform supports four atomic dispatch operations:
 *   **Action**: Binds a Work Order to a Resource calendar slot.
 *   **State change**: Transitions `WorkOrder` status from `Draft` to `Scheduled`.
 *   **Side-effect**: Enqueues a push notification and SMS to the assigned worker's mobile application.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### EXE-DIS-002: Release (Unassign)
 *   **Action**: Clears the resource assignment from a Work Order.
 *   **State change**: Transitions `WorkOrder` status back to `Draft` (available for rescheduling).
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### EXE-DIS-003: Lock Schedule
 *   **Action**: Locks an Appointment block, preventing automated scheduling engines or client self-booking portals from modifying the assignment.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### EXE-DIS-004: Broadcast Dispatch Alert
 *   **Action**: Triggers an alert broadcast to all workers in a specific geographic territory for urgent, unassigned Work Orders (e.g. emergency leak repair). The first qualified resource to accept the job clocks in.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ---
 
@@ -45,4 +45,4 @@ The platform supports four atomic dispatch operations:
 
 ### EXE-DIS-005: Manual Triage Policy
 *   **Rule**: If a preceding Work Order is delayed (technician clocks out late), successor jobs assigned to the same worker are flagged as a `Schedule Conflict` (overlap alert) on the Dispatch Board. The system does not automatically shift successor dates (avoiding routing overlaps), forcing manual dispatcher triage.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

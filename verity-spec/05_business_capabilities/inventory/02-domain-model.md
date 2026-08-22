@@ -21,11 +21,11 @@ This document details the `inventory` capability specs for the `02 Domain Model`
 
 ### REQ-INVENTORY-02DOMAINMODEL-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, WAITING, CONFIRMED, ASSIGNED, DONE, CANCELLED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-INVENTORY-02DOMAINMODEL-003
 *   **Requirement**: Mutations are restricted to actions: `create_picking, reserve_stock, validate_picking`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-INVENTORY-02DOMAINMODEL-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

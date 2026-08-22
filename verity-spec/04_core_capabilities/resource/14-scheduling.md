@@ -21,11 +21,11 @@ This document details the `resource` capability specs for the `14 Scheduling` co
 
 ### REQ-RESOURCE-14SCHEDULING-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE, OUT_OF_OFFICE`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-RESOURCE-14SCHEDULING-003
 *   **Requirement**: Mutations are restricted to actions: `create_resource, update_schedule, set_out_of_office`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-RESOURCE-14SCHEDULING-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

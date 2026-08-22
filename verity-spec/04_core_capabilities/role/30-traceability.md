@@ -21,11 +21,11 @@ This document details the `role` capability specs for the `30 Traceability` cont
 
 ### REQ-ROLE-30TRACEABILITY-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-ROLE-30TRACEABILITY-003
 *   **Requirement**: Mutations are restricted to actions: `create_role, compose_role, delete_role`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-ROLE-30TRACEABILITY-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

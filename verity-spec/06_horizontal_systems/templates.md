@@ -3,7 +3,7 @@
 ## 06_horizontal_systems/templates.md
 
 ## Provenance
-*   **Primary Sources**: `reference/base/concept-inventory.md`
+*   **Primary Sources**: `SOURCE_UNAVAILABLE`
 *   **Verity Bible Authority**: `verity-bible/volume_5_operations_security.md`
 *   **Transformation Type**: ADOPT
 *   **Open Decisions**: None
@@ -16,12 +16,12 @@ This document details the `horizontal_systems` system specifications for `Templa
 
 ### REQ-HORIZONTALSYSTEMS-TEMPLATES-001
 *   **Requirement**: The system utilizes `base` core patterns for `handlebars notification layout files`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-HORIZONTALSYSTEMS-TEMPLATES-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-HORIZONTALSYSTEMS-TEMPLATES-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

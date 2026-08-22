@@ -21,11 +21,11 @@ This document details the `user` capability specs for the `17 Evidence And Audit
 
 ### REQ-USER-17EVIDENCEANDAUDIT-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, SUSPENDED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-USER-17EVIDENCEANDAUDIT-003
 *   **Requirement**: Mutations are restricted to actions: `create_user, authenticate, invalidate_session`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-USER-17EVIDENCEANDAUDIT-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

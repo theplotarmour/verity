@@ -16,12 +16,12 @@ This document details the `experience` system specifications for `Dashboards`.
 
 ### REQ-EXPERIENCE-DASHBOARDS-001
 *   **Requirement**: The system utilizes `metabase` core patterns for `responsive view layouts metadata`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-EXPERIENCE-DASHBOARDS-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-EXPERIENCE-DASHBOARDS-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

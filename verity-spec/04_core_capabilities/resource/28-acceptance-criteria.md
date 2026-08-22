@@ -21,11 +21,11 @@ This document details the `resource` capability specs for the `28 Acceptance Cri
 
 ### REQ-RESOURCE-28ACCEPTANCECRITERIA-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE, OUT_OF_OFFICE`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-RESOURCE-28ACCEPTANCECRITERIA-003
 *   **Requirement**: Mutations are restricted to actions: `create_resource, update_schedule, set_out_of_office`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-RESOURCE-28ACCEPTANCECRITERIA-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

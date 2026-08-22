@@ -21,11 +21,11 @@ This document details the `party` capability specs for the `17 Evidence And Audi
 
 ### REQ-PARTY-17EVIDENCEANDAUDIT-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-PARTY-17EVIDENCEANDAUDIT-003
 *   **Requirement**: Mutations are restricted to actions: `create_party, update_party, archive_party`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-PARTY-17EVIDENCEANDAUDIT-004
 *   **Requirement**: Offline sync conflict class is `MERGEABLE`.

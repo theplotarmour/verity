@@ -20,7 +20,7 @@ An **Evidence** record represents verified operational data captured in the fiel
 
 ### EXE-EVI-001: Write-Once Immutability
 *   **Rule**: Once an Evidence record (image file pointer, signature vector, GPS coordinate verify log) is successfully uploaded and associated with a Work Order, it is strictly read-only. Editing or deleting evidence records by technicians or dispatchers is blocked.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### EXE-EVI-002: Metadata Traceability
 *   **Rule**: Every Evidence record must carry:
@@ -28,7 +28,7 @@ An **Evidence** record represents verified operational data captured in the fiel
     *   `gps_coordinates` (latitude, longitude, accuracy radius in meters).
     *   `device_timestamp` (DateTime recorded by local client clock at capture).
     *   `work_order_id` (FK to WorkOrder).
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ---
 
@@ -37,13 +37,13 @@ An **Evidence** record represents verified operational data captured in the fiel
 ### EXE-EVI-003: Photo Evidence
 *   **Description**: Image files captured via the mobile camera.
 *   **Validation Constraint**: The upload payload must preserve original camera Exif metadata (timestamp, focal length) where available to prevent upload of pre-existing images.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### EXE-EVI-004: Signature Capture
 *   **Description**: Digital sign-off captured on the touchscreen client.
 *   **Format**: Stored as an encoded SVG vector coordinate path rather than a low-resolution bitmap screenshot to ensure clarity.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### EXE-EVI-005: Geo-Match Verification
 *   **Description**: Comparison check verifying that the device coordinates at check-in or submit match the target Location's geofence bounds.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

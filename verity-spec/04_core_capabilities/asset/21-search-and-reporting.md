@@ -21,11 +21,11 @@ This document details the `asset` capability specs for the `21 Search And Report
 
 ### REQ-ASSET-21SEARCHANDREPORTING-002
 *   **Requirement**: State changes are constrained to enums: `OPERATIONAL, MAINTENANCE, DISPOSED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-ASSET-21SEARCHANDREPORTING-003
 *   **Requirement**: Mutations are restricted to actions: `create_asset, update_asset, send_to_maintenance`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-ASSET-21SEARCHANDREPORTING-004
 *   **Requirement**: Offline sync conflict class is `LWW_ALLOWED`.

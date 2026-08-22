@@ -16,12 +16,12 @@ This document details the `horizontal_systems` system specifications for `Report
 
 ### REQ-HORIZONTALSYSTEMS-REPORTING-001
 *   **Requirement**: The system utilizes `metabase` core patterns for `operational reporting metrics`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-HORIZONTALSYSTEMS-REPORTING-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-HORIZONTALSYSTEMS-REPORTING-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

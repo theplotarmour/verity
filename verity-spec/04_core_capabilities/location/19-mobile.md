@@ -21,11 +21,11 @@ This document details the `location` capability specs for the `19 Mobile` contra
 
 ### REQ-LOCATION-19MOBILE-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-LOCATION-19MOBILE-003
 *   **Requirement**: Mutations are restricted to actions: `create_location, update_geofence`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-LOCATION-19MOBILE-004
 *   **Requirement**: Offline sync conflict class is `LWW_ALLOWED`.

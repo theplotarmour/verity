@@ -21,11 +21,11 @@ This document details the `user` capability specs for the `27 Migrations` contra
 
 ### REQ-USER-27MIGRATIONS-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, SUSPENDED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-USER-27MIGRATIONS-003
 *   **Requirement**: Mutations are restricted to actions: `create_user, authenticate, invalidate_session`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-USER-27MIGRATIONS-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

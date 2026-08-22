@@ -21,11 +21,11 @@ This document details the `commerce` capability specs for the `17 Evidence And A
 
 ### REQ-COMMERCE-17EVIDENCEANDAUDIT-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, POSTED, PAID, CANCELLED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-COMMERCE-17EVIDENCEANDAUDIT-003
 *   **Requirement**: Mutations are restricted to actions: `create_invoice, post_invoice, register_payment, void_payment`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-COMMERCE-17EVIDENCEANDAUDIT-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

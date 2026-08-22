@@ -16,12 +16,12 @@ This document details the `industry_packs` system specifications for `Profession
 
 ### REQ-INDUSTRYPACKS-PROFESSIONALSERVICES-001
 *   **Requirement**: The system utilizes `project` core patterns for `SLA contract billing precomposed pack`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-INDUSTRYPACKS-PROFESSIONALSERVICES-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-INDUSTRYPACKS-PROFESSIONALSERVICES-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

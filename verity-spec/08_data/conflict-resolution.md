@@ -16,12 +16,12 @@ This document details the `data` system specifications for `Conflict Resolution`
 
 ### REQ-DATA-CONFLICTRESOLUTION-001
 *   **Requirement**: The system utilizes `frappe` core patterns for `conflict policy classes merge resolution`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-DATA-CONFLICTRESOLUTION-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-DATA-CONFLICTRESOLUTION-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

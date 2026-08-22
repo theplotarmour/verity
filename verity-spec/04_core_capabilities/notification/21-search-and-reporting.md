@@ -21,11 +21,11 @@ This document details the `notification` capability specs for the `21 Search And
 
 ### REQ-NOTIFICATION-21SEARCHANDREPORTING-002
 *   **Requirement**: State changes are constrained to enums: `PENDING, SENT, FAILED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-NOTIFICATION-21SEARCHANDREPORTING-003
 *   **Requirement**: Mutations are restricted to actions: `send_notification, create_template`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-NOTIFICATION-21SEARCHANDREPORTING-004
 *   **Requirement**: Offline sync conflict class is `APPEND_ONLY`.

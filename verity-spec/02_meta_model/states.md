@@ -23,13 +23,13 @@ To allow tenants to configure highly localized workflows while enabling the core
 ### MET-STA-001: System State Categories
 *   **Description**: Fixed, platform-level enums that dictate core engine behavior.
 *   *Examples for Work*: `DRAFT`, `SCHEDULING`, `EN_ROUTE`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 *   **Traceability**: Mapped from Plane state category concept.
 
 ### MET-STA-002: Tenant Custom Status Labels
 *   **Description**: User-friendly, configurable strings mapped to a single system category.
 *   *Example mapping*: A custom status "Awaiting Gate Pass" maps to the `SCHEDULING` system state category; "Replacing Compressor" maps to the `IN_PROGRESS` system state category.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ---
 
@@ -37,8 +37,8 @@ To allow tenants to configure highly localized workflows while enabling the core
 
 ### MET-STA-003: Mandatory Category Binding
 *   **Rule**: When a tenant creates a custom Status, they must map it to exactly one valid system `StateCategory`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### MET-STA-004: SLA Timer Triggers
 *   **Rule**: SLA timers and clock states (Running, Paused, Stopped) evaluate changes strictly at the system `StateCategory` layer, ignoring the custom Status Label text.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

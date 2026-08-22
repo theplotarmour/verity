@@ -21,11 +21,11 @@ This document details the `document` capability specs for the `16 Notifications`
 
 ### REQ-DOCUMENT-16NOTIFICATIONS-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, ARCHIVED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-DOCUMENT-16NOTIFICATIONS-003
 *   **Requirement**: Mutations are restricted to actions: `upload_document, archive_document`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-DOCUMENT-16NOTIFICATIONS-004
 *   **Requirement**: Offline sync conflict class is `APPEND_ONLY`.

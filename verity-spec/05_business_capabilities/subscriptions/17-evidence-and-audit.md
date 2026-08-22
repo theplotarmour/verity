@@ -21,11 +21,11 @@ This document details the `subscriptions` capability specs for the `17 Evidence 
 
 ### REQ-SUBSCRIPTIONS-17EVIDENCEANDAUDIT-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, ACTIVE, PAST_DUE, TERMINATED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-SUBSCRIPTIONS-17EVIDENCEANDAUDIT-003
 *   **Requirement**: Mutations are restricted to actions: `create_subscription, billing_run, suspend_subscription`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-SUBSCRIPTIONS-17EVIDENCEANDAUDIT-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

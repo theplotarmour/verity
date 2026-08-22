@@ -42,7 +42,7 @@ To support offline client synchronization, low-latency reporting, and scale the 
     *   Validates input schemas, checks permissions, verifies preconditions, and commits mutations in a single transaction.
     *   Always emits a Business Event on success.
     *   Returns transaction outcome (success | failure).
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### MET-MET-002: Queries (Read Operations)
 *   **Description**: The read pipeline for fetching active state data.
@@ -50,11 +50,11 @@ To support offline client synchronization, low-latency reporting, and scale the 
     *   Bypasses validation rules, constraints, and business lifecycle hooks.
     *   Must enforce tenant-isolation and row-scoping filters at the AST query sandboxing layer (as defined in `01_platform/authorization.md`).
     *   Guaranteed to be side-effect free (cannot modify database rows).
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### MET-MET-003: Projections (Read-Oriented Representations)
 *   **Description**: Derived tables optimized for high-performance reading and analytics (e.g. a technician workload projection, search indexes, or SLA breach summary reports).
 *   **Operational Properties**:
     *   Constructed asynchronously by subscribing to and processing Business Events from the Event Bus.
     *   Can be out of sync temporarily (eventual consistency), but must resolve quickly to support operational dispatch screens.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

@@ -21,11 +21,11 @@ This document details the `procurement` capability specs for the `10 Workflows` 
 
 ### REQ-PROCUREMENT-10WORKFLOWS-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, SENT, PURCHASE, DONE, CANCELLED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PROCUREMENT-10WORKFLOWS-003
 *   **Requirement**: Mutations are restricted to actions: `create_purchase, send_rfq, confirm_purchase, cancel_purchase`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PROCUREMENT-10WORKFLOWS-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

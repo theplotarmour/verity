@@ -21,11 +21,11 @@ This document details the `inventory` capability specs for the `16 Notifications
 
 ### REQ-INVENTORY-16NOTIFICATIONS-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, WAITING, CONFIRMED, ASSIGNED, DONE, CANCELLED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-INVENTORY-16NOTIFICATIONS-003
 *   **Requirement**: Mutations are restricted to actions: `create_picking, reserve_stock, validate_picking`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-INVENTORY-16NOTIFICATIONS-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

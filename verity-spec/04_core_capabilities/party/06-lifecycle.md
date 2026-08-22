@@ -21,11 +21,11 @@ This document details the `party` capability specs for the `06 Lifecycle` contra
 
 ### REQ-PARTY-06LIFECYCLE-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PARTY-06LIFECYCLE-003
 *   **Requirement**: Mutations are restricted to actions: `create_party, update_party, archive_party`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PARTY-06LIFECYCLE-004
 *   **Requirement**: Offline sync conflict class is `MERGEABLE`.

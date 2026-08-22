@@ -63,4 +63,4 @@ Claude Code shall implement the scheduling structures as follows:
 - Bible Synthesis ADOPTED, Bible V2, Bible V5
 
 ## Open Decisions
-- None.
+- **DEC-BIBLE-002**: Resource Representation Scope (reconciling whether crews, teams, and spaces are stand-alone resources or composite groups of physical resources).

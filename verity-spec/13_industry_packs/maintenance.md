@@ -16,12 +16,12 @@ This document details the `industry_packs` system specifications for `Maintenanc
 
 ### REQ-INDUSTRYPACKS-MAINTENANCE-001
 *   **Requirement**: The system utilizes `maintenance` core patterns for `preventative asset repair precomposed pack`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-INDUSTRYPACKS-MAINTENANCE-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-INDUSTRYPACKS-MAINTENANCE-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

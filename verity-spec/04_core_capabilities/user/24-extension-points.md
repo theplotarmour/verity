@@ -21,11 +21,11 @@ This document details the `user` capability specs for the `24 Extension Points` 
 
 ### REQ-USER-24EXTENSIONPOINTS-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, SUSPENDED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-USER-24EXTENSIONPOINTS-003
 *   **Requirement**: Mutations are restricted to actions: `create_user, authenticate, invalidate_session`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-USER-24EXTENSIONPOINTS-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

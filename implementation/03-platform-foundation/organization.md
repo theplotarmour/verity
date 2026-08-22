@@ -45,4 +45,5 @@ Defines the implementation of the hierarchical organization tree within a tenant
 - Covers: GOV-TER-010, GOV-TER-011.
 
 # Open Decisions
+- **DEC-BIBLE-005**: Tenant vs Organization Boundaries (clarifying whether Tenant and Org represent identical or hierarchical boundaries).
 - **IMPLEMENTATION DECISION REQUIRED**: Strategy for efficient deep-tree queries (Materialized Paths, Ltree, or Recursive CTEs).

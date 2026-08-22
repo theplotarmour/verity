@@ -21,11 +21,11 @@ This document details the `organization` capability specs for the `29 Test Matri
 
 ### REQ-ORGANIZATION-29TESTMATRIX-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-ORGANIZATION-29TESTMATRIX-003
 *   **Requirement**: Mutations are restricted to actions: `create_org, update_org, add_member, remove_member`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-ORGANIZATION-29TESTMATRIX-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

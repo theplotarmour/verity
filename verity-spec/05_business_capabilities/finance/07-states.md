@@ -21,11 +21,11 @@ This document details the `finance` capability specs for the `07 States` contrac
 
 ### REQ-FINANCE-07STATES-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-FINANCE-07STATES-003
 *   **Requirement**: Mutations are restricted to actions: `configure_tax, recalculate_projections`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-FINANCE-07STATES-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

@@ -3,7 +3,7 @@
 ## 16_traceability/capability-traceability.md
 
 ## Provenance
-*   **Primary Sources**: `reference/base/concept-inventory.md`
+*   **Primary Sources**: `SOURCE_UNAVAILABLE`
 *   **Verity Bible Authority**: `verity-bible/volume_5_operations_security.md`
 *   **Transformation Type**: ADOPT
 *   **Open Decisions**: None
@@ -16,12 +16,12 @@ This document details the `traceability` system specifications for `Capability T
 
 ### REQ-TRACEABILITY-CAPABILITYTRACEABILITY-001
 *   **Requirement**: The system utilizes `base` core patterns for `cross-reference mapping to catalog modules`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-TRACEABILITY-CAPABILITYTRACEABILITY-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-TRACEABILITY-CAPABILITYTRACEABILITY-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

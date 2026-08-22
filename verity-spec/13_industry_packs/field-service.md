@@ -16,12 +16,12 @@ This document details the `industry_packs` system specifications for `Field Serv
 
 ### REQ-INDUSTRYPACKS-FIELDSERVICE-001
 *   **Requirement**: The system utilizes `fsm` core patterns for `technician route dispatch precomposed pack`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-INDUSTRYPACKS-FIELDSERVICE-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-INDUSTRYPACKS-FIELDSERVICE-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

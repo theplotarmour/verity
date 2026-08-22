@@ -21,11 +21,11 @@ This document details the `expenses` capability specs for the `21 Search And Rep
 
 ### REQ-EXPENSES-21SEARCHANDREPORTING-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, SUBMITTED, APPROVED, POSTED, DONE, REFUSED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-EXPENSES-21SEARCHANDREPORTING-003
 *   **Requirement**: Mutations are restricted to actions: `create_expense, submit_expense, approve_expense, refuse_expense`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-EXPENSES-21SEARCHANDREPORTING-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

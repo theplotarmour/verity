@@ -57,8 +57,8 @@ When a decision is approved, it is moved to a separate file in `17_decisions/adr
 
 ### GOV-DEC-001: No Silent Promotions
 No implementation choice (such as database engines, sync algorithms, ORMs, or frontend frameworks) may be silently promoted into a product requirement unless it has been explicitly evaluated in an active ADR. The domain model remains database-agnostic.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### GOV-DEC-002: Decision Overrides
 If a custom client system requires an override of an established ADR, the developer must submit a `Client-Specific Exception Request`. The exception must be documented in the client composition file without altering the platform's core ADR record.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

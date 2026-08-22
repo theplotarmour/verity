@@ -21,11 +21,11 @@ This document details the `contract` capability specs for the `17 Evidence And A
 
 ### REQ-CONTRACT-17EVIDENCEANDAUDIT-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, ACTIVE, EXPIRED, CANCELLED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-CONTRACT-17EVIDENCEANDAUDIT-003
 *   **Requirement**: Mutations are restricted to actions: `create_contract, activate_contract, terminate_contract`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-CONTRACT-17EVIDENCEANDAUDIT-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

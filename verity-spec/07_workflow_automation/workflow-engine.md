@@ -16,12 +16,12 @@ This document details the `workflow_automation` system specifications for `Workf
 
 ### REQ-WORKFLOWAUTOMATION-WORKFLOWENGINE-001
 *   **Requirement**: The system utilizes `temporal` core patterns for `durable workflow replay state machines`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-WORKFLOWAUTOMATION-WORKFLOWENGINE-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-WORKFLOWAUTOMATION-WORKFLOWENGINE-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

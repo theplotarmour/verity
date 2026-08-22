@@ -21,11 +21,11 @@ This document details the `contract` capability specs for the `26 Edge Cases` co
 
 ### REQ-CONTRACT-26EDGECASES-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, ACTIVE, EXPIRED, CANCELLED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-CONTRACT-26EDGECASES-003
 *   **Requirement**: Mutations are restricted to actions: `create_contract, activate_contract, terminate_contract`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-CONTRACT-26EDGECASES-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

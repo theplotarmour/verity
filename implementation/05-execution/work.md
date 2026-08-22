@@ -78,4 +78,5 @@ Claude Code shall implement the Work Order domain as follows:
 - INV-002
 
 ## Open Decisions
-- None.
+- **DEC-BIBLE-003**: Terminal State Path of Work Orders (reconciling linear closed flow vs invoicing archive boundary).
+- **DEC-BIBLE-006**: Checklist Item Naming (ChecklistItem vs Task naming conflict).

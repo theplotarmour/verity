@@ -3,7 +3,7 @@
 ## 15_testing/permissions-testing.md
 
 ## Provenance
-*   **Primary Sources**: `reference/base/concept-inventory.md`
+*   **Primary Sources**: `SOURCE_UNAVAILABLE`
 *   **Verity Bible Authority**: `verity-bible/volume_5_operations_security.md`
 *   **Transformation Type**: ADOPT
 *   **Open Decisions**: None
@@ -16,12 +16,12 @@ This document details the `testing` system specifications for `Permissions Testi
 
 ### REQ-TESTING-PERMISSIONSTESTING-001
 *   **Requirement**: The system utilizes `base` core patterns for `row scoping and role bypass checks`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-TESTING-PERMISSIONSTESTING-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-TESTING-PERMISSIONSTESTING-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

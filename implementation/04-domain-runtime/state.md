@@ -51,4 +51,5 @@ Covers states, transitions, invariant enforcement on closed states, and side eff
 - INV-002, GOV-TER-001, MET-ACT-004
 
 # Open Decisions
-- None
+- **DEC-BIBLE-001**: Party Lifecycle Initial State (reconciling Prospect vs Invited as the starting lifecycle state).
+- **DEC-BIBLE-003**: Terminal State Path of Work Orders (reconciling linear closed flow vs invoicing archive boundary).

@@ -21,11 +21,11 @@ This document details the `resource` capability specs for the `17 Evidence And A
 
 ### REQ-RESOURCE-17EVIDENCEANDAUDIT-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE, OUT_OF_OFFICE`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-RESOURCE-17EVIDENCEANDAUDIT-003
 *   **Requirement**: Mutations are restricted to actions: `create_resource, update_schedule, set_out_of_office`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-RESOURCE-17EVIDENCEANDAUDIT-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

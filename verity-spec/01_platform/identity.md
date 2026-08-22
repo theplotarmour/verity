@@ -20,7 +20,7 @@ A human individual's identity is globally unique, but their operational role, me
     *   `User`: Holds authentication records (email, password hash, MFA keys, active sessions). Represents the actor.
     *   `Party`: Holds personal and contact details (first name, last name, phone number, physical address). Represents the person/entity.
 *   **Relation**: A `User` is optionally linked to a `Party` record via a one-to-one relationship (`party_id`).
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ---
 
@@ -30,7 +30,7 @@ A human individual's identity is globally unique, but their operational role, me
 *   **Description**: A single `User` identity can be mapped to multiple Organizations (tenants) via explicit membership records.
 *   **Entity Mapping**:
     *   `Membership`: `user_id` (FK to User), `organization_id` (FK to Organization), `role_id` (FK to Role).
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ```text
        ┌──────────────┐
@@ -45,8 +45,8 @@ A human individual's identity is globally unique, but their operational role, me
 
 ### PLA-IDE-003: Membership-Scoped Sessions
 *   **Description**: When a User logs in, they authenticate globally. However, to execute API actions or view dashboards, they must activate a specific `Membership` context. All queries are filtered against the active membership's `organization_id` and role permissions.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### PLA-IDE-004: Contractor Delegation
 *   **Description**: A third-party subcontractor can log into Verity once, and switch context between Tenant A (e.g. Facilities client) and Tenant B (e.g. Security client) without logging out. Their actions are logged under the respective Tenant's event audit trail.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

@@ -3,7 +3,7 @@
 ## 06_horizontal_systems/localization.md
 
 ## Provenance
-*   **Primary Sources**: `reference/base/concept-inventory.md`
+*   **Primary Sources**: `SOURCE_UNAVAILABLE`
 *   **Verity Bible Authority**: `verity-bible/volume_5_operations_security.md`
 *   **Transformation Type**: ADOPT
 *   **Open Decisions**: None
@@ -16,12 +16,12 @@ This document details the `horizontal_systems` system specifications for `Locali
 
 ### REQ-HORIZONTALSYSTEMS-LOCALIZATION-001
 *   **Requirement**: The system utilizes `base` core patterns for `multi-language selection registries`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-HORIZONTALSYSTEMS-LOCALIZATION-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-HORIZONTALSYSTEMS-LOCALIZATION-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

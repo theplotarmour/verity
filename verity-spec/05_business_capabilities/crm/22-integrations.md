@@ -21,11 +21,11 @@ This document details the `crm` capability specs for the `22 Integrations` contr
 
 ### REQ-CRM-22INTEGRATIONS-002
 *   **Requirement**: State changes are constrained to enums: `NEW, QUALIFIED, WON, LOST`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-CRM-22INTEGRATIONS-003
 *   **Requirement**: Mutations are restricted to actions: `create_lead, transition_stage, mark_won, mark_lost`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-CRM-22INTEGRATIONS-004
 *   **Requirement**: Offline sync conflict class is `LWW_ALLOWED`.

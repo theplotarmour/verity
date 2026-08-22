@@ -21,11 +21,11 @@ This document details the `asset` capability specs for the `25 Failure And Excep
 
 ### REQ-ASSET-25FAILUREANDEXCEPTIONS-002
 *   **Requirement**: State changes are constrained to enums: `OPERATIONAL, MAINTENANCE, DISPOSED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-ASSET-25FAILUREANDEXCEPTIONS-003
 *   **Requirement**: Mutations are restricted to actions: `create_asset, update_asset, send_to_maintenance`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-ASSET-25FAILUREANDEXCEPTIONS-004
 *   **Requirement**: Offline sync conflict class is `LWW_ALLOWED`.

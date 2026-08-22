@@ -21,11 +21,11 @@ This document details the `security` capability specs for the `08 Actions` contr
 
 ### REQ-SECURITY-08ACTIONS-002
 *   **Requirement**: State changes are constrained to enums: `ROSTERED, PATROLLING, COMPLETED, INCIDENT_REPORTED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-SECURITY-08ACTIONS-003
 *   **Requirement**: Mutations are restricted to actions: `start_patrol, scan_checkpoint, report_incident, end_patrol`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-SECURITY-08ACTIONS-004
 *   **Requirement**: Offline sync conflict class is `APPEND_ONLY`.

@@ -64,4 +64,4 @@ Once the `Party` slice is complete and passes all tests, proceed to implement `U
 - INV-003, GOV-TER-006.
 
 ## Open Decisions
-- None.
+- **DEC-BIBLE-001**: Party Lifecycle Initial State (reconciling Prospect vs Invited as the starting lifecycle state).

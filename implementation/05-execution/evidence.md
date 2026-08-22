@@ -63,4 +63,4 @@ Claude Code shall implement the evidence system as follows:
 - Bible V3
 
 ## Open Decisions
-- None.
+- **DEC-BIBLE-004**: Decoupling of Address and Location (reconciling whether address fields are unified under Location or separated as standalone Place profiles).

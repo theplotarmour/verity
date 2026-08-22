@@ -21,11 +21,11 @@ This document details the `party` capability specs for the `24 Extension Points`
 
 ### REQ-PARTY-24EXTENSIONPOINTS-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PARTY-24EXTENSIONPOINTS-003
 *   **Requirement**: Mutations are restricted to actions: `create_party, update_party, archive_party`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PARTY-24EXTENSIONPOINTS-004
 *   **Requirement**: Offline sync conflict class is `MERGEABLE`.

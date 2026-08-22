@@ -21,11 +21,11 @@ This document details the `security` capability specs for the `17 Evidence And A
 
 ### REQ-SECURITY-17EVIDENCEANDAUDIT-002
 *   **Requirement**: State changes are constrained to enums: `ROSTERED, PATROLLING, COMPLETED, INCIDENT_REPORTED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-SECURITY-17EVIDENCEANDAUDIT-003
 *   **Requirement**: Mutations are restricted to actions: `start_patrol, scan_checkpoint, report_incident, end_patrol`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-SECURITY-17EVIDENCEANDAUDIT-004
 *   **Requirement**: Offline sync conflict class is `APPEND_ONLY`.

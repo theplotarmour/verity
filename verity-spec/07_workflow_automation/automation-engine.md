@@ -16,12 +16,12 @@ This document details the `workflow_automation` system specifications for `Autom
 
 ### REQ-WORKFLOWAUTOMATION-AUTOMATIONENGINE-001
 *   **Requirement**: The system utilizes `n8n` core patterns for `composable DAG action routes`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-WORKFLOWAUTOMATION-AUTOMATIONENGINE-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-WORKFLOWAUTOMATION-AUTOMATIONENGINE-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

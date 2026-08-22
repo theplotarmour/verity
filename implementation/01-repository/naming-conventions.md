@@ -74,4 +74,4 @@ HOW CLAUDE SHOULD EXECUTE:
 - Traces to GOV-TER-001→017.
 
 ## Open Decisions
-- None.
+- **DEC-BIBLE-006**: Checklist Item Naming (ChecklistItem vs Task naming conflict).

@@ -21,11 +21,11 @@ This document details the `document` capability specs for the `14 Scheduling` co
 
 ### REQ-DOCUMENT-14SCHEDULING-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, ARCHIVED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-DOCUMENT-14SCHEDULING-003
 *   **Requirement**: Mutations are restricted to actions: `upload_document, archive_document`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-DOCUMENT-14SCHEDULING-004
 *   **Requirement**: Offline sync conflict class is `APPEND_ONLY`.

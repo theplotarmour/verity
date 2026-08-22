@@ -21,11 +21,11 @@ This document details the `projects` capability specs for the `12 Events` contra
 
 ### REQ-PROJECTS-12EVENTS-002
 *   **Requirement**: State changes are constrained to enums: `PLANNING, ACTIVE, COMPLETED, SUSPENDED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PROJECTS-12EVENTS-003
 *   **Requirement**: Mutations are restricted to actions: `create_project, create_task, complete_project`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PROJECTS-12EVENTS-004
 *   **Requirement**: Offline sync conflict class is `MERGEABLE`.

@@ -16,12 +16,12 @@ This document details the `platform_operations` system specifications for `Recov
 
 ### REQ-PLATFORMOPERATIONS-RECOVERY-001
 *   **Requirement**: The system utilizes `temporal` core patterns for `durable workspace restore points`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PLATFORMOPERATIONS-RECOVERY-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-PLATFORMOPERATIONS-RECOVERY-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

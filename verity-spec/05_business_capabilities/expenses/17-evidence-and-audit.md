@@ -21,11 +21,11 @@ This document details the `expenses` capability specs for the `17 Evidence And A
 
 ### REQ-EXPENSES-17EVIDENCEANDAUDIT-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, SUBMITTED, APPROVED, POSTED, DONE, REFUSED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-EXPENSES-17EVIDENCEANDAUDIT-003
 *   **Requirement**: Mutations are restricted to actions: `create_expense, submit_expense, approve_expense, refuse_expense`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-EXPENSES-17EVIDENCEANDAUDIT-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

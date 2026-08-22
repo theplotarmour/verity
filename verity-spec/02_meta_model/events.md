@@ -35,8 +35,8 @@ Every Business Event must carry a standardized envelope containing:
 
 ### MET-EVE-001: Immutability
 *   **Rule**: Business Events are strictly write-once. An event record can never be modified or deleted.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### MET-EVE-002: Commit Sequence Order
 *   **Rule**: The publishing of an event to the outbound Event Bus must occur within the same database transaction lifecycle as the action mutation, using the Outbox pattern. The event is written to a database `Outbox` table and picked up by a background publisher, ensuring events are never dispatched if the transaction rolls back.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

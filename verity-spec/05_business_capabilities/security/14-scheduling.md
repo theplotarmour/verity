@@ -21,11 +21,11 @@ This document details the `security` capability specs for the `14 Scheduling` co
 
 ### REQ-SECURITY-14SCHEDULING-002
 *   **Requirement**: State changes are constrained to enums: `ROSTERED, PATROLLING, COMPLETED, INCIDENT_REPORTED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-SECURITY-14SCHEDULING-003
 *   **Requirement**: Mutations are restricted to actions: `start_patrol, scan_checkpoint, report_incident, end_patrol`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-SECURITY-14SCHEDULING-004
 *   **Requirement**: Offline sync conflict class is `APPEND_ONLY`.

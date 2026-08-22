@@ -22,7 +22,7 @@ A Tenant represents the client contract boundary (e.g. ACME Services Inc), where
 *   **Description**: Organizations can be nested hierarchically to represent multi-branch business entities (e.g. Holdings Company $\rightarrow$ Regional Division $\rightarrow$ City Branch $\rightarrow$ Local Site Office).
 *   **Entity Mapping**:
     *   `Organization`: `id`, `name`, `tenant_id`, `parent_id` (FK to Organization, optional).
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ```text
   ACME Holdings (Tenant Root)
@@ -40,12 +40,12 @@ A Tenant represents the client contract boundary (e.g. ACME Services Inc), where
 
 ### PLA-ORG-002: Downward Resource Visibility
 *   **Description**: A User mapped to a parent Organization node (e.g., Regional Manager) automatically inherits visibility and dispatch authority over all descendant child Organization nodes.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### PLA-ORG-003: Isolated Child Work Scoping
 *   **Description**: A Worker or Resource bound to a child Organization branch (e.g., London Office) cannot view or accept Work Orders assigned to sibling branches (e.g., Manchester Office) unless explicitly granted cross-branch permissions.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### PLA-ORG-004: Customer Scoping
 *   **Description**: Customer Accounts can be scoped globally to the Tenant (visible across all branches) or mapped strictly to a specific regional Organization node to restrict branch access.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

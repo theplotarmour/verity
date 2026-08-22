@@ -21,11 +21,11 @@ This document details the `document` capability specs for the `13 Automation` co
 
 ### REQ-DOCUMENT-13AUTOMATION-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, ARCHIVED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-DOCUMENT-13AUTOMATION-003
 *   **Requirement**: Mutations are restricted to actions: `upload_document, archive_document`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-DOCUMENT-13AUTOMATION-004
 *   **Requirement**: Offline sync conflict class is `APPEND_ONLY`.

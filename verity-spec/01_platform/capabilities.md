@@ -26,7 +26,7 @@ A **Capability** is a self-contained, domain-specific module of business logic (
     *   `dependencies` (Array of Strings): Required capability IDs.
     *   `entity_types` (Array of Strings): Entities owned by this capability.
     *   `version` (String): SemVer version of the capability logic.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ---
 
@@ -36,11 +36,11 @@ A **Capability** is a self-contained, domain-specific module of business logic (
 *   **Description**: Capabilities are activated on a per-Tenant basis. An inactive capability's endpoints, UI menus, and event handlers are fully hidden and blocked for that tenant.
 *   **Entity Mapping**:
     *   `TenantActivation`: `tenant_id` (FK to Tenant), `capability_id` (String), `activated_at` (DateTime), `status` (active | suspended).
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### PLA-CAP-003: Dependency Resolution on Activation
 *   **Rule**: When a tenant administrator attempts to activate a Capability (e.g., `Scheduling`), the Activation Service validates that all prerequisite dependencies (e.g., `Workforce`) are already active for that tenant. If dependencies are missing, the activation is rejected.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ---
 
@@ -48,4 +48,4 @@ A **Capability** is a self-contained, domain-specific module of business logic (
 
 ### PLA-CAP-004: In-Memory Capability Verification
 *   **Rule**: The application core uses local in-memory lookups to check if a tenant has a capability activated. Checking capability permissions must not trigger synchronous database queries during API routing.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

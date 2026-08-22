@@ -21,11 +21,11 @@ This document details the `facilities` capability specs for the `29 Test Matrix`
 
 ### REQ-FACILITIES-29TESTMATRIX-002
 *   **Requirement**: State changes are constrained to enums: `SCHEDULED, IN_PROGRESS, VERIFIED, FAILED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-FACILITIES-29TESTMATRIX-003
 *   **Requirement**: Mutations are restricted to actions: `schedule_inspection, perform_clean, verify_facility`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-FACILITIES-29TESTMATRIX-004
 *   **Requirement**: Offline sync conflict class is `SEMANTIC_MERGE`.

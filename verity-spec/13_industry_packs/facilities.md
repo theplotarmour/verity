@@ -16,12 +16,12 @@ This document details the `industry_packs` system specifications for `Facilities
 
 ### REQ-INDUSTRYPACKS-FACILITIES-001
 *   **Requirement**: The system utilizes `custom_facilities` core patterns for `cleaning and visits precomposed pack`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-INDUSTRYPACKS-FACILITIES-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-INDUSTRYPACKS-FACILITIES-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

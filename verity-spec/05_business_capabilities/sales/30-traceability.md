@@ -21,11 +21,11 @@ This document details the `sales` capability specs for the `30 Traceability` con
 
 ### REQ-SALES-30TRACEABILITY-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, SENT, SALE, DONE, CANCELLED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-SALES-30TRACEABILITY-003
 *   **Requirement**: Mutations are restricted to actions: `create_order, send_quote, confirm_order, cancel_order`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-SALES-30TRACEABILITY-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

@@ -21,11 +21,11 @@ This document details the `asset` capability specs for the `16 Notifications` co
 
 ### REQ-ASSET-16NOTIFICATIONS-002
 *   **Requirement**: State changes are constrained to enums: `OPERATIONAL, MAINTENANCE, DISPOSED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-ASSET-16NOTIFICATIONS-003
 *   **Requirement**: Mutations are restricted to actions: `create_asset, update_asset, send_to_maintenance`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-ASSET-16NOTIFICATIONS-004
 *   **Requirement**: Offline sync conflict class is `LWW_ALLOWED`.

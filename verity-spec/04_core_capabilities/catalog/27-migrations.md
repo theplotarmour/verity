@@ -21,11 +21,11 @@ This document details the `catalog` capability specs for the `27 Migrations` con
 
 ### REQ-CATALOG-27MIGRATIONS-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, ARCHIVED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-CATALOG-27MIGRATIONS-003
 *   **Requirement**: Mutations are restricted to actions: `create_item, update_price`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-CATALOG-27MIGRATIONS-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

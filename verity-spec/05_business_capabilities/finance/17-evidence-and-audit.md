@@ -21,11 +21,11 @@ This document details the `finance` capability specs for the `17 Evidence And Au
 
 ### REQ-FINANCE-17EVIDENCEANDAUDIT-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-FINANCE-17EVIDENCEANDAUDIT-003
 *   **Requirement**: Mutations are restricted to actions: `configure_tax, recalculate_projections`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-FINANCE-17EVIDENCEANDAUDIT-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

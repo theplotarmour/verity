@@ -21,11 +21,11 @@ This document details the `permission` capability specs for the `01 Purpose And 
 
 ### REQ-PERMISSION-01PURPOSEANDSCOPE-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PERMISSION-01PURPOSEANDSCOPE-003
 *   **Requirement**: Mutations are restricted to actions: `grant_permission, revoke_permission`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PERMISSION-01PURPOSEANDSCOPE-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

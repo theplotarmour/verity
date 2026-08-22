@@ -21,11 +21,11 @@ This document details the `staffing` capability specs for the `09 Permissions` c
 
 ### REQ-STAFFING-09PERMISSIONS-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, PUBLISHED, CLOSED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-STAFFING-09PERMISSIONS-003
 *   **Requirement**: Mutations are restricted to actions: `create_roster, allocate_shift, publish_roster, request_swap`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-STAFFING-09PERMISSIONS-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

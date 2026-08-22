@@ -21,11 +21,11 @@ This document details the `permission` capability specs for the `14 Scheduling` 
 
 ### REQ-PERMISSION-14SCHEDULING-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PERMISSION-14SCHEDULING-003
 *   **Requirement**: Mutations are restricted to actions: `grant_permission, revoke_permission`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PERMISSION-14SCHEDULING-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

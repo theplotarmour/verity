@@ -21,11 +21,11 @@ This document details the `commerce` capability specs for the `25 Failure And Ex
 
 ### REQ-COMMERCE-25FAILUREANDEXCEPTIONS-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, POSTED, PAID, CANCELLED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-COMMERCE-25FAILUREANDEXCEPTIONS-003
 *   **Requirement**: Mutations are restricted to actions: `create_invoice, post_invoice, register_payment, void_payment`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-COMMERCE-25FAILUREANDEXCEPTIONS-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

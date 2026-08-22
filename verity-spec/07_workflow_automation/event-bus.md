@@ -3,7 +3,7 @@
 ## 07_workflow_automation/event-bus.md
 
 ## Provenance
-*   **Primary Sources**: `reference/base/concept-inventory.md`
+*   **Primary Sources**: `SOURCE_UNAVAILABLE`
 *   **Verity Bible Authority**: `verity-bible/volume_5_operations_security.md`
 *   **Transformation Type**: ADOPT
 *   **Open Decisions**: None
@@ -16,12 +16,12 @@ This document details the `workflow_automation` system specifications for `Event
 
 ### REQ-WORKFLOWAUTOMATION-EVENTBUS-001
 *   **Requirement**: The system utilizes `base` core patterns for `outbox transactional event publish`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-WORKFLOWAUTOMATION-EVENTBUS-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-WORKFLOWAUTOMATION-EVENTBUS-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

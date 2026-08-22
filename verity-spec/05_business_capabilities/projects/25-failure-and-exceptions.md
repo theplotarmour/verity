@@ -21,11 +21,11 @@ This document details the `projects` capability specs for the `25 Failure And Ex
 
 ### REQ-PROJECTS-25FAILUREANDEXCEPTIONS-002
 *   **Requirement**: State changes are constrained to enums: `PLANNING, ACTIVE, COMPLETED, SUSPENDED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PROJECTS-25FAILUREANDEXCEPTIONS-003
 *   **Requirement**: Mutations are restricted to actions: `create_project, create_task, complete_project`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PROJECTS-25FAILUREANDEXCEPTIONS-004
 *   **Requirement**: Offline sync conflict class is `MERGEABLE`.

@@ -16,12 +16,12 @@ This document details the `horizontal_systems` system specifications for `Commun
 
 ### REQ-HORIZONTALSYSTEMS-COMMUNICATION-001
 *   **Requirement**: The system utilizes `novu` core patterns for `provider-agnostic notification logs`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-HORIZONTALSYSTEMS-COMMUNICATION-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-HORIZONTALSYSTEMS-COMMUNICATION-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

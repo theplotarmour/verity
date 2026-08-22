@@ -16,12 +16,12 @@ This document details the `horizontal_systems` system specifications for `Search
 
 ### REQ-HORIZONTALSYSTEMS-SEARCH-001
 *   **Requirement**: The system utilizes `opensearch` core patterns for `full-text search and match queries`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-HORIZONTALSYSTEMS-SEARCH-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-HORIZONTALSYSTEMS-SEARCH-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

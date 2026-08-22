@@ -21,11 +21,11 @@ This document details the `subscriptions` capability specs for the `19 Mobile` c
 
 ### REQ-SUBSCRIPTIONS-19MOBILE-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, ACTIVE, PAST_DUE, TERMINATED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-SUBSCRIPTIONS-19MOBILE-003
 *   **Requirement**: Mutations are restricted to actions: `create_subscription, billing_run, suspend_subscription`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-SUBSCRIPTIONS-19MOBILE-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

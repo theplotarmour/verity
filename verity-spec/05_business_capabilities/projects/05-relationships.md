@@ -21,11 +21,11 @@ This document details the `projects` capability specs for the `05 Relationships`
 
 ### REQ-PROJECTS-05RELATIONSHIPS-002
 *   **Requirement**: State changes are constrained to enums: `PLANNING, ACTIVE, COMPLETED, SUSPENDED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PROJECTS-05RELATIONSHIPS-003
 *   **Requirement**: Mutations are restricted to actions: `create_project, create_task, complete_project`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PROJECTS-05RELATIONSHIPS-004
 *   **Requirement**: Offline sync conflict class is `MERGEABLE`.

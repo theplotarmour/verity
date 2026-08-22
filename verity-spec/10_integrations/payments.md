@@ -16,12 +16,12 @@ This document details the `integrations` system specifications for `Payments`.
 
 ### REQ-INTEGRATIONS-PAYMENTS-001
 *   **Requirement**: The system utilizes `saleor` core patterns for `invoicing and gateway capture charges`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-INTEGRATIONS-PAYMENTS-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-INTEGRATIONS-PAYMENTS-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

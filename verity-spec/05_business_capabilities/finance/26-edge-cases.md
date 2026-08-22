@@ -21,11 +21,11 @@ This document details the `finance` capability specs for the `26 Edge Cases` con
 
 ### REQ-FINANCE-26EDGECASES-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-FINANCE-26EDGECASES-003
 *   **Requirement**: Mutations are restricted to actions: `configure_tax, recalculate_projections`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-FINANCE-26EDGECASES-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

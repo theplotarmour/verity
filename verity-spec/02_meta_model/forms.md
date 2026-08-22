@@ -26,7 +26,7 @@ Forms manage data entry for record creation and modification. Layout schemas are
         *   `Section Break`: Grouping headers with collapse options.
         *   `Column Break`: Declares vertical grid divisions.
         *   `Field Reference`: Links to the entity field definitions, specifying read-only and visibility rules.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 *   **Traceability**: Mapped from Odoo XML form architecture.
 
 ---
@@ -36,9 +36,9 @@ Forms manage data entry for record creation and modification. Layout schemas are
 ### MET-FOR-002: Dynamic Visibility Rules (Logic)
 *   **Description**: Forms support dynamic skip/branching logic. Fields or sections can be hidden or made visible based on responses to other inputs.
 *   *Example*: If field `has_damage` is toggled `true`, render section `Damage Details` and mark `photo_evidence` as required.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 *   **Traceability**: Formbricks `SurveyLogic` skip-logic pattern.
 
 ### MET-FOR-003: Validation Triggers
 *   **Rule**: The form engine executes input verification during value changes (on-blur) and block-submittal (on-submit). If inputs violate constraints, specific field error messages are rendered dynamically, blocking submission.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

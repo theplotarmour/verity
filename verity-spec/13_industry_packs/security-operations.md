@@ -16,12 +16,12 @@ This document details the `industry_packs` system specifications for `Security O
 
 ### REQ-INDUSTRYPACKS-SECURITYOPERATIONS-001
 *   **Requirement**: The system utilizes `custom_security` core patterns for `guard patrol precomposed pack`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-INDUSTRYPACKS-SECURITYOPERATIONS-002
 *   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-INDUSTRYPACKS-SECURITYOPERATIONS-003
 *   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

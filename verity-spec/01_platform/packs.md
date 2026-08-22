@@ -25,7 +25,7 @@ An **Industry Pack** (e.g. `Security Operations Pack`, `Facilities Management Pa
     *   `default_roles` (Array of objects mapping roles to permission scopes).
     *   `custom_field_schemas` (Array of custom attributes to inject).
     *   `default_templates` (Array of Checklist and Document templates).
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ---
 
@@ -37,8 +37,8 @@ An **Industry Pack** (e.g. `Security Operations Pack`, `Facilities Management Pa
     2.  The system automatically generates the defined `default_roles` and binds permissions.
     3.  The system registers the defined `custom_field_schemas` in the active metadata catalog.
     4.  The system installs the defined default checklists and documents.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### PLA-PCK-003: Overlap Resolution
 *   **Rule**: If a Tenant activates both Pack A and Pack B, and both define custom fields with the same name on the same entity (e.g. `WorkOrder.zone`), the system merges the schemas. If field types conflict (e.g. string vs. integer), the activation fails until the schema conflict is resolved in the tenant override configuration.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

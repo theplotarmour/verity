@@ -21,11 +21,11 @@ This document details the `party` capability specs for the `14 Scheduling` contr
 
 ### REQ-PARTY-14SCHEDULING-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PARTY-14SCHEDULING-003
 *   **Requirement**: Mutations are restricted to actions: `create_party, update_party, archive_party`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PARTY-14SCHEDULING-004
 *   **Requirement**: Offline sync conflict class is `MERGEABLE`.

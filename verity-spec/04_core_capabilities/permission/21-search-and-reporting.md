@@ -21,11 +21,11 @@ This document details the `permission` capability specs for the `21 Search And R
 
 ### REQ-PERMISSION-21SEARCHANDREPORTING-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, INACTIVE`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PERMISSION-21SEARCHANDREPORTING-003
 *   **Requirement**: Mutations are restricted to actions: `grant_permission, revoke_permission`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PERMISSION-21SEARCHANDREPORTING-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

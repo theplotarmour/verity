@@ -21,11 +21,11 @@ This document details the `document` capability specs for the `17 Evidence And A
 
 ### REQ-DOCUMENT-17EVIDENCEANDAUDIT-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, ARCHIVED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-DOCUMENT-17EVIDENCEANDAUDIT-003
 *   **Requirement**: Mutations are restricted to actions: `upload_document, archive_document`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-DOCUMENT-17EVIDENCEANDAUDIT-004
 *   **Requirement**: Offline sync conflict class is `APPEND_ONLY`.

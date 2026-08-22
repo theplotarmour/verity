@@ -21,11 +21,11 @@ This document details the `expenses` capability specs for the `10 Workflows` con
 
 ### REQ-EXPENSES-10WORKFLOWS-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, SUBMITTED, APPROVED, POSTED, DONE, REFUSED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-EXPENSES-10WORKFLOWS-003
 *   **Requirement**: Mutations are restricted to actions: `create_expense, submit_expense, approve_expense, refuse_expense`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-EXPENSES-10WORKFLOWS-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

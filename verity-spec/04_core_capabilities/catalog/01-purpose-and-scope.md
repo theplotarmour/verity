@@ -21,11 +21,11 @@ This document details the `catalog` capability specs for the `01 Purpose And Sco
 
 ### REQ-CATALOG-01PURPOSEANDSCOPE-002
 *   **Requirement**: State changes are constrained to enums: `ACTIVE, ARCHIVED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-CATALOG-01PURPOSEANDSCOPE-003
 *   **Requirement**: Mutations are restricted to actions: `create_item, update_price`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-CATALOG-01PURPOSEANDSCOPE-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

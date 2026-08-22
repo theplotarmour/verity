@@ -21,11 +21,11 @@ This document details the `crm` capability specs for the `29 Test Matrix` contra
 
 ### REQ-CRM-29TESTMATRIX-002
 *   **Requirement**: State changes are constrained to enums: `NEW, QUALIFIED, WON, LOST`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-CRM-29TESTMATRIX-003
 *   **Requirement**: Mutations are restricted to actions: `create_lead, transition_stage, mark_won, mark_lost`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-CRM-29TESTMATRIX-004
 *   **Requirement**: Offline sync conflict class is `LWW_ALLOWED`.

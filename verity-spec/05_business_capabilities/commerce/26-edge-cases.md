@@ -21,11 +21,11 @@ This document details the `commerce` capability specs for the `26 Edge Cases` co
 
 ### REQ-COMMERCE-26EDGECASES-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, POSTED, PAID, CANCELLED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-COMMERCE-26EDGECASES-003
 *   **Requirement**: Mutations are restricted to actions: `create_invoice, post_invoice, register_payment, void_payment`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-COMMERCE-26EDGECASES-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

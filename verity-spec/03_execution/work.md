@@ -16,7 +16,7 @@ A **Work Order** represents a single committed service obligation to be executed
 
 ### EXE-WRK-001: Scoping Constraints
 *   **Rule**: Every Work Order must belong to exactly one Tenant `Organization`, be scoped to a target `Location`, and be associated with a billing Customer `Party`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ---
 

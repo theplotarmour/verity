@@ -21,11 +21,11 @@ This document details the `inventory` capability specs for the `17 Evidence And 
 
 ### REQ-INVENTORY-17EVIDENCEANDAUDIT-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, WAITING, CONFIRMED, ASSIGNED, DONE, CANCELLED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-INVENTORY-17EVIDENCEANDAUDIT-003
 *   **Requirement**: Mutations are restricted to actions: `create_picking, reserve_stock, validate_picking`.
-*   **Status**: `[FACT]`
+*   **Status**: `[INFERRED]`
 
 ### REQ-INVENTORY-17EVIDENCEANDAUDIT-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

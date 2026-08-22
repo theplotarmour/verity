@@ -23,17 +23,17 @@ The platform core evaluates three categories of guards before executing a state 
 ### MET-TRA-001: Structural Guard
 *   **Rule**: Validates if a transition is permitted between the source and target states.
 *   *Example*: Moving from `Completed` back to `Draft` is structurally blocked.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### MET-TRA-002: Authorization Guard
 *   **Rule**: Checks if the active actor's role membership has permission to trigger the mutating Action that causes the transition.
 *   *Example*: Only a user with role `Supervisor` can execute the `verify` action to transition a job to `Completed`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### MET-TRA-003: Data Evidence Guard
 *   **Rule**: Checks if the entity meets the required data state constraints (e.g. required custom fields are populated, checklist forms are submitted, or photo attachments are present).
 *   *Example*: The transition from `In-Progress` to `Completed` requires `ChecklistResponse.status = COMPLETED` and at least one `Evidence` photo record.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ---
 
@@ -41,4 +41,4 @@ The platform core evaluates three categories of guards before executing a state 
 
 ### MET-TRA-004: Validation Abort & Rollback
 *   **Rule**: If any guard evaluates to false, the transition is aborted, a `ValidationError` is returned, and all related database writes are rolled back.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

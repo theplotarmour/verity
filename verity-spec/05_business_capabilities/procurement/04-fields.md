@@ -21,11 +21,11 @@ This document details the `procurement` capability specs for the `04 Fields` con
 
 ### REQ-PROCUREMENT-04FIELDS-002
 *   **Requirement**: State changes are constrained to enums: `DRAFT, SENT, PURCHASE, DONE, CANCELLED`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PROCUREMENT-04FIELDS-003
 *   **Requirement**: Mutations are restricted to actions: `create_purchase, send_rfq, confirm_purchase, cancel_purchase`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### REQ-PROCUREMENT-04FIELDS-004
 *   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.

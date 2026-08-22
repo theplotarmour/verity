@@ -26,7 +26,7 @@ The experience system supports four canonical display layouts defined in the met
     *   `columns` (Array of objects specifying field key, label, data type, and sortable boolean).
     *   `default_sort` (Field key and direction).
     *   `row_actions` (Actions exposed to users on row select).
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### MET-VIW-002: Kanban View (Board)
 *   **Description**: Visual card lists grouped into columns by State or status.
@@ -34,18 +34,18 @@ The experience system supports four canonical display layouts defined in the met
     *   `group_by_field` (Field key, e.g. `status`).
     *   `card_fields` (Fields to render on each card preview).
     *   `drag_action` (The Action triggered when dragging a card between columns).
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### MET-VIW-003: Calendar View
 *   **Description**: Timeline grid mapping allocations to date-time blocks.
 *   **Metadata Parameters**:
     *   `start_datetime_field`, `end_datetime_field`.
     *   `resource_mapping_field` (e.g. `assigned_resource_id`).
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`
 
 ### MET-VIW-004: Map View
 *   **Description**: Geospatial marker mapping of locations and active resources.
 *   **Metadata Parameters**:
     *   `coordinates_field` (geo_point field link).
     *   `marker_label_field`, `color_status_field`.
-*   **Status**: `[FACT]`
+*   **Status**: `[UNKNOWN]`

@@ -2,26 +2,24 @@
 
 ## 17_decisions/superseded.md
 
-## Provenance
-*   **Primary Sources**: `reference/base/concept-inventory.md`
-*   **Verity Bible Authority**: `verity-bible/volume_5_operations_security.md`
-*   **Transformation Type**: ADOPT
-*   **Open Decisions**: None
+This document contains the register of historical, superseded design decisions for the Verity platform.
 
 ---
 
-## 1. Historical Archived Architecture Decisions Logs Specification
-
-This document details the `decisions` system specifications for `Superseded`.
-
-### REQ-DECISIONS-SUPERSEDED-001
-*   **Requirement**: The system utilizes `base` core patterns for `historical archived architecture decisions logs`.
-*   **Status**: `[FACT]`
-
-### REQ-DECISIONS-SUPERSEDED-002
-*   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
-
-### REQ-DECISIONS-SUPERSEDED-003
-*   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+### DEC-HIST-001: Separation of Employee and Partner Tables
+*   **Decision ID**: DEC-HIST-001
+*   **Question**: Should Verity retain Odoo's split tables for partners (`res.partner`) and employees (`hr.employee`)?
+*   **Context**: Odoo stores employee HR details separately from partner communication info.
+*   **Affected Concepts**: `Party`, `Resource`, `User`
+*   **Evidence**: Odoo addons/hr/models/hr_employee.py
+*   **Evidence Location**: odoo/addons/hr/models/hr_employee.py
+*   **Options**:
+    *   *Option A*: Retain split tables. Pros: maps directly to Odoo. Cons: leads to profile sync duplication.
+    *   *Option B*: Unify under the single canonical `Party` primitive.
+*   **Recommendation**: Option B.
+*   **Status**: `SUPERSEDED`
+*   **Owner**: Product Owner
+*   **Resolution**: Resolved by INV-003 (Unified Party Identity).
+*   **Supersedes**: None
+*   **Superseded By**: INV-003
+*   **Confidence**: `HIGH`
