@@ -60,3 +60,12 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
+## Greenfield Rebuild Guidelines (Spec 1.0.1 Compliance)
+> [!IMPORTANT]
+> **The active Verity repository is a greenfield implementation.** No legacy VEDA application code, schema, UI, domain model, route, workflow, seed, test, compatibility layer, or archived source is part of the active implementation context. 
+> 
+> The **Verity Master Platform Specification (Spec 1.0.1)**, **Verity Bible**, and verified reference corpus are the only product authorities. Existing infrastructure may be reused only when explicitly approved and proven compatible with the specification. 
+> 
+> Legacy VEDA history exists outside the active tree solely for forensic reference (accessible via the Git tag `veda-legacy-final`) and must not influence implementation decisions. No VEDA-specific semantic dependency may survive merely because its environment variables are retained.
+
