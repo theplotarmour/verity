@@ -3,30 +3,27 @@
 ## field-service/20-offline.md
 
 ## Provenance
-*   **Primary Sources**: `odoo-prd/entities/field-service.md`
-*   **Verity Bible Authority**: `verity-bible/volume_2_metamodel_primitives.md`
+*   **Primary Sources**: `reference/frappe/verity-implications.md`
+*   **Verity Bible Authority**: `verity-bible/volume_5_operations_security.md`
 *   **Transformation Type**: ADOPT
 *   **Open Decisions**: None
 
 ---
 
-## 1. Conflict classes mapping.
+## 1. Conflict Policy Assignment Matrix
 
-This document details the `field-service` capability specs for the `20 Offline` contract.
+This document maps all write actions and entity fields within the `field-service` capability to their designated Conflict Policy class.
 
-### REQ-FIELD-SERVICE-20OFFLINE-001
-*   **Requirement**: The capability manages `FsmOrder, FsmResourceMapping` elements.
-*   **Status**: `[FACT]`
-*   **Source Reference**: `odoo/addons/fsm/models/fsm_order.py`
+| Mutation Type | Target / Action | Conflict Policy Class |
+| :--- | :--- | :--- |
+| Descriptive Metadata | Update Description | `LWW_ALLOWED` |
+| Operational State | State Transitions | `COMMAND_REJECTED` |
+| Financial State | Invoicing / Amounts | `SERVER_AUTHORITATIVE` |
+| Append-only Evidence | Checkpoint Scan / Photos | `APPEND_ONLY` |
+| Attendance Event | Clock-in | `APPEND_ONLY` |
+| Resource Assignment | Assign Resource | `COMMAND_REJECTED` |
+| Configuration | Workflow Policy | `COMMAND_REJECTED` |
 
-### REQ-FIELD-SERVICE-20OFFLINE-002
-*   **Requirement**: State changes are constrained to enums: `UNASSIGNED, ASSIGNED, IN_TRANSIT, ON_SITE, DONE`.
-*   **Status**: `[FACT]`
-
-### REQ-FIELD-SERVICE-20OFFLINE-003
-*   **Requirement**: Mutations are restricted to actions: `create_fsm_order, dispatch_resource, arrive_on_site, complete_fsm_order`.
-*   **Status**: `[FACT]`
-
-### REQ-FIELD-SERVICE-20OFFLINE-004
-*   **Requirement**: Offline sync conflict class is `SERVER_AUTHORITATIVE`.
+### REQ-FIELD-SERVICE-OFFLINE-001
+*   **Requirement**: Every mutating transaction in `field-service` must evaluate conflict policy classes before resolving offline queues.
 *   **Status**: `[DECIDED]`

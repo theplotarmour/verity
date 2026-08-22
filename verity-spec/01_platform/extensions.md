@@ -12,10 +12,10 @@
 
 ## 1. Schema Extensions (Custom Fields)
 
-To support industry-specific attributes without requiring relational database schema migrations, Verity uses a dynamic JSONB metadata extension pattern.
+To support industry-specific attributes without requiring relational database schema migrations, Verity uses a dynamic dynamic document extensions metadata extension pattern.
 
 ### PLA-EXT-001: The Extensions Column
-*   **Description**: Every operational Entity table contains a `custom_fields` JSONB column. 
+*   **Description**: Every operational Entity table contains a `custom_fields` dynamic document extensions column. 
 *   **Logical Rule**: Custom attributes requested by a tenant are stored as key-value pairs inside this column, preserving relational column integrity for the core schema.
 *   **Status**: `[FACT]`
 
@@ -26,7 +26,7 @@ To support industry-specific attributes without requiring relational database sc
 *   **Status**: `[FACT]`
 
 ### PLA-EXT-003: Runtime Dynamic Schema Validation
-*   **Rule**: During write operations (create/update), the query processor reads the `CustomFieldSchema` definitions for the target tenant and entity. It dynamically compiles a validation schema (e.g. dynamic Zod object) and validates the inputs in the `custom_fields` column. If inputs violate the metadata schema, the write is aborted.
+*   **Rule**: During write operations (create/update), the query processor reads the `CustomFieldSchema` definitions for the target tenant and entity. It dynamically compiles a validation schema (e.g. dynamic Runtime Schema Validation object) and validates the inputs in the `custom_fields` column. If inputs violate the metadata schema, the write is aborted.
 *   **Status**: `[FACT]`
 
 ---

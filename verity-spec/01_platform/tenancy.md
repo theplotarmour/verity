@@ -39,5 +39,9 @@ Verity enforces absolute data partitioning. Under no circumstances can data from
 *   **Status**: `[FACT]`
 
 ### PLA-TEN-005: Physical Sharding (Enterprise Separation)
-*   **Description**: Large enterprise-tier tenants must be fully isolatable to dedicated PostgreSQL databases or schemas without modifying the underlying domain code models. The application router determines connection strings dynamically from the authenticated request headers.
+*   **Description**: Large enterprise-tier tenants must be fully isolatable to dedicated Relational Database databases or schemas without modifying the underlying domain code models. The application router determines connection strings dynamically from the authenticated request headers.
 *   **Status**: `[FACT]`
+
+### PLA-TEN-006: Secure Context Derivation Invariant
+*   **Requirement**: Tenant context is derived and verified from the authenticated authorization context (access token scope). Client-supplied tenant identifiers in request payloads must never be used to grant or expand data visibility.
+*   **Status**: `[DECIDED]`

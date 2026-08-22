@@ -40,7 +40,7 @@ To prevent spaghetti dependencies, all business capabilities must be classified 
 ### PLA-OVE-001: The Platform Core
 *   **Description**: The fundamental runtime substrate that must be present in every single Verity installation. 
 *   **Entities included**: Tenant, Organization, User, Group, Role, Permission, Event, AuditLog.
-*   **Services included**: Tenant isolation routing, authentication, query sandboxing middleware, dynamic Zod validator runtime, event bus, and offline sync queue.
+*   **Services included**: Tenant isolation routing, authentication, query sandboxing middleware, dynamic Runtime Schema Validation validator runtime, event bus, and offline sync queue.
 *   **Status**: `[FACT]`
 
 ### PLA-OVE-002: Reusable Capabilities

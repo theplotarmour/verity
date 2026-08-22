@@ -24,7 +24,7 @@ Every Action execution follows a strict pipeline managed by the Platform Core:
   Client Action Request (Input Payload)
          │
          ▼
-  1. Input Schema Validation (Zod Type Validation)
+  1. Input Schema Validation (Runtime Schema Validation Type Validation)
          │
          ▼
   2. Authorization & Scoping Checks (Can user execute?)
@@ -44,7 +44,7 @@ Every Action execution follows a strict pipeline managed by the Platform Core:
 ## 3. Execution Pipeline Rules
 
 ### MET-ACT-001: Schema Validation
-*   **Rule**: The input payload is validated against a static schema (e.g. JSON schema / Zod contract) defining types and required parameters.
+*   **Rule**: The input payload is validated against a static schema (e.g. JSON schema / Runtime Schema Validation contract) defining types and required parameters.
 *   **Status**: `[FACT]`
 
 ### MET-ACT-002: Authorization Enforcement

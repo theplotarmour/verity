@@ -32,7 +32,7 @@ To optimize performance and database sizing, the platform segregates audits into
 *   **Description**: Logs authentication attempts, permission mutations, configuration parameter edits, role reassignments, and API key generation.
 *   **Retention**: Mapped to security compliance requirements.
 *   **Entity Mapping**:
-    *   `SecurityAuditEvent`: `event_type` (auth_success | auth_failed | permission_escalated), `actor_id` (FK), `ip_address` (String), `payload` (JSONB), `timestamp`.
+    *   `SecurityAuditEvent`: `event_type` (auth_success | auth_failed | permission_escalated), `actor_id` (FK), `ip_address` (String), `payload` (dynamic document extensions), `timestamp`.
 *   **Status**: `[FACT]`
 *   **Traceability**: Keycloak Security Audit framework.
 

@@ -10,7 +10,7 @@
 
 ---
 
-## 1. Schema jsonb slots and hook callbacks.
+## 1. Schema dynamic document extensions slots and hook callbacks.
 
 This document details the `facilities` capability specs for the `24 Extension Points` contract.
 

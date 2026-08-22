@@ -19,8 +19,8 @@ A **Rule** represents a deterministic check that validates data or enforces stru
 ## 2. Validation Layers
 
 ### MET-RUL-001: Database Constraints (SQL Constraints)
-*   **Description**: Declarative database-level constraints compiled into PostgreSQL DDL (e.g. Unique indexes, Foreign Key RESTRICT policies, and simple field range check constraints).
-*   **Execution**: Enforced natively by PostgreSQL at the transaction boundary.
+*   **Description**: Declarative database-level constraints compiled into Relational Database DDL (e.g. Unique indexes, Foreign Key RESTRICT policies, and simple field range check constraints).
+*   **Execution**: Enforced natively by Relational Database at the transaction boundary.
 *   **Status**: `[FACT]`
 *   **Traceability**: Odoo `_sql_constraints`.
 

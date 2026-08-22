@@ -27,7 +27,7 @@ Every Business Event must carry a standardized envelope containing:
 *   `eventType` (String): Dot-notated event code (e.g. `work_order.assigned`).
 *   `entityType` (String): Target entity class (e.g. `WorkOrder`).
 *   `entityId` (UUID): Target entity primary key.
-*   `payload` (JSONB): Dynamic data payload mapping previous state, new state, and altered fields.
+*   `payload` (dynamic document extensions): Dynamic data payload mapping previous state, new state, and altered fields.
 
 ---
 

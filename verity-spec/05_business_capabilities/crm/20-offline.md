@@ -3,30 +3,27 @@
 ## crm/20-offline.md
 
 ## Provenance
-*   **Primary Sources**: `odoo-prd/entities/crm.md`
-*   **Verity Bible Authority**: `verity-bible/volume_2_metamodel_primitives.md`
+*   **Primary Sources**: `reference/frappe/verity-implications.md`
+*   **Verity Bible Authority**: `verity-bible/volume_5_operations_security.md`
 *   **Transformation Type**: ADOPT
 *   **Open Decisions**: None
 
 ---
 
-## 1. Conflict classes mapping.
+## 1. Conflict Policy Assignment Matrix
 
-This document details the `crm` capability specs for the `20 Offline` contract.
+This document maps all write actions and entity fields within the `crm` capability to their designated Conflict Policy class.
 
-### REQ-CRM-20OFFLINE-001
-*   **Requirement**: The capability manages `Lead, PipelineStage` elements.
-*   **Status**: `[FACT]`
-*   **Source Reference**: `odoo/addons/crm/models/crm_lead.py`
+| Mutation Type | Target / Action | Conflict Policy Class |
+| :--- | :--- | :--- |
+| Descriptive Metadata | Update Description | `LWW_ALLOWED` |
+| Operational State | State Transitions | `COMMAND_REJECTED` |
+| Financial State | Invoicing / Amounts | `SERVER_AUTHORITATIVE` |
+| Append-only Evidence | Checkpoint Scan / Photos | `APPEND_ONLY` |
+| Attendance Event | Clock-in | `APPEND_ONLY` |
+| Resource Assignment | Assign Resource | `COMMAND_REJECTED` |
+| Configuration | Workflow Policy | `COMMAND_REJECTED` |
 
-### REQ-CRM-20OFFLINE-002
-*   **Requirement**: State changes are constrained to enums: `NEW, QUALIFIED, WON, LOST`.
-*   **Status**: `[FACT]`
-
-### REQ-CRM-20OFFLINE-003
-*   **Requirement**: Mutations are restricted to actions: `create_lead, transition_stage, mark_won, mark_lost`.
-*   **Status**: `[FACT]`
-
-### REQ-CRM-20OFFLINE-004
-*   **Requirement**: Offline sync conflict class is `LWW_ALLOWED`.
+### REQ-CRM-OFFLINE-001
+*   **Requirement**: Every mutating transaction in `crm` must evaluate conflict policy classes before resolving offline queues.
 *   **Status**: `[DECIDED]`

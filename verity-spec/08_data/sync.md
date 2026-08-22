@@ -10,18 +10,14 @@
 
 ---
 
-## 1. Offline Event-Log Synchronize Sync Specification
+## 1. Synchronization and Event Merging
 
-This document details the `data` system specifications for `Sync`.
+This document details the specifications for synchronization from offline clients to the central database.
 
-### REQ-DATA-SYNC-001
-*   **Requirement**: The system utilizes `activitywatch` core patterns for `offline event-log synchronize sync`.
-*   **Status**: `[FACT]`
+### REQ-DATA-SYNC-001: Telemetry Compression & Aggregation
+*   **Requirement**: Telemetry coordinate feeds must be aggregated locally (e.g. merging stationary heartbeats) before synchronizing to save network bandwidth and storage overhead.
+*   **Status**: `[DECIDED]`
 
-### REQ-DATA-SYNC-002
-*   **Requirement**: Operational metrics and logs are scoped by `tenant_id` at the database middleware layer.
-*   **Status**: `[FACT]`
-
-### REQ-DATA-SYNC-003
-*   **Requirement**: Actions must publish change logs to the Event Bus on commit.
-*   **Status**: `[FACT]`
+### REQ-DATA-SYNC-002: Context Verification on Sync
+*   **Requirement**: The sync gateway validates the user session and tenancy boundary on every incoming upload payload. Unsynced payloads containing coordinates outside the allowed tenant organization boundary are rejected.
+*   **Status**: `[DECIDED]`
