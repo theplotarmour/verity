@@ -161,6 +161,7 @@ any requirement written because it is "common in ERP/SaaS" rather than traced to
 - **ADR-004** `Place`, `Address`, `Location`, `Geofence` are four distinct concepts. Geofences are policies, not Locations.
 - **ADR-005** `Tenant` is the root data-isolation boundary; `Organization` is a nested business-unit hierarchy inside a Tenant. RLS is one *mechanism* for tenant isolation, not the product invariant.
 - **ADR-006** Work sub-steps are `ChecklistItem`. `Task` is reserved for project-level milestones.
+- **ADR-007** Party de-duplication is resolved by invitation + verification: provisioning creates an `Invited` Party with *unverified* contacts and never looks across tenants; identity is linked only when the person verifies a contact channel. Uniqueness is enforced over verified contacts only. `provisionIdentity()` correctly does not de-duplicate.
 
 ## Identity shape (already decided, do not re-litigate)
 
@@ -195,7 +196,6 @@ is tenant-scoped and carries the ordinary RLS policy.
 - **ADR-002 / DEC-BIBLE-002** Resource scope (single actor vs crews/pools/spaces) is `DECISION_REQUIRED` and intentionally deferred. Build so it can be incorporated cleanly; do not invent a final Resource architecture.
 - **Spec status taxonomy is undefined.** `[UNKNOWN_REASON: FUTURE_CAPABILITY]` (1096 uses) and `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]` (722 uses) appear throughout `verity-spec/` but are defined nowhere. It is unresolved whether these mark ratified-but-unbuilt requirements or unratified ones. Escalate before relying on the status of a requirement.
 - `implementation/02-foundation-build-order/vertical-slice-strategy.md` still lists `DEC-BIBLE-001` as open; it was resolved by ADR-001. The ADR wins.
-- **Party de-duplication is unresolved and blocks any identity API.** Because reachability hides identities a tenant has no membership for, a tenant cannot tell that a Party already exists for the same human, so two tenants can each provision one and INV-003 breaks. Matching on verified email or phone (Bible V2 Primitive 2 §8) is the likely route, but *who may match against identities they cannot see* is a product decision needing an ADR. `provisionIdentity()` deliberately does not de-duplicate.
 - `TenantMembership.roleId` is specified by the handoff but deferred until the authorization step creates `Role`; inventing it early would pre-empt that design.
 - **The Bible is not editable.** One amendment (AMD-001, `factoryId` -> `tenantId`, Volume V §1.A.1 and Volume VI) was authorised by the product owner as a one-time edit and is already applied. Do not modify `verity-bible/` again without a fresh explicit instruction.
 
