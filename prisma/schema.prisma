@@ -45,6 +45,7 @@ model Tenant {
   permissions        Permission[]
   roleCompositions   RoleComposition[]
   customFieldSchemas CustomFieldSchema[]
+  domainEvents       DomainEvent[]
 
   @@map("tenant")
 }
@@ -351,4 +352,38 @@ model CustomFieldSchema {
   @@unique([tenantId, entityKey, fieldName])
   @@index([tenantId, entityKey])
   @@map("custom_field_schema")
+}
+
+/// Transactional event outbox (Authority: Spec MET-ACT-004, MET-EVE-001→002).
+///
+/// An Event is a fact: something happened. Rows are written inside the same
+/// transaction as the mutation that produced them, which is what makes
+/// MET-ACT-004's "events must never be emitted if the transaction rolls back"
+/// structurally true rather than a convention a caller could forget.
+///
+/// Immutable: RLS grants INSERT and SELECT only, so a delivered event cannot be
+/// rewritten or deleted by the application. Delivery marking is performed by the
+/// dispatcher role.
+model DomainEvent {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  /// Namespace-qualified event name, e.g. `verity.party.suspended`.
+  name        String
+  /// The entity the fact concerns (EntityDefinition.key).
+  entityKey   String    @map("entity_key")
+  entityId    String?   @map("entity_id") @db.Uuid
+  /// The command that produced it, for traceability back to the action.
+  commandKey  String?   @map("command_key")
+  /// Actor at the time of the fact; null for platform-initiated events.
+  actorUserId String?   @map("actor_user_id") @db.Uuid
+  payload     Json      @default("{}")
+  occurredAt  DateTime  @default(now()) @map("occurred_at")
+  /// Set by the dispatcher once delivered; null means pending.
+  deliveredAt DateTime? @map("delivered_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, occurredAt])
+  @@index([deliveredAt])
+  @@map("domain_event")
 }
