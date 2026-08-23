@@ -1,3 +1,23 @@
+// Verity Platform Foundation — Phase 0 baseline.
+//
+// Scope: the tenancy substrate only (Tenant, Organization) plus the base entity
+// pattern every future capability inherits. No business capability is modelled here.
+//
+// Authority:
+//   Bible V1        — Prisma/PostgreSQL is the system of record
+//   Bible V5 §1     — tenant isolation is absolute; RLS at the engine level
+//   ADR-005         — Tenant is the root data-isolation boundary;
+//                     Organization is a nested business unit inside a Tenant
+//   Spec PLA-TEN-001 — every operational table partitioned by tenant
+//   Spec PLA-TEN-003 — no cross-tenant foreign keys
+//   Spec PLA-ORG-001 — Organizations nest self-referentially
+//
+// Base entity pattern (implementation/02-foundation-build-order/bootstrap-sequence.md, step 7):
+//   id, tenantId, createdAt, updatedAt, version, customFields
+// `version` carries optimistic concurrency; `customFields` is the extension
+// surface required by PLA-EXT-001 so capabilities extend entities without
+// altering the platform ontology.
+
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["relationJoins"]
@@ -9,4 +29,853 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// Rebuild active schemas strictly as per Verity Master Platform Specification
+/// The root data-isolation boundary — the client contract boundary (ADR-005).
+/// A Tenant is not itself tenant-scoped, so it carries no `tenantId`.
+model Tenant {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  organizations      Organization[]
+  memberships        TenantMembership[]
+  roles              Role[]
+  permissions        Permission[]
+  roleCompositions   RoleComposition[]
+  customFieldSchemas CustomFieldSchema[]
+  domainEvents       DomainEvent[]
+  statusLabels       TenantStatusLabel[]
+  activities         Activity[]
+  securityEvents     SecurityAuditEvent[]
+  workflows          WorkflowDefinition[]
+  workflowRuns       WorkflowRun[]
+  credentials        Credential[]
+  activations        TenantActivation[]
+  configParameters   ConfigParameter[]
+  offlineCommands    OfflineCommand[]
+  syncExceptions     SyncException[]
+
+  @@map("tenant")
+}
+
+/// A functional, legal, or regional node inside a Tenant (ADR-005, PLA-ORG-001).
+/// Nests self-referentially: Holdings -> Region -> Branch -> Site Office.
+model Organization {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  parentId     String?  @map("parent_id") @db.Uuid
+  name         String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // PLA-TEN-003: the parent link is keyed on (tenantId, parentId) rather than
+  // parentId alone, so the database itself refuses a cross-tenant parent.
+  parent      Organization?      @relation("OrganizationHierarchy", fields: [tenantId, parentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  children    Organization[]     @relation("OrganizationHierarchy")
+  memberships TenantMembership[]
+
+  @@unique([tenantId, id], name: "organization_tenant_scoped_id")
+  @@index([tenantId])
+  @@index([tenantId, parentId])
+  @@map("organization")
+}
+
+/// Party lifecycle (Authority: Bible V2 Primitive 2 §3-§5, ADR-001).
+/// ADR-001 keeps these platform-level only: capability-specific lifecycles
+/// (CRM `Prospect`, Workforce `Employee`) belong inside those capabilities and
+/// map back to this primitive, they do not extend it.
+enum PartyState {
+  Invited
+  Active
+  Suspended
+  Archived
+}
+
+/// The single canonical record for any human or corporate participant.
+///
+/// GLOBAL, not tenant-scoped. Authority: Bible V2 Primitive 2 §2 — "Scoped
+/// globally to the Platform database, mapped to Organizations via
+/// TenantMembership records" — and INV-003, which requires exactly one Party
+/// per person across the whole platform even when they work for many tenants
+/// (PLA-IDE-004, the subcontractor case). A `tenantId` column here would force
+/// one row per tenant and break INV-003.
+///
+/// Visibility is therefore not a tenant column but reachability: a tenant sees
+/// a Party only if that Party's User holds a TenantMembership in it. See the
+/// RLS policies in the migration.
+///
+/// No address field: ADR-004 makes Address a distinct concept from Party and
+/// forbids folding mailing details into another primitive.
+model Party {
+  id           String     @id @default(uuid()) @db.Uuid
+  /// Human or corporate participant, so the label is a single display name;
+  /// given/family names are optional and only meaningful for humans.
+  displayName  String     @map("display_name")
+  givenName    String?    @map("given_name")
+  familyName   String?    @map("family_name")
+  /// Bible V2 Primitive 2 §8: identity evidence is a verified email or phone.
+  email        String?
+  phone        String?
+  state        PartyState @default(Invited)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  version      Int        @default(1)
+  customFields Json       @default("{}") @map("custom_fields")
+
+  user User?
+
+  @@index([email])
+  @@index([phone])
+  @@map("party")
+}
+
+/// The authenticating actor. GLOBAL, for the same reason as Party.
+///
+/// 1:1 with Party (GOV-TER-006, INV-003). Bible V2 Primitive 2 §1 describes
+/// User as storing "credentials and passwords"; authentication is offloaded to
+/// Supabase Auth (Authority: EXISTING INFRASTRUCTURE, and
+/// implementation/03-platform-foundation/identity.md), so no credential
+/// material is stored here — `authUserId` references the Supabase `auth.users`
+/// row. Keeping a second credential store would duplicate the source of truth.
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  /// Supabase Auth user id. Single global realm (Bible V5 §1.A.4).
+  authUserId   String   @unique @map("auth_user_id") @db.Uuid
+  partyId      String   @unique @map("party_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  party       Party              @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  memberships TenantMembership[]
+
+  @@map("user")
+}
+
+/// Binds a global User into one Organization inside one Tenant.
+///
+/// Authority: Bible V2 Primitive 2 §2 and §13 (authorization is defined at the
+/// membership level), Bible V5 §1.A.4 (one identity, distinct memberships per
+/// tenant), Spec PLA-IDE-002, implementation/03-platform-foundation/membership.md.
+///
+/// This IS tenant-scoped and carries the RLS boundary. `roleId` is specified by
+/// the handoff but deferred: Role belongs to the authorization step and does not
+/// exist yet, and inventing it here would pre-empt that design.
+model TenantMembership {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  roleId         String?  @map("role_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  version        Int      @default(1)
+  customFields   Json     @default("{}") @map("custom_fields")
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // PLA-TEN-003 again: keyed on (tenantId, organizationId) so the database
+  // refuses a membership pointing at another tenant's Organization.
+  organization Organization @relation(fields: [tenantId, organizationId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  // Nullable on purpose: a membership with no Role grants nothing, so an
+  // unassigned membership fails closed instead of defaulting to access.
+  // Restrict, not SetNull: a composite key cannot null `tenantId`, and a Role
+  // must not vanish from under a live membership — reassign first.
+  role         Role?        @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([userId, organizationId])
+  @@index([tenantId])
+  @@index([userId])
+  @@map("tenant_membership")
+}
+
+/// Permission verbs (Authority: Spec PLA-AUT-003).
+/// A closed set: a bespoke capability action is expressed as `ActionExecute`
+/// against a named entity, so a new capability never needs a new verb.
+enum PermissionVerb {
+  Read
+  Create
+  Edit
+  Delete
+  ActionExecute
+}
+
+/// Permission scope levels (Authority: Spec PLA-AUT-002, refining Bible V2
+/// Primitive 2 §13, which lists Global/Tenant/Site; the spec adds Organization,
+/// which ADR-005 requires as a real nesting level inside a Tenant).
+///
+/// `Global` means cross-tenant platform administration. It is defined because the
+/// specification defines it, but nothing here grants it: honouring it would mean
+/// bypassing the RLS that enforces INV-001, and that security decision has not
+/// been made. `resolvePermissions` refuses to return Global grants.
+enum PermissionScope {
+  Global
+  Tenant
+  Organization
+  Location
+}
+
+/// A named bundle of permissions inside one Tenant (Authority: Spec PLA-AUT-001).
+model Role {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  name         String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  permissions Permission[]
+  memberships TenantMembership[]
+  /// Compositions where this Role is the parent — it inherits from the child.
+  parentOf    RoleComposition[]  @relation("RoleCompositionParent")
+  /// Compositions where this Role is the child — its permissions flow upward.
+  childOf     RoleComposition[]  @relation("RoleCompositionChild")
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id], name: "role_tenant_scoped_id")
+  @@index([tenantId])
+  @@map("role")
+}
+
+/// Composite-role edge (Authority: Spec PLA-AUT-001; Bible Synthesis ADOPTED —
+/// Keycloak composite roles). A parent Role inherits every permission held by its
+/// child Roles, flattened at runtime.
+///
+/// The spec names this `RoleComposition`; the handoff calls it `RoleInheritance`.
+/// The spec outranks the handoff.
+model RoleComposition {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  parentRoleId String   @map("parent_role_id") @db.Uuid
+  childRoleId  String   @map("child_role_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parentRole Role   @relation("RoleCompositionParent", fields: [tenantId, parentRoleId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  childRole  Role   @relation("RoleCompositionChild", fields: [tenantId, childRoleId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([parentRoleId, childRoleId])
+  @@index([tenantId])
+  @@map("role_composition")
+}
+
+/// A single grant: Verb + Entity + Scope (Authority: implementation handoff
+/// 03-platform-foundation/authorization.md; Spec PLA-AUT-003).
+///
+/// `entity` is a free string rather than an enum, deliberately: a new capability
+/// must introduce entities without altering the platform ontology.
+model Permission {
+  id        String          @id @default(uuid()) @db.Uuid
+  tenantId  String          @map("tenant_id") @db.Uuid
+  roleId    String          @map("role_id") @db.Uuid
+  verb      PermissionVerb
+  entity    String
+  scope     PermissionScope
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([roleId, verb, entity, scope])
+  @@index([tenantId])
+  @@index([roleId])
+  @@map("permission")
+}
+
+/// Entity structural classes (Authority: Spec MET-ENT-001→003).
+enum EntityClass {
+  /// Permanent business record backed by a physical table.
+  Persistent
+  /// Session-scoped temporary state; emits no state events (MET-ENT-002).
+  Transient
+  /// Interface/mixin template; no table of its own (MET-ENT-003).
+  Abstract
+}
+
+/// Custom field types (Authority: Spec PLA-EXT-002, which fixes exactly this set).
+enum CustomFieldType {
+  String
+  Number
+  Boolean
+  Select
+  Date
+}
+
+/// The entity registry (Authority: Spec MET-ENT-001→005).
+///
+/// GLOBAL, not tenant-scoped. An entity definition describes a *type*, is
+/// identical for every tenant, and is written by migrations when a capability is
+/// installed — it is platform metadata of the kind PLA-TEN-001 exempts from
+/// tenant partitioning ("global system lists"). Tenant-specific shape lives in
+/// `CustomFieldSchema` instead.
+///
+/// A capability ships its own tables and registers them here; the platform does
+/// not generate tables at runtime. That is what lets a new capability introduce
+/// entities without the platform ontology changing (foundation-ready B).
+model EntityDefinition {
+  /// Namespace-qualified unique key, e.g. `verity.work.work_order` (MET-ENT-004).
+  key          String      @id
+  /// Owning capability. Every entity has exactly one owner.
+  capability   String
+  class        EntityClass
+  /// Physical table for a Persistent entity; null for Transient/Abstract.
+  tableName    String?     @map("table_name")
+  /// False only for platform-wide system reference data (MET-ENT-005).
+  tenantScoped Boolean     @default(true) @map("tenant_scoped")
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  customFields CustomFieldSchema[]
+  states       StateDefinition[]
+
+  @@index([capability])
+  @@map("entity_definition")
+}
+
+/// Tenant-declared extension fields (Authority: Spec PLA-EXT-002).
+///
+/// Tenant-scoped, unlike EntityDefinition: these are one tenant's additions to an
+/// entity, stored in that entity's `custom_fields` JSONB column (PLA-EXT-001) so
+/// the relational core schema stays intact and no migration is needed to add one.
+model CustomFieldSchema {
+  id            String          @id @default(uuid()) @db.Uuid
+  tenantId      String          @map("tenant_id") @db.Uuid
+  /// FK to EntityDefinition.key — the entity being extended.
+  entityKey     String          @map("entity_key")
+  fieldName     String          @map("field_name")
+  fieldType     CustomFieldType @map("field_type")
+  required      Boolean         @default(false)
+  /// Only meaningful when fieldType is Select.
+  selectOptions String[]        @default([]) @map("select_options")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  entity EntityDefinition @relation(fields: [entityKey], references: [key], onDelete: Cascade)
+
+  @@unique([tenantId, entityKey, fieldName])
+  @@index([tenantId, entityKey])
+  @@map("custom_field_schema")
+}
+
+/// Transactional event outbox (Authority: Spec MET-ACT-004, MET-EVE-001→002).
+///
+/// An Event is a fact: something happened. Rows are written inside the same
+/// transaction as the mutation that produced them, which is what makes
+/// MET-ACT-004's "events must never be emitted if the transaction rolls back"
+/// structurally true rather than a convention a caller could forget.
+///
+/// Immutable: RLS grants INSERT and SELECT only, so a delivered event cannot be
+/// rewritten or deleted by the application. Delivery marking is performed by the
+/// dispatcher role.
+model DomainEvent {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  /// Namespace-qualified event name, e.g. `verity.party.suspended`.
+  name        String
+  /// The entity the fact concerns (EntityDefinition.key).
+  entityKey   String    @map("entity_key")
+  entityId    String?   @map("entity_id") @db.Uuid
+  /// The command that produced it, for traceability back to the action.
+  commandKey  String?   @map("command_key")
+  /// Actor at the time of the fact; null for platform-initiated events.
+  actorUserId String?   @map("actor_user_id") @db.Uuid
+  payload     Json      @default("{}")
+  occurredAt  DateTime  @default(now()) @map("occurred_at")
+  /// Set by the dispatcher once delivered; null means pending.
+  deliveredAt DateTime? @map("delivered_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, occurredAt])
+  @@index([deliveredAt])
+  @@map("domain_event")
+}
+
+/// Platform state categories (Authority: Spec MET-STA-001, MET-STA-004).
+///
+/// MET-STA-001 calls the categories "fixed, platform-level enums" but illustrates
+/// them with Work-domain values (`EN_ROUTE`, `SCHEDULING`). Those are the Work
+/// capability's *states*, not platform categories — hardcoding them into the core
+/// would be the same domain leakage the no-legacy policy forbids and would make
+/// the platform field-service specific.
+///
+/// The fixed set below is therefore behavioural, not domain: it says what the
+/// engine must do, which is exactly what MET-STA-004 needs when it evaluates SLA
+/// clocks "strictly at the system StateCategory layer".
+///
+///   Draft     — not yet started; no SLA clock
+///   Pending   — waiting on something external; clock paused
+///   Active    — work is happening; clock running
+///   Blocked   — halted by an exception; clock paused
+///   Completed — terminal, succeeded; clock stopped
+///   Cancelled — terminal, abandoned; clock stopped
+///
+/// IMPLEMENTATION DECISION: the specification mandates that categories exist and
+/// fixes their engine meaning, but does not enumerate a domain-neutral set. This
+/// set is inferred from MET-STA-004's clock semantics and needs ratification.
+enum StateCategory {
+  Draft
+  Pending
+  Active
+  Blocked
+  Completed
+  Cancelled
+}
+
+/// One state in an entity's lifecycle (Authority: Spec MET-STA-001, MET-STA-003).
+///
+/// GLOBAL, like EntityDefinition: a lifecycle belongs to the capability that owns
+/// the entity and is identical for every tenant. Tenants rename states via
+/// TenantStatusLabel; they do not add or remove them.
+model StateDefinition {
+  id         String        @id @default(uuid()) @db.Uuid
+  entityKey  String        @map("entity_key")
+  /// Stable machine key, e.g. `in_progress`.
+  key        String
+  /// Mandatory category binding (MET-STA-003).
+  category   StateCategory
+  /// Exactly one initial state per entity.
+  isInitial  Boolean       @default(false) @map("is_initial")
+  /// Terminal states lock the entity (INV-002).
+  isTerminal Boolean       @default(false) @map("is_terminal")
+
+  entity          EntityDefinition       @relation(fields: [entityKey], references: [key], onDelete: Cascade)
+  fromTransitions TransitionDefinition[] @relation("TransitionFrom")
+  toTransitions   TransitionDefinition[] @relation("TransitionTo")
+  labels          TenantStatusLabel[]
+
+  @@unique([entityKey, key])
+  @@index([entityKey])
+  @@map("state_definition")
+}
+
+/// An allowed movement between two states (Authority: Spec MET-TRA-001).
+///
+/// The structural guard is this table: a transition that is not declared here
+/// cannot happen, so `Completed -> Draft` is blocked by absence rather than by a
+/// check somebody has to remember to write.
+model TransitionDefinition {
+  id          String  @id @default(uuid()) @db.Uuid
+  entityKey   String  @map("entity_key")
+  fromStateId String  @map("from_state_id") @db.Uuid
+  toStateId   String  @map("to_state_id") @db.Uuid
+  /// The Action permitted to trigger it; the authorization guard (MET-TRA-002)
+  /// is the command pipeline's own check on this command.
+  commandKey  String? @map("command_key")
+
+  fromState StateDefinition @relation("TransitionFrom", fields: [fromStateId], references: [id], onDelete: Cascade)
+  toState   StateDefinition @relation("TransitionTo", fields: [toStateId], references: [id], onDelete: Cascade)
+
+  @@unique([fromStateId, toStateId])
+  @@index([entityKey])
+  @@map("transition_definition")
+}
+
+/// Tenant-facing label for a platform state (Authority: Spec MET-STA-002/003).
+///
+/// Tenant-scoped: "Awaiting Gate Pass" is one tenant's word for a state whose
+/// category the engine still reasons about unchanged (MET-STA-004).
+model TenantStatusLabel {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  stateId  String @map("state_id") @db.Uuid
+  label    String
+
+  tenant Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  state  StateDefinition @relation(fields: [stateId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, stateId])
+  @@index([tenantId])
+  @@map("tenant_status_label")
+}
+
+/// Operational audit stream (Authority: Spec EXE-AUD-001, GOV-TER "Activity").
+///
+/// EXE-AUD-001 names the table `WorkOrderActivity` with a `work_order_id` FK.
+/// That is domain leakage: the platform cannot own a table keyed to one
+/// capability's entity, and GOV-TER already reserves `Activity` as the canonical
+/// term for a change record. The generic form keys on (entityKey, entityId), so
+/// every capability's changes land in one stream without the core knowing any of
+/// them.
+///
+/// Retention is infinite (EXE-AUD-001: required for contract disputes and
+/// historical SLAs), and rows are immutable at the database level (EXE-AUD-003).
+model Activity {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  entityKey    String   @map("entity_key")
+  entityId     String   @map("entity_id") @db.Uuid
+  /// Null for platform-initiated changes with no human actor.
+  actorUserId  String?  @map("actor_user_id") @db.Uuid
+  fieldChanged String   @map("field_changed")
+  oldValue     String?  @map("old_value")
+  newValue     String?  @map("new_value")
+  /// The command responsible, so a change traces back to the action.
+  commandKey   String?  @map("command_key")
+  occurredAt   DateTime @default(now()) @map("occurred_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, entityKey, entityId])
+  @@index([tenantId, occurredAt])
+  @@map("activity")
+}
+
+/// Security audit event types (Authority: Spec EXE-AUD-002).
+enum SecurityEventType {
+  AuthSuccess
+  AuthFailed
+  PermissionEscalated
+  PermissionRevoked
+  RoleAssigned
+  ConfigurationChanged
+  ApiKeyGenerated
+}
+
+/// Security audit stream (Authority: Spec EXE-AUD-002).
+///
+/// Separate from Activity because its retention is compliance-driven rather than
+/// infinite, and because mixing authentication and permission changes into the
+/// operational stream makes both harder to reason about.
+///
+/// `tenantId` is required: an event that concerns no tenant cannot be shown to
+/// one without leaking across the boundary. Pre-authentication failures, which
+/// have no tenant yet, belong to platform operations and are out of scope until
+/// the auth layer exists.
+model SecurityAuditEvent {
+  id          String            @id @default(uuid()) @db.Uuid
+  tenantId    String            @map("tenant_id") @db.Uuid
+  eventType   SecurityEventType @map("event_type")
+  actorUserId String?           @map("actor_user_id") @db.Uuid
+  /// Recorded as text: it is evidence, not a queryable address type.
+  ipAddress   String?           @map("ip_address")
+  payload     Json              @default("{}")
+  occurredAt  DateTime          @default(now()) @map("occurred_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, occurredAt])
+  @@index([tenantId, eventType])
+  @@map("security_audit_event")
+}
+
+/// Automation node categories (Authority: Spec MET-AUT-001).
+enum WorkflowNodeType {
+  /// Listens for a platform Event, schedule, or webhook and starts a run.
+  Trigger
+  /// Executes an integration or mutates an entity.
+  Action
+  /// Directs flow: conditionals, branching, joins.
+  Logic
+}
+
+enum WorkflowRunStatus {
+  Running
+  Succeeded
+  Failed
+}
+
+/// An orchestrated business process (Authority: Spec MET-WKF-001→003, MET-AUT-001).
+///
+/// Tenant-scoped and stored as data, not code. The engine knows how to walk a
+/// DAG and how to run a *node type*; it knows nothing about any particular
+/// workflow. That is what lets a new workflow be introduced without the engine
+/// changing — foundation-ready condition C.
+model WorkflowDefinition {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  key       String
+  /// Bumped when the graph changes; a run records the version it executed.
+  version   Int      @default(1)
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  nodes  WorkflowNode[]
+  edges  WorkflowEdge[]
+  runs   WorkflowRun[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@map("workflow_definition")
+}
+
+/// One node in the graph (Authority: Spec MET-AUT-001).
+///
+/// `handlerKey` names a node type registered in code. The node's behaviour lives
+/// there; `config` is its data. A capability adds capabilities by registering a
+/// handler, never by editing the executor.
+model WorkflowNode {
+  id         String           @id @default(uuid()) @db.Uuid
+  tenantId   String           @map("tenant_id") @db.Uuid
+  workflowId String           @map("workflow_id") @db.Uuid
+  key        String
+  type       WorkflowNodeType
+  /// Registered node-type key, e.g. `verity.core.emit_event`.
+  handlerKey String           @map("handler_key")
+  config     Json             @default("{}")
+
+  workflow WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  outgoing WorkflowEdge[]     @relation("EdgeFrom")
+  incoming WorkflowEdge[]     @relation("EdgeTo")
+  stepRuns WorkflowStepRun[]
+
+  @@unique([workflowId, key])
+  @@index([tenantId])
+  @@map("workflow_node")
+}
+
+/// A directed edge, optionally conditional (Authority: Spec MET-WKF-002).
+///
+/// `condition` is a declarative predicate over the envelope, not code: routing
+/// decisions are data so a tenant can change a threshold without a deploy.
+model WorkflowEdge {
+  id         String @id @default(uuid()) @db.Uuid
+  tenantId   String @map("tenant_id") @db.Uuid
+  workflowId String @map("workflow_id") @db.Uuid
+  fromNodeId String @map("from_node_id") @db.Uuid
+  toNodeId   String @map("to_node_id") @db.Uuid
+  /// null means unconditional.
+  condition  Json?
+
+  workflow WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  fromNode WorkflowNode       @relation("EdgeFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode   WorkflowNode       @relation("EdgeTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([fromNodeId, toNodeId])
+  @@index([tenantId])
+  @@map("workflow_edge")
+}
+
+/// One execution of a workflow.
+model WorkflowRun {
+  id              String            @id @default(uuid()) @db.Uuid
+  tenantId        String            @map("tenant_id") @db.Uuid
+  workflowId      String            @map("workflow_id") @db.Uuid
+  workflowVersion Int               @map("workflow_version")
+  status          WorkflowRunStatus @default(Running)
+  /// Deduplication key: the same trigger fact must not start two runs.
+  idempotencyKey  String?           @map("idempotency_key")
+  triggerEventId  String?           @map("trigger_event_id") @db.Uuid
+  input           Json              @default("{}")
+  error           String?
+  startedAt       DateTime          @default(now()) @map("started_at")
+  finishedAt      DateTime?         @map("finished_at")
+
+  tenant   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  workflow WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  steps    WorkflowStepRun[]
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status])
+  @@map("workflow_run")
+}
+
+/// One node execution within a run (Authority: Spec MET-WKF-001).
+///
+/// Each step is its own transaction boundary, and its output envelope is
+/// recorded so a failed run can be inspected without re-running it.
+model WorkflowStepRun {
+  id         String            @id @default(uuid()) @db.Uuid
+  tenantId   String            @map("tenant_id") @db.Uuid
+  runId      String            @map("run_id") @db.Uuid
+  nodeId     String            @map("node_id") @db.Uuid
+  sequence   Int
+  status     WorkflowRunStatus @default(Running)
+  output     Json              @default("{}")
+  error      String?
+  startedAt  DateTime          @default(now()) @map("started_at")
+  finishedAt DateTime?         @map("finished_at")
+
+  run  WorkflowRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  node WorkflowNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([runId, sequence])
+  @@map("workflow_step_run")
+}
+
+/// Encrypted third-party secrets (Authority: Spec MET-AUT-003).
+///
+/// Automations reference a credential by name; the ciphertext is decrypted only
+/// at execution time inside the action node. The secret never appears in a
+/// workflow's JSON configuration, so exporting or logging a workflow cannot leak
+/// it.
+model Credential {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  /// pgcrypto ciphertext. Never selected into application memory except by
+  /// verity.credential_reveal() at execution time.
+  secret    Bytes
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("credential")
+}
+
+enum ActivationStatus {
+  Active
+  Suspended
+}
+
+/// Configuration precedence scopes (Authority: Spec PLA-CFG-001).
+/// Narrowest wins: User > Organization > Tenant > Global.
+enum ConfigScope {
+  Global
+  Tenant
+  Organization
+  User
+}
+
+/// The capability registry (Authority: Spec PLA-CAP-001, PLA-VER-002).
+///
+/// GLOBAL, like EntityDefinition: a capability's identity, version and
+/// dependencies are platform facts, written when the capability is installed.
+/// Which tenants may use it is a separate, tenant-scoped question answered by
+/// TenantActivation.
+model CapabilityDefinition {
+  id           String   @id
+  name         String
+  /// SemVer of the capability's logic (PLA-VER-002).
+  version      String
+  /// Capability ids this one requires (PLA-CAP-003).
+  dependencies String[] @default([])
+  /// EntityDefinition keys this capability owns.
+  entityTypes  String[] @default([]) @map("entity_types")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  activations TenantActivation[]
+
+  @@map("capability_definition")
+}
+
+/// Per-tenant activation (Authority: Spec PLA-CAP-002, PLA-CAP-003).
+///
+/// An inactive capability is fully blocked for that tenant — not merely hidden
+/// in the UI. Enforcement lives in the command and query pipelines, because a
+/// capability that is invisible but still reachable by API is not deactivated.
+model TenantActivation {
+  id            String           @id @default(uuid()) @db.Uuid
+  tenantId      String           @map("tenant_id") @db.Uuid
+  capabilityId  String           @map("capability_id")
+  status        ActivationStatus @default(Active)
+  activatedAt   DateTime         @default(now()) @map("activated_at")
+  /// Version pinned at activation (PLA-VER-003), so a platform upgrade cannot
+  /// silently change a tenant's behaviour.
+  pinnedVersion String?          @map("pinned_version")
+
+  tenant     Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  capability CapabilityDefinition @relation(fields: [capabilityId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, capabilityId])
+  @@index([tenantId])
+  @@map("tenant_activation")
+}
+
+/// A configuration value at one precedence scope (Authority: Spec PLA-CFG-001).
+///
+/// `scopeId` identifies the organization or user for the narrower scopes and is
+/// null for Tenant and Global. Resolution walks narrowest to broadest and takes
+/// the first hit.
+model ConfigParameter {
+  id        String      @id @default(uuid()) @db.Uuid
+  /// Null only for Global scope, which belongs to no tenant.
+  tenantId  String?     @map("tenant_id") @db.Uuid
+  key       String
+  value     Json
+  scope     ConfigScope
+  scopeId   String?     @map("scope_id") @db.Uuid
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key, scope, scopeId])
+  @@index([tenantId, key])
+  @@map("config_parameter")
+}
+
+enum OfflineCommandStatus {
+  Pending
+  Applied
+  Rejected
+}
+
+/// Reasons a replayed command could not be applied (Authority: Bible V5 §2.C).
+enum SyncConflictKind {
+  /// Server-side state moved so preconditions no longer hold.
+  StateConflict
+  /// The target record was deleted while the client was offline.
+  TargetDeleted
+  /// The actor's permissions were revoked while they were offline.
+  AuthorizationRevoked
+  /// Optimistic concurrency lost against a newer server version.
+  VersionConflict
+}
+
+/// The offline command inbox (Authority: Bible V5 §2.A, §2.B).
+///
+/// `commandId` is generated by the client, not the server, and carries the
+/// uniqueness constraint. That is what makes replay exactly-once: a retry after
+/// a network failure collides on insert and returns the stored result rather
+/// than applying the mutation twice.
+model OfflineCommand {
+  id              String               @id @default(uuid()) @db.Uuid
+  tenantId        String               @map("tenant_id") @db.Uuid
+  /// Client-generated identity (Bible V5 §2.B.1).
+  commandId       String               @map("command_id") @db.Uuid
+  commandKey      String               @map("command_key")
+  actorUserId     String               @map("actor_user_id") @db.Uuid
+  payload         Json                 @default("{}")
+  /// Replay order (Bible V5 §2.B.3) — the device's clock, not the server's.
+  deviceTimestamp DateTime             @map("device_timestamp")
+  status          OfflineCommandStatus @default(Pending)
+  /// Cached result, returned verbatim on a duplicate submission.
+  result          Json?
+  error           String?
+  receivedAt      DateTime             @default(now()) @map("received_at")
+  appliedAt       DateTime?            @map("applied_at")
+
+  tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  exceptions SyncException[]
+
+  @@unique([tenantId, commandId])
+  @@index([tenantId, status, deviceTimestamp])
+  @@map("offline_command")
+}
+
+/// A replay that could not be applied and needs a human (Authority: Bible V5 §2.C).
+///
+/// Bible V5 requires an aborted replay to be flagged in the audit log and
+/// enqueued for manual resolution rather than silently dropped — losing a
+/// field worker's captured work is worse than surfacing a conflict.
+model SyncException {
+  id               String           @id @default(uuid()) @db.Uuid
+  tenantId         String           @map("tenant_id") @db.Uuid
+  offlineCommandId String           @map("offline_command_id") @db.Uuid
+  kind             SyncConflictKind
+  detail           String
+  resolvedAt       DateTime?        @map("resolved_at")
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  tenant         Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  offlineCommand OfflineCommand @relation(fields: [offlineCommandId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, resolvedAt])
+  @@map("sync_exception")
+}

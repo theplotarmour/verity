@@ -103,3 +103,23 @@ This document contains the register of historical, superseded design decisions f
 *   **Supersedes**: None
 *   **Superseded By**: ADR-006
 *   **Confidence**: `HIGH`
+
+---
+
+### DEC-REQ-002: Party De-duplication Across Tenants
+*   **Decision ID**: DEC-REQ-002
+*   **Question**: How is exactly one `Party` per participant guaranteed when reachability hides identities a tenant holds no membership for?
+*   **Context**: Raised during the platform foundation build. `Party` and `User` are global with no tenant column, so isolation is enforced by membership reachability; a tenant therefore cannot see that a `Party` already exists for the same human and can create a duplicate, breaking INV-003.
+*   **Affected Concepts**: `Party`, `User`, `TenantMembership`
+*   **Options**:
+    *   *Option A*: Global uniqueness checked at provisioning.
+    *   *Option B*: Invitation and verification, with linking at verification time.
+    *   *Option C*: Permit duplicates and reconcile by administrative merge.
+*   **Recommendation**: Option B.
+*   **Status**: `SUPERSEDED`
+*   **Owner**: Product Owner
+*   **Resolution**: Resolved by ADR-007.
+*   **Supersedes**: None
+*   **Superseded By**: ADR-007
+*   **Confidence**: `HIGH`
+
