@@ -15,6 +15,7 @@ import {
   type CommandDefinition,
 } from "@/server/platform/command";
 import { executeQuery, type QueryDefinition } from "@/server/platform/query";
+import { activateCapability, invalidateCapabilityCache } from "@/server/platform/capability";
 
 /**
  * Command/query pipeline gate test.
@@ -31,6 +32,7 @@ if (!hasDatabase) {
 }
 
 const ENTITY = "verity.test.widget";
+const CAPABILITY = "verity.capability.command_test";
 
 /** A command that renames a Tenant — a real mutation on a real table. */
 const renameTenant: CommandDefinition<{ name: string }, { name: string }> = {
@@ -76,8 +78,11 @@ describeDb("command and query runtime", () => {
 
     const admin = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL });
     try {
+      await admin.capabilityDefinition.create({
+        data: { id: CAPABILITY, name: "Command runtime test", version: "1.0.0", entityTypes: [ENTITY] },
+      });
       await admin.entityDefinition.create({
-        data: { key: ENTITY, capability: "test", class: "Persistent", tableName: "tenant" },
+        data: { key: ENTITY, capability: CAPABILITY, class: "Persistent", tableName: "tenant" },
       });
     } finally {
       await admin.$disconnect();
@@ -85,6 +90,9 @@ describeDb("command and query runtime", () => {
 
     await withTenant(tenantA, async (tx) => {
       await tx.tenant.create({ data: { id: tenantA, name: "Original" } });
+      // The pipeline blocks work for an inactive capability (PLA-CAP-002), so
+      // the fixture has to activate it exactly as a real tenant would.
+      await activateCapability(tx, tenantA, CAPABILITY);
       const org = await tx.organization.create({ data: { tenantId: tenantA, name: "HQ" } });
 
       editorRole = (await tx.role.create({ data: { tenantId: tenantA, name: "Editor" } })).id;
@@ -116,7 +124,10 @@ describeDb("command and query runtime", () => {
     });
   });
 
-  afterEach(() => clearHooks());
+  afterEach(() => {
+    clearHooks();
+    invalidateCapabilityCache();
+  });
 
   afterAll(async () => {
     const admin = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL });
@@ -128,6 +139,7 @@ describeDb("command and query runtime", () => {
       await admin.$executeRaw`DELETE FROM "user" WHERE id = ${actor.userId}::uuid`;
       await admin.$executeRaw`DELETE FROM party WHERE id NOT IN (SELECT party_id FROM "user")`;
       await admin.$executeRaw`DELETE FROM entity_definition WHERE key = ${ENTITY}`;
+      await admin.$executeRaw`DELETE FROM capability_definition WHERE id = ${CAPABILITY}`;
     } finally {
       await admin.$disconnect();
     }

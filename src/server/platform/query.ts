@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { authorize } from "./authorization";
+import { capabilityForEntity, requireCapabilityActive } from "./capability";
 import { withTenant, type TenantScopedClient } from "./tenancy";
 import { ValidationError, type ActorContext } from "./command";
 
@@ -59,6 +60,8 @@ export async function executeQuery<TInput, TResult>(
         parsed.error.issues.map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`),
       );
     }
+    const capability = await capabilityForEntity(tx, def.entity);
+    if (capability) await requireCapabilityActive(tx, actor.tenantId, capability);
     await authorize(tx, actor.roleId, "Read", def.entity);
     return def.handler({ actor, tx }, parsed.data);
   });

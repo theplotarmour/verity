@@ -52,6 +52,8 @@ model Tenant {
   workflows          WorkflowDefinition[]
   workflowRuns       WorkflowRun[]
   credentials        Credential[]
+  activations        TenantActivation[]
+  configParameters   ConfigParameter[]
 
   @@map("tenant")
 }
@@ -721,4 +723,87 @@ model Credential {
   @@unique([tenantId, name])
   @@index([tenantId])
   @@map("credential")
+}
+
+enum ActivationStatus {
+  Active
+  Suspended
+}
+
+/// Configuration precedence scopes (Authority: Spec PLA-CFG-001).
+/// Narrowest wins: User > Organization > Tenant > Global.
+enum ConfigScope {
+  Global
+  Tenant
+  Organization
+  User
+}
+
+/// The capability registry (Authority: Spec PLA-CAP-001, PLA-VER-002).
+///
+/// GLOBAL, like EntityDefinition: a capability's identity, version and
+/// dependencies are platform facts, written when the capability is installed.
+/// Which tenants may use it is a separate, tenant-scoped question answered by
+/// TenantActivation.
+model CapabilityDefinition {
+  id           String   @id
+  name         String
+  /// SemVer of the capability's logic (PLA-VER-002).
+  version      String
+  /// Capability ids this one requires (PLA-CAP-003).
+  dependencies String[] @default([])
+  /// EntityDefinition keys this capability owns.
+  entityTypes  String[] @default([]) @map("entity_types")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  activations TenantActivation[]
+
+  @@map("capability_definition")
+}
+
+/// Per-tenant activation (Authority: Spec PLA-CAP-002, PLA-CAP-003).
+///
+/// An inactive capability is fully blocked for that tenant — not merely hidden
+/// in the UI. Enforcement lives in the command and query pipelines, because a
+/// capability that is invisible but still reachable by API is not deactivated.
+model TenantActivation {
+  id            String           @id @default(uuid()) @db.Uuid
+  tenantId      String           @map("tenant_id") @db.Uuid
+  capabilityId  String           @map("capability_id")
+  status        ActivationStatus @default(Active)
+  activatedAt   DateTime         @default(now()) @map("activated_at")
+  /// Version pinned at activation (PLA-VER-003), so a platform upgrade cannot
+  /// silently change a tenant's behaviour.
+  pinnedVersion String?          @map("pinned_version")
+
+  tenant     Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  capability CapabilityDefinition @relation(fields: [capabilityId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, capabilityId])
+  @@index([tenantId])
+  @@map("tenant_activation")
+}
+
+/// A configuration value at one precedence scope (Authority: Spec PLA-CFG-001).
+///
+/// `scopeId` identifies the organization or user for the narrower scopes and is
+/// null for Tenant and Global. Resolution walks narrowest to broadest and takes
+/// the first hit.
+model ConfigParameter {
+  id        String      @id @default(uuid()) @db.Uuid
+  /// Null only for Global scope, which belongs to no tenant.
+  tenantId  String?     @map("tenant_id") @db.Uuid
+  key       String
+  value     Json
+  scope     ConfigScope
+  scopeId   String?     @map("scope_id") @db.Uuid
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key, scope, scopeId])
+  @@index([tenantId, key])
+  @@map("config_parameter")
 }

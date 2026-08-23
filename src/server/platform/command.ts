@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { PermissionVerb } from "@prisma/client";
 import { authorize } from "./authorization";
+import { capabilityForEntity, requireCapabilityActive } from "./capability";
 import { CustomFieldValidationError } from "./entity";
 import { withTenant, type TenantScopedClient } from "./tenancy";
 
@@ -161,7 +162,13 @@ export async function executeCommand<TInput, TResult>(
     }
     const input = parsed.data;
 
-    // 2. MET-ACT-002 — throws ForbiddenError, so a missing branch cannot permit.
+    // 2a. PLA-CAP-002 — an inactive capability is blocked at the execution path,
+    //     not merely hidden in the UI. Checked before authorization so a tenant
+    //     cannot probe permissions for a capability it does not have.
+    const capability = await capabilityForEntity(tx, def.entity);
+    if (capability) await requireCapabilityActive(tx, actor.tenantId, capability);
+
+    // 2b. MET-ACT-002 — throws ForbiddenError, so a missing branch cannot permit.
     await authorize(tx, actor.roleId, def.verb, def.entity);
 
     // 3. MET-ACT-003
