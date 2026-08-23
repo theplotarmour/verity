@@ -47,6 +47,8 @@ model Tenant {
   customFieldSchemas CustomFieldSchema[]
   domainEvents       DomainEvent[]
   statusLabels       TenantStatusLabel[]
+  activities         Activity[]
+  securityEvents     SecurityAuditEvent[]
 
   @@map("tenant")
 }
@@ -486,4 +488,74 @@ model TenantStatusLabel {
   @@unique([tenantId, stateId])
   @@index([tenantId])
   @@map("tenant_status_label")
+}
+
+/// Operational audit stream (Authority: Spec EXE-AUD-001, GOV-TER "Activity").
+///
+/// EXE-AUD-001 names the table `WorkOrderActivity` with a `work_order_id` FK.
+/// That is domain leakage: the platform cannot own a table keyed to one
+/// capability's entity, and GOV-TER already reserves `Activity` as the canonical
+/// term for a change record. The generic form keys on (entityKey, entityId), so
+/// every capability's changes land in one stream without the core knowing any of
+/// them.
+///
+/// Retention is infinite (EXE-AUD-001: required for contract disputes and
+/// historical SLAs), and rows are immutable at the database level (EXE-AUD-003).
+model Activity {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  entityKey    String   @map("entity_key")
+  entityId     String   @map("entity_id") @db.Uuid
+  /// Null for platform-initiated changes with no human actor.
+  actorUserId  String?  @map("actor_user_id") @db.Uuid
+  fieldChanged String   @map("field_changed")
+  oldValue     String?  @map("old_value")
+  newValue     String?  @map("new_value")
+  /// The command responsible, so a change traces back to the action.
+  commandKey   String?  @map("command_key")
+  occurredAt   DateTime @default(now()) @map("occurred_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, entityKey, entityId])
+  @@index([tenantId, occurredAt])
+  @@map("activity")
+}
+
+/// Security audit event types (Authority: Spec EXE-AUD-002).
+enum SecurityEventType {
+  AuthSuccess
+  AuthFailed
+  PermissionEscalated
+  PermissionRevoked
+  RoleAssigned
+  ConfigurationChanged
+  ApiKeyGenerated
+}
+
+/// Security audit stream (Authority: Spec EXE-AUD-002).
+///
+/// Separate from Activity because its retention is compliance-driven rather than
+/// infinite, and because mixing authentication and permission changes into the
+/// operational stream makes both harder to reason about.
+///
+/// `tenantId` is required: an event that concerns no tenant cannot be shown to
+/// one without leaking across the boundary. Pre-authentication failures, which
+/// have no tenant yet, belong to platform operations and are out of scope until
+/// the auth layer exists.
+model SecurityAuditEvent {
+  id          String            @id @default(uuid()) @db.Uuid
+  tenantId    String            @map("tenant_id") @db.Uuid
+  eventType   SecurityEventType @map("event_type")
+  actorUserId String?           @map("actor_user_id") @db.Uuid
+  /// Recorded as text: it is evidence, not a queryable address type.
+  ipAddress   String?           @map("ip_address")
+  payload     Json              @default("{}")
+  occurredAt  DateTime          @default(now()) @map("occurred_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, occurredAt])
+  @@index([tenantId, eventType])
+  @@map("security_audit_event")
 }
