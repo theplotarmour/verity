@@ -39,11 +39,12 @@ model Tenant {
   version      Int      @default(1)
   customFields Json     @default("{}") @map("custom_fields")
 
-  organizations    Organization[]
-  memberships      TenantMembership[]
-  roles            Role[]
-  permissions      Permission[]
-  roleCompositions RoleComposition[]
+  organizations      Organization[]
+  memberships        TenantMembership[]
+  roles              Role[]
+  permissions        Permission[]
+  roleCompositions   RoleComposition[]
+  customFieldSchemas CustomFieldSchema[]
 
   @@map("tenant")
 }
@@ -276,4 +277,78 @@ model Permission {
   @@index([tenantId])
   @@index([roleId])
   @@map("permission")
+}
+
+/// Entity structural classes (Authority: Spec MET-ENT-001→003).
+enum EntityClass {
+  /// Permanent business record backed by a physical table.
+  Persistent
+  /// Session-scoped temporary state; emits no state events (MET-ENT-002).
+  Transient
+  /// Interface/mixin template; no table of its own (MET-ENT-003).
+  Abstract
+}
+
+/// Custom field types (Authority: Spec PLA-EXT-002, which fixes exactly this set).
+enum CustomFieldType {
+  String
+  Number
+  Boolean
+  Select
+  Date
+}
+
+/// The entity registry (Authority: Spec MET-ENT-001→005).
+///
+/// GLOBAL, not tenant-scoped. An entity definition describes a *type*, is
+/// identical for every tenant, and is written by migrations when a capability is
+/// installed — it is platform metadata of the kind PLA-TEN-001 exempts from
+/// tenant partitioning ("global system lists"). Tenant-specific shape lives in
+/// `CustomFieldSchema` instead.
+///
+/// A capability ships its own tables and registers them here; the platform does
+/// not generate tables at runtime. That is what lets a new capability introduce
+/// entities without the platform ontology changing (foundation-ready B).
+model EntityDefinition {
+  /// Namespace-qualified unique key, e.g. `verity.work.work_order` (MET-ENT-004).
+  key          String      @id
+  /// Owning capability. Every entity has exactly one owner.
+  capability   String
+  class        EntityClass
+  /// Physical table for a Persistent entity; null for Transient/Abstract.
+  tableName    String?     @map("table_name")
+  /// False only for platform-wide system reference data (MET-ENT-005).
+  tenantScoped Boolean     @default(true) @map("tenant_scoped")
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  customFields CustomFieldSchema[]
+
+  @@index([capability])
+  @@map("entity_definition")
+}
+
+/// Tenant-declared extension fields (Authority: Spec PLA-EXT-002).
+///
+/// Tenant-scoped, unlike EntityDefinition: these are one tenant's additions to an
+/// entity, stored in that entity's `custom_fields` JSONB column (PLA-EXT-001) so
+/// the relational core schema stays intact and no migration is needed to add one.
+model CustomFieldSchema {
+  id            String          @id @default(uuid()) @db.Uuid
+  tenantId      String          @map("tenant_id") @db.Uuid
+  /// FK to EntityDefinition.key — the entity being extended.
+  entityKey     String          @map("entity_key")
+  fieldName     String          @map("field_name")
+  fieldType     CustomFieldType @map("field_type")
+  required      Boolean         @default(false)
+  /// Only meaningful when fieldType is Select.
+  selectOptions String[]        @default([]) @map("select_options")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  entity EntityDefinition @relation(fields: [entityKey], references: [key], onDelete: Cascade)
+
+  @@unique([tenantId, entityKey, fieldName])
+  @@index([tenantId, entityKey])
+  @@map("custom_field_schema")
 }
