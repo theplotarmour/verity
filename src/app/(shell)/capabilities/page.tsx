@@ -1,7 +1,7 @@
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { DataTable } from "@/components/ui/DataTable";
-import { PageHeader } from "@/components/ui/primitives";
+import { PageHeader, Stat } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
 
@@ -50,21 +50,37 @@ export default async function CapabilityRegistryPage() {
   return (
     <>
       <PageHeader
+        eyebrow="Administration"
         title="Capability registry"
         description="Every capability installed on the platform, and whether this tenant has activated it."
       />
+
+      <div className="mb-6 grid grid-cols-2 items-stretch gap-3 sm:grid-cols-3">
+        <Stat label="Installed" value={rows.length} hint="Available on the platform" />
+        <Stat
+          label="Active here"
+          value={rows.filter((r) => r.status === "Active").length}
+          hint="Activated for this tenant"
+        />
+        <Stat
+          label="Not activated"
+          value={rows.filter((r) => r.status === "Not activated").length}
+        />
+      </div>
+
       <DataTable
         caption="Capabilities"
         rows={rows}
         columns={[
           { key: "name", header: "Capability" },
-          { key: "version", header: "Version" },
           { key: "status", header: "Status", variant: "state", categoryKey: "statusCategory" },
+          { key: "version", header: "Version" },
           { key: "pinned", header: "Pinned at" },
           { key: "dependencies", header: "Depends on" },
           { key: "entities", header: "Entities", numeric: true },
         ]}
         emptyTitle="No capabilities installed"
+        emptyDescription="A capability registers itself with the platform at boot. None has."
       />
     </>
   );

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { FormDescriptor } from "@/server/platform/experience";
-import { Button, ErrorState, Field, Input, SectionHeading, Select, Surface } from "@/components/ui/primitives";
+import { Button, DefinitionList, ErrorState, Field, Input, Panel, Select } from "@/components/ui/primitives";
 import { runCommand, type ActionFailure } from "@/server/actions/platform";
 
 /**
@@ -42,47 +42,45 @@ export function CustomFieldsPanel({
 
   if (custom.length === 0) {
     return (
-      <section>
-        <SectionHeading>Custom fields</SectionHeading>
-        <Surface className="p-5">
-          <p className="text-text-secondary m-0">
-            This tenant has declared no custom fields for {entityKey.split(".").pop()}. Declaring one
-            makes it appear here and in the record&rsquo;s validation, with no code change.
-          </p>
-        </Surface>
-      </section>
+      <Panel title="Custom fields">
+        <p className="m-0 max-w-[60ch] text-[13px] leading-relaxed text-text-secondary">
+          This tenant has declared no custom fields for {entityKey.split(".").pop()}. Declaring one
+          makes it appear here and in the record&rsquo;s validation, with no code change.
+        </p>
+      </Panel>
     );
   }
 
   return (
     <section>
-      <SectionHeading note={descriptor.readOnly ? "Locked — terminal state" : undefined}>
-        Custom fields
-      </SectionHeading>
-
       {!editing ? (
-        <Surface className="p-5">
-          <dl className="grid grid-cols-1 sm:grid-cols-[minmax(140px,auto)_1fr] gap-x-6 gap-y-3 m-0">
-            {custom.map((field) => (
-              <div key={field.name} className="contents">
-                <dt className="text-text-tertiary text-[13px]">{field.name}</dt>
-                <dd className="m-0 text-text break-words">
-                  {values[field.name] === undefined || values[field.name] === null || values[field.name] === ""
-                    ? "—"
-                    : String(values[field.name])}
-                </dd>
-              </div>
-            ))}
-          </dl>
-          {canEdit && !descriptor.readOnly && (
-            <Button size="sm" className="mt-4" onClick={() => setEditing(true)}>
-              Edit custom fields
-            </Button>
-          )}
-        </Surface>
+        <Panel
+          title="Custom fields"
+          action={
+            descriptor.readOnly ? (
+              <span className="text-[12px] text-text-tertiary">Locked — terminal state</span>
+            ) : canEdit ? (
+              <Button size="sm" onClick={() => setEditing(true)}>
+                Edit
+              </Button>
+            ) : undefined
+          }
+        >
+          <DefinitionList
+            items={custom.map((field) => ({
+              term: field.name,
+              value:
+                values[field.name] === undefined ||
+                values[field.name] === null ||
+                values[field.name] === ""
+                  ? "—"
+                  : String(values[field.name]),
+            }))}
+          />
+        </Panel>
       ) : (
         <form
-          className="bg-surface rounded-lg p-5 flex flex-col gap-4"
+          className="flex flex-col gap-4 rounded-lg border border-line bg-surface p-5"
           action={(formData) => {
             setFailure(null);
             const payload: Record<string, unknown> = {};

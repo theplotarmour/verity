@@ -1,8 +1,17 @@
-import Link from "next/link";
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { resolvePermissions } from "@/server/platform/authorization";
-import { DefinitionList, DemoDataNotice, PageHeader, SectionHeading, StateBadge, Surface } from "@/components/ui/primitives";
+import {
+  DefinitionList,
+  DemoDataNotice,
+  EmptyState,
+  PageHeader,
+  Panel,
+  Row,
+  RowList,
+  Stat,
+  StateBadge,
+} from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
 
@@ -35,91 +44,86 @@ export default async function OverviewPage() {
   return (
     <>
       <PageHeader
+        eyebrow={data.organization?.name ?? "Workspace"}
         title="Overview"
-        description="Current operating context and what the platform can actually tell you about it."
+        description="The platform's current state in this organization — what is active, what is waiting, and what has happened recently."
       />
 
-      <div className="grid gap-8 lg:grid-cols-[1.4fr_1fr]">
-        <div className="flex flex-col gap-8">
-          <section>
-            <SectionHeading>Context</SectionHeading>
-            <Surface className="p-5">
-              <DefinitionList
-                items={[
-                  { term: "Organization", value: data.organization?.name ?? "—" },
-                  {
-                    term: "Role",
-                    value: actor.roleId ? "Assigned" : "No role assigned — read access only",
-                  },
-                  { term: "Permissions", value: `${data.permissions.length} effective grants` },
-                  { term: "Capabilities", value: `${data.activations.length} active` },
-                ]}
-              />
-            </Surface>
-          </section>
+      {/*
+        A band of real counts, not a KPI strip. Each is something the platform
+        genuinely knows: rows it can count right now. There are no trends,
+        targets or sparklines, because a comparison implies a series and the
+        platform has no analytics layer to derive one from. Zero is shown as zero
+        and means zero.
+      */}
+      <div className="mb-9 grid grid-cols-2 items-stretch gap-3 lg:grid-cols-4">
+        <Stat
+          label="Awaiting your role"
+          value={data.pendingApprovals}
+          hint={data.pendingApprovals > 0 ? "Approvals need a decision" : "No approvals pending"}
+          href={data.pendingApprovals > 0 ? "/approvals" : undefined}
+        />
+        <Stat
+          label="Sync exceptions"
+          value={data.openExceptions}
+          hint={data.openExceptions > 0 ? "Unresolved conflicts" : "None unresolved"}
+        />
+        <Stat label="Capabilities" value={data.activations.length} hint="Active in this tenant" />
+        <Stat
+          label="Permissions"
+          value={data.permissions.length}
+          hint={actor.roleId ? "Effective grants" : "No role assigned"}
+        />
+      </div>
 
-          <section>
-            <SectionHeading note="Newest first">Recent activity</SectionHeading>
-            <Surface className="p-1">
-              {data.recentEvents.length === 0 ? (
-                <p className="text-text-secondary px-4 py-6 m-0">
-                  No platform events recorded in this organization yet.
-                </p>
-              ) : (
-                <ul className="list-none m-0 p-0">
-                  {data.recentEvents.map((event) => (
-                    <li
-                      key={event.id}
-                      className="flex items-baseline justify-between gap-4 px-4 py-2.5 border-b border-line last:border-b-0"
-                    >
-                      <span className="font-mono text-[13px] text-text truncate">{event.name}</span>
-                      <time
-                        dateTime={event.occurredAt.toISOString()}
-                        className="text-[13px] text-text-tertiary shrink-0 tabular"
-                      >
-                        {event.occurredAt.toISOString().replace("T", " ").slice(0, 16)}
-                      </time>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Surface>
-          </section>
-        </div>
+      <div className="grid items-start gap-6 lg:grid-cols-[1.5fr_1fr]">
+        <Panel title="Recent activity" action={<span className="text-[12px] text-text-tertiary">Newest first</span>} flush>
+          {data.recentEvents.length === 0 ? (
+            <EmptyState
+              title="Nothing has happened yet"
+              description="Platform events appear here as commands run. An empty stream means this organization has not executed one."
+            />
+          ) : (
+            <RowList>
+              {data.recentEvents.map((event) => (
+                <Row key={event.id}>
+                  <span className="truncate font-mono text-[12.5px] text-text">{event.name}</span>
+                  <time
+                    dateTime={event.occurredAt.toISOString()}
+                    className="tabular shrink-0 text-[12px] text-text-tertiary"
+                  >
+                    {event.occurredAt.toISOString().replace("T", " ").slice(0, 16)}
+                  </time>
+                </Row>
+              ))}
+            </RowList>
+          )}
+        </Panel>
 
-        <div className="flex flex-col gap-8">
-          <section>
-            <SectionHeading>Needs attention</SectionHeading>
-            <Surface className="p-5 flex flex-col gap-4">
-              <div className="flex items-baseline justify-between gap-4">
-                <span className="text-text-secondary">Approvals awaiting your role</span>
-                <span className="text-[26px] font-light tabular tracking-[-0.02em]">{data.pendingApprovals}</span>
-              </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <span className="text-text-secondary">Unresolved sync exceptions</span>
-                <span className="text-[26px] font-light tabular tracking-[-0.02em]">{data.openExceptions}</span>
-              </div>
-              {data.pendingApprovals > 0 && (
-                <Link href="/approvals" className="text-accent-ink no-underline hover:underline">
-                  Review approvals →
-                </Link>
-              )}
-            </Surface>
-          </section>
+        <div className="flex flex-col gap-6">
+          <Panel title="Operating context">
+            <DefinitionList
+              items={[
+                { term: "Organization", value: data.organization?.name ?? "—" },
+                {
+                  term: "Role",
+                  value: actor.roleId ? "Assigned" : "No role assigned — read access only",
+                },
+                { term: "Tenant", value: <span className="font-mono text-[12px]">{actor.tenantId.slice(0, 8)}…</span> },
+              ]}
+            />
+          </Panel>
 
-          <section>
-            <SectionHeading>Active capabilities</SectionHeading>
-            <Surface className="p-5">
-              <ul className="list-none m-0 p-0 flex flex-col gap-2.5">
-                {data.activations.map((a) => (
-                  <li key={a.capabilityId} className="flex items-center justify-between gap-3">
-                    <span className="text-text">{a.capability.name}</span>
-                    <StateBadge category="Active" label={`v${a.pinnedVersion ?? a.capability.version}`} />
-                  </li>
-                ))}
-              </ul>
-            </Surface>
-          </section>
+          <Panel title="Active capabilities" flush>
+            <RowList>
+              {data.activations.map((a) => (
+                <Row key={a.capabilityId}>
+                  <span className="text-[14px] text-text">{a.capability.name}</span>
+                  <StateBadge category="Active" label={`v${a.pinnedVersion ?? a.capability.version}`} />
+                </Row>
+              ))}
+            </RowList>
+          </Panel>
 
           <DemoDataNotice />
         </div>

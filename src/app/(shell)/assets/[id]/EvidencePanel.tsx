@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Button, ErrorState, Field, Input, SectionHeading, Select, Surface,
+  Button, EmptyState, ErrorState, Field, Input, Panel, Select,
 } from "@/components/ui/primitives";
 import { runCommand, type ActionFailure } from "@/server/actions/platform";
 
@@ -41,24 +41,39 @@ export function EvidencePanel({
 
   return (
     <section>
-      <SectionHeading note="Immutable once recorded">Evidence</SectionHeading>
-
-      <Surface className="p-1">
+      {/* The capture action sits in the panel header rather than below the list.
+          A button floating under a card reads as unattached once the list grows;
+          in the header it stays put and stays obviously scoped to this record. */}
+      <Panel
+        title="Evidence"
+        action={
+          canCapture && !open ? (
+            <Button size="sm" onClick={() => setOpen(true)}>
+              Capture
+            </Button>
+          ) : (
+            <span className="text-[12px] text-text-tertiary">Immutable once recorded</span>
+          )
+        }
+        flush
+      >
         {evidence.length === 0 ? (
-          <p className="text-text-secondary px-4 py-6 m-0">
-            No evidence captured against this asset.
-          </p>
+          <EmptyState
+            compact
+            title="No evidence captured"
+            description="Evidence is immutable field data recorded against this asset. Nothing has been captured yet."
+          />
         ) : (
-          <ul className="list-none m-0 p-0">
+          <ul className="m-0 list-none divide-y divide-line p-0">
             {evidence.map((item) => (
-              <li key={item.id} className="px-4 py-3 border-b border-line last:border-b-0">
+              <li key={item.id} className="px-5 py-3.5">
                 <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-text font-medium">{item.kind}</span>
-                  <time dateTime={item.capturedAt} className="text-[13px] text-text-tertiary tabular shrink-0">
+                  <span className="text-[14px] text-text">{item.kind}</span>
+                  <time dateTime={item.capturedAt} className="tabular shrink-0 text-[12px] text-text-tertiary">
                     {item.capturedAt.replace("T", " ").slice(0, 16)}
                   </time>
                 </div>
-                <p className="text-[13px] text-text-secondary m-0 mt-0.5">
+                <p className="m-0 mt-1 text-[12.5px] leading-relaxed text-text-secondary">
                   {item.withinFence === null
                     ? "No geofence evaluated at capture"
                     : item.withinFence
@@ -70,17 +85,11 @@ export function EvidencePanel({
             ))}
           </ul>
         )}
-      </Surface>
-
-      {canCapture && !open && (
-        <Button size="sm" className="mt-3" onClick={() => setOpen(true)}>
-          Capture evidence
-        </Button>
-      )}
+      </Panel>
 
       {canCapture && open && (
         <form
-          className="mt-3 bg-surface rounded-lg p-4 flex flex-col gap-4 max-w-md"
+          className="mt-3 flex max-w-md flex-col gap-4 rounded-lg border border-line bg-surface p-5"
           action={(formData) => {
             setFailure(null);
             startTransition(async () => {

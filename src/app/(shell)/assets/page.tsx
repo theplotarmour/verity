@@ -40,6 +40,7 @@ export default async function AssetsPage() {
   return (
     <>
       <PageHeader
+        eyebrow="Capability"
         title="Assets"
         description="Physical equipment. Equipment-specific attributes live in custom fields, never as platform columns."
       />
@@ -47,14 +48,16 @@ export default async function AssetsPage() {
         caption="Assets"
         rows={data}
         columns={[
-          { key: "name", header: "Asset", variant: "link", href: "/assets/{id}" },
-          { key: "reference", header: "Reference" },
+          { key: "name", header: "Asset", variant: "link", href: "/assets/{id}", subKey: "reference" },
           { key: "location", header: "Location" },
           { key: "state", header: "State", variant: "state", categoryKey: "category" },
         ]}
         emptyTitle="No assets registered"
+        emptyDescription="An asset is physical equipment the platform tracks. None has been registered in your scope."
       />
-      <div className="mt-6"><DemoDataNotice /></div>
+      <div className="mt-6">
+        <DemoDataNotice />
+      </div>
     </>
   );
 }

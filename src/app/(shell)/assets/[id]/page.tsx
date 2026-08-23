@@ -7,7 +7,15 @@ import { ENTITY_ASSET } from "@/server/capabilities/asset";
 import { ENTITY_EVIDENCE } from "@/server/capabilities/evidence";
 import { entityHistory } from "@/server/platform/audit";
 import {
-  DefinitionList, PageHeader, PermissionDenied, SectionHeading, StateBadge, Surface,
+  DefinitionList,
+  EmptyState,
+  PageHeader,
+  Panel,
+  PermissionDenied,
+  Row,
+  RowList,
+  Stat,
+  StateBadge,
 } from "@/components/ui/primitives";
 import { AuditTrail } from "@/components/shell/AuditTrail";
 import { AssetActions } from "./AssetActions";
@@ -75,9 +83,20 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
 
   return (
     <>
+      {/*
+        The asset's state is the single most important fact about it — it decides
+        which transitions are offered and whether the record is writable at all
+        (INV-002). It therefore sits in the masthead beside the name, not three
+        rows down a definition list where it reads as one attribute among many.
+      */}
       <PageHeader
+        eyebrow={`Asset · ${data.asset.location?.name ?? "Unassigned"}`}
         title={data.asset.name}
-        description={data.asset.reference ? `Reference ${data.asset.reference}` : undefined}
+        description={
+          data.isTerminal
+            ? "This asset is in a terminal state and is permanently read-only."
+            : undefined
+        }
         actions={
           <AssetActions
             assetId={data.asset.id}
@@ -88,46 +107,55 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
         }
       />
 
-      <div className="grid gap-8 lg:grid-cols-[1.3fr_1fr]">
-        <div className="flex flex-col gap-8">
-          <section>
-            <SectionHeading>Identity</SectionHeading>
-            <Surface className="p-5">
-              <DefinitionList
-                items={[
-                  { term: "State", value: <StateBadge category={data.category} label={data.asset.state} /> },
-                  { term: "Location", value: data.asset.location?.name ?? "Unassigned" },
-                  { term: "Reference", value: data.asset.reference ?? "—" },
-                  { term: "Version", value: String(data.asset.version) },
-                ]}
-              />
-              {data.isTerminal && (
-                <p className="text-[13px] text-text-tertiary mt-4 mb-0">
-                  This asset is in a terminal state and is permanently read-only (INV-002).
-                </p>
-              )}
-            </Surface>
-          </section>
+      <div className="mb-6 grid grid-cols-2 items-stretch gap-3 sm:grid-cols-4">
+        <div className="flex flex-col rounded-lg border border-line bg-surface p-5">
+          <span className="text-[11px] font-medium uppercase tracking-[0.09em] text-text-tertiary">
+            State
+          </span>
+          <span className="mt-2.5">
+            <StateBadge category={data.category} label={data.asset.state} />
+          </span>
+        </div>
+        <Stat label="Bookings" value={data.bookings.length} />
+        <Stat label="Evidence" value={data.evidence.length} />
+        <Stat label="Version" value={data.asset.version} hint="Optimistic concurrency" />
+      </div>
 
-          <section>
-            <SectionHeading>Scheduling</SectionHeading>
-            <Surface className="p-1">
-              {data.bookings.length === 0 ? (
-                <p className="text-text-secondary px-4 py-6 m-0">No bookings reference this asset.</p>
-              ) : (
-                <ul className="list-none m-0 p-0">
-                  {data.bookings.map((b) => (
-                    <li key={b.id} className="flex items-baseline justify-between gap-4 px-4 py-3 border-b border-line last:border-b-0">
-                      <span className="text-text">{b.resource.name}</span>
-                      <span className="text-[13px] text-text-tertiary tabular">
-                        {b.startsAt.toISOString().replace("T", " ").slice(0, 16)} → {b.endsAt.toISOString().slice(11, 16)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Surface>
-          </section>
+      <div className="grid items-start gap-6 lg:grid-cols-[1.35fr_1fr]">
+        <div className="flex flex-col gap-6">
+          <Panel title="Identity">
+            <DefinitionList
+              items={[
+                { term: "Location", value: data.asset.location?.name ?? "Unassigned" },
+                { term: "Reference", value: data.asset.reference ?? "—" },
+              ]}
+            />
+          </Panel>
+
+          <Panel
+            title="Scheduling"
+            action={<span className="text-[12px] text-text-tertiary">Times in UTC</span>}
+            flush
+          >
+            {data.bookings.length === 0 ? (
+              <EmptyState
+                title="Not scheduled"
+                description="No booking references this asset. Bookings appear here once a resource backed by it is reserved."
+              />
+            ) : (
+              <RowList>
+                {data.bookings.map((b) => (
+                  <Row key={b.id}>
+                    <span className="text-[14px] text-text">{b.resource.name}</span>
+                    <span className="tabular shrink-0 text-[12px] text-text-tertiary">
+                      {b.startsAt.toISOString().replace("T", " ").slice(0, 16)} →{" "}
+                      {b.endsAt.toISOString().slice(11, 16)}
+                    </span>
+                  </Row>
+                ))}
+              </RowList>
+            )}
+          </Panel>
 
           <EvidencePanel
             assetId={data.asset.id}
@@ -142,15 +170,18 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
           />
         </div>
 
-        <section>
-          <SectionHeading>History</SectionHeading>
+        <Panel title="History" flush>
           <AuditTrail
             entries={data.history.map((h) => ({
-              id: h.id, field: h.fieldChanged, from: h.oldValue, to: h.newValue,
-              at: h.occurredAt.toISOString(), command: h.commandKey,
+              id: h.id,
+              field: h.fieldChanged,
+              from: h.oldValue,
+              to: h.newValue,
+              at: h.occurredAt.toISOString(),
+              command: h.commandKey,
             }))}
           />
-        </section>
+        </Panel>
       </div>
     </>
   );

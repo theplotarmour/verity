@@ -1,10 +1,17 @@
-import Link from "next/link";
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { resolvePermissions } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { workspaceContributionsFor } from "@/server/platform/contribution";
-import { EmptyState, PageHeader, SectionHeading, Surface } from "@/components/ui/primitives";
+import {
+  EmptyState,
+  PageHeader,
+  Panel,
+  Row,
+  RowList,
+  Stat,
+  Surface,
+} from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
 
@@ -62,45 +69,65 @@ export default async function WorkspacePage() {
   return (
     <>
       <PageHeader
+        eyebrow="Platform"
         title="Workspace"
         description="What is waiting on you right now. A workspace is for executing; the overview is for reading."
       />
 
       {nothingWaiting ? (
-        <EmptyState
-          title="Nothing is waiting on you"
-          description="Approvals, unresolved sync exceptions and blocked records appear here when they need attention."
-        />
+        <Surface>
+          <EmptyState
+            title="Nothing is waiting on you"
+            description="Approvals, unresolved sync exceptions and blocked records appear here the moment they need a decision. An empty workspace is the goal, not a gap."
+          />
+        </Surface>
       ) : (
-        <div className="flex flex-col gap-10">
-          {waiting.map((queue) => (
-            <section key={queue.key}>
-              <SectionHeading note={`${queue.value} item${queue.value === 1 ? "" : "s"}`}>
-                {queue.label}
-              </SectionHeading>
-              <Surface className="p-5 flex items-center justify-between gap-4">
-                <span className="text-[26px] font-light tabular tracking-[-0.02em]">{queue.value}</span>
-                <Link href={queue.href} className="text-accent-ink no-underline hover:underline">
-                  Open →
-                </Link>
-              </Surface>
-            </section>
-          ))}
+        <div className="flex flex-col gap-9">
+          {waiting.length > 0 && (
+            <div>
+              {/*
+                Queues are cards in one band rather than a stack of sections. A
+                queue is a destination with a count — the same shape each time —
+                so giving each its own heading and rule made the page look longer
+                than it was without making it clearer.
+              */}
+              <div className="grid grid-cols-1 items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {waiting.map((queue) => (
+                  <Stat
+                    key={queue.key}
+                    label={queue.label}
+                    value={queue.value}
+                    hint={`${queue.value === 1 ? "item" : "items"} waiting — open`}
+                    href={queue.href}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
           {data.exceptions.length > 0 && (
-            <section>
-              <SectionHeading>Sync exceptions</SectionHeading>
-              <Surface className="p-1">
-                <ul className="list-none m-0 p-0">
-                  {data.exceptions.map((exception) => (
-                    <li key={exception.id} className="px-4 py-3 border-b border-line last:border-b-0">
-                      <p className="text-text m-0">{exception.kind}</p>
-                      <p className="text-[13px] text-text-secondary m-0">{exception.detail}</p>
-                    </li>
-                  ))}
-                </ul>
-              </Surface>
-            </section>
+            <Panel
+              title="Sync exceptions"
+              action={
+                <span className="text-[12px] text-text-tertiary">
+                  {data.exceptions.length} unresolved
+                </span>
+              }
+              flush
+            >
+              <RowList>
+                {data.exceptions.map((exception) => (
+                  <Row key={exception.id} className="items-start">
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className="text-[14px] text-text">{exception.kind}</span>
+                      <span className="text-[12.5px] leading-relaxed text-text-secondary">
+                        {exception.detail}
+                      </span>
+                    </span>
+                  </Row>
+                ))}
+              </RowList>
+            </Panel>
           )}
         </div>
       )}

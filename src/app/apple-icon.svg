@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180">
+  <!-- App icon: the identity sheet's APP ICON treatment — the mark held in a
+       rounded square. A home-screen icon is composited onto an unknown wallpaper,
+       so unlike the favicon it needs its own ground. Geometry identical to
+       components/brand/VerityMark. -->
+  <rect width="180" height="180" rx="40" fill="#18181B"/>
+  <g transform="translate(53.6 42) scale(3.9)" fill="#D4A017">
+    <path d="M 2 0 H 14.613 A 2 2 0 0 1 16.1432 3.288 L 9.4078 11.283 A 1.3135 1.3135 0 0 0 7.2052 11.283 L 0.4698 3.288 A 2 2 0 0 1 2 0 Z"/>
+    <path d="M 2 24 H 14.613 A 2 2 0 0 0 16.1432 20.712 L 9.4078 12.717 A 1.3135 1.3135 0 0 1 7.2052 12.717 L 0.4698 20.712 A 2 2 0 0 0 2 24 Z"/>
+  </g>
+</svg>
