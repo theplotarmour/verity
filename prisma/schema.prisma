@@ -39,23 +39,28 @@ model Tenant {
   version      Int      @default(1)
   customFields Json     @default("{}") @map("custom_fields")
 
-  organizations      Organization[]
-  memberships        TenantMembership[]
-  roles              Role[]
-  permissions        Permission[]
-  roleCompositions   RoleComposition[]
-  customFieldSchemas CustomFieldSchema[]
-  domainEvents       DomainEvent[]
-  statusLabels       TenantStatusLabel[]
-  activities         Activity[]
-  securityEvents     SecurityAuditEvent[]
-  workflows          WorkflowDefinition[]
-  workflowRuns       WorkflowRun[]
-  credentials        Credential[]
-  activations        TenantActivation[]
-  configParameters   ConfigParameter[]
-  offlineCommands    OfflineCommand[]
-  syncExceptions     SyncException[]
+  organizations       Organization[]
+  memberships         TenantMembership[]
+  roles               Role[]
+  permissions         Permission[]
+  roleCompositions    RoleComposition[]
+  customFieldSchemas  CustomFieldSchema[]
+  domainEvents        DomainEvent[]
+  statusLabels        TenantStatusLabel[]
+  activities          Activity[]
+  securityEvents      SecurityAuditEvent[]
+  workflows           WorkflowDefinition[]
+  workflowRuns        WorkflowRun[]
+  credentials         Credential[]
+  activations         TenantActivation[]
+  configParameters    ConfigParameter[]
+  offlineCommands     OfflineCommand[]
+  syncExceptions      SyncException[]
+  places              Place[]
+  addresses           Address[]
+  locations           Location[]
+  geofences           Geofence[]
+  locationAssignments LocationAssignment[]
 
   @@map("tenant")
 }
@@ -78,6 +83,7 @@ model Organization {
   parent      Organization?      @relation("OrganizationHierarchy", fields: [tenantId, parentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   children    Organization[]     @relation("OrganizationHierarchy")
   memberships TenantMembership[]
+  locations   Location[]
 
   @@unique([tenantId, id], name: "organization_tenant_scoped_id")
   @@index([tenantId])
@@ -152,8 +158,9 @@ model User {
   version      Int      @default(1)
   customFields Json     @default("{}") @map("custom_fields")
 
-  party       Party              @relation(fields: [partyId], references: [id], onDelete: Restrict)
-  memberships TenantMembership[]
+  party               Party                @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  memberships         TenantMembership[]
+  locationAssignments LocationAssignment[]
 
   @@map("user")
 }
@@ -903,4 +910,138 @@ model FieldPermission {
   @@unique([entityKey, fieldName])
   @@index([entityKey])
   @@map("field_permission")
+}
+
+// ===========================================================================
+// CAPABILITY: Location  (verity.capability.location)
+//
+// Authority: ADR-004, which splits what a naive model would call "an address"
+// into four distinct concepts and forbids folding them together:
+//
+//   Place    — real-world spatial identity (where something physically is)
+//   Address  — the mailing representation (how you write to it)
+//   Location — operational spatial context (where work happens)
+//   Geofence — a spatial policy, not a place
+//
+// The split matters because a depot's postal address, the coordinates a
+// technician navigates to, the operational site work is scheduled against, and
+// the boundary that decides whether a check-in is valid are four different
+// facts that change independently.
+// ===========================================================================
+
+/// Real-world spatial identity (ADR-004).
+model Place {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  name         String
+  /// WGS84. Stored as Decimal, not Float: coordinate arithmetic on binary
+  /// floating point accumulates error, and a geofence decision is a boundary
+  /// comparison where that error changes the answer.
+  latitude     Decimal? @db.Decimal(9, 6)
+  longitude    Decimal? @db.Decimal(9, 6)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  addresses Address[]
+  locations Location[]
+
+  @@unique([tenantId, id], name: "place_tenant_scoped_id")
+  @@index([tenantId])
+  @@map("place")
+}
+
+/// Mailing representation (ADR-004). Deliberately separate from Place: a site
+/// may have several postal addresses, or none, without changing where it is.
+model Address {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  placeId      String?  @map("place_id") @db.Uuid
+  line1        String
+  line2        String?
+  city         String?
+  region       String?
+  postalCode   String?  @map("postal_code")
+  countryCode  String?  @map("country_code")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  place  Place? @relation(fields: [tenantId, placeId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([tenantId])
+  @@map("address")
+}
+
+/// Operational spatial context — the site work is scheduled against
+/// (ADR-004, GOV-TER-017). This is the entity a Location-scoped permission
+/// grant resolves to.
+model Location {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  placeId        String?  @map("place_id") @db.Uuid
+  name           String
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  version        Int      @default(1)
+  customFields   Json     @default("{}") @map("custom_fields")
+
+  tenant       Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  organization Organization         @relation(fields: [tenantId, organizationId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  place        Place?               @relation(fields: [tenantId, placeId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  geofences    Geofence[]
+  assignments  LocationAssignment[]
+
+  @@unique([tenantId, id], name: "location_tenant_scoped_id")
+  @@index([tenantId, organizationId])
+  @@map("location")
+}
+
+/// A spatial policy attached to a Location (ADR-004: "Geofences are policies,
+/// not Locations themselves").
+model Geofence {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  locationId   String   @map("location_id") @db.Uuid
+  name         String
+  centreLat    Decimal  @map("centre_lat") @db.Decimal(9, 6)
+  centreLng    Decimal  @map("centre_lng") @db.Decimal(9, 6)
+  radiusMetres Int      @map("radius_metres")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([tenantId, locationId])
+  @@map("geofence")
+}
+
+/// Binds a User to the Locations they work at.
+///
+/// This is what a `Location`-scoped permission grant resolves through: without
+/// it the platform would have no way to answer "which sites are this actor's",
+/// and a Location-scoped grant would reach nothing.
+model LocationAssignment {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  locationId String   @map("location_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, locationId])
+  @@index([tenantId, userId])
+  @@map("location_assignment")
 }
