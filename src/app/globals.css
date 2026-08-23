@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+/**
+ * Verity design tokens.
+ *
+ * Authority: Bible V4 §1 — the UX Constitution.
+ *
+ *   §1.A  Whitespace as structure. Hierarchy comes from alignment and negative
+ *         space, not from borders, boxes and card grids. Borders exist, but as a
+ *         last resort rather than a default.
+ *   §1.B  The default surface is solid and high-contrast — #FFFFFF light,
+ *         #1C1C1E dark. Glassmorphic blur is banned as a visual identity and
+ *         permitted only for temporary contextual layers such as a mobile sheet.
+ *   §1    Premium, precise, calm. No gamified colour.
+ *
+ * The palette is deliberately almost monochrome. Colour is reserved for state,
+ * so that when something is coloured it means something.
+ */
+
+@theme {
+  --color-surface: #ffffff;
+  --color-surface-sunken: #f7f7f8;
+  --color-surface-raised: #ffffff;
+  --color-line: #e6e6e8;
+  --color-line-strong: #d2d2d6;
+
+  --color-text: #16161a;
+  --color-text-secondary: #5c5c66;
+  --color-text-tertiary: #8a8a94;
+
+  --color-accent: #1f5fd9;
+  --color-accent-hover: #1a51ba;
+  --color-accent-subtle: #eef3fd;
+
+  /* State colours map to StateCategory (ADR-009), never invented per screen. */
+  --color-state-draft: #8a8a94;
+  --color-state-pending: #a8730a;
+  --color-state-active: #1f5fd9;
+  --color-state-blocked: #b3261e;
+  --color-state-completed: #1f7a4d;
+  --color-state-cancelled: #6b6b75;
+
+  --color-danger: #b3261e;
+  --color-danger-subtle: #fdeeed;
+  --color-warning: #a8730a;
+  --color-warning-subtle: #fdf6e9;
+  --color-success: #1f7a4d;
+  --color-success-subtle: #edf7f1;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-surface: #1c1c1e;
+    --color-surface-sunken: #141416;
+    --color-surface-raised: #242426;
+    --color-line: #303034;
+    --color-line-strong: #3d3d42;
+
+    --color-text: #f2f2f4;
+    --color-text-secondary: #a0a0aa;
+    --color-text-tertiary: #74747e;
+
+    --color-accent: #6b9bf5;
+    --color-accent-hover: #85adf7;
+    --color-accent-subtle: #1b2740;
+
+    --color-state-draft: #8a8a94;
+    --color-state-pending: #d19a2e;
+    --color-state-active: #6b9bf5;
+    --color-state-blocked: #e8837b;
+    --color-state-completed: #5cb98a;
+    --color-state-cancelled: #74747e;
+
+    --color-danger: #e8837b;
+    --color-danger-subtle: #2c1a19;
+    --color-warning: #d19a2e;
+    --color-warning-subtle: #2b2213;
+    --color-success: #5cb98a;
+    --color-success-subtle: #16261e;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  /* Operational software is read for hours; optimise for legibility. */
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Focus is never removed, only restyled. Keyboard users are first-class. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Bible V4 §1.B: translucency is permitted only for temporary contextual
+   layers. This is the single place it is allowed, and it is a scrim, not a
+   surface. */
+.verity-scrim {
+  background: color-mix(in srgb, #000 45%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Tabular numerals keep columns of figures aligned across rows. */
+.tabular { font-variant-numeric: tabular-nums; }
