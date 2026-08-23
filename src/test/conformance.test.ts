@@ -185,7 +185,9 @@ describeDb("conformance: database enforcement", () => {
         FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
         WHERE NOT t.tgisinternal AND t.tgname LIKE '%append_only%'`;
       const guarded = rows.map((r) => r.tablename).sort();
-      expect(guarded).toEqual(["activity", "domain_event", "security_audit_event"]);
+      // Evidence joins the audit tables: a proof-of-attendance photograph that
+      // can be edited afterwards is not evidence.
+      expect(guarded).toEqual(["activity", "domain_event", "evidence", "security_audit_event"]);
     } finally {
       await admin.$disconnect();
     }
