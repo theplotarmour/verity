@@ -1,26 +1,31 @@
 import type { ReactNode } from "react";
+import "./globals.css";
 
 export const metadata = {
   title: "Verity",
   description: "Module-driven business operating platform",
 };
 
-/**
- * Root shell.
- *
- * Bible V4 defines four role-centric experiences, and
- * implementation/01-repository/repository-structure.md places them in the route
- * groups (hq), (owner), (worker) and (portal). Route groups are parenthesised
- * and never appear in a URL, which is what keeps them distinct from the legacy
- * VEDA routes /owner and /worker that forbidden pattern #9 bans.
- *
- * No shell is built here yet: the objective is the platform substrate, and a
- * role-centric experience is only meaningful once capabilities exist to expose.
- */
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // Never block zoom; some users need it and the layout does not depend on it.
+  maximumScale: 5,
+};
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {/* First stop for a keyboard user on every page. */}
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-3 focus:left-3 focus:bg-surface focus:text-text focus:px-4 focus:py-2 focus:rounded-md focus:border focus:border-line-strong"
+        >
+          Skip to content
+        </a>
+        {children}
+      </body>
     </html>
   );
 }
