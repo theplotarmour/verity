@@ -128,6 +128,18 @@ describe("conformance: architectural boundaries", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("keeps capabilities out of the platform core", () => {
+    // A capability may import the platform; the platform must never import a
+    // capability. The Location scope resolver is registered *into* the platform
+    // rather than imported *by* it, and this is the check that keeps it that way.
+    const offenders = SOURCES.filter((file) => {
+      const rel = relative(ROOT, file);
+      if (!rel.startsWith("src/server/platform/")) return false;
+      return /from "@\/server\/capabilities\//.test(readFileSync(file, "utf8"));
+    }).map((f) => relative(ROOT, f));
+    expect(offenders).toEqual([]);
+  });
+
   it("keeps React out of the server platform layer", () => {
     const offenders = SOURCES.filter((file) => {
       const rel = relative(ROOT, file);
@@ -173,7 +185,9 @@ describeDb("conformance: database enforcement", () => {
         FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
         WHERE NOT t.tgisinternal AND t.tgname LIKE '%append_only%'`;
       const guarded = rows.map((r) => r.tablename).sort();
-      expect(guarded).toEqual(["activity", "domain_event", "security_audit_event"]);
+      // Evidence joins the audit tables: a proof-of-attendance photograph that
+      // can be edited afterwards is not evidence.
+      expect(guarded).toEqual(["activity", "domain_event", "evidence", "security_audit_event"]);
     } finally {
       await admin.$disconnect();
     }

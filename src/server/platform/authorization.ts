@@ -105,6 +105,49 @@ export async function authorize(
  * ------------------------------------------------------------------------- */
 
 /**
+ * Resolves which records of a scope kind an actor can reach.
+ *
+ * The platform owns the `PermissionScope` values (PLA-AUT-002) but does not own
+ * every axis they scope along. `Location` is defined by the specification and
+ * implemented by the Location capability, so the platform must be able to
+ * evaluate a Location-scoped grant without importing that capability. A
+ * capability registers a resolver for its axis; without one the scope resolves
+ * to nothing rather than to everything.
+ */
+export type ScopeResolver = (
+  tx: TenantScopedClient,
+  actor: ActorContext,
+) => Promise<string[]>;
+
+const scopeResolvers = new Map<PermissionScope, ScopeResolver>();
+
+export function registerScopeResolver(scope: PermissionScope, resolver: ScopeResolver): void {
+  scopeResolvers.set(scope, resolver);
+}
+
+export function clearScopeResolvers(): void {
+  scopeResolvers.clear();
+}
+
+/**
+ * Ids reachable on a non-organization axis, or null when no capability has
+ * registered a resolver for it.
+ *
+ * Null means "cannot be evaluated" and callers must treat it as reaching
+ * nothing. Returning an empty array would be indistinguishable from a resolver
+ * that legitimately found no rows.
+ */
+export async function resolveScopeAxis(
+  tx: TenantScopedClient,
+  actor: ActorContext,
+  scope: PermissionScope,
+): Promise<string[] | null> {
+  const resolver = scopeResolvers.get(scope);
+  if (!resolver) return null;
+  return resolver(tx, actor);
+}
+
+/**
  * The organizations a grant lets an actor reach.
  *
  * `Tenant` reaches every organization in the tenant. `Organization` reaches the
@@ -135,6 +178,8 @@ export async function scopeOrganizations(
       return rows.map((r) => r.organization_id);
     }
     case "Location":
+      // Location is not an organization axis. Resolution belongs to whichever
+      // capability owns Location; the caller reads it via resolveScopeAxis.
       return null;
     case "Global":
       // Never granted; resolve_permissions filters Global out before this point.
@@ -190,6 +235,29 @@ export async function scopeFilter(
 }
 
 /**
+ * Locations this actor may reach for a verb on an entity.
+ *
+ * Empty when the role holds no Location-scoped grant, and empty when it holds
+ * one but no capability has registered a resolver — an unevaluable grant must
+ * reach nothing.
+ */
+export async function reachableLocations(
+  tx: TenantScopedClient,
+  actor: ActorContext,
+  verb: PermissionVerb,
+  entity: string,
+): Promise<string[]> {
+  if (!actor.roleId) return [];
+
+  const hasLocationGrant = (await resolvePermissions(tx, actor.roleId)).some(
+    (p) => p.entity === entity && p.verb === verb && p.scope === "Location",
+  );
+  if (!hasLocationGrant) return [];
+
+  return (await resolveScopeAxis(tx, actor, "Location")) ?? [];
+}
+
+/**
  * Layer 2 gate for a single record (PLA-AUT-004).
  *
  * Throws `ForbiddenError` when the record's organization falls outside the
@@ -202,9 +270,17 @@ export async function assertRowInScope(
   actor: ActorContext,
   entity: string,
   verb: PermissionVerb,
-  row: { organizationId?: string | null },
+  row: { organizationId?: string | null; locationId?: string | null },
 ): Promise<void> {
   const { organizationIds } = await reachableOrganizations(tx, actor, verb, entity);
+
+  // PLA-AUT-004 scopes on organization_id *or* location_id. A Location-scoped
+  // grant admits the record on its own, so it is checked before the
+  // organization axis rather than in addition to it.
+  if (row.locationId) {
+    const locations = await reachableLocations(tx, actor, verb, entity);
+    if (locations.includes(row.locationId)) return;
+  }
 
   if (!row.organizationId) {
     const grants = actor.roleId ? await resolvePermissions(tx, actor.roleId) : [];

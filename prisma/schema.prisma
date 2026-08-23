@@ -39,23 +39,37 @@ model Tenant {
   version      Int      @default(1)
   customFields Json     @default("{}") @map("custom_fields")
 
-  organizations      Organization[]
-  memberships        TenantMembership[]
-  roles              Role[]
-  permissions        Permission[]
-  roleCompositions   RoleComposition[]
-  customFieldSchemas CustomFieldSchema[]
-  domainEvents       DomainEvent[]
-  statusLabels       TenantStatusLabel[]
-  activities         Activity[]
-  securityEvents     SecurityAuditEvent[]
-  workflows          WorkflowDefinition[]
-  workflowRuns       WorkflowRun[]
-  credentials        Credential[]
-  activations        TenantActivation[]
-  configParameters   ConfigParameter[]
-  offlineCommands    OfflineCommand[]
-  syncExceptions     SyncException[]
+  organizations        Organization[]
+  memberships          TenantMembership[]
+  roles                Role[]
+  permissions          Permission[]
+  roleCompositions     RoleComposition[]
+  customFieldSchemas   CustomFieldSchema[]
+  domainEvents         DomainEvent[]
+  statusLabels         TenantStatusLabel[]
+  activities           Activity[]
+  securityEvents       SecurityAuditEvent[]
+  workflows            WorkflowDefinition[]
+  workflowRuns         WorkflowRun[]
+  credentials          Credential[]
+  activations          TenantActivation[]
+  configParameters     ConfigParameter[]
+  offlineCommands      OfflineCommand[]
+  syncExceptions       SyncException[]
+  places               Place[]
+  addresses            Address[]
+  locations            Location[]
+  geofences            Geofence[]
+  locationAssignments  LocationAssignment[]
+  assets               Asset[]
+  evidence             Evidence[]
+  resources            Resource[]
+  resourceGroups       ResourceGroup[]
+  resourceGroupMembers ResourceGroupMember[]
+  availabilityWindows  AvailabilityWindow[]
+  bookings             Booking[]
+  approvalRequests     ApprovalRequest[]
+  approvalSteps        ApprovalStep[]
 
   @@map("tenant")
 }
@@ -78,6 +92,7 @@ model Organization {
   parent      Organization?      @relation("OrganizationHierarchy", fields: [tenantId, parentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   children    Organization[]     @relation("OrganizationHierarchy")
   memberships TenantMembership[]
+  locations   Location[]
 
   @@unique([tenantId, id], name: "organization_tenant_scoped_id")
   @@index([tenantId])
@@ -127,7 +142,8 @@ model Party {
   version      Int        @default(1)
   customFields Json       @default("{}") @map("custom_fields")
 
-  user User?
+  user      User?
+  resources Resource[]
 
   @@index([email])
   @@index([phone])
@@ -152,8 +168,9 @@ model User {
   version      Int      @default(1)
   customFields Json     @default("{}") @map("custom_fields")
 
-  party       Party              @relation(fields: [partyId], references: [id], onDelete: Restrict)
-  memberships TenantMembership[]
+  party               Party                @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  memberships         TenantMembership[]
+  locationAssignments LocationAssignment[]
 
   @@map("user")
 }
@@ -231,13 +248,14 @@ model Role {
   version      Int      @default(1)
   customFields Json     @default("{}") @map("custom_fields")
 
-  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  permissions Permission[]
-  memberships TenantMembership[]
+  tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  permissions   Permission[]
+  memberships   TenantMembership[]
   /// Compositions where this Role is the parent — it inherits from the child.
-  parentOf    RoleComposition[]  @relation("RoleCompositionParent")
+  approvalSteps ApprovalStep[]
+  parentOf      RoleComposition[]  @relation("RoleCompositionParent")
   /// Compositions where this Role is the child — its permissions flow upward.
-  childOf     RoleComposition[]  @relation("RoleCompositionChild")
+  childOf       RoleComposition[]  @relation("RoleCompositionChild")
 
   @@unique([tenantId, name])
   @@unique([tenantId, id], name: "role_tenant_scoped_id")
@@ -903,4 +921,420 @@ model FieldPermission {
   @@unique([entityKey, fieldName])
   @@index([entityKey])
   @@map("field_permission")
+}
+
+// ===========================================================================
+// CAPABILITY: Location  (verity.capability.location)
+//
+// Authority: ADR-004, which splits what a naive model would call "an address"
+// into four distinct concepts and forbids folding them together:
+//
+//   Place    — real-world spatial identity (where something physically is)
+//   Address  — the mailing representation (how you write to it)
+//   Location — operational spatial context (where work happens)
+//   Geofence — a spatial policy, not a place
+//
+// The split matters because a depot's postal address, the coordinates a
+// technician navigates to, the operational site work is scheduled against, and
+// the boundary that decides whether a check-in is valid are four different
+// facts that change independently.
+// ===========================================================================
+
+/// Real-world spatial identity (ADR-004).
+model Place {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  name         String
+  /// WGS84. Stored as Decimal, not Float: coordinate arithmetic on binary
+  /// floating point accumulates error, and a geofence decision is a boundary
+  /// comparison where that error changes the answer.
+  latitude     Decimal? @db.Decimal(9, 6)
+  longitude    Decimal? @db.Decimal(9, 6)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  addresses Address[]
+  locations Location[]
+
+  @@unique([tenantId, id], name: "place_tenant_scoped_id")
+  @@index([tenantId])
+  @@map("place")
+}
+
+/// Mailing representation (ADR-004). Deliberately separate from Place: a site
+/// may have several postal addresses, or none, without changing where it is.
+model Address {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  placeId      String?  @map("place_id") @db.Uuid
+  line1        String
+  line2        String?
+  city         String?
+  region       String?
+  postalCode   String?  @map("postal_code")
+  countryCode  String?  @map("country_code")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  place  Place? @relation(fields: [tenantId, placeId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([tenantId])
+  @@map("address")
+}
+
+/// Operational spatial context — the site work is scheduled against
+/// (ADR-004, GOV-TER-017). This is the entity a Location-scoped permission
+/// grant resolves to.
+model Location {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  placeId        String?  @map("place_id") @db.Uuid
+  name           String
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  version        Int      @default(1)
+  customFields   Json     @default("{}") @map("custom_fields")
+
+  tenant       Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  organization Organization         @relation(fields: [tenantId, organizationId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  place        Place?               @relation(fields: [tenantId, placeId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  geofences    Geofence[]
+  assignments  LocationAssignment[]
+  assets       Asset[]
+
+  @@unique([tenantId, id], name: "location_tenant_scoped_id")
+  @@index([tenantId, organizationId])
+  @@map("location")
+}
+
+/// A spatial policy attached to a Location (ADR-004: "Geofences are policies,
+/// not Locations themselves").
+model Geofence {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  locationId   String   @map("location_id") @db.Uuid
+  name         String
+  centreLat    Decimal  @map("centre_lat") @db.Decimal(9, 6)
+  centreLng    Decimal  @map("centre_lng") @db.Decimal(9, 6)
+  radiusMetres Int      @map("radius_metres")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([tenantId, locationId])
+  @@map("geofence")
+}
+
+/// Binds a User to the Locations they work at.
+///
+/// This is what a `Location`-scoped permission grant resolves through: without
+/// it the platform would have no way to answer "which sites are this actor's",
+/// and a Location-scoped grant would reach nothing.
+model LocationAssignment {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  locationId String   @map("location_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, locationId])
+  @@index([tenantId, userId])
+  @@map("location_assignment")
+}
+
+// ===========================================================================
+// CAPABILITY: Asset  (verity.capability.asset)
+//
+// Authority: GOV-TER-009 (`Asset` — physical equipment/machinery), ADR-008
+// (an Asset is one of the two things a Resource may be backed by).
+//
+// Demanded independently by Fleet Management, Medical Equipment Maintenance and
+// Facilities. Note what is deliberately absent: no make, model, year, or any
+// other equipment-specific column. Forbidden pattern #3 exists because VEDA put
+// vehicle brand and model identifiers into a core table; those belong in
+// custom_fields, where a fleet tenant and a hospital tenant can each describe
+// their own equipment without the platform knowing either domain.
+// ===========================================================================
+
+model Asset {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  /// Where the asset currently is. Null for an asset in transit or unassigned.
+  locationId   String?  @map("location_id") @db.Uuid
+  name         String
+  /// Tenant-facing identifier — a fleet number, a serial, an asset tag.
+  reference    String?
+  state        String   @default("in_service")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location  Location?  @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  resources Resource[]
+
+  @@unique([tenantId, id], name: "asset_tenant_scoped_id")
+  @@unique([tenantId, reference])
+  @@index([tenantId, locationId])
+  @@map("asset")
+}
+
+// ===========================================================================
+// CAPABILITY: Evidence  (verity.capability.evidence)
+//
+// Authority: Bible V2 (Evidence as immutable field data — GPS, photos,
+// signatures), EXE-AUD-003 (append-only), ADR-004 (spatial capture is a Place
+// question, and a geofence is the policy that judges it).
+//
+// Demanded independently by Security Operations, Field Service, Drone
+// Inspection and Medical Equipment Maintenance. Evidence is the reason the
+// audit stream is append-only at trigger level: a calibration certificate or a
+// proof-of-attendance photograph that can be edited later is not evidence.
+// ===========================================================================
+
+enum EvidenceKind {
+  Photo
+  Signature
+  GeoPoint
+  Document
+  Reading
+}
+
+model Evidence {
+  id           String       @id @default(uuid()) @db.Uuid
+  tenantId     String       @map("tenant_id") @db.Uuid
+  /// What this evidence is about — any capability's entity.
+  entityKey    String       @map("entity_key")
+  entityId     String       @map("entity_id") @db.Uuid
+  kind         EvidenceKind
+  /// Storage reference for a photo or document; null for a reading or point.
+  uri          String?
+  /// Captured coordinates, when the device supplied them.
+  latitude     Decimal?     @db.Decimal(9, 6)
+  longitude    Decimal?     @db.Decimal(9, 6)
+  /// Device clock at capture — not server time, which may be much later for
+  /// evidence captured offline.
+  capturedAt   DateTime     @map("captured_at")
+  capturedById String?      @map("captured_by_id") @db.Uuid
+  /// Geofence this capture was judged against, and the verdict at capture time.
+  geofenceId   String?      @map("geofence_id") @db.Uuid
+  withinFence  Boolean?     @map("within_fence")
+  payload      Json         @default("{}")
+  recordedAt   DateTime     @default(now()) @map("recorded_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, entityKey, entityId])
+  @@index([tenantId, capturedAt])
+  @@map("evidence")
+}
+
+// ===========================================================================
+// CAPABILITY: Scheduling  (verity.capability.scheduling)
+//
+// Authority: ADR-008, which fixed this shape so it would not have to be
+// re-litigated: a Resource is a single schedulable unit backed by exactly one
+// Party or Asset, and crews, pools and room sets are ResourceGroup
+// compositions. Availability and conflict detection run against Resources only,
+// so there is one implementation rather than two that must agree.
+//
+// Demanded independently by Staffing, Facilities, Field Service and Medical
+// Equipment Maintenance.
+// ===========================================================================
+
+/// How a group resolves to its members when work is scheduled against it.
+enum GroupSelection {
+  /// Every member is required — a two-person crew where both must attend.
+  AllOf
+  /// Any one member satisfies it — a pool of interchangeable technicians.
+  AnyOf
+  /// A specific count drawn from the pool.
+  NOf
+}
+
+/// A single schedulable unit (ADR-008).
+///
+/// Backed by exactly one Party or one Asset — never both, never neither. A
+/// Resource backed by neither is unschedulable; one backed by both is
+/// ambiguous. Enforced by a check constraint rather than by convention.
+model Resource {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  partyId      String?  @map("party_id") @db.Uuid
+  assetId      String?  @map("asset_id") @db.Uuid
+  name         String
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant       Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  party        Party?                @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  asset        Asset?                @relation(fields: [tenantId, assetId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  memberships  ResourceGroupMember[]
+  availability AvailabilityWindow[]
+  bookings     Booking[]
+
+  @@unique([tenantId, id], name: "resource_tenant_scoped_id")
+  @@index([tenantId])
+  @@map("resource")
+}
+
+/// A composition of Resources — a crew, a pool, a room set (ADR-008).
+///
+/// A group has no calendar of its own; its availability is derived from its
+/// members. That is what keeps conflict detection a single implementation.
+model ResourceGroup {
+  id            String         @id @default(uuid()) @db.Uuid
+  tenantId      String         @map("tenant_id") @db.Uuid
+  name          String
+  selection     GroupSelection @default(AnyOf)
+  /// Only meaningful for NOf.
+  requiredCount Int?           @map("required_count")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  version       Int            @default(1)
+  customFields  Json           @default("{}") @map("custom_fields")
+
+  tenant  Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  members ResourceGroupMember[]
+
+  @@unique([tenantId, id], name: "resource_group_tenant_scoped_id")
+  @@index([tenantId])
+  @@map("resource_group")
+}
+
+model ResourceGroupMember {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  groupId    String   @map("group_id") @db.Uuid
+  resourceId String   @map("resource_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  group    ResourceGroup @relation(fields: [tenantId, groupId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  resource Resource      @relation(fields: [tenantId, resourceId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([groupId, resourceId])
+  @@index([tenantId])
+  @@map("resource_group_member")
+}
+
+/// A window in which a Resource is or is not available.
+model AvailabilityWindow {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  resourceId String   @map("resource_id") @db.Uuid
+  startsAt   DateTime @map("starts_at")
+  endsAt     DateTime @map("ends_at")
+  /// False marks an exception — leave, servicing, a closure.
+  available  Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  resource Resource @relation(fields: [tenantId, resourceId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([tenantId, resourceId, startsAt])
+  @@map("availability_window")
+}
+
+/// A Resource committed to a period of work.
+///
+/// `subjectEntityKey` / `subjectEntityId` point at whatever the booking is for,
+/// so Scheduling never needs to know which capability asked.
+model Booking {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  resourceId       String   @map("resource_id") @db.Uuid
+  subjectEntityKey String   @map("subject_entity_key")
+  subjectEntityId  String   @map("subject_entity_id") @db.Uuid
+  startsAt         DateTime @map("starts_at")
+  endsAt           DateTime @map("ends_at")
+  cancelled        Boolean  @default(false)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  version          Int      @default(1)
+  customFields     Json     @default("{}") @map("custom_fields")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  resource Resource @relation(fields: [tenantId, resourceId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([tenantId, resourceId, startsAt])
+  @@map("booking")
+}
+
+// ===========================================================================
+// CAPABILITY: Approval  (verity.capability.approval)
+//
+// Authority: foundation validation — demanded independently by Professional
+// Services, Staffing, Finance and Procurement. A generic multi-step approval
+// chain, so that four capabilities do not each grow their own.
+// ===========================================================================
+
+enum ApprovalDecision {
+  Pending
+  Approved
+  Rejected
+  Skipped
+}
+
+model ApprovalRequest {
+  id               String           @id @default(uuid()) @db.Uuid
+  tenantId         String           @map("tenant_id") @db.Uuid
+  subjectEntityKey String           @map("subject_entity_key")
+  subjectEntityId  String           @map("subject_entity_id") @db.Uuid
+  requestedById    String           @map("requested_by_id") @db.Uuid
+  state            String           @default("pending")
+  outcome          ApprovalDecision @default(Pending)
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+  version          Int              @default(1)
+  customFields     Json             @default("{}") @map("custom_fields")
+
+  tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  steps  ApprovalStep[]
+
+  @@index([tenantId, subjectEntityKey, subjectEntityId])
+  @@map("approval_request")
+}
+
+/// One step in a chain. Steps are ordered and decided in sequence.
+model ApprovalStep {
+  id              String           @id @default(uuid()) @db.Uuid
+  tenantId        String           @map("tenant_id") @db.Uuid
+  requestId       String           @map("request_id") @db.Uuid
+  sequence        Int
+  /// The role permitted to decide this step. Who approves is a role, not a
+  /// person, so a chain survives someone leaving.
+  approverRoleId  String           @map("approver_role_id") @db.Uuid
+  decision        ApprovalDecision @default(Pending)
+  decidedByUserId String?          @map("decided_by_user_id") @db.Uuid
+  decidedAt       DateTime?        @map("decided_at")
+  comment         String?
+
+  tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  request ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  role    Role            @relation(fields: [tenantId, approverRoleId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([requestId, sequence])
+  @@index([tenantId])
+  @@map("approval_step")
 }
