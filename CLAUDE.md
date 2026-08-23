@@ -216,11 +216,22 @@ children hold (PLA-AUT-001).
   returning false, so forgetting to branch on the result cannot permit the action.
   MET-ACT-002 requires this on every command.
 
-**Only Layer 1 exists.** PLA-AUT-004 (row-level scoping) and PLA-AUT-005
-(field-level stripping) need a command pipeline to hook into and are built with
-it. Each grant's `scope` is carried through so those layers have what they need,
-but nothing evaluates it yet — a passing `authorize()` is not a complete
-authorization decision.
+**All three layers are enforced.** Layer 1 `authorize()` decides whether the role
+may touch the entity type; Layer 2 `assertRowInScope()` / `scopeFilter()` decides
+which records are theirs (Organization scope resolves to the actor's node plus
+descendants — PLA-ORG-002 downward visibility and PLA-ORG-003 sibling isolation
+in one subtree); Layer 3 `redactFields()` removes restricted fields. The query
+pipeline applies Layer 3 automatically to a top-level array result and offers
+Layer 2 through `ctx.scope()`.
+
+- Restricted fields are declared in `FieldPermission` and granted by an ordinary
+  `Read` on the field-qualified key `<entityKey>#<fieldName>` — no separate
+  numeric "level" ladder, which would be a second authorization model to keep in
+  sync with the first.
+- Redaction **omits** a field rather than nulling it; a null cannot be told apart
+  from a genuinely absent value.
+- A `Location`-scoped grant currently reaches **nothing**, because Location does
+  not exist as an entity yet. It fails closed rather than widening to the tenant.
 
 ## Open — do not solve silently
 

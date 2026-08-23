@@ -332,8 +332,9 @@ model EntityDefinition {
   tenantScoped Boolean     @default(true) @map("tenant_scoped")
   createdAt    DateTime    @default(now()) @map("created_at")
 
-  customFields CustomFieldSchema[]
-  states       StateDefinition[]
+  customFields     CustomFieldSchema[]
+  states           StateDefinition[]
+  fieldPermissions FieldPermission[]
 
   @@index([capability])
   @@map("entity_definition")
@@ -878,4 +879,28 @@ model SyncException {
 
   @@index([tenantId, resolvedAt])
   @@map("sync_exception")
+}
+
+/// A field whose visibility is restricted (Authority: Spec PLA-AUT-005).
+///
+/// GLOBAL capability metadata: which fields are sensitive is a property of the
+/// entity, declared by its owning capability, not a per-tenant choice.
+///
+/// The presence of a row is what makes a field restricted. Reading it then
+/// requires an ordinary Read grant on the field-qualified entity key
+/// `<entityKey>#<fieldName>`, which reuses Verb+Entity+Scope exactly as it
+/// stands. The specification's phrasing ("requires level 2 access") suggests a
+/// numeric ladder; a ladder would be a second, parallel authorization model to
+/// keep in sync with the first, so the existing grant mechanism is used instead.
+model FieldPermission {
+  id        String   @id @default(uuid()) @db.Uuid
+  entityKey String   @map("entity_key")
+  fieldName String   @map("field_name")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  entity EntityDefinition @relation(fields: [entityKey], references: [key], onDelete: Cascade)
+
+  @@unique([entityKey, fieldName])
+  @@index([entityKey])
+  @@map("field_permission")
 }
