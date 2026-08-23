@@ -48,6 +48,20 @@ export type NavigationContribution = {
   requiresVerb?: PermissionVerb;
   /** Lower sorts first; ties fall back to label order. */
   order?: number;
+  /**
+   * Name of an icon from the platform's design-system set.
+   *
+   * Deliberately a plain string rather than the UI layer's `IconName` union:
+   * `src/server/` must not import from `src/components/`, and inverting that to
+   * satisfy a type would put the design system upstream of the platform. The
+   * shell narrows it with `isIconName()` and falls back when a capability names
+   * an icon that does not exist, so a typo costs a glyph rather than a render.
+   *
+   * A capability picks an icon; it never ships SVG. That keeps the platform
+   * ignorant of what a capability looks like while keeping the icon set a
+   * design-system concern rather than something each capability re-decides.
+   */
+  icon?: string;
 };
 
 /**

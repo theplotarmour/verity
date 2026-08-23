@@ -21,6 +21,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Design handoff bundle from claude.ai/design — HTML/CSS/JS prototypes kept as
+    // visual authority, never compiled or shipped. Linting them reports defects in
+    // someone else's prototype as defects in the platform.
+    "verity-app-ui-mockups/**",
   ]),
 ]);
 

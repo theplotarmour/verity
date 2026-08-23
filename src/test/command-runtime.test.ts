@@ -132,14 +132,27 @@ describeDb("command and query runtime", () => {
   afterAll(async () => {
     const admin = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL });
     try {
+      // The tenant goes first because its activation rows reference the
+      // capability definition; removing the definition ahead of them fails on
+      // the foreign key and aborts the rest of this block.
+      await admin.$executeRaw`DELETE FROM tenant WHERE id = ${tenantA}::uuid`;
+
+      // Then the two fixed-id rows. These are the ones whose survival breaks the
+      // NEXT run with a unique-constraint violation, so nothing that can throw
+      // may sit in front of them. They used to run last, behind an unguarded
+      // `actor.userId` — which is undefined whenever setup itself failed. A
+      // single setup failure therefore poisoned the database for every
+      // subsequent run until the rows were removed by hand.
+      await admin.$executeRaw`DELETE FROM entity_definition WHERE key = ${ENTITY}`;
+      await admin.$executeRaw`DELETE FROM capability_definition WHERE id = ${CAPABILITY}`;
+
       // Party and User are global (Bible V2 Primitive 2 §2), so they survive the
       // tenant they were provisioned in. Removing the tenant alone would leak an
       // unreachable identity on every run.
-      await admin.$executeRaw`DELETE FROM tenant WHERE id = ${tenantA}::uuid`;
-      await admin.$executeRaw`DELETE FROM "user" WHERE id = ${actor.userId}::uuid`;
+      if (actor?.userId) {
+        await admin.$executeRaw`DELETE FROM "user" WHERE id = ${actor.userId}::uuid`;
+      }
       await admin.$executeRaw`DELETE FROM party WHERE id NOT IN (SELECT party_id FROM "user")`;
-      await admin.$executeRaw`DELETE FROM entity_definition WHERE key = ${ENTITY}`;
-      await admin.$executeRaw`DELETE FROM capability_definition WHERE id = ${CAPABILITY}`;
     } finally {
       await admin.$disconnect();
     }

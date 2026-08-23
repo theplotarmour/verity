@@ -93,14 +93,14 @@ export default async function OverviewPage() {
             <Surface className="p-5 flex flex-col gap-4">
               <div className="flex items-baseline justify-between gap-4">
                 <span className="text-text-secondary">Approvals awaiting your role</span>
-                <span className="text-[22px] font-semibold tabular">{data.pendingApprovals}</span>
+                <span className="text-[26px] font-light tabular tracking-[-0.02em]">{data.pendingApprovals}</span>
               </div>
               <div className="flex items-baseline justify-between gap-4">
                 <span className="text-text-secondary">Unresolved sync exceptions</span>
-                <span className="text-[22px] font-semibold tabular">{data.openExceptions}</span>
+                <span className="text-[26px] font-light tabular tracking-[-0.02em]">{data.openExceptions}</span>
               </div>
               {data.pendingApprovals > 0 && (
-                <Link href="/approvals" className="text-accent no-underline hover:underline">
+                <Link href="/approvals" className="text-accent-ink no-underline hover:underline">
                   Review approvals →
                 </Link>
               )}

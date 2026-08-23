@@ -186,7 +186,7 @@ export function registerApprovalCapability(): void {
   registerContribution({
     capabilityId: APPROVAL_CAPABILITY,
     navigation: [
-      { href: "/approvals", label: "Approvals", group: "Capabilities", order: 50,
+      { href: "/approvals", label: "Approvals", group: "Capabilities", order: 50, icon: "approvals",
         requiresEntity: ENTITY_APPROVAL, requiresVerb: "Read",
         shells: ["platform", "operations", "worker"] },
     ],

@@ -1,0 +1,234 @@
+import { expect, test } from "@playwright/test";
+
+/**
+ * The Verity visual identity.
+ *
+ * These assert the things that would silently regress and that no other suite
+ * would notice: the brand token values, the mark's geometry, the theme
+ * round-trip, and text contrast across both themes. A screenshot review catches
+ * none of them reliably — a font that fails to load looks "fine" until you
+ * compare it to something, and this project shipped Times once already because
+ * a theme variable was scoped to the wrong element.
+ */
+
+const GOLD = {
+  // Derived from the board's #D4A017 via its own tonal mix. Light mode uses the
+  // 600 step for fills and the 800 step for ink, because #D4A017 itself reaches
+  // only 2.2:1 on the light canvas.
+  light: { accent: "#bc8e16", ink: "#806214", canvas: "#f4f4f5" },
+  dark: { accent: "#e6c878", ink: "#e6c878", canvas: "#0d0d0f" },
+};
+
+async function tokens(page: import("@playwright/test").Page) {
+  return page.evaluate(() => {
+    const s = getComputedStyle(document.documentElement);
+    return {
+      theme: document.documentElement.getAttribute("data-theme"),
+      accent: s.getPropertyValue("--color-accent").trim(),
+      ink: s.getPropertyValue("--color-accent-ink").trim(),
+      canvas: s.getPropertyValue("--color-canvas").trim(),
+      onAccent: s.getPropertyValue("--color-accent-on").trim(),
+      font: getComputedStyle(document.body).fontFamily,
+    };
+  });
+}
+
+test.describe("brand identity", () => {
+  test("renders the approved gold tokens in light mode", async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("verity-theme", "light"));
+    await page.goto("/");
+
+    const t = await tokens(page);
+    expect(t.theme).toBe("light");
+    expect(t.accent).toBe(GOLD.light.accent);
+    expect(t.ink).toBe(GOLD.light.ink);
+    expect(t.canvas).toBe(GOLD.light.canvas);
+    // Text on a gold fill is dark ink, never white — white measures 2.4:1.
+    expect(t.onAccent).toBe("#191a1c");
+  });
+
+  test("designs dark mode rather than inverting it", async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("verity-theme", "dark"));
+    await page.goto("/");
+
+    const t = await tokens(page);
+    expect(t.theme).toBe("dark");
+    // Gold moves UP the tonal scale in dark mode. Reusing the light-mode value
+    // would leave the accent at roughly 2:1 against the page.
+    expect(t.accent).toBe(GOLD.dark.accent);
+    expect(t.canvas).toBe(GOLD.dark.canvas);
+  });
+
+  test("loads Inter rather than falling back to a system serif", async ({ page }) => {
+    await page.goto("/");
+    const t = await tokens(page);
+    // The FIRST family is what actually renders. Asserting only "contains Inter"
+    // would pass while the browser fell through to a serif, and asserting the
+    // string does not end in "serif" is wrong too — the stack legitimately ends
+    // in the generic `sans-serif`.
+    expect(t.font.split(",")[0]!.trim().replace(/["']/g, "")).toBe("Inter");
+    expect(await page.evaluate(() => document.fonts.check('400 14px Inter'))).toBe(true);
+  });
+
+  test("draws the hourglass mark at its measured geometry", async ({ page }) => {
+    await page.goto("/");
+
+    // The mark is geometry, not a font glyph or an icon-library import, and it
+    // is not two plain triangles either: the corners carry a 2.0 radius and the
+    // facing apexes are cut by a circle. Both were derived by measuring the
+    // supplied asset and verified to 0.47% against it. Locked here because
+    // "close enough" is how a brand ends up subtly wrong on every screen.
+    const paths = await page
+      .locator('svg[viewBox="0 0 16.613 24"] path')
+      .evaluateAll((els) => els.map((e) => e.getAttribute("d")));
+
+    // The shell mounts the lockup more than once (rail and mobile bar), so this
+    // asserts on the shape rather than on how many copies exist.
+    expect(paths.length).toBeGreaterThanOrEqual(2);
+    expect(paths.every((d) => d?.includes("A 2 2 0 0"))).toBe(true);
+    expect(paths.every((d) => d?.includes("A 1.3135 1.3135"))).toBe(true);
+  });
+
+  test("renders the wordmark as artwork, not as type", async ({ page }) => {
+    await page.goto("/");
+
+    // "verity" is set in a geometric face that is not Inter. Reproducing it with
+    // a font would approximate a logotype, so the approved artwork is masked and
+    // painted with currentColor instead.
+    const masks = await page
+      .locator("span")
+      .evaluateAll((els) =>
+        els.map((e) => getComputedStyle(e).webkitMaskImage).filter((v) => v && v !== "none"),
+      );
+    expect(masks.some((m) => m.includes("verity-wordmark"))).toBe(true);
+  });
+
+  test("keeps the theme choice across a reload", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: /^Theme:/ }).click();
+    const chosen = await page.evaluate(() => localStorage.getItem("verity-theme"));
+
+    await page.reload();
+    expect(await page.evaluate(() => localStorage.getItem("verity-theme"))).toBe(chosen);
+  });
+
+  test("meets AA text contrast in both themes", async ({ page }) => {
+    for (const theme of ["light", "dark"] as const) {
+      await page.addInitScript((t) => localStorage.setItem("verity-theme", t), theme);
+      await page.goto("/locations");
+
+      const failures = await page.evaluate(() => {
+        const lum = (c: string) => {
+          const p = (c.match(/\d+(\.\d+)?/g) ?? []).slice(0, 3).map(Number);
+          const [r, g, b] = p.map((v) => {
+            const s = v / 255;
+            return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+          });
+          return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+        };
+        const bgOf = (el: Element): string => {
+          let n: Element | null = el;
+          while (n && n !== document.documentElement) {
+            const b = getComputedStyle(n).backgroundColor;
+            if (b && !/rgba\(0, 0, 0, 0\)|transparent/.test(b)) return b;
+            n = n.parentElement;
+          }
+          return getComputedStyle(document.body).backgroundColor;
+        };
+
+        const bad: string[] = [];
+        document.querySelectorAll("a,p,span,td,th,h1,h2,h3,button,label").forEach((el) => {
+          const text = el.textContent?.trim();
+          if (!text) return;
+          // Only elements holding their own text; a wrapper inherits nothing.
+          if (
+            el.children.length &&
+            ![...el.childNodes].some((n) => n.nodeType === 3 && n.textContent?.trim())
+          ) {
+            return;
+          }
+          const cs = getComputedStyle(el);
+          if (cs.display === "none" || cs.visibility === "hidden") return;
+
+          const fs = parseFloat(cs.fontSize);
+          const fw = parseInt(cs.fontWeight) || 400;
+          const need = fs >= 24 || (fs >= 18.66 && fw >= 700) ? 3.0 : 4.5;
+          const l1 = lum(cs.color);
+          const l2 = lum(bgOf(el));
+          const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+          if (ratio < need) bad.push(`${text.slice(0, 24)} @ ${ratio.toFixed(2)}:1 (needs ${need})`);
+        });
+        return bad;
+      });
+
+      expect(failures, `contrast failures in ${theme} mode`).toEqual([]);
+    }
+  });
+});
+
+/**
+ * Sign-in must be visited WITHOUT a session. The project's stored auth state
+ * would redirect this page to the shell, and every assertion below would then
+ * silently pass against the wrong document.
+ */
+test.describe("sign-in", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test("keeps implementation vocabulary and marketing filler off the page", async ({ page }) => {
+    await page.goto("/sign-in");
+    await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+
+    // This page is reachable by anyone. It should not describe how the platform
+    // is built, and it should not fill the silence with generic SaaS copy.
+    const text = (await page.locator("main").innerText()).toLowerCase();
+    for (const leak of [
+      "identity realm",
+      "authentication is handled",
+      "tenant",
+      "supabase",
+      "authorization",
+      "welcome back",
+      "access your workspace",
+      "enter your credentials",
+    ]) {
+      expect(text, `sign-in must not say "${leak}"`).not.toContain(leak);
+    }
+  });
+
+  test("carries the Verity identity, not a default form", async ({ page }) => {
+    await page.goto("/sign-in");
+
+    await expect(page.locator('svg[viewBox="0 0 16.613 24"]').first()).toBeVisible();
+
+    const masks = await page
+      .locator("span")
+      .evaluateAll((els) =>
+        els.map((e) => getComputedStyle(e).webkitMaskImage).filter((v) => v && v !== "none"),
+      );
+    expect(masks.some((m) => m.includes("verity-wordmark"))).toBe(true);
+
+    // The primary action is gold. A default blue button is the single clearest
+    // sign that a brand was never applied.
+    const bg = await page
+      .getByRole("button", { name: "Sign in" })
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(["rgb(188, 142, 22)", "rgb(230, 200, 120)"]).toContain(bg);
+  });
+
+  test("rejects bad credentials without revealing which field was wrong", async ({ page }) => {
+    await page.goto("/sign-in");
+    await page.getByLabel("Email").fill("nobody@example.invalid");
+    await page.getByLabel("Password").fill("not-the-password");
+    await page.getByRole("button", { name: "Sign in" }).click();
+
+    const alert = page.getByRole("alert");
+    await expect(alert).toBeVisible();
+
+    // Distinguishing "no such account" from "wrong password" is an
+    // account-enumeration oracle.
+    const message = (await alert.innerText()).toLowerCase();
+    expect(message).not.toContain("no such");
+    expect(message).not.toContain("not found");
+    await expect(page).toHaveURL(/\/sign-in/);
+  });
+});

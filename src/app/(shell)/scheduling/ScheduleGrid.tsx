@@ -89,7 +89,7 @@ export function ScheduleGrid({
                           style={{ left: `${pos.left}%`, width: `${Math.max(pos.width, 1.2)}%` }}
                           title={`${booking.subject}: ${booking.startsAt} → ${booking.endsAt}`}
                         >
-                          <span className="text-[11px] text-accent whitespace-nowrap">{booking.subject}</span>
+                          <span className="text-[11px] text-accent-ink whitespace-nowrap">{booking.subject}</span>
                         </div>
                       );
                     })}

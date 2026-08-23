@@ -228,7 +228,7 @@ export function registerSchedulingCapability(): void {
   registerContribution({
     capabilityId: SCHEDULING_CAPABILITY,
     navigation: [
-      { href: "/scheduling", label: "Scheduling", group: "Capabilities", order: 40,
+      { href: "/scheduling", label: "Scheduling", group: "Capabilities", order: 40, icon: "schedule",
         requiresEntity: ENTITY_BOOKING, shells: ["platform", "operations"] },
     ],
   });

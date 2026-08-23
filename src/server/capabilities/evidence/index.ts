@@ -128,7 +128,7 @@ export function registerEvidenceCapability(): void {
   registerContribution({
     capabilityId: EVIDENCE_CAPABILITY,
     navigation: [
-      { href: "/evidence", label: "Evidence", group: "Capabilities", order: 30,
+      { href: "/evidence", label: "Evidence", group: "Capabilities", order: 30, icon: "evidence",
         requiresEntity: ENTITY_EVIDENCE, shells: ["platform", "operations"] },
     ],
   });
