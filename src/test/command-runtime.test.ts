@@ -121,7 +121,12 @@ describeDb("command and query runtime", () => {
   afterAll(async () => {
     const admin = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL });
     try {
+      // Party and User are global (Bible V2 Primitive 2 §2), so they survive the
+      // tenant they were provisioned in. Removing the tenant alone would leak an
+      // unreachable identity on every run.
       await admin.$executeRaw`DELETE FROM tenant WHERE id = ${tenantA}::uuid`;
+      await admin.$executeRaw`DELETE FROM "user" WHERE id = ${actor.userId}::uuid`;
+      await admin.$executeRaw`DELETE FROM party WHERE id NOT IN (SELECT party_id FROM "user")`;
       await admin.$executeRaw`DELETE FROM entity_definition WHERE key = ${ENTITY}`;
     } finally {
       await admin.$disconnect();
