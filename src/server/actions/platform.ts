@@ -143,7 +143,22 @@ export async function switchOrganization(membershipId: string): Promise<ActionRe
   }
 }
 
-export async function signInWithPassword(email: string, password: string): Promise<ActionFailure | never> {
+/**
+ * Signs in with a password.
+ *
+ * Takes `FormData` rather than positional strings on purpose. Next.js logs
+ * server-action invocations with their arguments, so the previous
+ * `signInWithPassword(email, password)` signature wrote every password in
+ * plaintext to the server log:
+ *
+ *     └─ ƒ signInWithPassword("someone@example.com", "hunter2") in 537ms
+ *
+ * `FormData` is opaque to that logger, so the credential never reaches the log.
+ */
+export async function signInWithPassword(formData: FormData): Promise<ActionFailure | never> {
+  const email = String(formData.get("email") ?? "");
+  const password = String(formData.get("password") ?? "");
+
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
