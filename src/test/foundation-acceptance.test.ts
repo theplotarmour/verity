@@ -156,12 +156,23 @@ describeDb("foundation acceptance: an unforeseen capability", () => {
     clearNodeHandlers();
     const admin = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL });
     try {
+      // Everything with a FIXED name comes first, and nothing that can throw is
+      // allowed in front of it. These are the rows and objects whose survival
+      // breaks the NEXT run — the table by its policy name, the definitions by
+      // their primary keys. They used to run behind an unguarded `actor.userId`,
+      // which is undefined whenever setup failed, so one bad run left this
+      // fixture in the database and every later run failed on it.
       await admin.$executeRawUnsafe(`DROP TABLE IF EXISTS "${TABLE}" CASCADE`);
+      // The tenant precedes the capability definition: its activation rows hold
+      // a foreign key to it.
       await admin.$executeRaw`DELETE FROM tenant WHERE id = ${tenantA}::uuid`;
-      await admin.$executeRaw`DELETE FROM "user" WHERE id = ${actor.userId}::uuid`;
-      await admin.$executeRaw`DELETE FROM party WHERE id NOT IN (SELECT party_id FROM "user")`;
       await admin.$executeRaw`DELETE FROM entity_definition WHERE key = ${ENTITY}`;
       await admin.$executeRaw`DELETE FROM capability_definition WHERE id = ${CAPABILITY}`;
+
+      if (actor?.userId) {
+        await admin.$executeRaw`DELETE FROM "user" WHERE id = ${actor.userId}::uuid`;
+      }
+      await admin.$executeRaw`DELETE FROM party WHERE id NOT IN (SELECT party_id FROM "user")`;
     } finally {
       await admin.$disconnect();
     }
