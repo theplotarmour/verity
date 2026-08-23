@@ -1,7 +1,8 @@
 # Experience Shell — Visual Rebuild Audit
 
 **Date:** 2026-08-24
-**Scope:** brand correction, sign-in rebuild, runtime fix. No client, pack or vertical started.
+**Scope:** brand correction, sign-in rebuild, runtime fix, and a shell-wide composition pass (§11).
+No client, pack or vertical started.
 **Diagnosis:** `experience-shell-visual-gap-audit.md`
 
 ---
@@ -96,8 +97,7 @@ fragments in an 8.6 KB path — a lossy re-derivation, not the asset.
 ### Lockup and favicon
 
 Proportions measured from the primary logo: symbol = **0.865 ×** wordmark height, gap = **0.38 ×**,
-optically centred. The favicon now uses the board's app-icon treatment — the mark held in a rounded
-square, because a bare dark mark disappears against a dark browser tab strip.
+optically centred. Favicon and app icon are covered in §11.
 
 ## 5. Sign-in — REBUILT
 
@@ -178,11 +178,123 @@ rendered full-bleed. Cleared by removing `.next` and restarting. Recorded becaus
 is "the CSS you wrote does not exist", and it is indistinguishable from a markup error unless
 computed values are checked.
 
-## 11. Remaining limitations
+## 11. Shell-wide composition pass (2026-08-24)
+
+The previous verdict stated plainly that "the shell's denser surfaces received token-level
+correction rather than the composition-level attention the sign-in page got." That gap is now
+closed. Every surface below was re-composed, not re-coloured.
+
+### What changed in the shared layer
+
+New primitives, so that composition is decided once rather than re-improvised per page:
+
+| Primitive | Why it exists |
+|---|---|
+| `Panel` | The board's repeating unit — quiet label row, hairline, body. Replaces ad-hoc `SectionHeading` + `Surface p-5` pairs that drifted apart page by page |
+| `Stat` | One **real** counted value. No trend, no sparkline, no target — the platform has no series to compare against |
+| `RowList` / `Row` | One row rhythm shared by bookings, evidence, approvals, capabilities and exceptions |
+| `FieldSet` | Visible grouping in long forms |
+
+**`PageHeader`** gained an `eyebrow` for operating context and was re-laid-out **twice**. Aligning
+actions to the block bottom settled them against the last line of the description; putting them on
+their own row with the title pushed them *between* title and description when the row collapsed on
+mobile. Centring against the whole text block is correct at every width and keeps reading order
+intact when it stacks.
+
+**`DataTable`** was rebuilt to the board's treatment: a quiet in-card toolbar, tracked-out column
+labels that recede, a first column carrying the record's identity in full-strength ink with an
+optional second line, supporting columns in secondary ink, separators between rows and nowhere
+else. A table where every cell has equal weight forces the eye to read every cell; this one is
+scanned down the identity column and then across.
+
+**Controls** gained a gold focus ring drawn with `box-shadow` rather than `outline`, so it follows
+the 9px radius exactly. A square ring around a rounded input is the kind of detail that reads as
+unfinished without anyone being able to name why.
+
+**`EmptyState`** now leads with the Verity mark at 25% opacity. An empty operational surface is
+where a new tenant spends its first week, and a line of grey text in a white rectangle reads as a
+page that failed to load. §6 asked for zero data to look like an early platform; it now does.
+
+### What changed per surface
+
+| Surface | Before | After |
+|---|---|---|
+| Overview | definition list + two loose counters | eyebrow, band of four **real** counts, activity panel, context and capability panels |
+| Workspace | one section, heading and rule per queue | queues as one card band; exceptions as a panel |
+| Locations / Assets | flat equal-weight tables | identity column with organisation/reference as a second line |
+| Location detail | stacked equal cards | stat band, identity, geofences, custom fields, history |
+| Asset detail | state buried in a definition list | **state in the masthead band** — it decides which transitions exist and whether the record is writable at all |
+| Scheduling | grid + generic disclosure | stat band, filled booking bars, styled peer list view |
+| Evidence | CRUD-looking table | register: no primary action, fence-verdict counts, standing immutability note |
+| Approvals | three equal sections | asymmetric by design — actionable first at full weight, in-flight quieter, settled last |
+| Approval queue | a card per request | one decision per row with the chain rendered as marked steps |
+| Capabilities / Configuration / Audit | bare tables | eyebrow, counts, purpose-built columns |
+| Audit trail | nested card inside a card | renders bare; the caller owns the container |
+
+### Defects found and fixed during this pass
+
+**A page title stopped matching its nav item.** Scheduling was retitled "Resources across time"
+with "Scheduling" demoted to the eyebrow. A Playwright test caught it, and it was a real wayfinding
+regression, not a stale assertion — the sidebar said one thing and the page said another. Reverted;
+all twelve titles now match their navigation labels.
+
+**Eyebrows repeated their titles.** "Location / Locations", "Asset / Assets", "Approval /
+Approvals" — an eyebrow that restates the title is noise. Normalised to three values that carry
+information the title does not: `Capability`, `Platform`, `Administration`, with detail pages
+carrying the parent record instead.
+
+**The audit log rendered a 12,970px page at 390px.** 100 rows × four stacked pairs each —
+technically responsive, genuinely unusable. `DataTable` now pages at 25 rows with an explicit
+"Show more", which fixes every long table at once rather than each page working around it.
+Measured: **12,970px → 9,074px**, and the same change bounds every future table.
+
+**A solid red button competed with gold.** The terminal asset transition used `variant="danger"`.
+These are state changes, not deletions, and a red fill told the reader nothing the state semantics
+were not already saying. Now secondary with danger *ink*.
+
+**`AuditTrail` lost its change string.** Styling the gap around the arrow with margins instead of
+writing literal spaces collapsed the text content to `in_service→maintenance`. Caught by a test;
+fixed in the markup rather than the assertion, because that line is read, copied and asserted as
+one string.
+
+**Stat values sat at different heights** when one label wrapped and its neighbours did not. The
+label now reserves two lines.
+
+### Favicon and app icon
+
+Rebuilt on the corrected geometry. The **favicon** is the bare mark, as the identity sheet shows
+it, but in gold rather than the sheet's black: a favicon sits on browser chrome we do not control,
+and black vanishes against a dark tab strip. The **app icon** (`apple-icon.svg`) keeps the sheet's
+rounded-square treatment, because a home-screen icon is composited onto an unknown wallpaper and
+needs its own ground.
+
+### Runtime, re-verified
+
+The proxy response-contract fix and the `FormData` authentication change are intact. The dev log
+was grepped after a full session — sign-out, failed sign-in, successful sign-in, organization
+switch, navigation across all twelve routes: **zero credential occurrences**. Browser console clean
+throughout; no uncaught promise errors, no hydration errors.
+
+### Results
+
+| Gate | Result |
+|---|---|
+| Vitest | **278 / 278** (20 files) |
+| Playwright | **54 passed**, 12 skipped |
+| Typecheck / ESLint / build | clean |
+| Horizontal overflow at 390px | **none**, all 10 routes |
+| AA contrast, both themes | **zero failures** |
+
+Route coverage inspected at 390px (full-page captures) and at desktop in both themes: overview,
+workspace, locations, location detail, assets, asset detail, scheduling, evidence, approvals,
+capabilities, configuration, audit, sign-in.
+
+## 12. Remaining limitations
 
 | Item | Class | Note |
 |---|---|---|
 | Wordmark is a raster mask, not a vector | **NON_BLOCKING** | pixel-exact and recolours; a vector needs the original outlines, which were not supplied |
+| Audit at 390px is still ~9,000px | **NON_BLOCKING** | an audit log is inherently long; paged at 25 with explicit expansion. Desktop is its primary surface |
 | Global search | **DEFERRED** | blocked on a search API, not on design |
 | Worker / operations / external shells | **DEFERRED** | contracts exist and route; §27 defers the applications |
 | Board's density toggle | **DEFERRED** | no capability needs it yet |
@@ -191,7 +303,7 @@ computed values are checked.
 | Failed sign-ins not recorded | **DECISION_REQUIRED** | pre-authentication has no tenant; needs a platform-level security log |
 | Job runner, storage driver, secret rotation | **NON_BLOCKING** | unchanged from `platform-readiness-audit.md` §14 |
 
-## 12. Product boundary
+## 13. Product boundary
 
 - **NO CLIENT SYSTEM.** No client-specific schema, route, workflow or branding.
 - **NO INDUSTRY PACK.** No facilities, security, staffing, CRM or commerce.
@@ -213,9 +325,11 @@ The runtime error was root-caused to a genuine missing failure path at the one b
 produce a `Response`, reproduced in a test before being fixed, and closed at the contract rather
 than suppressed.
 
-**Not claimed:** that this is finished design work. Two things are known-imperfect and recorded
-above — the wordmark is a raster mask because vector outlines were never supplied, and the shell's
-denser surfaces (tables, detail pages, forms) received token-level correction rather than the
-composition-level attention the sign-in page got. They are honest gaps, not oversights.
+**Every surface has now had composition-level work**, not only sign-in and the brand — §11 records
+what changed on each and the defects that surfaced while doing it.
+
+**Not claimed:** that this is finished design work. One known-imperfect item remains and is recorded
+above — the wordmark is a raster mask because vector outlines were never supplied. That is an honest
+gap, not an oversight.
 
 **Client development remains NOT ALLOWED** — unchanged, by instruction.
