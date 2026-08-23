@@ -46,6 +46,7 @@ model Tenant {
   roleCompositions   RoleComposition[]
   customFieldSchemas CustomFieldSchema[]
   domainEvents       DomainEvent[]
+  statusLabels       TenantStatusLabel[]
 
   @@map("tenant")
 }
@@ -323,6 +324,7 @@ model EntityDefinition {
   createdAt    DateTime    @default(now()) @map("created_at")
 
   customFields CustomFieldSchema[]
+  states       StateDefinition[]
 
   @@index([capability])
   @@map("entity_definition")
@@ -386,4 +388,102 @@ model DomainEvent {
   @@index([tenantId, occurredAt])
   @@index([deliveredAt])
   @@map("domain_event")
+}
+
+/// Platform state categories (Authority: Spec MET-STA-001, MET-STA-004).
+///
+/// MET-STA-001 calls the categories "fixed, platform-level enums" but illustrates
+/// them with Work-domain values (`EN_ROUTE`, `SCHEDULING`). Those are the Work
+/// capability's *states*, not platform categories — hardcoding them into the core
+/// would be the same domain leakage the no-legacy policy forbids and would make
+/// the platform field-service specific.
+///
+/// The fixed set below is therefore behavioural, not domain: it says what the
+/// engine must do, which is exactly what MET-STA-004 needs when it evaluates SLA
+/// clocks "strictly at the system StateCategory layer".
+///
+///   Draft     — not yet started; no SLA clock
+///   Pending   — waiting on something external; clock paused
+///   Active    — work is happening; clock running
+///   Blocked   — halted by an exception; clock paused
+///   Completed — terminal, succeeded; clock stopped
+///   Cancelled — terminal, abandoned; clock stopped
+///
+/// IMPLEMENTATION DECISION: the specification mandates that categories exist and
+/// fixes their engine meaning, but does not enumerate a domain-neutral set. This
+/// set is inferred from MET-STA-004's clock semantics and needs ratification.
+enum StateCategory {
+  Draft
+  Pending
+  Active
+  Blocked
+  Completed
+  Cancelled
+}
+
+/// One state in an entity's lifecycle (Authority: Spec MET-STA-001, MET-STA-003).
+///
+/// GLOBAL, like EntityDefinition: a lifecycle belongs to the capability that owns
+/// the entity and is identical for every tenant. Tenants rename states via
+/// TenantStatusLabel; they do not add or remove them.
+model StateDefinition {
+  id         String        @id @default(uuid()) @db.Uuid
+  entityKey  String        @map("entity_key")
+  /// Stable machine key, e.g. `in_progress`.
+  key        String
+  /// Mandatory category binding (MET-STA-003).
+  category   StateCategory
+  /// Exactly one initial state per entity.
+  isInitial  Boolean       @default(false) @map("is_initial")
+  /// Terminal states lock the entity (INV-002).
+  isTerminal Boolean       @default(false) @map("is_terminal")
+
+  entity          EntityDefinition       @relation(fields: [entityKey], references: [key], onDelete: Cascade)
+  fromTransitions TransitionDefinition[] @relation("TransitionFrom")
+  toTransitions   TransitionDefinition[] @relation("TransitionTo")
+  labels          TenantStatusLabel[]
+
+  @@unique([entityKey, key])
+  @@index([entityKey])
+  @@map("state_definition")
+}
+
+/// An allowed movement between two states (Authority: Spec MET-TRA-001).
+///
+/// The structural guard is this table: a transition that is not declared here
+/// cannot happen, so `Completed -> Draft` is blocked by absence rather than by a
+/// check somebody has to remember to write.
+model TransitionDefinition {
+  id          String  @id @default(uuid()) @db.Uuid
+  entityKey   String  @map("entity_key")
+  fromStateId String  @map("from_state_id") @db.Uuid
+  toStateId   String  @map("to_state_id") @db.Uuid
+  /// The Action permitted to trigger it; the authorization guard (MET-TRA-002)
+  /// is the command pipeline's own check on this command.
+  commandKey  String? @map("command_key")
+
+  fromState StateDefinition @relation("TransitionFrom", fields: [fromStateId], references: [id], onDelete: Cascade)
+  toState   StateDefinition @relation("TransitionTo", fields: [toStateId], references: [id], onDelete: Cascade)
+
+  @@unique([fromStateId, toStateId])
+  @@index([entityKey])
+  @@map("transition_definition")
+}
+
+/// Tenant-facing label for a platform state (Authority: Spec MET-STA-002/003).
+///
+/// Tenant-scoped: "Awaiting Gate Pass" is one tenant's word for a state whose
+/// category the engine still reasons about unchanged (MET-STA-004).
+model TenantStatusLabel {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  stateId  String @map("state_id") @db.Uuid
+  label    String
+
+  tenant Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  state  StateDefinition @relation(fields: [stateId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, stateId])
+  @@index([tenantId])
+  @@map("tenant_status_label")
 }

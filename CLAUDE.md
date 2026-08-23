@@ -229,6 +229,7 @@ authorization decision.
 - `implementation/02-foundation-build-order/vertical-slice-strategy.md` still lists `DEC-BIBLE-001` as open; it was resolved by ADR-001. The ADR wins.
 - `TenantMembership.roleId` is specified by the handoff but deferred until the authorization step creates `Role`; inventing it early would pre-empt that design.
 - **`Global` scope is defined but never granted.** PLA-AUT-002 defines cross-tenant platform administration, but honouring it means bypassing the RLS that enforces INV-001. `verity.resolve_permissions` filters `Global` grants out, so such a row can exist without silently taking effect. Wiring it up needs a security decision and an ADR.
+- **`StateCategory` set is an implementation decision awaiting ratification.** MET-STA-001 calls state categories "fixed, platform-level enums" but illustrates them with Work-domain values (`EN_ROUTE`, `SCHEDULING`), which would make the platform field-service specific and is the same domain leakage the no-legacy policy forbids. The implemented set is behavioural — `Draft | Pending | Active | Blocked | Completed | Cancelled` — inferred from MET-STA-004's SLA clock semantics. Needs an ADR.
 - **The Bible is not editable.** One amendment (AMD-001, `factoryId` -> `tenantId`, Volume V §1.A.1 and Volume VI) was authorised by the product owner as a one-time edit and is already applied. Do not modify `verity-bible/` again without a fresh explicit instruction.
 
 ## Stop conditions — escalate, do not improvise
