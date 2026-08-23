@@ -191,12 +191,44 @@ is tenant-scoped and carries the ordinary RLS policy.
   which predates the Supabase decision (EXISTING INFRASTRUCTURE) and is superseded
   in practice by implementation/03-platform-foundation/identity.md.
 
+## Authorization shape (already decided, do not re-litigate)
+
+Permissions are `Verb + Entity + Scope`. `Role` composes into other roles
+(`RoleComposition`, spec's name — the handoff's `RoleInheritance` is the same
+thing and the spec outranks it), and a parent inherits every permission its
+children hold (PLA-AUT-001).
+
+- `entity` is a free string, never an enum — a new capability must add entities
+  without touching the platform ontology.
+- Verbs are a closed set (PLA-AUT-003); a bespoke capability action is
+  `ActionExecute` against a named entity.
+- Scopes are `Global | Tenant | Organization | Location` (PLA-AUT-002, refining
+  Bible V2 Primitive 2 §13 which omits Organization; ADR-005 requires it). The
+  handoff's extra `own` scope appears in neither the Bible nor the spec and was
+  deliberately NOT added.
+- Flattening runs in the database (`verity.resolve_permissions`) so the recursive
+  walk respects the same RLS boundary as any other read.
+- Inheritance cycles are blocked by a database trigger, not by application code —
+  a cycle would make resolution non-terminating, and resolution runs on every check.
+- `TenantMembership.roleId` is nullable: a membership with no role grants nothing,
+  so an unassigned membership fails closed.
+- `authorize()` throws `ForbiddenError` (`code: "E_FORBIDDEN"`) rather than
+  returning false, so forgetting to branch on the result cannot permit the action.
+  MET-ACT-002 requires this on every command.
+
+**Only Layer 1 exists.** PLA-AUT-004 (row-level scoping) and PLA-AUT-005
+(field-level stripping) need a command pipeline to hook into and are built with
+it. Each grant's `scope` is carried through so those layers have what they need,
+but nothing evaluates it yet — a passing `authorize()` is not a complete
+authorization decision.
+
 ## Open — do not solve silently
 
 - **ADR-002 / DEC-BIBLE-002** Resource scope (single actor vs crews/pools/spaces) is `DECISION_REQUIRED` and intentionally deferred. Build so it can be incorporated cleanly; do not invent a final Resource architecture.
 - **Spec status taxonomy is undefined.** `[UNKNOWN_REASON: FUTURE_CAPABILITY]` (1096 uses) and `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]` (722 uses) appear throughout `verity-spec/` but are defined nowhere. It is unresolved whether these mark ratified-but-unbuilt requirements or unratified ones. Escalate before relying on the status of a requirement.
 - `implementation/02-foundation-build-order/vertical-slice-strategy.md` still lists `DEC-BIBLE-001` as open; it was resolved by ADR-001. The ADR wins.
 - `TenantMembership.roleId` is specified by the handoff but deferred until the authorization step creates `Role`; inventing it early would pre-empt that design.
+- **`Global` scope is defined but never granted.** PLA-AUT-002 defines cross-tenant platform administration, but honouring it means bypassing the RLS that enforces INV-001. `verity.resolve_permissions` filters `Global` grants out, so such a row can exist without silently taking effect. Wiring it up needs a security decision and an ADR.
 - **The Bible is not editable.** One amendment (AMD-001, `factoryId` -> `tenantId`, Volume V §1.A.1 and Volume VI) was authorised by the product owner as a one-time edit and is already applied. Do not modify `verity-bible/` again without a fresh explicit instruction.
 
 ## Stop conditions — escalate, do not improvise

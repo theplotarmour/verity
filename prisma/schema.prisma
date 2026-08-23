@@ -39,8 +39,11 @@ model Tenant {
   version      Int      @default(1)
   customFields Json     @default("{}") @map("custom_fields")
 
-  organizations Organization[]
-  memberships   TenantMembership[]
+  organizations    Organization[]
+  memberships      TenantMembership[]
+  roles            Role[]
+  permissions      Permission[]
+  roleCompositions RoleComposition[]
 
   @@map("tenant")
 }
@@ -157,6 +160,7 @@ model TenantMembership {
   tenantId       String   @map("tenant_id") @db.Uuid
   organizationId String   @map("organization_id") @db.Uuid
   userId         String   @map("user_id") @db.Uuid
+  roleId         String?  @map("role_id") @db.Uuid
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
   version        Int      @default(1)
@@ -167,9 +171,109 @@ model TenantMembership {
   // PLA-TEN-003 again: keyed on (tenantId, organizationId) so the database
   // refuses a membership pointing at another tenant's Organization.
   organization Organization @relation(fields: [tenantId, organizationId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  // Nullable on purpose: a membership with no Role grants nothing, so an
+  // unassigned membership fails closed instead of defaulting to access.
+  // Restrict, not SetNull: a composite key cannot null `tenantId`, and a Role
+  // must not vanish from under a live membership — reassign first.
+  role         Role?        @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([userId, organizationId])
   @@index([tenantId])
   @@index([userId])
   @@map("tenant_membership")
+}
+
+/// Permission verbs (Authority: Spec PLA-AUT-003).
+/// A closed set: a bespoke capability action is expressed as `ActionExecute`
+/// against a named entity, so a new capability never needs a new verb.
+enum PermissionVerb {
+  Read
+  Create
+  Edit
+  Delete
+  ActionExecute
+}
+
+/// Permission scope levels (Authority: Spec PLA-AUT-002, refining Bible V2
+/// Primitive 2 §13, which lists Global/Tenant/Site; the spec adds Organization,
+/// which ADR-005 requires as a real nesting level inside a Tenant).
+///
+/// `Global` means cross-tenant platform administration. It is defined because the
+/// specification defines it, but nothing here grants it: honouring it would mean
+/// bypassing the RLS that enforces INV-001, and that security decision has not
+/// been made. `resolvePermissions` refuses to return Global grants.
+enum PermissionScope {
+  Global
+  Tenant
+  Organization
+  Location
+}
+
+/// A named bundle of permissions inside one Tenant (Authority: Spec PLA-AUT-001).
+model Role {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  name         String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  permissions Permission[]
+  memberships TenantMembership[]
+  /// Compositions where this Role is the parent — it inherits from the child.
+  parentOf    RoleComposition[]  @relation("RoleCompositionParent")
+  /// Compositions where this Role is the child — its permissions flow upward.
+  childOf     RoleComposition[]  @relation("RoleCompositionChild")
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id], name: "role_tenant_scoped_id")
+  @@index([tenantId])
+  @@map("role")
+}
+
+/// Composite-role edge (Authority: Spec PLA-AUT-001; Bible Synthesis ADOPTED —
+/// Keycloak composite roles). A parent Role inherits every permission held by its
+/// child Roles, flattened at runtime.
+///
+/// The spec names this `RoleComposition`; the handoff calls it `RoleInheritance`.
+/// The spec outranks the handoff.
+model RoleComposition {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  parentRoleId String   @map("parent_role_id") @db.Uuid
+  childRoleId  String   @map("child_role_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parentRole Role   @relation("RoleCompositionParent", fields: [tenantId, parentRoleId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  childRole  Role   @relation("RoleCompositionChild", fields: [tenantId, childRoleId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([parentRoleId, childRoleId])
+  @@index([tenantId])
+  @@map("role_composition")
+}
+
+/// A single grant: Verb + Entity + Scope (Authority: implementation handoff
+/// 03-platform-foundation/authorization.md; Spec PLA-AUT-003).
+///
+/// `entity` is a free string rather than an enum, deliberately: a new capability
+/// must introduce entities without altering the platform ontology.
+model Permission {
+  id        String          @id @default(uuid()) @db.Uuid
+  tenantId  String          @map("tenant_id") @db.Uuid
+  roleId    String          @map("role_id") @db.Uuid
+  verb      PermissionVerb
+  entity    String
+  scope     PermissionScope
+  createdAt DateTime        @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [tenantId, roleId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([roleId, verb, entity, scope])
+  @@index([tenantId])
+  @@index([roleId])
+  @@map("permission")
 }
