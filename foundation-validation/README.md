@@ -56,21 +56,23 @@ masquerading as a schema would be worse — but it means "install a capability" 
 event, not a runtime one. Condition A holds; it is worth stating plainly that it holds at deploy
 time.
 
-**2. Row-level and field-level authorization are not yet enforced.** PLA-AUT-004 and PLA-AUT-005
-are specified and their `scope` values are carried through resolution, but nothing evaluates them.
-Every capability modelled here needs at least row-level scoping — a technician seeing only their
-own site is the single most repeated requirement across all eight. This is the largest remaining
-gap and is called out in each analysis rather than assumed away.
+**2. Row-level and field-level authorization were not enforced. Now resolved.** PLA-AUT-004 and
+PLA-AUT-005 were specified with their `scope` values carried through resolution, but nothing
+evaluated them — the single most repeated requirement across all eight capabilities was a
+technician seeing only their own site. Both layers are now implemented and enforced: an
+Organization-scoped grant resolves to the actor's node plus descendants, and restricted fields are
+omitted from payloads. Condition D is met.
 
-**3. `Resource` is still undecided (ADR-002).** Five of the eight capabilities want to schedule
-something that is not a single person — a crew, a bay, a vehicle, a scanner. The foundation does
-not model `Resource` at all yet, which is correct: ADR-002 is deliberately open, and inventing a
-Resource shape to make a hypothetical capability work is exactly what the kickoff forbade. The
-analyses record what each capability would need so the decision can be made against real demand.
+**3. `Resource` was undecided. Now resolved by ADR-008.** Five of the eight capabilities want to
+schedule something that is not a single person — a crew, a bay, a vehicle, a scanner. That demand
+is what ADR-002 deferred *for*, so this analysis supplied the evidence and the decision was taken
+on it: a `Resource` is a single schedulable unit backed by exactly one `Party` or `Asset`, and
+crews and pools are `ResourceGroup` compositions. No Resource shape was invented to make a
+hypothetical capability work; the decision was made against real, recorded demand.
 
 ## Status of the milestone
 
 The foundation-ready conditions are assessed in [capability-analysis.md](./capability-analysis.md).
-Conditions A–C and E–J are met and demonstrated. **Condition D is partially met**: new permissions
-can be introduced without changing the authorization architecture, but only entity-level checks are
-enforced today.
+**All ten conditions A–J are met and demonstrated.** Condition D was partial at first assessment —
+only entity-level checks were enforced — and was closed by implementing PLA-AUT-004 and
+PLA-AUT-005.
