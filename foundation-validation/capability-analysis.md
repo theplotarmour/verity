@@ -10,8 +10,9 @@ A recurring answer appears throughout and is stated once here rather than eight 
   both audit streams, CustomFieldSchema, ConfigParameter, the workflow engine, and the experience
   descriptors. This is the point of a foundation: the shared answer is long and the per-capability
   answer is short.
-- **Needed by all of them and not yet enforced**: row-level scoping (PLA-AUT-004). Noted per
-  capability only where the shape of the requirement differs.
+- **Needed by all of them, and now enforced**: row-level scoping (PLA-AUT-004). An
+  Organization-scoped grant reaches the actor's node and its descendants, which is what every
+  "sees only their own site" requirement below reduces to.
 
 ---
 
@@ -142,7 +143,7 @@ Calibration, servicing, regulatory traceability.
 | A | New capability registered without changing unrelated infrastructure | **Met** — demonstrated. Note: registration includes a migration, so installation is a deploy-time event |
 | B | New entities without modifying the platform ontology | **Met** — demonstrated with a table and lifecycle the platform had never seen |
 | C | New workflows without rewriting the engine | **Met** — demonstrated with two registered node handlers and a conditional edge |
-| D | New permissions without changing the authorization architecture | **Partially met** — new Verb+Entity+Scope grants need no change, but only entity-level checks are enforced. PLA-AUT-004/005 remain unimplemented |
+| D | New permissions without changing the authorization architecture | **Met** — new Verb+Entity+Scope grants need no change, and all three layers are enforced: entity-level (PLA-AUT-003), row-level via organization subtree (PLA-AUT-004), field-level omission (PLA-AUT-005) |
 | E | New events without modifying event infrastructure | **Met** — the capability emitted its own event name into the shared outbox |
 | F | New specialized UI without rewriting the shell | **Met** — navigation and forms were generated from metadata alone |
 | G | New client configuration without forking a capability | **Met** — a configuration value acted as a business rule |
@@ -152,11 +153,14 @@ Calibration, servicing, regulatory traceability.
 
 ## Recommended next decisions
 
-1. **Implement PLA-AUT-004 row-level scoping.** Every capability modelled needs it; it is the one
-   gap that would otherwise be worked around inside capabilities, which is how a platform rots.
-2. **Resolve ADR-002 (Resource scope).** Five of eight capabilities want to schedule something that
-   is not a single person. There is now real demand to decide against, which is exactly the
-   condition the ADR deferred for.
+1. ~~Implement PLA-AUT-004 row-level scoping.~~ **Done.** Both remaining layers are enforced.
+2. ~~Resolve ADR-002 (Resource scope).~~ **Done** — ADR-008 adopts a single-unit `Resource` with
+   `ResourceGroup` compositions, decided on the evidence in this document.
 3. **Build Evidence, Location, Scheduling, Asset and Approval as shared capabilities** before any
    client work. Each was independently demanded by three or more of the eight; building them inside
-   the first client would guarantee the second client forks them.
+   the first client would guarantee the second client forks them. ADR-008 fixes the shape
+   `Scheduling` and `Asset` must take, so they can now be built without re-litigating it.
+
+Every `Location`-scoped permission grant currently reaches nothing, by design, because `Location`
+does not exist as an entity yet. It fails closed rather than widening to the tenant, and building
+the Location capability is what activates it.

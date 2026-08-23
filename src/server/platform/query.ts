@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { authorize } from "./authorization";
+import { authorize, redactFields, scopeFilter } from "./authorization";
 import { capabilityForEntity, requireCapabilityActive } from "./capability";
 import { withTenant, type TenantScopedClient } from "./tenancy";
 import { ValidationError, type ActorContext } from "./command";
@@ -12,14 +12,30 @@ import { ValidationError, type ActorContext } from "./command";
  * state, Event records a fact — and blurring them is what lets a "read" quietly
  * acquire side effects.
  *
- * Reads still pass an authorization check: RLS guarantees a tenant cannot see
- * another tenant's rows, but it says nothing about whether *this actor* may read
- * this entity at all. Both are needed.
+ * Reads pass all three authorization layers. RLS guarantees a tenant cannot see
+ * another tenant's rows; Layer 1 decides whether this actor may read the entity
+ * at all; Layer 2 narrows which rows inside the tenant are theirs; Layer 3
+ * removes restricted fields from what survives.
+ *
+ * Layer 2 is offered to the handler rather than imposed on it, because the
+ * platform does not know where a capability keeps its organization column — or
+ * whether the entity is organization-scoped at all. Layer 3 is applied
+ * automatically to a top-level array result, which is the shape almost every
+ * list query returns; a handler returning something more nested is responsible
+ * for calling `ctx.redact` itself, and the field-permission registry makes that
+ * requirement discoverable rather than tribal.
  */
 
 export type QueryContext = {
   actor: ActorContext;
   tx: TenantScopedClient;
+  /**
+   * Prisma filter limiting results to organizations the actor can reach
+   * (PLA-AUT-004). Spread into a `where` clause.
+   */
+  scope: () => Promise<{ organizationId: { in: string[] } }>;
+  /** Strips restricted fields the actor may not read (PLA-AUT-005). */
+  redact: <T extends Record<string, unknown>>(rows: T[]) => Promise<Array<Partial<T>>>;
 };
 
 export type QueryDefinition<TInput, TResult> = {
@@ -63,6 +79,27 @@ export async function executeQuery<TInput, TResult>(
     const capability = await capabilityForEntity(tx, def.entity);
     if (capability) await requireCapabilityActive(tx, actor.tenantId, capability);
     await authorize(tx, actor.roleId, "Read", def.entity);
-    return def.handler({ actor, tx }, parsed.data);
+
+    const ctx: QueryContext = {
+      actor,
+      tx,
+      scope: () => scopeFilter(tx, actor, def.entity, "Read"),
+      redact: (rows) => redactFields(tx, actor, def.entity, rows),
+    };
+
+    const result = await def.handler(ctx, parsed.data);
+
+    // Layer 3 on the common shape. Only a top-level array of plain objects is
+    // handled; anything else is the handler's own responsibility, and silently
+    // half-redacting a nested structure would be worse than not touching it.
+    if (Array.isArray(result) && result.every((r) => r && typeof r === "object")) {
+      return (await redactFields(
+        tx,
+        actor,
+        def.entity,
+        result as Array<Record<string, unknown>>,
+      )) as TResult;
+    }
+    return result;
   });
 }

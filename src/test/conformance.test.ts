@@ -39,6 +39,7 @@ const GLOBAL_MODELS: Record<string, string> = {
   StateDefinition: "capability lifecycle metadata — MET-STA-001",
   TransitionDefinition: "capability lifecycle metadata — MET-TRA-001",
   ConfigParameter: "Global scope rows belong to no tenant — PLA-CFG-001",
+  FieldPermission: "which fields are sensitive is a property of the entity — PLA-AUT-005",
 };
 
 describe("conformance: forbidden legacy patterns", () => {

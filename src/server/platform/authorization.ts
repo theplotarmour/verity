@@ -1,4 +1,5 @@
 import type { PermissionScope, PermissionVerb } from "@prisma/client";
+import type { ActorContext } from "./command";
 import type { TenantScopedClient } from "./tenancy";
 
 /**
@@ -10,12 +11,17 @@ import type { TenantScopedClient } from "./tenancy";
  * (Keycloak composite roles flattened to runtime permission bits), Bible V2
  * Primitive 2 §13 (access is defined at the membership level).
  *
- * Scope of this module: Layer 1 of the three-tier model — entity-level checks
- * (PLA-AUT-003). Layer 2 (row-level scoping, PLA-AUT-004) and Layer 3
- * (field-level stripping, PLA-AUT-005) need a command pipeline to hook into and
- * are built with it; the `scope` on each grant is carried through here so those
- * layers have what they need, but nothing evaluates it yet. Do not mistake a
- * passing Layer 1 check for a complete authorization decision.
+ * All three layers of the model are implemented here:
+ *
+ *   Layer 1 (PLA-AUT-003) — may this role touch this entity type at all?
+ *   Layer 2 (PLA-AUT-004) — does this particular record fall inside the actor's
+ *                           membership scope?
+ *   Layer 3 (PLA-AUT-005) — which fields of it may they see?
+ *
+ * They are separate because they fail differently. Layer 1 rejects a request
+ * outright, Layer 2 narrows which rows exist for this actor, and Layer 3 removes
+ * attributes from rows they are otherwise entitled to. Collapsing them would
+ * force one answer where three are needed.
  */
 
 export type ResolvedPermission = {
@@ -92,4 +98,171 @@ export async function authorize(
       `E_FORBIDDEN: role ${roleId ?? "<none>"} may not ${verb} ${entity}`,
     );
   }
+}
+
+/* ------------------------------------------------------------------------- *
+ * Layer 2 — row-level scoping (PLA-AUT-004)
+ * ------------------------------------------------------------------------- */
+
+/**
+ * The organizations a grant lets an actor reach.
+ *
+ * `Tenant` reaches every organization in the tenant. `Organization` reaches the
+ * actor's own node and its descendants — PLA-ORG-002 gives a regional manager
+ * visibility downward, while PLA-ORG-003 keeps a branch worker out of sibling
+ * branches, and a subtree expresses both at once.
+ *
+ * `Location` returns null: Location does not exist as an entity yet, so a
+ * Location-scoped grant cannot be evaluated. Returning null makes such a grant
+ * reach nothing rather than silently widening to the whole tenant, which is the
+ * failure that would matter.
+ */
+export async function scopeOrganizations(
+  tx: TenantScopedClient,
+  actor: ActorContext,
+  scope: PermissionScope,
+): Promise<string[] | null> {
+  switch (scope) {
+    case "Tenant": {
+      const rows = await tx.$queryRaw<{ organization_id: string }[]>`
+        SELECT organization_id FROM verity.tenant_organizations()`;
+      return rows.map((r) => r.organization_id);
+    }
+    case "Organization": {
+      if (!actor.organizationId) return [];
+      const rows = await tx.$queryRaw<{ organization_id: string }[]>`
+        SELECT organization_id FROM verity.organization_subtree(${actor.organizationId}::uuid)`;
+      return rows.map((r) => r.organization_id);
+    }
+    case "Location":
+      return null;
+    case "Global":
+      // Never granted; resolve_permissions filters Global out before this point.
+      return [];
+  }
+}
+
+/**
+ * Every organization this actor may reach for a given verb on an entity,
+ * across all their grants.
+ *
+ * A role can hold the same verb at more than one scope; the actor reaches the
+ * union, since a narrower grant should never subtract from a broader one.
+ */
+export async function reachableOrganizations(
+  tx: TenantScopedClient,
+  actor: ActorContext,
+  verb: PermissionVerb,
+  entity: string,
+): Promise<{ organizationIds: string[]; unresolvedScopes: PermissionScope[] }> {
+  if (!actor.roleId) return { organizationIds: [], unresolvedScopes: [] };
+
+  const grants = (await resolvePermissions(tx, actor.roleId)).filter(
+    (p) => p.entity === entity && p.verb === verb,
+  );
+
+  const reachable = new Set<string>();
+  const unresolved: PermissionScope[] = [];
+
+  for (const grant of grants) {
+    const ids = await scopeOrganizations(tx, actor, grant.scope);
+    if (ids === null) unresolved.push(grant.scope);
+    else ids.forEach((id) => reachable.add(id));
+  }
+
+  return { organizationIds: [...reachable], unresolvedScopes: unresolved };
+}
+
+/**
+ * A Prisma filter restricting a query to rows the actor may see.
+ *
+ * Applied in addition to RLS, never instead of it: RLS stops another tenant's
+ * rows, this stops rows inside the tenant that are outside the actor's branch.
+ */
+export async function scopeFilter(
+  tx: TenantScopedClient,
+  actor: ActorContext,
+  entity: string,
+  verb: PermissionVerb = "Read",
+): Promise<{ organizationId: { in: string[] } }> {
+  const { organizationIds } = await reachableOrganizations(tx, actor, verb, entity);
+  return { organizationId: { in: organizationIds } };
+}
+
+/**
+ * Layer 2 gate for a single record (PLA-AUT-004).
+ *
+ * Throws `ForbiddenError` when the record's organization falls outside the
+ * actor's scope. A record with no organization is treated as tenant-wide and
+ * needs a Tenant-scoped grant, because an unscoped record must not become
+ * universally visible by omission.
+ */
+export async function assertRowInScope(
+  tx: TenantScopedClient,
+  actor: ActorContext,
+  entity: string,
+  verb: PermissionVerb,
+  row: { organizationId?: string | null },
+): Promise<void> {
+  const { organizationIds } = await reachableOrganizations(tx, actor, verb, entity);
+
+  if (!row.organizationId) {
+    const grants = actor.roleId ? await resolvePermissions(tx, actor.roleId) : [];
+    const tenantWide = grants.some(
+      (g) => g.entity === entity && g.verb === verb && g.scope === "Tenant",
+    );
+    if (tenantWide) return;
+    throw new ForbiddenError(
+      `E_FORBIDDEN: ${entity} record is not scoped to an organization and the role holds no Tenant-scoped ${verb} grant`,
+    );
+  }
+
+  if (!organizationIds.includes(row.organizationId)) {
+    throw new ForbiddenError(
+      `E_FORBIDDEN: ${entity} record in organization ${row.organizationId} is outside the actor's scope`,
+    );
+  }
+}
+
+/* ------------------------------------------------------------------------- *
+ * Layer 3 — field-level scoping (PLA-AUT-005)
+ * ------------------------------------------------------------------------- */
+
+/** Field-qualified entity key used to grant access to a restricted field. */
+export function fieldGrantKey(entityKey: string, fieldName: string): string {
+  return `${entityKey}#${fieldName}`;
+}
+
+/**
+ * Removes restricted fields the actor may not read (PLA-AUT-005).
+ *
+ * Fields are *omitted*, not nulled. A null is indistinguishable from a real
+ * absent value, so a caller could not tell "you may not see this" from "there is
+ * nothing here" — and a UI would render an empty billing rate as though it were
+ * zero.
+ */
+export async function redactFields<T extends Record<string, unknown>>(
+  tx: TenantScopedClient,
+  actor: ActorContext,
+  entityKey: string,
+  rows: T[],
+): Promise<Array<Partial<T>>> {
+  const restricted = await tx.fieldPermission.findMany({ where: { entityKey } });
+  if (restricted.length === 0) return rows;
+
+  const permitted = new Set<string>();
+  for (const field of restricted) {
+    if (await hasPermission(tx, actor.roleId, "Read", fieldGrantKey(entityKey, field.fieldName))) {
+      permitted.add(field.fieldName);
+    }
+  }
+
+  const strip = restricted.map((f) => f.fieldName).filter((name) => !permitted.has(name));
+  if (strip.length === 0) return rows;
+
+  return rows.map((row) => {
+    const copy: Record<string, unknown> = { ...row };
+    for (const field of strip) delete copy[field];
+    return copy as Partial<T>;
+  });
 }

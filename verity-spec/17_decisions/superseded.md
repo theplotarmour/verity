@@ -123,3 +123,21 @@ This document contains the register of historical, superseded design decisions f
 *   **Superseded By**: ADR-007
 *   **Confidence**: `HIGH`
 
+---
+
+### DEC-BIBLE-002: Resource Representation Scope
+*   **Decision ID**: DEC-BIBLE-002
+*   **Question**: Should `Resource` encompass composite spaces, crews, and teams directly, or represent single actors?
+*   **Context**: Deferred by ADR-002 pending evidence from real capability demand across scheduling, assignment, availability, conflict detection, delegation and client composition.
+*   **Affected Concepts**: `Resource`, `Asset`, `Party`
+*   **Options**:
+    *   *Option A*: Crew availability modelled directly as a first-class Crew Resource.
+    *   *Option B*: `Resource` represents a single schedulable unit; crews and pools are composite structures.
+*   **Recommendation**: Option B.
+*   **Status**: `SUPERSEDED`
+*   **Owner**: Product Owner
+*   **Resolution**: Resolved by ADR-008, using the evidence produced by the eight-capability foundation validation.
+*   **Supersedes**: None
+*   **Superseded By**: ADR-008
+*   **Confidence**: `HIGH`
+

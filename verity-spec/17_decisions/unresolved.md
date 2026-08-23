@@ -6,20 +6,5 @@ This document contains the register of active, unresolved design decisions for t
 
 ---
 
-### DEC-BIBLE-002: Resource Representation Scope
-*   **Decision ID**: DEC-BIBLE-002
-*   **Question**: Should `Resource` encompass composite spaces, crews, and teams directly, or represent single actors?
-*   **Context**: The meta-model and inventory contain conflicting representations of crew availability and capacity.
-*   **Affected Concepts**: `Resource`, `Asset`, `Party`
-*   **Evidence**: Cal.com EventType/Host DB structure; Odoo resource.resource model.
-*   **Evidence Location**: Cal.com EventType/Host DB structure; Odoo resource.resource model.
-*   **Options**:
-    *   *Option A*: Crew availability is modeled directly as a first-class Crew Resource.
-    *   *Option B*: Resources strictly represent a single human or physical Asset; crews/pools are composite structures.
-*   **Recommendation**: Keep Open.
-*   **Status**: `DECISION_REQUIRED`
-*   **Owner**: Product Owner
-*   **Resolution**: Intentionally deferred. The decision will remain open and will be resolved only after testing human resources, physical assets, rooms/spaces, teams/crews, and capacity pools across scheduling, assignment, availability, conflict detection, delegation, and client composition.
-*   **Supersedes**: None
-*   **Superseded By**: None
-*   **Confidence**: `HIGH`
+There are currently no unresolved decisions. `DEC-BIBLE-002` (Resource
+Representation Scope) was resolved by ADR-008 and moved to `superseded.md`.
