@@ -49,6 +49,9 @@ model Tenant {
   statusLabels       TenantStatusLabel[]
   activities         Activity[]
   securityEvents     SecurityAuditEvent[]
+  workflows          WorkflowDefinition[]
+  workflowRuns       WorkflowRun[]
+  credentials        Credential[]
 
   @@map("tenant")
 }
@@ -558,4 +561,164 @@ model SecurityAuditEvent {
   @@index([tenantId, occurredAt])
   @@index([tenantId, eventType])
   @@map("security_audit_event")
+}
+
+/// Automation node categories (Authority: Spec MET-AUT-001).
+enum WorkflowNodeType {
+  /// Listens for a platform Event, schedule, or webhook and starts a run.
+  Trigger
+  /// Executes an integration or mutates an entity.
+  Action
+  /// Directs flow: conditionals, branching, joins.
+  Logic
+}
+
+enum WorkflowRunStatus {
+  Running
+  Succeeded
+  Failed
+}
+
+/// An orchestrated business process (Authority: Spec MET-WKF-001→003, MET-AUT-001).
+///
+/// Tenant-scoped and stored as data, not code. The engine knows how to walk a
+/// DAG and how to run a *node type*; it knows nothing about any particular
+/// workflow. That is what lets a new workflow be introduced without the engine
+/// changing — foundation-ready condition C.
+model WorkflowDefinition {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  key       String
+  /// Bumped when the graph changes; a run records the version it executed.
+  version   Int      @default(1)
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  nodes  WorkflowNode[]
+  edges  WorkflowEdge[]
+  runs   WorkflowRun[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@map("workflow_definition")
+}
+
+/// One node in the graph (Authority: Spec MET-AUT-001).
+///
+/// `handlerKey` names a node type registered in code. The node's behaviour lives
+/// there; `config` is its data. A capability adds capabilities by registering a
+/// handler, never by editing the executor.
+model WorkflowNode {
+  id         String           @id @default(uuid()) @db.Uuid
+  tenantId   String           @map("tenant_id") @db.Uuid
+  workflowId String           @map("workflow_id") @db.Uuid
+  key        String
+  type       WorkflowNodeType
+  /// Registered node-type key, e.g. `verity.core.emit_event`.
+  handlerKey String           @map("handler_key")
+  config     Json             @default("{}")
+
+  workflow WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  outgoing WorkflowEdge[]     @relation("EdgeFrom")
+  incoming WorkflowEdge[]     @relation("EdgeTo")
+  stepRuns WorkflowStepRun[]
+
+  @@unique([workflowId, key])
+  @@index([tenantId])
+  @@map("workflow_node")
+}
+
+/// A directed edge, optionally conditional (Authority: Spec MET-WKF-002).
+///
+/// `condition` is a declarative predicate over the envelope, not code: routing
+/// decisions are data so a tenant can change a threshold without a deploy.
+model WorkflowEdge {
+  id         String @id @default(uuid()) @db.Uuid
+  tenantId   String @map("tenant_id") @db.Uuid
+  workflowId String @map("workflow_id") @db.Uuid
+  fromNodeId String @map("from_node_id") @db.Uuid
+  toNodeId   String @map("to_node_id") @db.Uuid
+  /// null means unconditional.
+  condition  Json?
+
+  workflow WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  fromNode WorkflowNode       @relation("EdgeFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode   WorkflowNode       @relation("EdgeTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([fromNodeId, toNodeId])
+  @@index([tenantId])
+  @@map("workflow_edge")
+}
+
+/// One execution of a workflow.
+model WorkflowRun {
+  id              String            @id @default(uuid()) @db.Uuid
+  tenantId        String            @map("tenant_id") @db.Uuid
+  workflowId      String            @map("workflow_id") @db.Uuid
+  workflowVersion Int               @map("workflow_version")
+  status          WorkflowRunStatus @default(Running)
+  /// Deduplication key: the same trigger fact must not start two runs.
+  idempotencyKey  String?           @map("idempotency_key")
+  triggerEventId  String?           @map("trigger_event_id") @db.Uuid
+  input           Json              @default("{}")
+  error           String?
+  startedAt       DateTime          @default(now()) @map("started_at")
+  finishedAt      DateTime?         @map("finished_at")
+
+  tenant   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  workflow WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  steps    WorkflowStepRun[]
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, status])
+  @@map("workflow_run")
+}
+
+/// One node execution within a run (Authority: Spec MET-WKF-001).
+///
+/// Each step is its own transaction boundary, and its output envelope is
+/// recorded so a failed run can be inspected without re-running it.
+model WorkflowStepRun {
+  id         String            @id @default(uuid()) @db.Uuid
+  tenantId   String            @map("tenant_id") @db.Uuid
+  runId      String            @map("run_id") @db.Uuid
+  nodeId     String            @map("node_id") @db.Uuid
+  sequence   Int
+  status     WorkflowRunStatus @default(Running)
+  output     Json              @default("{}")
+  error      String?
+  startedAt  DateTime          @default(now()) @map("started_at")
+  finishedAt DateTime?         @map("finished_at")
+
+  run  WorkflowRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  node WorkflowNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([runId, sequence])
+  @@map("workflow_step_run")
+}
+
+/// Encrypted third-party secrets (Authority: Spec MET-AUT-003).
+///
+/// Automations reference a credential by name; the ciphertext is decrypted only
+/// at execution time inside the action node. The secret never appears in a
+/// workflow's JSON configuration, so exporting or logging a workflow cannot leak
+/// it.
+model Credential {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  /// pgcrypto ciphertext. Never selected into application memory except by
+  /// verity.credential_reveal() at execution time.
+  secret    Bytes
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("credential")
 }
