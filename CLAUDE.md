@@ -162,6 +162,9 @@ any requirement written because it is "common in ERP/SaaS" rather than traced to
 - **ADR-005** `Tenant` is the root data-isolation boundary; `Organization` is a nested business-unit hierarchy inside a Tenant. RLS is one *mechanism* for tenant isolation, not the product invariant.
 - **ADR-006** Work sub-steps are `ChecklistItem`. `Task` is reserved for project-level milestones.
 - **ADR-007** Party de-duplication is resolved by invitation + verification: provisioning creates an `Invited` Party with *unverified* contacts and never looks across tenants; identity is linked only when the person verifies a contact channel. Uniqueness is enforced over verified contacts only. `provisionIdentity()` correctly does not de-duplicate.
+- **ADR-008** `Resource` is a single schedulable unit backed by exactly one `Party` or `Asset`. Crews, pools, rooms-as-sets and capacity groups are `ResourceGroup` compositions, not a parallel type. Availability and conflict detection run against Resources only. Supersedes ADR-002.
+- **ADR-009** `StateCategory` is closed at `Draft | Pending | Active | Blocked | Completed | Cancelled` — behavioural, not domain. SLA clocks read `category` only, never `key` or `label`. Only `Completed` and `Cancelled` may be terminal.
+- **ADR-010** The spec `Status` field records **provenance**, not ratification. Only `[UNKNOWN_REASON: INTENTIONALLY_DEFERRED]` (6 uses) withholds permission to implement; every other value is permissive. See `verity-spec/00_governance/status-taxonomy.md`.
 
 ## Identity shape (already decided, do not re-litigate)
 
@@ -235,12 +238,8 @@ Layer 2 through `ctx.scope()`.
 
 ## Open — do not solve silently
 
-- **ADR-002 / DEC-BIBLE-002** Resource scope (single actor vs crews/pools/spaces) is `DECISION_REQUIRED` and intentionally deferred. Build so it can be incorporated cleanly; do not invent a final Resource architecture.
-- **Spec status taxonomy is undefined.** `[UNKNOWN_REASON: FUTURE_CAPABILITY]` (1096 uses) and `[UNKNOWN_REASON: SOURCE_UNAVAILABLE]` (722 uses) appear throughout `verity-spec/` but are defined nowhere. It is unresolved whether these mark ratified-but-unbuilt requirements or unratified ones. Escalate before relying on the status of a requirement.
 - `implementation/02-foundation-build-order/vertical-slice-strategy.md` still lists `DEC-BIBLE-001` as open; it was resolved by ADR-001. The ADR wins.
-- `TenantMembership.roleId` is specified by the handoff but deferred until the authorization step creates `Role`; inventing it early would pre-empt that design.
 - **`Global` scope is defined but never granted.** PLA-AUT-002 defines cross-tenant platform administration, but honouring it means bypassing the RLS that enforces INV-001. `verity.resolve_permissions` filters `Global` grants out, so such a row can exist without silently taking effect. Wiring it up needs a security decision and an ADR.
-- **`StateCategory` set is an implementation decision awaiting ratification.** MET-STA-001 calls state categories "fixed, platform-level enums" but illustrates them with Work-domain values (`EN_ROUTE`, `SCHEDULING`), which would make the platform field-service specific and is the same domain leakage the no-legacy policy forbids. The implemented set is behavioural — `Draft | Pending | Active | Blocked | Completed | Cancelled` — inferred from MET-STA-004's SLA clock semantics. Needs an ADR.
 - **Credential encryption key location is an implementation decision.** MET-AUT-003 requires an encrypted credential registry but does not say where the key lives. It is currently supplied per call from the application environment and never stored in the database, so a dump yields ciphertext alone. A managed KMS would be stronger and needs a platform decision.
 - **The Bible is not editable.** One amendment (AMD-001, `factoryId` -> `tenantId`, Volume V §1.A.1 and Volume VI) was authorised by the product owner as a one-time edit and is already applied. Do not modify `verity-bible/` again without a fresh explicit instruction.
 
