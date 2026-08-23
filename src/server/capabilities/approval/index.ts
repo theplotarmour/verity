@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ForbiddenError, resolvePermissions } from "@/server/platform/authorization";
+import { registerContribution } from "@/server/platform/contribution";
 import { registerCommand, type CommandDefinition, type EmittedEvent } from "@/server/platform/command";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import { transition } from "@/server/platform/state";
@@ -182,6 +183,41 @@ export const listPendingFor: QueryDefinition<
 };
 
 export function registerApprovalCapability(): void {
+  registerContribution({
+    capabilityId: APPROVAL_CAPABILITY,
+    navigation: [
+      { href: "/approvals", label: "Approvals", group: "Capabilities", order: 50,
+        requiresEntity: ENTITY_APPROVAL, requiresVerb: "Read",
+        shells: ["platform", "operations", "worker"] },
+    ],
+    workspace: [
+      {
+        key: "approvals.awaiting",
+        label: "Approvals awaiting your decision",
+        href: "/approvals",
+        // A real count of chains whose *current* step names a role the actor
+        // holds — never a placeholder, per the no-fake-metrics rule.
+        count: async ({ tenantId, roleId }) => {
+          if (!roleId) return 0;
+          const { withTenant } = await import("@/server/platform/tenancy");
+          return withTenant(tenantId, async (tx) => {
+            const steps = await tx.approvalStep.findMany({
+              where: { decision: "Pending", approverRoleId: roleId },
+            });
+            let due = 0;
+            for (const step of steps) {
+              const current = await tx.approvalStep.findFirst({
+                where: { requestId: step.requestId, decision: "Pending" },
+                orderBy: { sequence: "asc" },
+              });
+              if (current?.id === step.id) due++;
+            }
+            return due;
+          });
+        },
+      },
+    ],
+  });
   registerCommand(requestApproval);
   registerCommand(decide);
   registerQuery(listPendingFor);

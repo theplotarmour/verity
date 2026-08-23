@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { registerContribution } from "@/server/platform/contribution";
 import { registerCommand, type CommandDefinition } from "@/server/platform/command";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
@@ -224,6 +225,13 @@ export const listBookings: QueryDefinition<
 };
 
 export function registerSchedulingCapability(): void {
+  registerContribution({
+    capabilityId: SCHEDULING_CAPABILITY,
+    navigation: [
+      { href: "/scheduling", label: "Scheduling", group: "Capabilities", order: 40,
+        requiresEntity: ENTITY_BOOKING, shells: ["platform", "operations"] },
+    ],
+  });
   registerCommand(createResource);
   registerCommand(createGroup);
   registerCommand(declareUnavailable);

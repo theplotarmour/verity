@@ -41,9 +41,11 @@ test.describe("platform shell", () => {
     await expect(switcher.locator("option")).toHaveCount(2);
   });
 
-  test("navigation is derived from active capabilities", async ({ page }) => {
+  test("navigation is derived from capability contributions", async ({ page }) => {
     await page.goto("/");
-    for (const label of ["Location", "Asset", "Evidence", "Scheduling", "Approval"]) {
+    // Labels come from each capability's own contribution, not from the
+    // capability's registry name and not from a map inside the shell.
+    for (const label of ["Locations", "Assets", "Evidence", "Scheduling", "Approvals"]) {
       await expect(page.getByRole("link", { name: label, exact: true })).toBeVisible();
     }
   });

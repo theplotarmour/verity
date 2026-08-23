@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { registerContribution } from "@/server/platform/contribution";
 import { registerCommand, type CommandDefinition } from "@/server/platform/command";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import { withinGeofence } from "@/server/capabilities/location";
@@ -18,6 +19,11 @@ import { withinGeofence } from "@/server/capabilities/location";
  * The geofence verdict is stored at capture time rather than computed on read.
  * A fence can be moved or resized later, and re-judging a two-year-old check-in
  * against today's boundary would silently rewrite history.
+ *
+ * An artefact may be a platform-managed StoredFile — whose checksum is frozen at
+ * confirmation, so the bytes behind the reference cannot change — or an external
+ * URI for artefacts the platform does not host. A photo or document must carry
+ * one of the two; evidence of a photograph with no photograph is not evidence.
  */
 
 export const EVIDENCE_CAPABILITY = "verity.capability.evidence";
@@ -29,6 +35,7 @@ export const captureEvidence: CommandDefinition<
     entityId: string;
     kind: "Photo" | "Signature" | "GeoPoint" | "Document" | "Reading";
     uri?: string;
+    fileId?: string;
     latitude?: number;
     longitude?: number;
     capturedAt: string;
@@ -45,6 +52,7 @@ export const captureEvidence: CommandDefinition<
     entityId: z.string().uuid(),
     kind: z.enum(["Photo", "Signature", "GeoPoint", "Document", "Reading"]),
     uri: z.string().min(1).optional(),
+    fileId: z.string().uuid().optional(),
     latitude: z.number().min(-90).max(90).optional(),
     longitude: z.number().min(-180).max(180).optional(),
     capturedAt: z.string().datetime(),
@@ -53,7 +61,7 @@ export const captureEvidence: CommandDefinition<
   }),
   preconditions: async (_ctx, input) => {
     // A photo or document without a stored artefact is not evidence of anything.
-    if ((input.kind === "Photo" || input.kind === "Document") && !input.uri) {
+    if ((input.kind === "Photo" || input.kind === "Document") && !input.uri && !input.fileId) {
       throw new Error(`E_VALIDATION: ${input.kind} evidence requires a stored artefact`);
     }
     if (input.kind === "GeoPoint" && (input.latitude === undefined || input.longitude === undefined)) {
@@ -78,6 +86,7 @@ export const captureEvidence: CommandDefinition<
         entityId: input.entityId,
         kind: input.kind,
         uri: input.uri ?? null,
+        fileId: input.fileId ?? null,
         latitude: input.latitude ?? null,
         longitude: input.longitude ?? null,
         capturedAt: new Date(input.capturedAt),
@@ -116,6 +125,13 @@ export const listEvidenceFor: QueryDefinition<
 };
 
 export function registerEvidenceCapability(): void {
+  registerContribution({
+    capabilityId: EVIDENCE_CAPABILITY,
+    navigation: [
+      { href: "/evidence", label: "Evidence", group: "Capabilities", order: 30,
+        requiresEntity: ENTITY_EVIDENCE, shells: ["platform", "operations"] },
+    ],
+  });
   registerCommand(captureEvidence);
   registerQuery(listEvidenceFor);
 }
