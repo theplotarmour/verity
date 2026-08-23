@@ -1,25 +1,64 @@
 import { redirect } from "next/navigation";
 import { resolveActor } from "@/server/platform/auth";
 import { SignInForm } from "./SignInForm";
+import { VeritySymbol, VerityWordmark } from "@/components/brand/VerityMark";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Authentication — the product's front door.
+ *
+ * COMPOSITION
+ * Not a form floating in the middle of an empty viewport. The identity sits at
+ * the optical centre — slightly above true centre, where the eye expects it —
+ * the form sits directly beneath on the same axis, and the column is held to
+ * 340px so the fields read as deliberate rather than stretched. The background
+ * is the plain canvas: no gradient, no illustration, no hero panel. The mark and
+ * the whitespace carry the character.
+ *
+ * The form is separated by a hairline rather than boxed in a card. Bible V4 §1.A
+ * puts hierarchy in alignment and negative space; a card here would add a border
+ * that carries no meaning and make the page read as a dialog floating on
+ * nothing.
+ *
+ * COPY
+ * None beyond the words needed to act: the identity, "Sign in", two labels, one
+ * button. The previous version explained that "authentication is handled by the
+ * platform identity realm" — which describes our architecture to someone who
+ * only wants to start work, and quietly tells anyone who reaches this page,
+ * signed in or not, how the system is built. Swapping it for "Welcome back"
+ * would be the same mistake in a friendlier voice, so it is simply gone.
+ *
+ * Only the experience changed. The authentication contract, session handling,
+ * membership resolution and redirect behaviour are untouched.
+ */
 export default async function SignInPage() {
   // Already signed in with a usable membership? Nothing to do here.
   const actor = await resolveActor();
   if (actor) redirect("/");
 
   return (
-    <main id="main" className="min-h-dvh grid place-items-center px-6 py-12">
-      <div className="w-full max-w-sm">
-        <div className="mb-8">
-          <p className="text-[13px] uppercase tracking-[0.14em] text-text-tertiary m-0">Verity</p>
-          <h1 className="text-[22px] font-semibold tracking-[-0.01em] m-0 mt-1">Sign in</h1>
-          <p className="text-text-secondary mt-2 mb-0">
-            Authentication is handled by the platform identity realm.
+    <main
+      id="main"
+      className="grid min-h-dvh justify-items-center bg-canvas px-6"
+    >
+      {/* Optical centring: more space below than above, because a composition
+          centred by arithmetic reads as sitting too low. */}
+      <div className="flex w-full max-w-[340px] flex-col justify-center pb-[16vh] pt-[12vh]">
+        <div className="flex flex-col items-center">
+          <VeritySymbol size={44} className="text-accent" />
+          <VerityWordmark size={30} className="mt-5 text-text" />
+          {/* The board's tagline in its own treatment: neutral for the first two
+              words, accent on the third. */}
+          <p className="m-0 mt-4 text-[10px] font-medium uppercase tracking-[0.24em] text-text-tertiary">
+            Operate. Optimize. <span className="text-accent-ink">Outperform.</span>
           </p>
         </div>
-        <SignInForm />
+
+        <div className="mt-11 border-t border-line pt-9">
+          <h1 className="mb-6 text-center text-[15px] font-medium text-text">Sign in</h1>
+          <SignInForm />
+        </div>
       </div>
     </main>
   );
