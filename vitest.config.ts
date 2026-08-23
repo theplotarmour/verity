@@ -6,6 +6,11 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.ts"],
     setupFiles: ["./src/test/setup-env.ts"],
+    // These are integration tests against a real (often remote) PostgreSQL, and
+    // a single replay step is a network round trip. The 5s default fails on
+    // latency rather than on behaviour, which is the worst kind of red test.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
   resolve: {
     alias: {
