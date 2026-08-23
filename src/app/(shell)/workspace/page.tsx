@@ -79,8 +79,8 @@ export default async function WorkspacePage() {
                 {queue.label}
               </SectionHeading>
               <Surface className="p-5 flex items-center justify-between gap-4">
-                <span className="text-[22px] font-semibold tabular">{queue.value}</span>
-                <Link href={queue.href} className="text-accent no-underline hover:underline">
+                <span className="text-[26px] font-light tabular tracking-[-0.02em]">{queue.value}</span>
+                <Link href={queue.href} className="text-accent-ink no-underline hover:underline">
                   Open →
                 </Link>
               </Surface>

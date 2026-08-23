@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { MembershipOption } from "@/server/platform/auth";
 import { switchOrganization } from "@/server/actions/platform";
+import { Icon } from "@/components/ui/icons";
 
 /**
  * Answers "where am I operating right now?" and lets the actor change it.
@@ -36,41 +37,65 @@ export function OrganizationSwitcher({
   const selectId = `org-switcher-${instanceId}`;
 
   return (
-    <div className="px-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary m-0 mb-1.5">
+    <div className="px-1">
+      <p className="m-0 mb-1.5 px-2 text-[10px] font-medium uppercase tracking-[0.09em] text-text-tertiary">
         Context
       </p>
 
+      {/* One membership is a statement of fact, not a choice. A select with a
+          single option is a control that cannot do anything, so it is shown as
+          the label it actually is. */}
       {single ? (
-        <div>
-          <p className="text-[14px] font-medium text-text m-0">{active.organizationName}</p>
-          <p className="text-[13px] text-text-tertiary m-0">{active.tenantName}</p>
+        <div className="flex items-center gap-2.5 rounded-md border border-line bg-control px-2.5 py-2">
+          <Icon name="building" size={14} className="text-text-tertiary" />
+          <span className="min-w-0">
+            <span className="block truncate text-[13px] font-medium text-text">
+              {active.organizationName}
+            </span>
+            <span className="block truncate text-[11px] text-text-tertiary">
+              {active.tenantName}
+            </span>
+          </span>
         </div>
       ) : (
         <>
           <label htmlFor={selectId} className="sr-only">
             Active organization
           </label>
-          <select
-            id={selectId}
-            className="w-full h-10 min-h-11 sm:min-h-10 px-2 rounded-md bg-surface text-text border border-line-strong text-[14px]"
-            value={active.membershipId}
-            disabled={pending}
-            onChange={(event) => {
-              const membershipId = event.target.value;
-              startTransition(async () => {
-                await switchOrganization(membershipId);
-                router.refresh();
-              });
-            }}
-          >
-            {memberships.map((m) => (
-              <option key={m.membershipId} value={m.membershipId}>
-                {m.organizationName} — {m.tenantName}
-              </option>
-            ))}
-          </select>
-          <p className="text-[13px] text-text-tertiary m-0 mt-1">
+          <div className="relative flex items-center">
+            <Icon
+              name="building"
+              size={14}
+              className="pointer-events-none absolute left-2.5 text-text-tertiary"
+            />
+            <select
+              id={selectId}
+              className="h-11 w-full min-h-11 cursor-pointer appearance-none rounded-md border border-line bg-control pl-8 pr-8 text-[13px] text-text transition-colors hover:border-line-strong sm:h-[38px] sm:min-h-[38px]"
+              value={active.membershipId}
+              disabled={pending}
+              onChange={(event) => {
+                const membershipId = event.target.value;
+                startTransition(async () => {
+                  await switchOrganization(membershipId);
+                  router.refresh();
+                });
+              }}
+            >
+              {memberships.map((m) => (
+                <option key={m.membershipId} value={m.membershipId}>
+                  {m.organizationName} — {m.tenantName}
+                </option>
+              ))}
+            </select>
+            <Icon
+              name="chevronDown"
+              size={13}
+              className="pointer-events-none absolute right-2.5 text-text-tertiary"
+            />
+          </div>
+          {/* aria-live so a switch is announced; without it the page simply
+              changes under a screen-reader user with no explanation. */}
+          <p aria-live="polite" className="m-0 mt-1.5 px-2 text-[11px] text-text-tertiary">
             {pending ? "Switching…" : `${active.roleName ?? "No role"} in this context`}
           </p>
         </>

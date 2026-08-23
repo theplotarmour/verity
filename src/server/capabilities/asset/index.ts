@@ -138,7 +138,7 @@ export function registerAssetCapability(): void {
   registerContribution({
     capabilityId: ASSET_CAPABILITY,
     navigation: [
-      { href: "/assets", label: "Assets", group: "Capabilities", order: 20,
+      { href: "/assets", label: "Assets", group: "Capabilities", order: 20, icon: "assets",
         requiresEntity: ENTITY_ASSET, shells: ["platform", "operations", "worker"] },
     ],
   });

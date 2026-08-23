@@ -59,7 +59,11 @@ export function PageHeader({
   return (
     <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-8">
       <div className="min-w-0">
-        <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-text m-0">{title}</h1>
+        {/* Light, not semibold. The board builds hierarchy from size, tracking
+            and space — and only weights 200–500 are loaded, so a `font-semibold`
+            here asked for a 600 the family does not ship and got a synthesized
+            approximation of it. */}
+        <h1 className="text-[26px] font-light tracking-[-0.02em] text-text m-0">{title}</h1>
         {description && (
           <p className="text-text-secondary mt-1 mb-0 max-w-2xl">{description}</p>
         )}
@@ -72,7 +76,7 @@ export function PageHeader({
 export function SectionHeading({ children, note }: { children: ReactNode; note?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-4 mb-3">
-      <h2 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-text-tertiary m-0">
+      <h2 className="text-[11px] font-medium uppercase tracking-[0.09em] text-text-tertiary m-0">
         {children}
       </h2>
       {note && <span className="text-[13px] text-text-tertiary">{note}</span>}
@@ -99,8 +103,11 @@ export function Button({ variant = "secondary", size = "md", className, ...rest 
     md: "h-10 px-4 text-[14px] min-h-11 sm:min-h-10",
   };
 
+  // `text-accent-on` rather than white: the accent is gold, and white on gold
+  // measures 2.4:1 — below every WCAG threshold. The board's own contrast
+  // routine picks dark ink for a light accent, which reaches 7.3:1.
   const variants = {
-    primary: "bg-accent text-white hover:bg-accent-hover",
+    primary: "bg-accent text-accent-on hover:bg-accent-hover font-medium shadow-sm",
     secondary: "bg-surface text-text border border-line-strong hover:bg-surface-sunken",
     ghost: "bg-transparent text-text-secondary hover:bg-surface-sunken hover:text-text",
     danger: "bg-danger text-white hover:opacity-90",
@@ -187,7 +194,11 @@ const CATEGORY_PRESENTATION: Record<
 > = {
   Draft: { label: "Draft", glyph: "○", color: "text-[var(--color-state-draft)]", background: "bg-surface-sunken" },
   Pending: { label: "Pending", glyph: "◐", color: "text-[var(--color-state-pending)]", background: "bg-warning-subtle" },
-  Active: { label: "Active", glyph: "◉", color: "text-[var(--color-state-active)]", background: "bg-accent-subtle" },
+  // Active reads on the info bed, not the accent bed. Gold now means "selected
+  // or actionable" everywhere else in the shell; letting one StateCategory also
+  // claim it would make a gold row ambiguous between "this is where you are"
+  // and "this record is running".
+  Active: { label: "Active", glyph: "◉", color: "text-[var(--color-state-active)]", background: "bg-info-subtle" },
   Blocked: { label: "Blocked", glyph: "▲", color: "text-[var(--color-state-blocked)]", background: "bg-danger-subtle" },
   Completed: { label: "Completed", glyph: "●", color: "text-[var(--color-state-completed)]", background: "bg-success-subtle" },
   Cancelled: { label: "Cancelled", glyph: "×", color: "text-[var(--color-state-cancelled)]", background: "bg-surface-sunken" },

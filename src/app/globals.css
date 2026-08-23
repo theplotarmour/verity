@@ -3,88 +3,186 @@
 /**
  * Verity design tokens.
  *
- * Authority: Bible V4 §1 — the UX Constitution.
+ * AUTHORITY
+ *   1. Bible V4 §1 — the UX Constitution (outranks everything below).
+ *   2. Approved brand identity boards, `verity-app-ui-mockups/` — visual
+ *      authority for palette, typography, geometry and rhythm.
  *
+ * Bible V4 §1 in force here:
  *   §1.A  Whitespace as structure. Hierarchy comes from alignment and negative
- *         space, not from borders, boxes and card grids. Borders exist, but as a
- *         last resort rather than a default.
- *   §1.B  The default surface is solid and high-contrast — #FFFFFF light,
- *         #1C1C1E dark. Glassmorphic blur is banned as a visual identity and
- *         permitted only for temporary contextual layers such as a mobile sheet.
- *   §1    Premium, precise, calm. No gamified colour.
+ *         space, not from borders, boxes and card grids.
+ *   §1.B  [FACT] Glassmorphic blur is NOT the visual identity. Translucency is
+ *         permitted ONLY for temporary contextual layers (sheet, dropdown,
+ *         floating panel). The default surface is solid and high-contrast:
+ *         #FFFFFF light, #1C1C1E dark.
  *
- * The palette is deliberately almost monochrome. Colour is reserved for state,
- * so that when something is coloured it means something.
+ * WHERE THE BOARD AND THE BIBLE DISAGREE — RESOLVED, DO NOT RE-LITIGATE
+ * The board renders the rail and header with `backdrop-filter: blur(30px)` over
+ * translucent white layers (--g1..--g4). That is persistent chrome, not a
+ * temporary layer, so Bible V4 §1.B forbids it and the Bible outranks the board.
+ *
+ * The look is preserved without the blur: each translucent layer was composited
+ * against its own base and shipped as the resulting solid colour. `--g1` (white
+ * at 44% over #F4F4F5) is #F9F9F9 here. Visually equivalent at rest, legible on
+ * top of any content, and it does not repaint a blurred backdrop on every
+ * scroll frame. Translucency survives only where the Bible names it — see
+ * `.verity-scrim` and `.verity-overlay` at the end of this file.
+ *
+ * ONE ACCENT
+ * The board states the rule directly: "One accent drives interaction, selection
+ * and state. Neutrals and semantic colours never change." Gold is an accent, not
+ * a theme. It marks what is actionable, selected or live — never a heading, a
+ * card, a border by default, or a large background region.
  */
 
 @theme {
-  --color-surface: #ffffff;
-  --color-surface-sunken: #f7f7f8;
+  /* ---------------------------------------------------------------------
+   * Gold — the Verity accent.
+   *
+   * The board defines gold as a *derived tonal scale*, not a flat hex. This
+   * matters: #D4A017 alone reaches only 2.16:1 on the light page, so a single
+   * value cannot serve both modes. Each step below is the board's own mix
+   * function — toward #FFFFFF above 500, toward #0D0D0F below it.
+   * ------------------------------------------------------------------- */
+  --color-gold-50: #fcf9f1;
+  --color-gold-100: #f9f2df;
+  --color-gold-200: #f2e3b9;
+  --color-gold-300: #e6c878;
+  --color-gold-400: #dcb141;
+  --color-gold-500: #d4a017; /* the brand hex, as printed on the board */
+  --color-gold-600: #bc8e16;
+  --color-gold-700: #a07a15;
+  --color-gold-800: #806214;
+  --color-gold-900: #614b12;
+
+  /* Accent roles. Three, because gold behaves differently as a fill than as
+     ink, and collapsing them is how gold interfaces end up illegible. */
+  --color-accent: #bc8e16;        /* fills, indicators, rules, chart strokes */
+  --color-accent-ink: #806214;    /* accent-coloured TEXT and icons — 5.2:1   */
+  --color-accent-on: #191a1c;     /* text ON a gold fill — 7.3:1, never white */
+  --color-accent-subtle: #f6f1e4; /* selected row / active nav bed            */
+  --color-accent-line: #ecdcb0;   /* border of a selected element             */
+  --color-accent-hover: #a07a15;
+
+  /* ---------------------------------------------------------------------
+   * Neutrals. Warm, per the board's "Warm Sand / Gold" direction — the page is
+   * #F4F4F5 rather than pure white so that white surfaces read as raised
+   * without needing a shadow to say so.
+   * ------------------------------------------------------------------- */
+  --color-canvas: #f4f4f5;        /* the page itself (board --base)          */
+  --color-surface: #ffffff;       /* Bible §1.B default surface              */
+  --color-surface-sunken: #efeff0;
   --color-surface-raised: #ffffff;
-  --color-line: #e6e6e8;
-  --color-line-strong: #d2d2d6;
+  --color-chrome: #f9f9f9;        /* rail + header (board --g1, flattened)   */
+  --color-control: #fcfcfc;       /* inputs and controls (board --g3)        */
 
-  --color-text: #16161a;
-  --color-text-secondary: #5c5c66;
-  --color-text-tertiary: #8a8a94;
+  --color-line: #e8e8e9;          /* board --bd, flattened                   */
+  --color-line-strong: #dbdbdd;   /* board --bds, flattened                  */
 
-  --color-accent: #1f5fd9;
-  --color-accent-hover: #1a51ba;
-  --color-accent-subtle: #eef3fd;
+  --color-text: #18181b;          /* 16.1:1 on canvas                        */
+  --color-text-secondary: #5c5c60;/*  6.1:1                                  */
+  --color-text-tertiary: #6f6f74; /*  4.6:1 — darkened from the board's       */
+                                  /*  #7A7A7F (3.9:1) to clear AA body text.  */
 
-  /* State colours map to StateCategory (ADR-009), never invented per screen. */
-  --color-state-draft: #8a8a94;
-  --color-state-pending: #a8730a;
-  --color-state-active: #1f5fd9;
-  --color-state-blocked: #b3261e;
-  --color-state-completed: #1f7a4d;
-  --color-state-cancelled: #6b6b75;
+  /* ---------------------------------------------------------------------
+   * State colours map to StateCategory (ADR-009) and are never invented per
+   * screen. The board's semantic set is muted on purpose — these are read all
+   * day and saturated status chips become noise by the third screen.
+   * ------------------------------------------------------------------- */
+  --color-state-draft: #6f6f74;
+  --color-state-pending: #8a6313;
+  --color-state-active: #3a6b96;
+  --color-state-blocked: #a63d34;
+  --color-state-completed: #3f7d53;
+  --color-state-cancelled: #6f6f74;
 
-  --color-danger: #b3261e;
-  --color-danger-subtle: #fdeeed;
-  --color-warning: #a8730a;
-  --color-warning-subtle: #fdf6e9;
-  --color-success: #1f7a4d;
-  --color-success-subtle: #edf7f1;
+  --color-danger: #a63d34;
+  --color-danger-subtle: #fbf0ef;
+  --color-warning: #8a6313;
+  --color-warning-subtle: #fbf6ea;
+  --color-success: #3f7d53;
+  --color-success-subtle: #eff6f1;
+  --color-info: #3a6b96;
+  --color-info-subtle: #eff4f8;
 
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
+  /* Radii — the board's actual geometry. Restrained and consistent; a stray
+     radius is the fastest way to make a premium interface look assembled. */
+  --radius-xs: 6px;
+  --radius-sm: 9px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
 
-  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  /* Elevation. Low, wide and nearly colourless — depth by shadow *spread*,
+     not darkness. The board never uses a hard drop shadow. */
+  --shadow-sm: 0 1px 1px rgb(18 18 21 / 0.025), 0 12px 32px -16px rgb(18 18 21 / 0.13);
+  --shadow-md: 0 1px 2px rgb(18 18 21 / 0.03), 0 22px 52px -20px rgb(18 18 21 / 0.19);
+  --shadow-lg: 0 2px 6px rgb(18 18 21 / 0.05), 0 44px 90px -28px rgb(18 18 21 / 0.32);
+
+  --font-sans: var(--font-inter), ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SF Mono", Menlo, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  @theme {
-    --color-surface: #1c1c1e;
-    --color-surface-sunken: #141416;
-    --color-surface-raised: #242426;
-    --color-line: #303034;
-    --color-line-strong: #3d3d42;
+/**
+ * Dark mode.
+ *
+ * Designed, not inverted. The page drops to near-black (#0D0D0F, the board's
+ * dark base) while the surface sits at Bible §1.B's #1C1C1E — so surfaces read
+ * as *lifted out of* the page rather than merely lighter than it.
+ *
+ * Gold moves UP the scale here (300, not 600). A dark-mode accent must gain
+ * luminance to stay legible; reusing the light-mode gold would drop it to
+ * roughly 2:1 against the page.
+ */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
-    --color-text: #f2f2f4;
-    --color-text-secondary: #a0a0aa;
-    --color-text-tertiary: #74747e;
+/* `data-theme` is always a RESOLVED value — "light" or "dark", never "system".
+   The inline script in the document head reads the stored preference, resolves
+   "system" against the media query, and stamps the result before first paint.
+   That keeps this file to one dark block instead of duplicating every token
+   into a `prefers-color-scheme` copy that could drift out of sync with it. */
+:root[data-theme="dark"] {
+  --color-accent: #e6c878;        /* 11.9:1 on the dark page */
+  --color-accent-ink: #e6c878;
+  --color-accent-on: #191a1c;     /* still dark ink on gold  */
+  --color-accent-subtle: #241f14;
+  --color-accent-line: #513f12;
+  --color-accent-hover: #f2e3b9;
 
-    --color-accent: #6b9bf5;
-    --color-accent-hover: #85adf7;
-    --color-accent-subtle: #1b2740;
+  --color-canvas: #0d0d0f;
+  --color-surface: #1c1c1e;
+  --color-surface-sunken: #141416;
+  --color-surface-raised: #242427;
+  --color-chrome: #141417;
+  --color-control: #1e1e22;
 
-    --color-state-draft: #8a8a94;
-    --color-state-pending: #d19a2e;
-    --color-state-active: #6b9bf5;
-    --color-state-blocked: #e8837b;
-    --color-state-completed: #5cb98a;
-    --color-state-cancelled: #74747e;
+  --color-line: #26262a;
+  --color-line-strong: #35353a;
 
-    --color-danger: #e8837b;
-    --color-danger-subtle: #2c1a19;
-    --color-warning: #d19a2e;
-    --color-warning-subtle: #2b2213;
-    --color-success: #5cb98a;
-    --color-success-subtle: #16261e;
-  }
+  --color-text: #ececee;
+  --color-text-secondary: #a1a1a7;
+  --color-text-tertiary: #85858b;
+
+  --color-state-draft: #85858b;
+  --color-state-pending: #dfae4e;
+  --color-state-active: #7ea8cc;
+  --color-state-blocked: #e0796d;
+  --color-state-completed: #6fbe86;
+  --color-state-cancelled: #85858b;
+
+  --color-danger: #e0796d;
+  --color-danger-subtle: #2a1917;
+  --color-warning: #dfae4e;
+  --color-warning-subtle: #2a2214;
+  --color-success: #6fbe86;
+  --color-success-subtle: #16241b;
+  --color-info: #7ea8cc;
+  --color-info-subtle: #16202a;
+
+  --shadow-sm: 0 1px 1px rgb(0 0 0 / 0.3), 0 16px 40px -18px rgb(0 0 0 / 0.7);
+  --shadow-md: 0 2px 4px rgb(0 0 0 / 0.35), 0 28px 62px -22px rgb(0 0 0 / 0.8);
+  --shadow-lg: 0 3px 8px rgb(0 0 0 / 0.45), 0 50px 100px -30px rgb(0 0 0 / 0.9);
 }
 
 * { box-sizing: border-box; }
@@ -92,34 +190,57 @@
 html, body {
   margin: 0;
   padding: 0;
-  background: var(--color-surface-sunken);
+  background: var(--color-canvas);
   color: var(--color-text);
-  font-family: var(--font-sans);
-  /* Operational software is read for hours; optimise for legibility. */
+  /* Spelled out rather than `var(--font-sans)`: Tailwind v4 tree-shakes theme
+     variables no utility references, so relying on it here silently fell back
+     to Times. The stack is stated where it is used. */
+  font-family: var(--font-inter), ui-sans-serif, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  /* Operational software is read for hours; optimise for legibility. The board
+     sets chrome at 12.5px, which is right for glanceable navigation and wrong
+     for content. Chrome follows the board; content stays at 14px. */
   font-size: 14px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* Focus is never removed, only restyled. Keyboard users are first-class. */
-:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
+/* The board's headings are Light (300), not bold. Weight is not how this
+   interface signals importance — size, space and position are. */
+h1, h2, h3 {
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  margin: 0;
 }
 
-/* Bible V4 §1.B: translucency is permitted only for temporary contextual
-   layers. This is the single place it is allowed, and it is a scrim, not a
-   surface. */
+/* Focus is never removed, only restyled. Keyboard users are first-class.
+   Two-tone so the ring survives on both gold and neutral surfaces. */
+:focus-visible {
+  outline: 2px solid var(--color-accent-ink);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/**
+ * The two places Bible V4 §1.B permits translucency: a scrim behind a temporary
+ * layer, and the temporary layer itself. Nothing persistent may use either.
+ */
 .verity-scrim {
-  background: color-mix(in srgb, #000 45%, transparent);
+  background: color-mix(in srgb, #06060a 45%, transparent);
+}
+
+.verity-overlay {
+  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
 }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

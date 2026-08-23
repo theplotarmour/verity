@@ -53,7 +53,7 @@ function Cell({ column, row }: { column: Column; row: Record<string, unknown> })
 
   if (column.variant === "link" && column.href) {
     return (
-      <Link href={fillTemplate(column.href, row)} className="text-accent no-underline hover:underline">
+      <Link href={fillTemplate(column.href, row)} className="text-accent-ink no-underline hover:underline">
         {text}
       </Link>
     );

@@ -250,7 +250,7 @@ export function registerLocationCapability(): void {
   registerContribution({
     capabilityId: LOCATION_CAPABILITY,
     navigation: [
-      { href: "/locations", label: "Locations", group: "Capabilities", order: 10,
+      { href: "/locations", label: "Locations", group: "Capabilities", order: 10, icon: "locations",
         requiresEntity: ENTITY_LOCATION, shells: ["platform", "operations"] },
     ],
   });
