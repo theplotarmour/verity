@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { registerContribution } from "@/server/platform/contribution";
 import { registerCommand, type CommandDefinition } from "@/server/platform/command";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import { assertMutable, transition } from "@/server/platform/state";
@@ -134,6 +135,13 @@ export const listAssets: QueryDefinition<
 };
 
 export function registerAssetCapability(): void {
+  registerContribution({
+    capabilityId: ASSET_CAPABILITY,
+    navigation: [
+      { href: "/assets", label: "Assets", group: "Capabilities", order: 20,
+        requiresEntity: ENTITY_ASSET, shells: ["platform", "operations", "worker"] },
+    ],
+  });
   registerCommand(registerAsset);
   registerCommand(changeAssetState);
   registerCommand(relocateAsset);

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { registerScopeResolver } from "@/server/platform/authorization";
+import { registerContribution } from "@/server/platform/contribution";
 import { registerCommand, type CommandDefinition } from "@/server/platform/command";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
@@ -199,6 +200,13 @@ export const listLocations: QueryDefinition<
 /** Installs the capability into the running process. */
 export function registerLocationCapability(): void {
   registerScopeResolver("Location", actorLocations);
+  registerContribution({
+    capabilityId: LOCATION_CAPABILITY,
+    navigation: [
+      { href: "/locations", label: "Locations", group: "Capabilities", order: 10,
+        requiresEntity: ENTITY_LOCATION, shells: ["platform", "operations"] },
+    ],
+  });
   registerCommand(createPlace);
   registerCommand(createLocation);
   registerCommand(addGeofence);

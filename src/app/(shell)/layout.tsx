@@ -4,6 +4,7 @@ import { listMemberships, resolveActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { resolvePermissions } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
+import { navigationFor } from "@/server/platform/contribution";
 import { ShellChrome, type NavArea } from "@/components/shell/ShellChrome";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const memberships = await listMemberships();
   const active = memberships.find((m) => m.membershipId === actor.membershipId) ?? memberships[0]!;
 
-  const { capabilities, canAudit, canConfigure } = await withTenant(actor.tenantId, async (tx) => {
+  const { capabilities, canAudit, canConfigure, grants } = await withTenant(actor.tenantId, async (tx) => {
     const activations = await tx.tenantActivation.findMany({
       where: { status: "Active" },
       include: { capability: true },
@@ -38,37 +39,42 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     const readable = new Set(permissions.filter((p) => p.verb === "Read").map((p) => p.entity));
 
     return {
-      // A capability appears only if it is active *and* the actor can read at
-      // least one of its entities. A menu item that leads to E_FORBIDDEN is
-      // worse than no menu item.
-      capabilities: activations
-        .filter((a) => a.capability.entityTypes.some((e) => readable.has(e)))
-        .map((a) => ({ id: a.capabilityId, name: a.capability.name })),
+      // Every active capability is offered to the contribution layer, which
+      // applies the per-item permission filter. Filtering here as well would
+      // hide a capability whose only visible surface is one the actor *can*
+      // reach.
+      capabilities: activations.map((a) => ({ id: a.capabilityId, name: a.capability.name })),
+      grants: permissions.map((p) => ({ entity: p.entity, verb: p.verb })),
       canAudit: readable.size > 0,
       canConfigure: permissions.some((p) => p.verb === "Edit"),
     };
   });
 
-  const capabilityRoutes: Record<string, string> = {
-    "verity.capability.location": "/locations",
-    "verity.capability.asset": "/assets",
-    "verity.capability.scheduling": "/scheduling",
-    "verity.capability.evidence": "/evidence",
-    "verity.capability.approval": "/approvals",
-  };
+  // Capability navigation is declared by the capabilities themselves. The shell
+  // previously held a hard-coded id-to-route map, which meant every new
+  // capability required an edit to platform code — exactly the coupling the
+  // capability system exists to prevent.
+  const contributed = navigationFor({
+    activeCapabilityIds: capabilities.map((c) => c.id),
+    shell: "platform",
+    canRead: (entity, verb) => grants.some((g) => g.entity === entity && g.verb === verb),
+  });
 
   const areas: NavArea[] = [
     { group: "Platform", items: [{ href: "/", label: "Overview" }, { href: "/workspace", label: "Workspace" }] },
     {
       group: "Capabilities",
-      items: capabilities
-        .filter((c) => capabilityRoutes[c.id])
-        .map((c) => ({ href: capabilityRoutes[c.id]!, label: c.name })),
+      items: contributed
+        .filter((c) => (c.group ?? "Capabilities") === "Capabilities")
+        .map((c) => ({ href: c.href, label: c.label })),
     },
     {
       group: "Administration",
       items: [
         { href: "/capabilities", label: "Capability registry" },
+        ...contributed
+          .filter((c) => c.group === "Administration")
+          .map((c) => ({ href: c.href, label: c.label })),
         ...(canConfigure ? [{ href: "/configuration", label: "Configuration" }] : []),
         ...(canAudit ? [{ href: "/audit", label: "Audit" }] : []),
       ],

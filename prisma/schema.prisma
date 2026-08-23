@@ -34,6 +34,9 @@ datasource db {
 model Tenant {
   id           String   @id @default(uuid()) @db.Uuid
   name         String
+  /// IANA zone for reckoning local time. Null means UTC, stated explicitly
+  /// rather than guessed — a wrong guess misplaces every deadline by the offset.
+  timeZone     String?  @map("time_zone")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
   version      Int      @default(1)
@@ -70,6 +73,11 @@ model Tenant {
   bookings             Booking[]
   approvalRequests     ApprovalRequest[]
   approvalSteps        ApprovalStep[]
+  businessCalendars    BusinessCalendar[]
+  businessHours        BusinessHours[]
+  businessHolidays     BusinessHoliday[]
+  slaPolicies          SlaPolicy[]
+  slaClocks            SlaClock[]
 
   @@map("tenant")
 }
@@ -81,6 +89,9 @@ model Organization {
   tenantId     String   @map("tenant_id") @db.Uuid
   parentId     String?  @map("parent_id") @db.Uuid
   name         String
+  /// Overrides the tenant zone for this branch. A portfolio genuinely spans
+  /// zones, and a regional manager reads times in the site's local clock.
+  timeZone     String?  @map("time_zone")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
   version      Int      @default(1)
@@ -1337,4 +1348,176 @@ model ApprovalStep {
   @@unique([requestId, sequence])
   @@index([tenantId])
   @@map("approval_step")
+}
+
+// ===========================================================================
+// PLATFORM: Temporal model
+//
+// Authority: Bible V4 §5.B ("schedulers see time zones in local project
+// contexts"), Bible V3 §1 (SLA clocks), EXE-SCH-001 (UTC storage with
+// user-local translation).
+//
+// Every instant is stored in UTC. A timezone is a *rendering and reckoning*
+// context, not a storage format: "9am local" means different instants in
+// different places, and a business calendar cannot decide whether 08:30 is
+// inside working hours without knowing whose clock is being read.
+//
+// The platform holds no default. Guessing a timezone silently misplaces every
+// deadline by the offset, so an unconfigured tenant is explicitly UTC and the
+// interface says so rather than pretending to know.
+// ===========================================================================
+
+/// Working-hours calendar used by SLA clocks (Bible V3 §1).
+///
+/// Tenant-scoped and optionally narrowed to an organization, because a
+/// portfolio's branches genuinely keep different hours.
+model BusinessCalendar {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  /// Null means the calendar applies tenant-wide.
+  organizationId String?  @map("organization_id") @db.Uuid
+  name           String
+  /// IANA zone, e.g. "Europe/London". Never an offset: an offset cannot
+  /// express daylight saving, so a fixed one is wrong for half the year.
+  timeZone       String   @map("time_zone")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  version        Int      @default(1)
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  hours    BusinessHours[]
+  holidays BusinessHoliday[]
+  policies SlaPolicy[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id], name: "business_calendar_tenant_scoped_id")
+  @@index([tenantId])
+  @@map("business_calendar")
+}
+
+/// One working window on one weekday, in the calendar's own timezone.
+model BusinessHours {
+  id          String @id @default(uuid()) @db.Uuid
+  tenantId    String @map("tenant_id") @db.Uuid
+  calendarId  String @map("calendar_id") @db.Uuid
+  /// 0 = Sunday through 6 = Saturday, matching JavaScript's getDay().
+  weekday     Int
+  /// Minutes from local midnight. Stored as minutes rather than a time so a
+  /// window can cross into a 25-hour DST day without ambiguity.
+  startMinute Int    @map("start_minute")
+  endMinute   Int    @map("end_minute")
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  calendar BusinessCalendar @relation(fields: [tenantId, calendarId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([tenantId, calendarId, weekday])
+  @@map("business_hours")
+}
+
+/// A non-working date. Stored as a local date, not an instant, because a
+/// holiday is a day in a place rather than a moment in time.
+model BusinessHoliday {
+  id         String @id @default(uuid()) @db.Uuid
+  tenantId   String @map("tenant_id") @db.Uuid
+  calendarId String @map("calendar_id") @db.Uuid
+  /// ISO local date, e.g. "2026-12-25".
+  localDate  String @map("local_date")
+  name       String
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  calendar BusinessCalendar @relation(fields: [tenantId, calendarId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([calendarId, localDate])
+  @@index([tenantId])
+  @@map("business_holiday")
+}
+
+// ===========================================================================
+// PLATFORM: SLA substrate
+//
+// Authority: Bible V3 §1 [FACT] — the clock state machine is constitutional,
+// MET-STA-004 (clocks evaluate at the StateCategory layer, ignoring label text).
+//
+// This is the reusable substrate only. It provides clocks, calendars, pause and
+// breach semantics and an escalation hook. It defines no client's SLA policy and
+// no domain workflow — a capability attaches a policy to its own entity and the
+// platform runs the clock.
+//
+// The clock transitions are driven by StateCategory rather than by state keys,
+// which is exactly why ADR-009 fixed a behavioural category set: Active runs the
+// clock, Pending and Blocked pause it, Completed and Cancelled stop it, Draft
+// has not started. A capability gets correct SLA behaviour by declaring its
+// states honestly, without writing any clock code.
+// ===========================================================================
+
+enum SlaClockStatus {
+  /// Target created, clock not yet started (Bible V3: INITIALIZE).
+  NotStarted
+  Running
+  Paused
+  /// Deadline passed while running.
+  Breached
+  /// Terminal; elapsed time frozen.
+  Stopped
+}
+
+/// A reusable SLA policy owned by a capability's entity type.
+model SlaPolicy {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  /// EntityDefinition.key this policy applies to.
+  entityKey     String   @map("entity_key")
+  name          String
+  /// Working minutes allowed before breach.
+  targetMinutes Int      @map("target_minutes")
+  /// Null means elapsed wall-clock time; otherwise only working time counts.
+  calendarId    String?  @map("calendar_id") @db.Uuid
+  /// Higher wins when several policies match (Bible V3: contract SLA overrides
+  /// tenant default; an explicit work-level deadline overrides both).
+  precedence    Int      @default(0)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  version       Int      @default(1)
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  calendar BusinessCalendar? @relation(fields: [tenantId, calendarId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  clocks   SlaClock[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id], name: "sla_policy_tenant_scoped_id")
+  @@index([tenantId, entityKey])
+  @@map("sla_policy")
+}
+
+/// A running clock against one record.
+model SlaClock {
+  id                 String         @id @default(uuid()) @db.Uuid
+  tenantId           String         @map("tenant_id") @db.Uuid
+  policyId           String         @map("policy_id") @db.Uuid
+  entityKey          String         @map("entity_key")
+  entityId           String         @map("entity_id") @db.Uuid
+  status             SlaClockStatus @default(NotStarted)
+  /// Working minutes consumed while running. Accumulated on pause and stop so
+  /// the figure survives a restart and needs no replay to compute.
+  elapsedMinutes     Int            @default(0) @map("elapsed_minutes")
+  /// When the current running segment began; null unless Running.
+  runningSince       DateTime?      @map("running_since")
+  /// Computed when the clock starts or resumes. An explicit override wins
+  /// (Bible V3 precedence rule 2).
+  deadlineAt         DateTime?      @map("deadline_at")
+  overrideDeadlineAt DateTime?      @map("override_deadline_at")
+  breachedAt         DateTime?      @map("breached_at")
+  stoppedAt          DateTime?      @map("stopped_at")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+  version            Int            @default(1)
+
+  tenant Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  policy SlaPolicy @relation(fields: [tenantId, policyId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([policyId, entityKey, entityId])
+  @@index([tenantId, status])
+  @@index([tenantId, deadlineAt])
+  @@map("sla_clock")
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { registerContribution } from "@/server/platform/contribution";
 import { registerCommand, type CommandDefinition } from "@/server/platform/command";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import { withinGeofence } from "@/server/capabilities/location";
@@ -116,6 +117,13 @@ export const listEvidenceFor: QueryDefinition<
 };
 
 export function registerEvidenceCapability(): void {
+  registerContribution({
+    capabilityId: EVIDENCE_CAPABILITY,
+    navigation: [
+      { href: "/evidence", label: "Evidence", group: "Capabilities", order: 30,
+        requiresEntity: ENTITY_EVIDENCE, shells: ["platform", "operations"] },
+    ],
+  });
   registerCommand(captureEvidence);
   registerQuery(listEvidenceFor);
 }

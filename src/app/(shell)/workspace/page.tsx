@@ -3,7 +3,8 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { resolvePermissions } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { EmptyState, PageHeader, SectionHeading, StateBadge, Surface } from "@/components/ui/primitives";
+import { workspaceContributionsFor } from "@/server/platform/contribution";
+import { EmptyState, PageHeader, SectionHeading, Surface } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
 
@@ -27,31 +28,36 @@ export default async function WorkspacePage() {
   const data = await withTenant(actor.tenantId, async (tx) => {
     const permissions = actor.roleId ? await resolvePermissions(tx, actor.roleId) : [];
 
-    const [approvals, exceptions, blockedAssets] = await Promise.all([
-      tx.approvalStep.findMany({
-        where: { decision: "Pending", approverRoleId: actor.roleId ?? undefined },
-        include: { request: true },
-        orderBy: { sequence: "asc" },
-      }),
+    const [activations, exceptions] = await Promise.all([
+      tx.tenantActivation.findMany({ where: { status: "Active" } }),
       tx.syncException.findMany({ where: { resolvedAt: null }, take: 10 }),
-      tx.asset.findMany({ where: { state: "maintenance" }, take: 10 }),
     ]);
 
-    // Only chains whose *current* step is this one.
-    const actionable = [];
-    for (const step of approvals) {
-      const current = await tx.approvalStep.findFirst({
-        where: { requestId: step.requestId, decision: "Pending" },
-        orderBy: { sequence: "asc" },
-      });
-      if (current?.id === step.id) actionable.push(step);
-    }
-
-    return { permissions, actionable, exceptions, blockedAssets };
+    return { permissions, activations, exceptions };
   });
 
-  const nothingWaiting =
-    data.actionable.length === 0 && data.exceptions.length === 0 && data.blockedAssets.length === 0;
+  // Queue entries are supplied by the capabilities themselves. The workspace
+  // does not know what an approval or a patrol is; it knows how to render "N
+  // things are waiting on you" and where to send the user. A capability that
+  // cannot count something real simply contributes nothing.
+  const queues = workspaceContributionsFor({
+    activeCapabilityIds: data.activations.map((a) => a.capabilityId),
+    shell: "platform",
+  });
+
+  const counted = await Promise.all(
+    queues.map(async (queue) => ({
+      ...queue,
+      value: await queue.count({
+        tenantId: actor.tenantId,
+        roleId: actor.roleId,
+        userId: actor.userId,
+      }),
+    })),
+  );
+  const waiting = counted.filter((q) => q.value > 0);
+
+  const nothingWaiting = waiting.length === 0 && data.exceptions.length === 0;
 
   return (
     <>
@@ -67,45 +73,19 @@ export default async function WorkspacePage() {
         />
       ) : (
         <div className="flex flex-col gap-10">
-          {data.actionable.length > 0 && (
-            <section>
-              <SectionHeading note={`${data.actionable.length} item${data.actionable.length === 1 ? "" : "s"}`}>
-                Awaiting your decision
+          {waiting.map((queue) => (
+            <section key={queue.key}>
+              <SectionHeading note={`${queue.value} item${queue.value === 1 ? "" : "s"}`}>
+                {queue.label}
               </SectionHeading>
-              <Surface className="p-1">
-                <ul className="list-none m-0 p-0">
-                  {data.actionable.map((step) => (
-                    <li key={step.id} className="flex items-center justify-between gap-4 px-4 py-3 border-b border-line last:border-b-0">
-                      <span className="text-text">
-                        {step.request.subjectEntityKey.split(".").pop()} · step {step.sequence + 1}
-                      </span>
-                      <Link href="/approvals" className="text-accent no-underline hover:underline shrink-0">
-                        Decide →
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
+              <Surface className="p-5 flex items-center justify-between gap-4">
+                <span className="text-[22px] font-semibold tabular">{queue.value}</span>
+                <Link href={queue.href} className="text-accent no-underline hover:underline">
+                  Open →
+                </Link>
               </Surface>
             </section>
-          )}
-
-          {data.blockedAssets.length > 0 && (
-            <section>
-              <SectionHeading>Blocked records</SectionHeading>
-              <Surface className="p-1">
-                <ul className="list-none m-0 p-0">
-                  {data.blockedAssets.map((asset) => (
-                    <li key={asset.id} className="flex items-center justify-between gap-4 px-4 py-3 border-b border-line last:border-b-0">
-                      <Link href={`/assets/${asset.id}`} className="text-accent no-underline hover:underline">
-                        {asset.name}
-                      </Link>
-                      <StateBadge category="Blocked" label={asset.state} />
-                    </li>
-                  ))}
-                </ul>
-              </Surface>
-            </section>
-          )}
+          ))}
 
           {data.exceptions.length > 0 && (
             <section>
