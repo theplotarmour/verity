@@ -47,7 +47,7 @@ export function ScheduleGrid({
             {days.map((day) => (
               <div
                 key={day.toISOString()}
-                className="flex-1 text-[11px] text-text-tertiary text-center py-1.5 border-l border-line first:border-l-0 tabular"
+                className="tabular flex-1 border-l border-line py-2 text-center text-[11px] text-text-tertiary first:border-l-0"
               >
                 {day.getUTCDate()}
               </div>
@@ -62,8 +62,8 @@ export function ScheduleGrid({
               return (
                 <li key={resource.id} className="flex items-stretch border-b border-line last:border-b-0">
                   <div className="w-[180px] shrink-0 px-4 py-3">
-                    <p className="text-text m-0 truncate">{resource.name}</p>
-                    <p className="text-[13px] text-text-tertiary m-0">{resource.backing}</p>
+                    <p className="m-0 truncate text-[14px] text-text">{resource.name}</p>
+                    <p className="m-0 text-[12px] text-text-tertiary">{resource.backing}</p>
                   </div>
 
                   <div className="relative flex-1 my-2 mr-3">
@@ -85,11 +85,15 @@ export function ScheduleGrid({
                       return (
                         <div
                           key={booking.id}
-                          className="absolute top-0 bottom-0 rounded-sm bg-accent-subtle border border-accent px-1.5 overflow-hidden"
+                          // Filled, not outlined. A booking is often only a few
+                          // percent of a 14-day window, and at that width an
+                          // outline collapses into two lines with nothing legible
+                          // between them.
+                          className="absolute bottom-0 top-0 flex items-center overflow-hidden rounded-sm bg-accent px-1.5"
                           style={{ left: `${pos.left}%`, width: `${Math.max(pos.width, 1.2)}%` }}
                           title={`${booking.subject}: ${booking.startsAt} → ${booking.endsAt}`}
                         >
-                          <span className="text-[11px] text-accent-ink whitespace-nowrap">{booking.subject}</span>
+                          <span className="whitespace-nowrap text-[11px] font-medium text-accent-on">{booking.subject}</span>
                         </div>
                       );
                     })}
@@ -101,24 +105,39 @@ export function ScheduleGrid({
         </div>
       </div>
 
-      {/* The same information without the geometry. */}
-      <details>
-        <summary className="text-[13px] text-text-secondary cursor-pointer">
-          Bookings as a list ({bookings.length})
+      {/*
+        The same information without the geometry. A time grid is unreadable to a
+        screen reader and to anyone who needs exact times rather than relative
+        widths, so the list is a peer view rather than a fallback — but it stays
+        collapsed, because the grid is the answer most of the time.
+      */}
+      <details className="group rounded-lg border border-line bg-surface">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-[12px] text-text-secondary transition-colors hover:text-text [&::-webkit-details-marker]:hidden">
+          <span
+            aria-hidden="true"
+            className="text-[10px] text-text-tertiary transition-transform group-open:rotate-90"
+          >
+            ▶
+          </span>
+          Bookings as a list
+          <span className="text-text-tertiary">({bookings.length})</span>
         </summary>
-        <ul className="mt-2 mb-0 pl-5 text-[13px] text-text-secondary">
+        <ul className="m-0 list-none divide-y divide-line border-t border-line p-0">
           {bookings.map((b) => (
-            <li key={b.id}>
-              {resources.find((r) => r.id === b.resourceId)?.name ?? "Unknown resource"} — {b.subject}:{" "}
-              {b.startsAt.replace("T", " ").slice(0, 16)} → {b.endsAt.replace("T", " ").slice(0, 16)}
+            <li key={b.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-2.5">
+              <span className="text-[13px] text-text">
+                {resources.find((r) => r.id === b.resourceId)?.name ?? "Unknown resource"}
+                <span className="text-text-tertiary"> · {b.subject}</span>
+              </span>
+              <span className="tabular text-[12px] text-text-tertiary">
+                {b.startsAt.replace("T", " ").slice(0, 16)} → {b.endsAt.replace("T", " ").slice(0, 16)}
+              </span>
             </li>
           ))}
         </ul>
       </details>
 
-      <p className="text-[13px] text-text-tertiary m-0">
-        14-day window · times shown in UTC.
-      </p>
+      <p className="m-0 text-[12px] text-text-tertiary">14-day window · times shown in UTC.</p>
     </div>
   );
 }

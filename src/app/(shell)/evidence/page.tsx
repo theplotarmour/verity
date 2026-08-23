@@ -4,7 +4,7 @@ import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { ENTITY_EVIDENCE } from "@/server/capabilities/evidence";
 import { DataTable } from "@/components/ui/DataTable";
-import { PageHeader, PermissionDenied, SectionHeading, Surface } from "@/components/ui/primitives";
+import { PageHeader, Panel, PermissionDenied, Stat } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
 
@@ -52,32 +52,50 @@ export default async function EvidencePage() {
 
   return (
     <>
+      {/*
+        Evidence is a register, not a CRUD list — nothing on this page mutates
+        anything, by design. The composition says so before the copy does: there
+        is no primary action in the masthead, and the immutability note is a
+        standing panel rather than a footnote, because "why can I not edit this"
+        is the question this screen exists to answer.
+      */}
       <PageHeader
+        eyebrow="Capability"
         title="Evidence"
         description="Immutable field data. Once recorded, evidence cannot be edited or deleted at any privilege level."
       />
+
+      <div className="mb-6 grid grid-cols-2 items-stretch gap-3 sm:grid-cols-4">
+        <Stat label="Captures" value={rows.length} />
+        <Stat label="Inside fence" value={rows.filter((r) => r.fence === "Inside").length} />
+        <Stat label="Outside fence" value={rows.filter((r) => r.fence === "Outside").length} />
+        <Stat
+          label="Not evaluated"
+          value={rows.filter((r) => r.fence === "Not evaluated").length}
+          hint="No fence at capture"
+        />
+      </div>
 
       <DataTable
         caption="Evidence"
         rows={rows}
         columns={[
-          { key: "kind", header: "Kind" },
-          { key: "subject", header: "Subject", variant: "link", href: "/assets/{subjectId}" },
+          { key: "subject", header: "Subject", variant: "link", href: "/assets/{subjectId}", subKey: "kind" },
           { key: "fence", header: "Geofence at capture" },
           { key: "capturedAt", header: "Captured" },
         ]}
         emptyTitle="No evidence captured"
-        emptyDescription="Evidence is captured against a record — open an asset to capture some."
+        emptyDescription="Evidence is captured against a record. Open an asset to capture some."
       />
 
-      <div className="mt-8">
-        <SectionHeading>Why the verdict is stored, not computed</SectionHeading>
-        <Surface className="p-5">
-          <p className="text-text-secondary m-0">
-            The geofence result is recorded at capture time. A fence can be moved or resized later, and
-            re-judging an old capture against today&rsquo;s boundary would silently rewrite history.
+      <div className="mt-6">
+        <Panel title="Why the verdict is stored, not computed">
+          <p className="m-0 max-w-[70ch] text-[13px] leading-relaxed text-text-secondary">
+            The geofence result is recorded at capture time. A fence can be moved or resized later,
+            and re-judging an old capture against today&rsquo;s boundary would silently rewrite
+            history.
           </p>
-        </Surface>
+        </Panel>
       </div>
     </>
   );

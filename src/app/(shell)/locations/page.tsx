@@ -56,6 +56,7 @@ export default async function LocationsPage() {
   return (
     <>
       <PageHeader
+        eyebrow="Capability"
         title="Locations"
         description="Operational sites. A Location is where work happens; the Place it references is where it physically is."
         actions={<CreateLocationForm organizations={result.organizations} />}
@@ -64,8 +65,7 @@ export default async function LocationsPage() {
         caption="Locations"
         rows={result.rows}
         columns={[
-          { key: "name", header: "Location", variant: "link", href: "/locations/{id}" },
-          { key: "organization", header: "Organization" },
+          { key: "name", header: "Location", variant: "link", href: "/locations/{id}", subKey: "organization" },
           { key: "place", header: "Place" },
           { key: "geofences", header: "Geofences", numeric: true },
         ]}

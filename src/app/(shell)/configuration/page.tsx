@@ -1,7 +1,7 @@
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { DataTable } from "@/components/ui/DataTable";
-import { PageHeader, SectionHeading, Surface } from "@/components/ui/primitives";
+import { PageHeader, Panel } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +36,7 @@ export default async function ConfigurationPage() {
   return (
     <>
       <PageHeader
+        eyebrow="Administration"
         title="Configuration"
         description="Values resolve narrowest-first: user, then organization, then tenant, then platform default."
       />
@@ -44,23 +45,22 @@ export default async function ConfigurationPage() {
         caption="Configuration parameters"
         rows={rows}
         columns={[
-          { key: "key", header: "Key" },
+          { key: "key", header: "Key", subKey: "source" },
           { key: "scope", header: "Scope" },
           { key: "value", header: "Value" },
-          { key: "source", header: "Source" },
         ]}
         emptyTitle="No configuration set"
-        emptyDescription="Capabilities read defaults until a tenant overrides them."
+        emptyDescription="Capabilities read their defaults until a tenant overrides them. Nothing has been overridden here."
       />
 
-      <div className="mt-8">
-        <SectionHeading>Precedence</SectionHeading>
-        <Surface className="p-5">
-          <p className="text-text-secondary m-0">
-            The first matching scope wins outright. A branch that overrides a value replaces it rather
-            than blending it with the tenant default, because a partially-overridden value is ambiguous.
+      <div className="mt-6">
+        <Panel title="Precedence">
+          <p className="m-0 max-w-[70ch] text-[13px] leading-relaxed text-text-secondary">
+            The first matching scope wins outright. A branch that overrides a value replaces it
+            rather than blending it with the tenant default, because a partially-overridden value is
+            ambiguous.
           </p>
-        </Surface>
+        </Panel>
       </div>
     </>
   );

@@ -38,7 +38,12 @@ export function AssetActions({
           <Button
             key={target.key}
             size="sm"
-            variant={target.category === "Cancelled" ? "danger" : "secondary"}
+            // Secondary throughout, with the terminal transition marked in
+            // danger INK rather than a danger fill. These are state changes, not
+            // deletions, and a solid red block competes with gold for the eye
+            // while telling the reader nothing gold was not already telling them.
+            variant="secondary"
+            className={target.category === "Cancelled" ? "text-danger" : undefined}
             disabled={pending}
             onClick={() => {
               setFailure(null);

@@ -6,7 +6,14 @@ import { ENTITY_LOCATION } from "@/server/capabilities/location";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { entityHistory } from "@/server/platform/audit";
 import {
-  DefinitionList, PageHeader, PermissionDenied, SectionHeading, Surface,
+  DefinitionList,
+  EmptyState,
+  PageHeader,
+  Panel,
+  PermissionDenied,
+  Row,
+  RowList,
+  Stat,
 } from "@/components/ui/primitives";
 import { AuditTrail } from "@/components/shell/AuditTrail";
 import { buildFormDescriptor } from "@/server/platform/experience";
@@ -64,60 +71,78 @@ export default async function LocationDetailPage({
 
   return (
     <>
-      <PageHeader title={location.name} description={`Operational site in ${location.organization.name}`} />
+      {/*
+        A detail page is an operational record, not a stack of equal cards. The
+        eyebrow carries the parent so the title can be the site's own name, and
+        the identity block sits at full width above the split — it is what the
+        page is ABOUT, and burying it in a left column beside a history feed
+        gives it the same weight as an audit row.
+      */}
+      <PageHeader
+        eyebrow={`Location · ${location.organization.name}`}
+        title={location.name}
+        description={
+          location.place
+            ? `Sited at ${location.place.name}.`
+            : "No place linked — this site has no physical coordinates."
+        }
+      />
 
-      <div className="grid gap-8 lg:grid-cols-[1.3fr_1fr]">
-        <div className="flex flex-col gap-8">
-          <section>
-            <SectionHeading>Identity</SectionHeading>
-            <Surface className="p-5">
-              <DefinitionList
-                items={[
-                  { term: "Organization", value: location.organization.name },
-                  {
-                    term: "Place",
-                    value: location.place
-                      ? `${location.place.name}${
-                          location.place.latitude
-                            ? ` · ${Number(location.place.latitude).toFixed(4)}, ${Number(location.place.longitude).toFixed(4)}`
-                            : ""
-                        }`
-                      : "No place linked — this site has no physical coordinates",
-                  },
-                  { term: "Assets on site", value: String(location.assets.length) },
-                  { term: "Assigned users", value: String(location.assignments.length) },
-                ]}
+      <div className="mb-6 grid grid-cols-2 items-stretch gap-3 sm:grid-cols-4">
+        <Stat label="Assets on site" value={location.assets.length} />
+        <Stat label="Assigned users" value={location.assignments.length} />
+        <Stat label="Geofences" value={location.geofences.length} />
+        <Stat
+          label="Coordinates"
+          value={
+            location.place?.latitude
+              ? `${Number(location.place.latitude).toFixed(3)}, ${Number(location.place.longitude).toFixed(3)}`
+              : "—"
+          }
+        />
+      </div>
+
+      <div className="grid items-start gap-6 lg:grid-cols-[1.35fr_1fr]">
+        <div className="flex flex-col gap-6">
+          <Panel title="Identity">
+            <DefinitionList
+              items={[
+                { term: "Organization", value: location.organization.name },
+                {
+                  term: "Place",
+                  value: location.place ? location.place.name : "No place linked",
+                },
+              ]}
+            />
+          </Panel>
+
+          <Panel
+            title="Geofences"
+            action={
+              <span className="text-[12px] text-text-tertiary">Policies, not places</span>
+            }
+            flush
+          >
+            {location.geofences.length === 0 ? (
+              <EmptyState
+                title="No geofence defined"
+                description="Evidence captured here will record coordinates but no boundary verdict."
               />
-            </Surface>
-          </section>
+            ) : (
+              <RowList>
+                {location.geofences.map((fence) => (
+                  <Row key={fence.id}>
+                    <span className="text-[14px] text-text">{fence.name}</span>
+                    <span className="tabular shrink-0 text-[12px] text-text-tertiary">
+                      {Number(fence.centreLat).toFixed(4)}, {Number(fence.centreLng).toFixed(4)} ·{" "}
+                      {fence.radiusMetres} m
+                    </span>
+                  </Row>
+                ))}
+              </RowList>
+            )}
+          </Panel>
 
-          <section>
-            <SectionHeading note="Geofences are policies, not places">Geofences</SectionHeading>
-            <Surface className="p-1">
-              {location.geofences.length === 0 ? (
-                <p className="text-text-secondary px-4 py-6 m-0">
-                  No geofence defined. Evidence captured here will record coordinates but no boundary verdict.
-                </p>
-              ) : (
-                <ul className="list-none m-0 p-0">
-                  {location.geofences.map((fence) => (
-                    <li
-                      key={fence.id}
-                      className="flex items-baseline justify-between gap-4 px-4 py-3 border-b border-line last:border-b-0"
-                    >
-                      <span className="text-text">{fence.name}</span>
-                      <span className="text-[13px] text-text-tertiary tabular">
-                        {Number(fence.centreLat).toFixed(4)}, {Number(fence.centreLng).toFixed(4)} · {fence.radiusMetres} m
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Surface>
-          </section>
-        </div>
-
-        <div className="flex flex-col gap-8">
           <CustomFieldsPanel
             entityKey={ENTITY_LOCATION}
             entityId={location.id}
@@ -125,19 +150,20 @@ export default async function LocationDetailPage({
             values={(location.customFields as Record<string, unknown>) ?? {}}
             canEdit={data.canEdit}
           />
-
-          <section>
-          <SectionHeading>History</SectionHeading>
-          <AuditTrail entries={history.map((h) => ({
-            id: h.id,
-            field: h.fieldChanged,
-            from: h.oldValue,
-            to: h.newValue,
-            at: h.occurredAt.toISOString(),
-            command: h.commandKey,
-          }))} />
-          </section>
         </div>
+
+        <Panel title="History" flush>
+          <AuditTrail
+            entries={history.map((h) => ({
+              id: h.id,
+              field: h.fieldChanged,
+              from: h.oldValue,
+              to: h.newValue,
+              at: h.occurredAt.toISOString(),
+              command: h.commandKey,
+            }))}
+          />
+        </Panel>
       </div>
     </>
   );

@@ -2,7 +2,7 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { resolvePermissions } from "@/server/platform/authorization";
 import { DataTable } from "@/components/ui/DataTable";
-import { PageHeader, PermissionDenied, SectionHeading, Surface } from "@/components/ui/primitives";
+import { EmptyState, PageHeader, Panel, PermissionDenied, SectionHeading, Stat } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
 
@@ -67,22 +67,37 @@ export default async function AuditPage() {
 
   return (
     <>
+      {/*
+        Two streams, deliberately not merged. Operational history answers "what
+        changed on this record"; the security stream answers "whose access
+        moved". They have different audiences and different permissions, and
+        interleaving them puts authentication noise in front of an operator who
+        cannot act on it. Separate headings keep that boundary legible.
+      */}
       <PageHeader
+        eyebrow="Administration"
         title="Audit"
         description="Recorded facts. Audit rows cannot be edited or deleted by the application at any privilege level."
       />
 
-      <div className="flex flex-col gap-10">
+      <div className="mb-8 grid grid-cols-2 items-stretch gap-3 sm:grid-cols-3">
+        <Stat label="Domain events" value={data.eventCount} hint="Emitted through the outbox" />
+        <Stat label="Field changes" value={data.activity.length} hint="Most recent 100" />
+        <Stat
+          label="Security events"
+          value={data.canSeeSecurity ? data.security.length : "—"}
+          hint={data.canSeeSecurity ? "Most recent 50" : "Not visible to your role"}
+        />
+      </div>
+
+      <div className="flex flex-col gap-8">
         <section>
-          <SectionHeading note={`${data.eventCount} platform events recorded`}>
-            Operational history
-          </SectionHeading>
+          <SectionHeading note="Newest first">Operational history</SectionHeading>
           <DataTable
             caption="Operational history"
             rows={data.activity}
             columns={[
-              { key: "entity", header: "Record" },
-              { key: "field", header: "Field" },
+              { key: "entity", header: "Record", subKey: "field" },
               { key: "change", header: "Change" },
               { key: "command", header: "Command" },
               { key: "at", header: "When" },
@@ -104,14 +119,15 @@ export default async function AuditPage() {
                 { key: "at", header: "When" },
               ]}
               emptyTitle="No security events recorded"
+              emptyDescription="Sign-ins and context switches appear here as they happen."
             />
           ) : (
-            <Surface className="p-5">
-              <p className="text-text-secondary m-0">
-                The security stream records authentication and permission changes. Your role does not
-                include access to it.
-              </p>
-            </Surface>
+            <Panel flush>
+              <EmptyState
+                title="Security stream not visible"
+                description="It records authentication and permission changes. Your current role does not include access to it."
+              />
+            </Panel>
           )}
         </section>
       </div>
