@@ -236,11 +236,31 @@ Layer 2 through `ctx.scope()`.
 - A `Location`-scoped grant currently reaches **nothing**, because Location does
   not exist as an entity yet. It fails closed rather than widening to the tenant.
 
+## Platform substrate added after the foundation (do not re-litigate)
+
+- **Capability contributions** (`contribution.ts`) — a capability declares its own navigation and
+  workspace queues. The shell must never hold a capability-to-route map again; that was the coupling
+  this replaced. The contract declares *where* a capability appears, never how to draw its page.
+- **Temporal model** (`temporal.ts`) — instants are UTC, zones are resolved (organization → tenant →
+  explicit UTC) and never guessed. Zones are validated on write because an unrecognised zone silently
+  degrades to UTC.
+- **SLA substrate** (`sla.ts`) — clock transitions derive from `StateCategory`, never from state keys
+  or labels. A capability that declares its states honestly gets correct SLA behaviour with no clock
+  code. A resumed clock continues its budget; a record that ran over then completed keeps its breach.
+- **Files** (`files.ts`) — two-phase upload; a confirmed file's key, checksum and size are frozen by
+  trigger. No storage driver is bound; that is a deployment step, not a missing contract.
+- **Notifications** (`notification.ts`) — suppressed notifications are recorded, not dropped.
+  Templates substitute literally; an expression language would make a tenant template a stored program.
+- **Custom fields** are rendered, validated and submitted end to end. The command re-validates
+  server-side because a client check is a convenience, never a control.
+
 ## Open — do not solve silently
 
 - `implementation/02-foundation-build-order/vertical-slice-strategy.md` still lists `DEC-BIBLE-001` as open; it was resolved by ADR-001. The ADR wins.
 - **`Global` scope is defined but never granted.** PLA-AUT-002 defines cross-tenant platform administration, but honouring it means bypassing the RLS that enforces INV-001. `verity.resolve_permissions` filters `Global` grants out, so such a row can exist without silently taking effect. Wiring it up needs a security decision and an ADR.
 - **Credential encryption key location is an implementation decision.** MET-AUT-003 requires an encrypted credential registry but does not say where the key lives. It is currently supplied per call from the application environment and never stored in the database, so a dump yields ciphertext alone. A managed KMS would be stronger and needs a platform decision.
+- **`own` permission scope is an open decision.** PLA-AUT-002 enumerates `Global | Tenant | Organization | Location`. `team` and `resource` need no platform change — they are axes and the scope-resolver registry handles them. `own` is actor-relative, appears in neither Bible nor spec, and needs an ADR before it is added.
+- **Nothing runs on a schedule.** SLA breach sweeps and notification dispatch are implemented and idempotent but nothing invokes them. Bind a job runner before a capability depends on a deadline firing.
 - **The Bible is not editable.** One amendment (AMD-001, `factoryId` -> `tenantId`, Volume V §1.A.1 and Volume VI) was authorised by the product owner as a one-time edit and is already applied. Do not modify `verity-bible/` again without a fresh explicit instruction.
 
 ## Stop conditions — escalate, do not improvise

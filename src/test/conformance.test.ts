@@ -150,6 +150,145 @@ describe("conformance: architectural boundaries", () => {
   });
 });
 
+
+describe("conformance: capability contracts (Phase E)", () => {
+  /**
+   * Declared dependencies, mirrored from each capability's install migration.
+   * A capability may import another only if it declares the dependency — that
+   * is what makes the dependency graph enforceable rather than decorative.
+   */
+  const DECLARED_DEPENDENCIES: Record<string, string[]> = {
+    location: [],
+    asset: ["location"],
+    evidence: ["location"],
+    scheduling: ["asset"],
+    approval: [],
+  };
+
+  const capabilityDirs = readdirSync(join(ROOT, "src/server/capabilities")).filter((entry) =>
+    statSync(join(ROOT, "src/server/capabilities", entry)).isDirectory(),
+  );
+
+  it("has a declared dependency list for every shipped capability", () => {
+    expect(capabilityDirs.sort()).toEqual(Object.keys(DECLARED_DEPENDENCIES).sort());
+  });
+
+  it("never imports a capability it has not declared a dependency on", () => {
+    const violations: string[] = [];
+
+    for (const capability of capabilityDirs) {
+      const allowed = new Set(DECLARED_DEPENDENCIES[capability] ?? []);
+      for (const file of sourceFiles(join(ROOT, "src/server/capabilities", capability))) {
+        const text = readFileSync(file, "utf8");
+        for (const match of text.matchAll(/@\/server\/capabilities\/([a-z_]+)/g)) {
+          const imported = match[1]!;
+          if (imported === capability || allowed.has(imported)) continue;
+          violations.push(`${capability} imports ${imported} without declaring it`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it("routes every capability mutation through a command definition", () => {
+    // A capability that mutates outside a CommandDefinition bypasses
+    // authorization, events and audit in one step, which is the single most
+    // damaging shortcut available to it.
+    const violations: string[] = [];
+
+    for (const capability of capabilityDirs) {
+      for (const file of sourceFiles(join(ROOT, "src/server/capabilities", capability))) {
+        const text = readFileSync(file, "utf8");
+        const mutates = /\.(create|update|delete|createMany|updateMany|deleteMany|upsert)\(/.test(text);
+        if (mutates && !text.includes("CommandDefinition")) {
+          violations.push(relative(ROOT, file));
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it("declares a verb and an entity on every command", () => {
+    const violations: string[] = [];
+
+    for (const capability of capabilityDirs) {
+      for (const file of sourceFiles(join(ROOT, "src/server/capabilities", capability))) {
+        const text = readFileSync(file, "utf8");
+        // Each command literal must carry both, or the pipeline cannot
+        // authorize it and would fall through to the capability gate alone.
+        for (const block of text.split("CommandDefinition<").slice(1)) {
+          const head = block.slice(0, 900);
+          if (!/\bverb:\s*"/.test(head) || !/\bentity:\s*[A-Z_]/.test(head)) {
+            violations.push(`${relative(ROOT, file)}: a command is missing verb or entity`);
+          }
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it("never sets a tenant scope by hand inside a capability", () => {
+    // Tenant context comes from withTenant. A capability calling set_config on
+    // verity.tenant_id would be choosing its own isolation boundary.
+    const violations = capabilityDirs.flatMap((capability) =>
+      sourceFiles(join(ROOT, "src/server/capabilities", capability))
+        .filter((file) => /set_config\(\s*'verity\.tenant_id'|SET LOCAL verity/.test(readFileSync(file, "utf8")))
+        .map((file) => relative(ROOT, file)),
+    );
+    expect(violations).toEqual([]);
+  });
+});
+
+describe("conformance: over-genericity (Phase G)", () => {
+  it("keeps JSON columns to the declared extension points", () => {
+    // Json is legitimate for custom_fields (PLA-EXT-001), event and automation
+    // payloads, and configuration values. Anywhere else it is usually a
+    // relational model that was not thought through, so the budget is fixed and
+    // a new one has to be argued for rather than added quietly.
+    const jsonFields = [...SCHEMA.matchAll(/^\s*(\w+)\s+Json/gm)].map((m) => m[1]!);
+    const permitted = new Set([
+      "customFields", "payload", "value", "config", "condition", "input", "output", "result",
+    ]);
+    const unexpected = jsonFields.filter((name) => !permitted.has(name));
+    expect(unexpected).toEqual([]);
+  });
+
+  it("has no entity-attribute-value table", () => {
+    // The failure mode the brief names first. An EAV table would show up as a
+    // model carrying an attribute name and a loose value column side by side.
+    const models = [...SCHEMA.matchAll(/^model\s+(\w+)\s*\{([\s\S]*?)^\}/gm)];
+    const suspects = models
+      .filter(([, , body]) =>
+        /\b(attributeName|attribute_name|fieldKey|propertyName)\b/.test(body) &&
+        /\b(value|stringValue|numericValue)\b/.test(body),
+      )
+      .map(([, name]) => name);
+    expect(suspects).toEqual([]);
+  });
+
+  it("keeps state machines declared as data, not as code branches", () => {
+    // One transition runtime, driven by transition_definition rows. A capability
+    // implementing its own switch over states would mean the platform's runtime
+    // is not actually reusable.
+    const capabilitySources = readdirSync(join(ROOT, "src/server/capabilities"))
+      .filter((entry) => statSync(join(ROOT, "src/server/capabilities", entry)).isDirectory())
+      .flatMap((entry) => sourceFiles(join(ROOT, "src/server/capabilities", entry)));
+
+    const violations = capabilitySources
+      .filter((file) => /switch\s*\(\s*\w*[Ss]tate\b/.test(readFileSync(file, "utf8")))
+      .map((file) => relative(ROOT, file));
+    expect(violations).toEqual([]);
+  });
+
+  it("keeps the platform surface small enough to stay comprehensible", () => {
+    // Not a hard architectural rule, but a tripwire: unchecked growth in the
+    // platform layer is how capability logic ends up there. If this fails the
+    // question to ask is whether the new module belongs in a capability.
+    const platformModules = sourceFiles(join(ROOT, "src/server/platform"));
+    expect(platformModules.length).toBeLessThanOrEqual(24);
+  });
+});
+
 const hasDatabase = Boolean(process.env.DATABASE_URL);
 const describeDb = hasDatabase ? describe : describe.skip;
 
