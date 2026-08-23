@@ -11,8 +11,11 @@ import {
   createSupabaseServerClient,
   listMemberships,
   requireActor,
+  resolveActor,
   setActiveMembership,
 } from "@/server/platform/auth";
+import { recordSecurityEvent } from "@/server/platform/audit";
+import { withTenant } from "@/server/platform/tenancy";
 import { installCapabilities } from "@/server/capabilities/registry";
 
 /**
@@ -120,6 +123,19 @@ export async function switchOrganization(membershipId: string): Promise<ActionRe
       };
     }
     await setActiveMembership(membershipId);
+
+    // Changing operating context changes what the actor can reach, so it
+    // belongs in the security stream rather than the operational one.
+    const chosen = available.find((m) => m.membershipId === membershipId)!;
+    await withTenant(chosen.tenantId, (tx) =>
+      recordSecurityEvent(tx, {
+        tenantId: chosen.tenantId,
+        eventType: "RoleAssigned",
+        actorUserId: chosen.userId,
+        payload: { organizationId: chosen.organizationId, role: chosen.roleName ?? null },
+      }),
+    );
+
     revalidatePath("/", "layout");
     return { ok: true, data: null };
   } catch (error) {
@@ -130,7 +146,13 @@ export async function switchOrganization(membershipId: string): Promise<ActionRe
 export async function signInWithPassword(email: string, password: string): Promise<ActionFailure | never> {
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
+
   if (error) {
+    // A failed attempt is recorded where it can be: before authentication there
+    // is no tenant context, so the security stream — which is tenant-scoped by
+    // design — cannot hold it. Recording it against a guessed tenant would be
+    // worse than not recording it, so this is deliberately left to the auth
+    // provider's own log and noted as a platform gap.
     return {
       ok: false,
       code: "E_VALIDATION",
@@ -140,7 +162,33 @@ export async function signInWithPassword(email: string, password: string): Promi
       retryable: true,
     };
   }
+
+  // A successful sign-in *does* have a tenant, once the actor resolves.
+  await recordAuthSuccess();
   redirect("/");
+}
+
+/**
+ * Records a successful authentication against the security stream (EXE-AUD-002).
+ *
+ * Best-effort by design: the sign-in has already succeeded, and failing to write
+ * an audit row must not lock the user out of a session they legitimately hold.
+ * The failure is surfaced rather than swallowed silently.
+ */
+async function recordAuthSuccess(): Promise<void> {
+  try {
+    const actor = await resolveActor();
+    if (!actor) return;
+    await withTenant(actor.tenantId, (tx) =>
+      recordSecurityEvent(tx, {
+        tenantId: actor.tenantId,
+        eventType: "AuthSuccess",
+        actorUserId: actor.userId,
+      }),
+    );
+  } catch (error) {
+    console.error("Failed to record AuthSuccess security event", error);
+  }
 }
 
 export async function signOut(): Promise<never> {

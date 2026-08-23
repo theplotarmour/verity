@@ -42,42 +42,46 @@ model Tenant {
   version      Int      @default(1)
   customFields Json     @default("{}") @map("custom_fields")
 
-  organizations        Organization[]
-  memberships          TenantMembership[]
-  roles                Role[]
-  permissions          Permission[]
-  roleCompositions     RoleComposition[]
-  customFieldSchemas   CustomFieldSchema[]
-  domainEvents         DomainEvent[]
-  statusLabels         TenantStatusLabel[]
-  activities           Activity[]
-  securityEvents       SecurityAuditEvent[]
-  workflows            WorkflowDefinition[]
-  workflowRuns         WorkflowRun[]
-  credentials          Credential[]
-  activations          TenantActivation[]
-  configParameters     ConfigParameter[]
-  offlineCommands      OfflineCommand[]
-  syncExceptions       SyncException[]
-  places               Place[]
-  addresses            Address[]
-  locations            Location[]
-  geofences            Geofence[]
-  locationAssignments  LocationAssignment[]
-  assets               Asset[]
-  evidence             Evidence[]
-  resources            Resource[]
-  resourceGroups       ResourceGroup[]
-  resourceGroupMembers ResourceGroupMember[]
-  availabilityWindows  AvailabilityWindow[]
-  bookings             Booking[]
-  approvalRequests     ApprovalRequest[]
-  approvalSteps        ApprovalStep[]
-  businessCalendars    BusinessCalendar[]
-  businessHours        BusinessHours[]
-  businessHolidays     BusinessHoliday[]
-  slaPolicies          SlaPolicy[]
-  slaClocks            SlaClock[]
+  organizations           Organization[]
+  memberships             TenantMembership[]
+  roles                   Role[]
+  permissions             Permission[]
+  roleCompositions        RoleComposition[]
+  customFieldSchemas      CustomFieldSchema[]
+  domainEvents            DomainEvent[]
+  statusLabels            TenantStatusLabel[]
+  activities              Activity[]
+  securityEvents          SecurityAuditEvent[]
+  workflows               WorkflowDefinition[]
+  workflowRuns            WorkflowRun[]
+  credentials             Credential[]
+  activations             TenantActivation[]
+  configParameters        ConfigParameter[]
+  offlineCommands         OfflineCommand[]
+  syncExceptions          SyncException[]
+  places                  Place[]
+  addresses               Address[]
+  locations               Location[]
+  geofences               Geofence[]
+  locationAssignments     LocationAssignment[]
+  assets                  Asset[]
+  evidence                Evidence[]
+  resources               Resource[]
+  resourceGroups          ResourceGroup[]
+  resourceGroupMembers    ResourceGroupMember[]
+  availabilityWindows     AvailabilityWindow[]
+  bookings                Booking[]
+  approvalRequests        ApprovalRequest[]
+  approvalSteps           ApprovalStep[]
+  businessCalendars       BusinessCalendar[]
+  businessHours           BusinessHours[]
+  businessHolidays        BusinessHoliday[]
+  slaPolicies             SlaPolicy[]
+  slaClocks               SlaClock[]
+  storedFiles             StoredFile[]
+  notificationTemplates   NotificationTemplate[]
+  notificationPreferences NotificationPreference[]
+  notifications           Notification[]
 
   @@map("tenant")
 }
@@ -179,9 +183,11 @@ model User {
   version      Int      @default(1)
   customFields Json     @default("{}") @map("custom_fields")
 
-  party               Party                @relation(fields: [partyId], references: [id], onDelete: Restrict)
-  memberships         TenantMembership[]
-  locationAssignments LocationAssignment[]
+  party                   Party                    @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  memberships             TenantMembership[]
+  locationAssignments     LocationAssignment[]
+  notificationPreferences NotificationPreference[]
+  notifications           Notification[]
 
   @@map("user")
 }
@@ -1135,7 +1141,10 @@ model Evidence {
   entityKey    String       @map("entity_key")
   entityId     String       @map("entity_id") @db.Uuid
   kind         EvidenceKind
-  /// Storage reference for a photo or document; null for a reading or point.
+  /// Platform-managed artefact. Preferred over `uri`: a StoredFile has a frozen
+  /// checksum, so the bytes behind the reference cannot later change.
+  fileId       String?      @map("file_id") @db.Uuid
+  /// External reference, for an artefact the platform does not host.
   uri          String?
   /// Captured coordinates, when the device supplied them.
   latitude     Decimal?     @db.Decimal(9, 6)
@@ -1150,7 +1159,8 @@ model Evidence {
   payload      Json         @default("{}")
   recordedAt   DateTime     @default(now()) @map("recorded_at")
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  file   StoredFile? @relation(fields: [fileId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, entityKey, entityId])
   @@index([tenantId, capturedAt])
@@ -1520,4 +1530,157 @@ model SlaClock {
   @@index([tenantId, status])
   @@index([tenantId, deadlineAt])
   @@map("sla_clock")
+}
+
+// ===========================================================================
+// PLATFORM: Files and documents
+//
+// Authority: PLA-CFG-002 (DocumentTemplate as a declarative template),
+// EXE-AUD-003 (evidence artefacts must not be silently replaced), Bible V5 §1
+// (tenant isolation applies to stored objects as much as to rows).
+//
+// The platform owns the *record* of a file — who uploaded it, what it is, which
+// record it belongs to, whether it is still pending — and delegates the bytes to
+// a storage driver. Keeping the record separate from the bytes is what lets
+// authorization, audit and retention work uniformly regardless of where the
+// object physically lives.
+// ===========================================================================
+
+enum StoredFileStatus {
+  /// Record created, bytes not yet confirmed. A file is never readable in this
+  /// state: an unconfirmed upload may be absent, partial, or someone else's.
+  Pending
+  Stored
+  /// Failed a post-upload check. Kept, never served.
+  Quarantined
+}
+
+model StoredFile {
+  id           String           @id @default(uuid()) @db.Uuid
+  tenantId     String           @map("tenant_id") @db.Uuid
+  /// Opaque key in the storage backend. Namespaced by tenant so a driver
+  /// misconfiguration cannot cross the boundary silently.
+  storageKey   String           @map("storage_key")
+  fileName     String           @map("file_name")
+  mimeType     String           @map("mime_type")
+  byteSize     Int              @map("byte_size")
+  /// Content hash, recorded at confirmation. Two records with the same checksum
+  /// are the same bytes, which is what makes an artefact reference verifiable.
+  checksum     String?
+  status       StoredFileStatus @default(Pending)
+  uploadedById String?          @map("uploaded_by_id") @db.Uuid
+  /// What the file is about, so authorization can be derived from the subject
+  /// rather than duplicated onto the file.
+  entityKey    String?          @map("entity_key")
+  entityId     String?          @map("entity_id") @db.Uuid
+  createdAt    DateTime         @default(now()) @map("created_at")
+  confirmedAt  DateTime?        @map("confirmed_at")
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  evidence Evidence[]
+
+  @@unique([tenantId, storageKey])
+  @@index([tenantId, entityKey, entityId])
+  @@map("stored_file")
+}
+
+// ===========================================================================
+// PLATFORM: Notifications
+//
+// Authority: PLA-CFG-002 (NotificationTemplate as a declarative template),
+// MET-EVE-001→002 (events drive automations and notifications).
+//
+// A capability raises a notification; the platform decides how it reaches
+// someone. Channels, preferences and templates are platform concerns because
+// every capability needs them and none should implement its own.
+//
+// Deliberately not a messaging product: no threads, no read receipts beyond a
+// timestamp, no delivery guarantees the platform cannot keep.
+// ===========================================================================
+
+enum NotificationChannel {
+  InApp
+  Email
+  Push
+  Webhook
+}
+
+enum NotificationStatus {
+  Pending
+  Sent
+  Failed
+  /// Suppressed by the recipient's preferences. Recorded rather than dropped,
+  /// so "why did nobody get told" is answerable.
+  Suppressed
+}
+
+/// A tenant-authored message template (PLA-CFG-002).
+///
+/// Placeholders are `{name}` and substitution is literal. A full expression
+/// language would make a stored template executable, which is a step the
+/// specification never asks for and a risk it does not weigh.
+model NotificationTemplate {
+  id        String              @id @default(uuid()) @db.Uuid
+  tenantId  String              @map("tenant_id") @db.Uuid
+  /// Stable key a capability refers to, e.g. `verity.approval.awaiting`.
+  key       String
+  channel   NotificationChannel
+  subject   String
+  body      String
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+  version   Int                 @default(1)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key, channel])
+  @@index([tenantId])
+  @@map("notification_template")
+}
+
+/// Per-recipient channel preferences. Absence means the platform default.
+model NotificationPreference {
+  id       String              @id @default(uuid()) @db.Uuid
+  tenantId String              @map("tenant_id") @db.Uuid
+  userId   String              @map("user_id") @db.Uuid
+  /// Notification key, or `*` for every notification on this channel.
+  key      String              @default("*")
+  channel  NotificationChannel
+  enabled  Boolean             @default(true)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key, channel])
+  @@index([tenantId, userId])
+  @@map("notification_preference")
+}
+
+/// One notification to one recipient on one channel.
+///
+/// Written inside the raising command's transaction for the same reason events
+/// are: a notification about work that rolled back is a lie.
+model Notification {
+  id          String              @id @default(uuid()) @db.Uuid
+  tenantId    String              @map("tenant_id") @db.Uuid
+  recipientId String              @map("recipient_id") @db.Uuid
+  key         String
+  channel     NotificationChannel
+  status      NotificationStatus  @default(Pending)
+  subject     String
+  body        String
+  /// What it concerns, so the interface can link to the record.
+  entityKey   String?             @map("entity_key")
+  entityId    String?             @map("entity_id") @db.Uuid
+  readAt      DateTime?           @map("read_at")
+  sentAt      DateTime?           @map("sent_at")
+  failure     String?
+  createdAt   DateTime            @default(now()) @map("created_at")
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recipient User   @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, recipientId, readAt])
+  @@index([tenantId, status])
+  @@map("notification")
 }

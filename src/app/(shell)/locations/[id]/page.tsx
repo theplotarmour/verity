@@ -9,6 +9,9 @@ import {
   DefinitionList, PageHeader, PermissionDenied, SectionHeading, Surface,
 } from "@/components/ui/primitives";
 import { AuditTrail } from "@/components/shell/AuditTrail";
+import { buildFormDescriptor } from "@/server/platform/experience";
+import { hasPermission } from "@/server/platform/authorization";
+import { CustomFieldsPanel } from "./CustomFieldsPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +50,11 @@ export default async function LocationDetailPage({
     }
 
     const history = await entityHistory(tx, ENTITY_LOCATION, location.id);
-    return { location, history };
+    // Built from the tenant's own declarations, so a newly declared field
+    // appears without this page changing (PLA-EXT-002).
+    const descriptor = await buildFormDescriptor(tx, ENTITY_LOCATION);
+    const canEdit = await hasPermission(tx, actor.roleId, "Edit", ENTITY_LOCATION);
+    return { location, history, descriptor, canEdit };
   });
 
   if ("notFound" in data) notFound();
@@ -110,7 +117,16 @@ export default async function LocationDetailPage({
           </section>
         </div>
 
-        <section>
+        <div className="flex flex-col gap-8">
+          <CustomFieldsPanel
+            entityKey={ENTITY_LOCATION}
+            entityId={location.id}
+            descriptor={data.descriptor}
+            values={(location.customFields as Record<string, unknown>) ?? {}}
+            canEdit={data.canEdit}
+          />
+
+          <section>
           <SectionHeading>History</SectionHeading>
           <AuditTrail entries={history.map((h) => ({
             id: h.id,
@@ -120,7 +136,8 @@ export default async function LocationDetailPage({
             at: h.occurredAt.toISOString(),
             command: h.commandKey,
           }))} />
-        </section>
+          </section>
+        </div>
       </div>
     </>
   );

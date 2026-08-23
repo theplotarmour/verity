@@ -3,6 +3,8 @@ import { registerScopeResolver } from "@/server/platform/authorization";
 import { registerContribution } from "@/server/platform/contribution";
 import { registerCommand, type CommandDefinition } from "@/server/platform/command";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
+import { validateCustomFields } from "@/server/platform/entity";
+import { diffFields, recordActivity } from "@/server/platform/audit";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
 import type { ActorContext } from "@/server/platform/command";
 
@@ -181,6 +183,51 @@ export const assignUserToLocation: CommandDefinition<
   },
 };
 
+/**
+ * Writes tenant custom fields on a Location.
+ *
+ * Validation is the platform's `validateCustomFields`, which compiles the
+ * tenant's own declarations at write time (PLA-EXT-003). The form's coercion is
+ * a convenience; this is the control. An undeclared key is rejected rather than
+ * stored, so `custom_fields` cannot accumulate data nothing validates.
+ */
+export const setLocationCustomFields: CommandDefinition<
+  { locationId: string; customFields: Record<string, unknown> },
+  { fields: number }
+> = {
+  key: "verity.location.set_custom_fields",
+  entity: ENTITY_LOCATION,
+  verb: "Edit",
+  input: z.object({
+    locationId: z.string().uuid(),
+    customFields: z.record(z.string(), z.unknown()),
+  }),
+  handler: async (ctx, input) => {
+    const before = await ctx.tx.location.findUniqueOrThrow({ where: { id: input.locationId } });
+    const validated = await validateCustomFields(ctx.tx, ENTITY_LOCATION, input.customFields);
+
+    const after = await ctx.tx.location.update({
+      where: { id: input.locationId },
+      data: { customFields: validated as never, version: { increment: 1 } },
+    });
+
+    await recordActivity(ctx, {
+      entityKey: ENTITY_LOCATION,
+      entityId: after.id,
+      commandKey: "verity.location.set_custom_fields",
+      changes: diffFields(
+        { customFields: before.customFields },
+        { customFields: after.customFields },
+      ),
+    });
+
+    return {
+      result: { fields: Object.keys(validated).length },
+      events: [{ name: "verity.location.custom_fields_updated", entityId: after.id }],
+    };
+  },
+};
+
 /* -------------------------------- queries -------------------------------- */
 
 export const listLocations: QueryDefinition<
@@ -211,5 +258,6 @@ export function registerLocationCapability(): void {
   registerCommand(createLocation);
   registerCommand(addGeofence);
   registerCommand(assignUserToLocation);
+  registerCommand(setLocationCustomFields);
   registerQuery(listLocations);
 }
