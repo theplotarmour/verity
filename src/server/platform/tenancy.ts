@@ -54,10 +54,49 @@ const TRANSACTION_TIMEOUT_MS = Number(process.env.VERITY_TX_TIMEOUT_MS ?? 15_000
 /** How long to wait for a free pooled connection before giving up. */
 const TRANSACTION_MAX_WAIT_MS = Number(process.env.VERITY_TX_MAX_WAIT_MS ?? 5_000);
 
+/**
+ * One-shot RLS guard for the runtime connection.
+ *
+ * `assertRlsEnforceable` existed and was called by seventeen test files, but by
+ * nothing in application code — so it only ever protected environments the test
+ * suite was pointed at. A deployment whose DATABASE_URL named a SUPERUSER or
+ * BYPASSRLS role would have started, served traffic, and returned every tenant's
+ * rows to every caller, with the policies still present and every test still
+ * green somewhere else. That is precisely the failure this function was written
+ * to prevent, so it now runs where it can actually prevent it.
+ *
+ * `withTenant` is the single chokepoint for every tenant-scoped read and write,
+ * which makes it the correct place: nothing can reach tenant data without
+ * passing this first.
+ *
+ * Memoised, so it costs one query per process rather than one per transaction.
+ * A FAILED check is deliberately not memoised — a transient connection error
+ * must not poison the process for its lifetime, while a genuinely bypassing role
+ * simply fails again on the next call. Isolation fails closed either way.
+ */
+let rlsEnforceable: Promise<void> | null = null;
+
+function ensureRlsEnforceable(): Promise<void> {
+  rlsEnforceable ??= assertRlsEnforceable().catch((error: unknown) => {
+    rlsEnforceable = null;
+    throw error;
+  });
+  return rlsEnforceable;
+}
+
+/** Test-only: forget the memoised result so a fresh check runs. */
+export function resetRlsEnforceableCache(): void {
+  rlsEnforceable = null;
+}
+
 export async function withTenant<T>(
   tenantId: string,
   fn: (tx: TenantScopedClient) => Promise<T>,
 ): Promise<T> {
+  // Before any tenant-scoped statement, not after. A role that bypasses RLS
+  // must never get as far as opening the transaction.
+  await ensureRlsEnforceable();
+
   return prisma.$transaction(
     async (tx) => {
       // set_config is parameterised; `SET LOCAL` cannot bind values, and building
@@ -76,7 +115,10 @@ export async function withTenant<T>(
  * RLS is not enforced for SUPERUSER or BYPASSRLS roles. A deployment that
  * connects as one of them has no tenant isolation at all, and — because the
  * policies are still present and syntactically correct — nothing else would
- * reveal it. Call this at startup and in the isolation test.
+ * reveal it.
+ *
+ * Called automatically by `withTenant` via `ensureRlsEnforceable`, and directly
+ * by the isolation and conformance tests.
  */
 export async function assertRlsEnforceable(
   client: Pick<PrismaClient, "$queryRaw"> = prisma,
