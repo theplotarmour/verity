@@ -2,7 +2,15 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { resolvePermissions } from "@/server/platform/authorization";
 import { DataTable } from "@/components/ui/DataTable";
-import { EmptyState, PageHeader, Panel, PermissionDenied, SectionHeading, Stat } from "@/components/ui/primitives";
+import {
+  EmptyState,
+  PageHeader,
+  Panel,
+  PermissionDenied,
+  SectionHeading,
+  Stat,
+  StatRow,
+} from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
 
@@ -75,12 +83,11 @@ export default async function AuditPage() {
         cannot act on it. Separate headings keep that boundary legible.
       */}
       <PageHeader
-        eyebrow="Administration"
         title="Audit"
         description="Recorded facts. Audit rows cannot be edited or deleted by the application at any privilege level."
       />
 
-      <div className="mb-8 grid grid-cols-2 items-stretch gap-3 sm:grid-cols-3">
+      <StatRow cols={3} className="mb-8">
         <Stat label="Domain events" value={data.eventCount} hint="Emitted through the outbox" />
         <Stat label="Field changes" value={data.activity.length} hint="Most recent 100" />
         <Stat
@@ -88,7 +95,7 @@ export default async function AuditPage() {
           value={data.canSeeSecurity ? data.security.length : "—"}
           hint={data.canSeeSecurity ? "Most recent 50" : "Not visible to your role"}
         />
-      </div>
+      </StatRow>
 
       <div className="flex flex-col gap-8">
         <section>

@@ -4,23 +4,24 @@ import { VeritySymbol } from "@/components/brand/VerityMark";
 /**
  * The Verity design system primitives.
  *
- * Authority: Bible V4 §1 (UX Constitution), §5.A (status semantics), and the
- * approved identity boards in `verity-app-ui-mockups/`.
+ * Authority: the approved brand identity board (`public/image.png`) and Bible
+ * V4 §1 (UX Constitution) / §5.A (status semantics).
  *
- * The composition rules these encode, so that individual screens do not each
- * re-decide them:
+ * The composition rules the board sets, encoded here once so that individual
+ * screens do not each re-decide them:
  *
- *   • Hierarchy comes from SIZE, SPACE and POSITION — never from weight. Only
- *     200–500 are loaded, headings are Light, and nothing is bold.
- *   • A card is a hairline and a radius. No shadow at rest, no fill, no colour.
- *     Elevation is reserved for things that genuinely float (menus, sheets).
+ *   • The page is Sand 100 and surfaces are pure white. A card is a hairline, a
+ *     14px radius and white — it needs no shadow to read as raised, because the
+ *     ground beneath it is warm and the card is not.
+ *   • Hierarchy comes from SIZE, SPACE and POSITION. Headings are Light (300).
+ *     Semibold appears exactly twice in the whole system: Heading 3, and the
+ *     primary button label.
+ *   • Labels are sentence case at 12–13px. The board's application screens use
+ *     no tracked-out capitals anywhere; that treatment belongs to the printed
+ *     identity sheet, not to the product.
  *   • Gold marks what is actionable, selected or live. Nothing else.
- *   • Labels are 11px caps with wide tracking; values are 13–14px regular. That
- *     pairing is the board's whole information rhythm and it repeats everywhere.
- *
- * Kept deliberately small. The brief warns against building two hundred
- * components before proving the core experience, so this is the set the shell
- * actually needs and nothing speculative.
+ *   • Status is a coloured dot beside a label, never a coloured pill. Six
+ *     competing beds on one screen is noise; a dot and a word is a status.
  */
 
 function cx(...parts: Array<string | false | undefined>): string {
@@ -34,8 +35,8 @@ function cx(...parts: Array<string | false | undefined>): string {
  *
  * Bible V4 §1.A says hierarchy comes from alignment and negative space rather
  * than borders and boxes — but an operational surface does need to say where one
- * record's information stops. The compromise is a hairline and nothing else:
- * bordered by default, never filled, never shadowed at rest.
+ * record's information stops. The board's answer is a hairline, a radius and
+ * white; that is all this is.
  */
 export function Surface({
   children,
@@ -47,19 +48,18 @@ export function Surface({
   className?: string;
 }) {
   return (
-    <div className={cx("rounded-lg bg-surface", bordered && "border border-line", className)}>
+    <div className={cx("rounded-xl bg-surface", bordered && "border border-line", className)}>
       {children}
     </div>
   );
 }
 
 /**
- * A titled card.
+ * A titled card — the board's repeating unit.
  *
- * The board's repeating unit: a quiet label row, a hairline, then content. It
- * exists so that the label/rule/body rhythm is identical on every screen instead
- * of being re-improvised per page — which is precisely how a shell starts to
- * look assembled rather than designed.
+ * The title sits INSIDE the card's padding with no rule beneath it, exactly as
+ * the board draws "Orders", "Stock" and "Recyclers". A hairline under every card
+ * title turns a page of cards into a page of tables.
  */
 export function Panel({
   title,
@@ -78,14 +78,17 @@ export function Panel({
   return (
     <Surface className={cx("overflow-hidden", className)}>
       {title && (
-        <div className="flex items-center justify-between gap-4 border-b border-line px-5 py-3">
-          <h2 className="m-0 text-[11px] font-medium uppercase tracking-[0.09em] text-text-tertiary">
-            {title}
-          </h2>
+        <div
+          className={cx(
+            "flex items-center justify-between gap-4 px-6 pt-5",
+            flush ? "pb-4" : "pb-1",
+          )}
+        >
+          <h2 className="m-0">{title}</h2>
           {action}
         </div>
       )}
-      <div className={flush ? "" : "p-5"}>{children}</div>
+      <div className={flush ? "" : cx("px-6 pb-6", title ? "pt-4" : "pt-6")}>{children}</div>
     </Surface>
   );
 }
@@ -93,47 +96,38 @@ export function Panel({
 /**
  * The page's masthead.
  *
- * `eyebrow` carries operating context — which capability, which parent record —
- * so the title itself never has to be padded out with it. The description is
- * held to a measure rather than the full column, because a line of body copy
- * running the width of a 1440px screen is unreadable regardless of how good the
- * typography is.
+ * One line, Heading 1 at the board's printed 32/40 Light. There is deliberately
+ * no eyebrow: the board's screens go straight to the title, and a kicker above a
+ * heading is a label doing work the heading already does. Operating context
+ * lives in the shell's own context control, which is where a reader looks for
+ * it, rather than being restated above every title.
  */
 export function PageHeader({
-  eyebrow,
   title,
   description,
   actions,
 }: {
-  eyebrow?: string;
   title: string;
   description?: string;
   actions?: ReactNode;
 }) {
-  // One block of text, actions beside it. Two earlier arrangements were wrong in
-  // different ways: aligning actions to the bottom settled them against the last
-  // line of the description, and putting them on their own row with the title
-  // pushed them BETWEEN the title and the description on mobile, where the row
-  // collapses. Centring against the whole text block reads as deliberate at every
-  // width and keeps the reading order intact when it stacks.
   return (
-    <header className="mb-9 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
+    <header className="mb-6">
       <div className="min-w-0">
-        {eyebrow && (
-          <p className="m-0 mb-2 text-[11px] font-medium uppercase tracking-[0.09em] text-text-tertiary">
-            {eyebrow}
-          </p>
-        )}
-        <h1 className="m-0 text-[28px] font-light leading-[1.15] tracking-[-0.02em] text-text">
-          {title}
-        </h1>
+        <h1 className="truncate">{title}</h1>
         {description && (
-          <p className="mb-0 mt-2.5 max-w-[62ch] text-[14px] leading-relaxed text-text-secondary">
+          <p className="mb-0 mt-2 max-w-[62ch] text-[14px] leading-relaxed text-text-secondary">
             {description}
           </p>
         )}
       </div>
-      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+      {/* Page actions read as a toolbar under the masthead rather than beside
+          the title. That is where the board puts an action — at the head of the
+          content it acts on — and it is the only placement that cannot collide
+          with the shell controls sharing the title's row. */}
+      {actions && (
+        <div className="mt-5 flex flex-wrap items-center gap-2 sm:justify-end">{actions}</div>
+      )}
     </header>
   );
 }
@@ -142,7 +136,7 @@ export function PageHeader({
 export function SectionHeading({ children, note }: { children: ReactNode; note?: string }) {
   return (
     <div className="mb-3 flex items-baseline justify-between gap-4">
-      <h2 className="m-0 text-[11px] font-medium uppercase tracking-[0.09em] text-text-tertiary">
+      <h2 className="m-0 text-[13px] font-medium leading-5 tracking-normal text-text">
         {children}
       </h2>
       {note && <span className="text-[12px] text-text-tertiary">{note}</span>}
@@ -150,8 +144,14 @@ export function SectionHeading({ children, note }: { children: ReactNode; note?:
   );
 }
 
+/* --------------------------------- stats --------------------------------- */
+
 /**
- * A single real number with its label.
+ * One real number with its label — value first, label beneath.
+ *
+ * That order is the board's, and it is the right one: the number is what the
+ * reader came for and the label only qualifies it. Labels above turn a row of
+ * figures into a row of captions.
  *
  * Takes a `value` the caller has actually counted. There is no placeholder, no
  * trend arrow and no sparkline, because the platform has nothing to compare
@@ -169,17 +169,12 @@ export function Stat({
   hint?: string;
   href?: string;
 }) {
-  // The label reserves two lines. In a row of cards one label wraps and its
-  // neighbours do not, and without a reserved box the numbers sit at different
-  // heights — which reads as a broken grid rather than as a long label.
   const body = (
     <>
-      <span className="min-h-[2.2em] text-[11px] font-medium uppercase leading-[1.1] tracking-[0.09em] text-text-tertiary">
-        {label}
-      </span>
-      <span className="tabular mt-1 text-[30px] font-light leading-none tracking-[-0.02em] text-text">
+      <span className="tabular text-[24px] font-normal leading-none tracking-[-0.02em] text-text">
         {value}
       </span>
+      <span className="mt-2 text-[13px] leading-[1.3] text-text-tertiary">{label}</span>
       {hint && <span className="mt-auto pt-3 text-[12px] text-text-tertiary">{hint}</span>}
     </>
   );
@@ -188,13 +183,44 @@ export function Stat({
     return (
       <a
         href={href}
-        className="flex flex-col rounded-lg border border-line bg-surface p-5 no-underline transition-colors hover:border-line-strong"
+        className="flex flex-col rounded-md px-5 py-4 no-underline transition-colors hover:bg-surface-sunken"
       >
         {body}
       </a>
     );
   }
-  return <div className="flex flex-col rounded-lg border border-line bg-surface p-5">{body}</div>;
+  return <div className="flex flex-col px-5 py-4">{body}</div>;
+}
+
+/**
+ * A band of stats inside ONE card, the way the board groups them.
+ *
+ * Four separate bordered cards for four numbers is four frames around nothing;
+ * the board draws one card with the figures ranged across it. Hairlines run
+ * between the columns on desktop only — on a phone they stack, and a vertical
+ * rule between stacked blocks points the wrong way.
+ */
+export function StatRow({
+  cols = 4,
+  className,
+  children,
+}: {
+  cols?: 3 | 4;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Surface
+      className={cx(
+        "grid grid-cols-2 divide-line [&>*]:min-w-0",
+        cols === 3 ? "sm:grid-cols-3" : "sm:grid-cols-4",
+        "sm:divide-x",
+        className,
+      )}
+    >
+      {children}
+    </Surface>
+  );
 }
 
 /* -------------------------------- button --------------------------------- */
@@ -204,30 +230,118 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   size?: "sm" | "md";
 };
 
+/**
+ * The board draws exactly three button weights: a gold fill, a white fill with
+ * a hairline, and a bare glyph. This is those three plus `danger`, which the
+ * board has no example of and which is drawn as the secondary shape in danger
+ * ink rather than as a red fill — a destructive action should be legible, not
+ * loud, on a screen an operator uses all day.
+ */
 export function Button({ variant = "secondary", size = "md", className, ...rest }: ButtonProps) {
   const base =
-    "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors " +
-    "disabled:cursor-not-allowed disabled:opacity-45 whitespace-nowrap";
+    "inline-flex items-center justify-center gap-2 rounded-lg transition-colors " +
+    "disabled:cursor-not-allowed disabled:opacity-45 whitespace-nowrap cursor-pointer";
 
-  // 44px minimum on touch targets; Bible V4 §2.3 requires large tap targets for
-  // deskless users and WCAG asks for the same. On desktop they tighten to the
-  // board's compact controls.
+  // 44px minimum on touch; Bible V4 §2.3 requires large tap targets for
+  // deskless users and WCAG asks for the same. On a pointer device they tighten
+  // to the board's 36–38px controls.
   const sizes = {
-    sm: "h-11 sm:h-8 px-3 text-[13px]",
-    md: "h-11 sm:h-[38px] px-4 text-[13px]",
+    sm: "h-10 px-3.5 text-[13px]",
+    md: "h-11 px-5 text-[14px]",
   };
 
-  // `text-accent-on` rather than white: the accent is gold, and white on gold
-  // measures 2.4:1 — below every WCAG threshold. The board's own contrast
-  // routine picks dark ink for a light accent, which reaches 7.3:1.
+  // Primary is the mockup's teal with a white label. See globals.css for the
+  // contrast note on `--color-accent-on`; it is one token if that is reversed.
   const variants = {
-    primary: "bg-accent text-accent-on hover:bg-accent-hover",
-    secondary: "border border-line-strong bg-surface text-text hover:bg-surface-sunken",
-    ghost: "bg-transparent text-text-secondary hover:bg-surface-sunken hover:text-text",
-    danger: "bg-danger text-white hover:opacity-90",
+    primary: "bg-accent text-accent-on font-medium hover:bg-accent-hover",
+    secondary: "border border-line bg-surface text-text font-medium hover:bg-surface-sunken",
+    ghost: "bg-transparent text-text-secondary font-medium hover:bg-surface-sunken hover:text-text",
+    danger: "border border-danger/40 bg-surface text-danger font-medium hover:bg-danger-subtle",
   };
 
   return <button className={cx(base, sizes[size], variants[variant], className)} {...rest} />;
+}
+
+/**
+ * A square control holding a single glyph.
+ *
+ * The board's header and toolbar are built from these: 36px, 10px radius, white,
+ * hairline. `label` is required — an icon-only control with no accessible name
+ * is a button only sighted mouse users can operate.
+ */
+export function IconButton({
+  label,
+  children,
+  tone = "default",
+  className,
+  ...rest
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  label: string;
+  children: ReactNode;
+  /** `accent` is the board's single gold action at the end of a toolbar. */
+  tone?: "default" | "accent" | "bare";
+}) {
+  const tones = {
+    default:
+      "border border-line bg-surface text-text-secondary hover:text-text hover:bg-surface-sunken",
+    accent: "border border-transparent bg-accent text-accent-on hover:bg-accent-hover",
+    bare: "border border-transparent bg-transparent text-text-secondary hover:text-text hover:bg-surface-sunken",
+  };
+  return (
+    <button
+      type="button"
+      title={label}
+      className={cx(
+        "grid size-11 shrink-0 place-items-center rounded-xl transition-colors cursor-pointer",
+        tones[tone],
+        className,
+      )}
+      {...rest}
+    >
+      {children}
+      <span className="sr-only">{label}</span>
+    </button>
+  );
+}
+
+/**
+ * The small control that sits at the top-right of a card.
+ *
+ * The mockup gives cards two kinds: a quiet pill with a glyph ("This month")
+ * and a plain accent link ("View all"). Both are the same size and the same
+ * optical weight, so a row of cards reads as one system rather than as a row of
+ * differently-decorated boxes.
+ */
+export function CardAction({
+  children,
+  href,
+  icon,
+  variant = "pill",
+}: {
+  children: ReactNode;
+  href?: string;
+  icon?: ReactNode;
+  variant?: "pill" | "link";
+}) {
+  const className =
+    variant === "pill"
+      ? "inline-flex h-8 items-center gap-1.5 rounded-lg bg-surface-sunken px-2.5 text-[12.5px] text-text-secondary no-underline transition-colors hover:text-text"
+      : "inline-flex h-8 items-center text-[13px] text-accent-ink underline underline-offset-4 transition-colors hover:text-accent";
+
+  if (href) {
+    return (
+      <a href={href} className={className}>
+        {icon}
+        {children}
+      </a>
+    );
+  }
+  return (
+    <span className={className}>
+      {icon}
+      {children}
+    </span>
+  );
 }
 
 /* --------------------------------- form ---------------------------------- */
@@ -235,9 +349,8 @@ export function Button({ variant = "secondary", size = "md", className, ...rest 
 /**
  * A labelled control.
  *
- * The label is 12px medium rather than caps: a form is read in sequence, and
- * tracked-out capitals slow that down even though they suit a standing column
- * header. Hint and error occupy the same slot so the layout does not jump when
+ * The label is 13px medium sentence case, matching every other label in the
+ * system. Hint and error occupy the same slot so the layout does not jump when
  * validation appears.
  */
 export function Field({
@@ -260,7 +373,7 @@ export function Field({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={htmlFor} className="text-[12px] font-medium text-text">
+      <label htmlFor={htmlFor} className="text-[13px] font-medium text-text">
         {label}
         {required && (
           <span className="ml-1 text-text-tertiary" aria-hidden="true">
@@ -287,17 +400,17 @@ export function Field({
 }
 
 /**
- * Control chrome.
+ * Control chrome — the board's input: white, a Neutral 200 hairline, 10px
+ * radius, 38px tall.
  *
- * A hairline at rest and a gold ring on focus. The ring is drawn with
- * `box-shadow` rather than `outline` so it follows the border radius exactly —
- * a square outline around a 9px-rounded input is the kind of detail that reads
+ * The focus ring is drawn with `box-shadow` rather than `outline` so it follows
+ * the border radius exactly; a square outline around a 10px-rounded input reads
  * as unfinished without anyone being able to say why.
  */
 const controlClass =
-  "w-full h-11 sm:h-[38px] px-3 rounded-md bg-surface text-text text-[14px] " +
-  "border border-line-strong placeholder:text-text-tertiary transition-colors " +
-  "hover:border-text-tertiary " +
+  "w-full h-11 px-4 rounded-lg bg-control text-text text-[14px] " +
+  "border border-line placeholder:text-text-tertiary transition-colors " +
+  "hover:border-line-strong " +
   "focus:outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-subtle)] " +
   "disabled:cursor-not-allowed disabled:opacity-55";
 
@@ -326,11 +439,9 @@ export function FieldSet({
 }) {
   return (
     <fieldset className="m-0 border-0 p-0">
-      <legend className="mb-1 p-0 text-[11px] font-medium uppercase tracking-[0.09em] text-text-tertiary">
-        {legend}
-      </legend>
+      <legend className="mb-1 p-0 text-[13px] font-medium text-text">{legend}</legend>
       {description && (
-        <p className="mb-4 mt-0 max-w-[52ch] text-[12px] text-text-tertiary">{description}</p>
+        <p className="mb-4 mt-0.5 max-w-[52ch] text-[12px] text-text-tertiary">{description}</p>
       )}
       <div className={cx("flex flex-col gap-4", !description && "mt-4")}>{children}</div>
     </fieldset>
@@ -342,49 +453,40 @@ export function FieldSet({
 /**
  * Renders a platform StateCategory (ADR-009).
  *
+ * The board's own status vocabulary is a small coloured dot beside a plain
+ * label — see its "In Stock / Border Soon / Out of Stock / Low Stock" list. That
+ * is what this draws. A coloured pill per state would put up to six competing
+ * beds on one table, and on a Sand page an amber pill reads as "selected"
+ * rather than as "pending".
+ *
  * Two rules the brief is explicit about. The UI must not invent a second state
  * taxonomy, so this accepts only the six canonical categories. And state must
- * never be communicated by colour alone, so every badge carries a text label and
- * a distinct glyph — a red dot and a green dot are the same dot to a
- * colour-blind user, and identical in a monochrome print-out.
+ * never be communicated by colour alone, which is why the label is not optional
+ * decoration here — the word carries the meaning and the dot reinforces it.
  */
-const CATEGORY_PRESENTATION: Record<
-  string,
-  { label: string; glyph: string; color: string; background: string }
-> = {
-  Draft: { label: "Draft", glyph: "○", color: "text-[var(--color-state-draft)]", background: "bg-surface-sunken" },
-  Pending: { label: "Pending", glyph: "◐", color: "text-[var(--color-state-pending)]", background: "bg-warning-subtle" },
-  // Active reads on the info bed, not the accent bed. Gold means "selected or
-  // actionable" everywhere else in the shell; letting one StateCategory also
-  // claim it would make a gold row ambiguous between "this is where you are"
-  // and "this record is running".
-  Active: { label: "Active", glyph: "◉", color: "text-[var(--color-state-active)]", background: "bg-info-subtle" },
-  Blocked: { label: "Blocked", glyph: "▲", color: "text-[var(--color-state-blocked)]", background: "bg-danger-subtle" },
-  Completed: { label: "Completed", glyph: "●", color: "text-[var(--color-state-completed)]", background: "bg-success-subtle" },
-  Cancelled: { label: "Cancelled", glyph: "×", color: "text-[var(--color-state-cancelled)]", background: "bg-surface-sunken" },
+const CATEGORY_PRESENTATION: Record<string, { label: string; color: string }> = {
+  Draft: { label: "Draft", color: "bg-[var(--color-state-draft)]" },
+  Pending: { label: "Pending", color: "bg-[var(--color-state-pending)]" },
+  // Active is not gold. Gold means "selected or actionable" everywhere else in
+  // the shell; letting one StateCategory also claim it would make a gold row
+  // ambiguous between "this is where you are" and "this record is running".
+  Active: { label: "Active", color: "bg-[var(--color-state-active)]" },
+  Blocked: { label: "Blocked", color: "bg-[var(--color-state-blocked)]" },
+  Completed: { label: "Completed", color: "bg-[var(--color-state-completed)]" },
+  Cancelled: { label: "Cancelled", color: "bg-[var(--color-state-cancelled)]" },
 };
 
 export function StateBadge({ category, label }: { category: string; label?: string }) {
   const preset = CATEGORY_PRESENTATION[category] ?? {
     label: category,
-    glyph: "•",
-    color: "text-text-secondary",
-    background: "bg-surface-sunken",
+    color: "bg-[var(--color-text-tertiary)]",
   };
 
   return (
-    <span
-      className={cx(
-        "inline-flex h-[22px] items-center gap-1.5 rounded-sm px-2 text-[12px] font-medium",
-        preset.background,
-        preset.color,
-      )}
-    >
-      <span aria-hidden="true" className="text-[10px] leading-none">
-        {preset.glyph}
-      </span>
+    <span className="inline-flex items-center gap-2 whitespace-nowrap text-[13px] text-text">
+      <span aria-hidden="true" className={cx("size-[7px] shrink-0 rounded-full", preset.color)} />
       {/* The tenant's own label when there is one, the category otherwise. */}
-      <span>{label ?? preset.label}</span>
+      {label ?? preset.label}
     </span>
   );
 }
@@ -397,7 +499,6 @@ export function StateBadge({ category, label }: { category: string; label?: stri
  * The mark sits above the message at low opacity. An empty operational surface
  * is the state a new tenant spends its first week in, and a bare line of grey
  * text in the middle of a white rectangle reads as a page that failed to load.
- * The brief asks for zero data to look like an early platform, not a broken app.
  */
 export function EmptyState({
   title,
@@ -413,8 +514,10 @@ export function EmptyState({
 }) {
   return (
     <div className={cx("flex flex-col items-center px-6 text-center", compact ? "py-10" : "py-16")}>
-      <VeritySymbol size={compact ? 20 : 26} className="text-text-tertiary opacity-25" />
-      <p className={cx("m-0 text-text", compact ? "mt-4 text-[14px]" : "mt-5 text-[15px]")}>{title}</p>
+      <VeritySymbol size={compact ? 20 : 26} className="text-accent opacity-30" />
+      <p className={cx("m-0 text-text", compact ? "mt-4 text-[14px]" : "mt-5 text-[15px]")}>
+        {title}
+      </p>
       {description && (
         <p className="mx-auto mb-0 mt-2 max-w-[44ch] text-[13px] leading-relaxed text-text-secondary">
           {description}
@@ -428,10 +531,9 @@ export function EmptyState({
 /**
  * An error the user can act on.
  *
- * The brief requires an error to say what happened, what the user can do, and
- * whether the action completed. `retryable` distinguishes "try again" from "this
- * will not succeed however many times you try", which is the difference between
- * a useful message and a shrug.
+ * Says what happened, what the user can do, and whether the action completed.
+ * `retryable` distinguishes "try again" from "this will not succeed however many
+ * times you try", which is the difference between a useful message and a shrug.
  *
  * Rendered as a bordered notice rather than a saturated block: an operator meets
  * these several times a day, and a shouting red panel each time is exhausting
@@ -449,14 +551,9 @@ export function ErrorState({
   retryable?: boolean;
 }) {
   return (
-    <div
-      role="alert"
-      className="rounded-lg border border-danger/25 bg-danger-subtle px-4 py-3.5"
-    >
+    <div role="alert" className="rounded-lg border border-danger/25 bg-danger-subtle px-4 py-3.5">
       <p className="m-0 flex items-center gap-2 text-[13px] font-medium text-danger">
-        <span aria-hidden="true" className="text-[11px] leading-none">
-          ▲
-        </span>
+        <span aria-hidden="true" className="size-[7px] shrink-0 rounded-full bg-danger" />
         {title}
       </p>
       <p className="mb-0 mt-1.5 text-[13px] leading-relaxed text-text">{message}</p>
@@ -490,7 +587,7 @@ export function PermissionDenied({ what }: { what: string }) {
     <Surface className="mt-2">
       <EmptyState
         title="You do not have access to this"
-        description={`Your current role does not permit ${what}. Switching organization in the sidebar may change what you can see.`}
+        description={`Your current role does not permit ${what}. Switching organization in the header may change what you can see.`}
       />
     </Surface>
   );
@@ -536,7 +633,7 @@ export function DefinitionList({ items }: { items: Array<{ term: string; value: 
             i > 0 && "border-t border-line",
           )}
         >
-          <dt className="text-[12px] text-text-tertiary">{term}</dt>
+          <dt className="text-[13px] text-text-tertiary">{term}</dt>
           <dd className="m-0 min-w-0 break-words text-right text-[14px] text-text">{value}</dd>
         </div>
       ))}
@@ -554,13 +651,7 @@ export function RowList({ children }: { children: ReactNode }) {
   return <ul className="m-0 list-none divide-y divide-line p-0">{children}</ul>;
 }
 
-export function Row({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
+export function Row({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <li className={cx("flex items-center justify-between gap-4 px-5 py-3.5", className)}>
       {children}

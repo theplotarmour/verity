@@ -1,3 +1,18 @@
+> **SUPERSEDED — 2026-08-24.**
+>
+> This document's evidence table no longer matches executable reality. It records
+> **274 Vitest / 34 Playwright**; the suite now stands at **280 Vitest / 60
+> Playwright**. Its §5 security claim ("STRONG, with one gap") was also written
+> before a real defect was found and fixed: `assertRlsEnforceable` was called by
+> seventeen test files and by **no application code**, so the runtime RLS guard
+> protected only environments the test suite was pointed at.
+>
+> Its structural findings — capability contracts, over-genericity, extension
+> proofs, deferred items — were re-checked and still hold. Read it for those.
+> For anything numeric, or for security status, read
+> [`foundation-gate-2026-08-24.md`](foundation-gate-2026-08-24.md), which
+> contains only results reproduced by running the commands it quotes.
+
 # Verity Platform Readiness Audit
 
 **Date:** 2026-08-23

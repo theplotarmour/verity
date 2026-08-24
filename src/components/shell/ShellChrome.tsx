@@ -17,23 +17,25 @@ export type NavArea = { group: string; items: NavItem[] };
 /**
  * The Verity application shell.
  *
- * Geometry, palette and rhythm follow the approved identity boards; see
- * `globals.css` for how the board's translucent chrome was resolved against
- * Bible V4 §1.B into solid surfaces.
+ * Geometry, palette and composition follow the approved product mockups.
  *
- * Responsive by RESTRUCTURING, not shrinking. On desktop navigation is a
- * persistent rail, because operators move between areas constantly and a hidden
- * menu costs a click every time. On mobile it becomes a sheet, because a
- * permanent rail would eat a third of a small screen for navigation needed
- * occasionally. The rail also collapses to symbols on demand — the board ships
- * that control, and on a 1024px laptop it returns real width to the content.
+ * WHAT THE MOCKUP'S SHELL IS
+ * A 234px sidebar carrying the lockup, a NAMED navigation list, and the signed-
+ * in person at the bottom. It is separated from the content by one hairline and
+ * no fill. Navigation items are icon plus label at a 63px pitch; the current
+ * one sits on a pale accent bed with an accent glyph and near-black label.
  *
- * WHAT IS DELIBERATELY ABSENT
- * The board's ⌘K global search is not here. Platform search is recorded as
- * DEFERRED in `platform-readiness-audit.md` §14 — there is no search API behind
- * it. Drawing the box anyway would be a control that lies about what the
- * platform can do, which §18's data-reality rule forbids as squarely as a fake
- * metric. It returns when there is something for it to query.
+ * Labels are not optional. An icon-only rail makes an operator learn nine
+ * glyphs before they can find anything, and every one of those glyphs is a
+ * guess until they hover it.
+ *
+ * The content column opens with a top bar — search, operating context, and the
+ * account controls — and the page's own title sits beneath it. That ordering is
+ * the mockup's: the bar belongs to the application, the title belongs to the
+ * page.
+ *
+ * Responsive by RESTRUCTURING, not shrinking. Below `lg` the sidebar becomes a
+ * sheet, because a permanent 234px panel would eat two thirds of a phone.
  */
 export function ShellChrome({
   areas,
@@ -51,18 +53,7 @@ export function ShellChrome({
   children: ReactNode;
 }) {
   const [navOpen, setNavOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
-
-  useEffect(() => {
-    setCollapsed(localStorage.getItem("verity-rail") === "collapsed");
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (mounted) localStorage.setItem("verity-rail", collapsed ? "collapsed" : "expanded");
-  }, [collapsed, mounted]);
 
   // Escape closes the mobile sheet — a sheet you can only leave by finding its
   // close button is a trap for keyboard users.
@@ -76,154 +67,101 @@ export function ShellChrome({
   const isCurrent = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
-  function navList(showLabels: boolean) {
+  /**
+   * The navigation list.
+   *
+   * Areas are rendered as one continuous list with no group headings, as the
+   * mockup does. The grouping still exists in the data and still orders the
+   * items; it simply is not drawn, because nine items do not need three
+   * headings to be scannable.
+   */
+  function navList() {
     return (
-      <nav aria-label="Platform" className="flex flex-col gap-5">
+      <nav aria-label="Platform" className="flex flex-col gap-1">
         {areas.map((area) => (
-          <div key={area.group}>
-            {showLabels && (
-              <p className="m-0 mb-1.5 px-[9px] text-[10px] font-medium uppercase tracking-[0.09em] text-text-tertiary">
-                {area.group}
-              </p>
-            )}
-            <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
-              {area.items.map((item) => {
-                const current = isCurrent(item.href);
-                return (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      onClick={() => setNavOpen(false)}
-                      aria-current={current ? "page" : undefined}
-                      title={showLabels ? undefined : item.label}
-                      className={
-                        "flex items-center gap-[11px] rounded-md px-[9px] no-underline transition-colors " +
-                        "h-11 sm:h-[33px] text-[13px] " +
-                        (showLabels ? "" : "justify-center ") +
-                        (current
-                          ? "bg-accent-subtle text-accent-ink font-medium"
-                          : "text-text-secondary hover:bg-control hover:text-text")
-                      }
-                    >
-                      {item.icon && <Icon name={item.icon} />}
-                      {showLabels && (
-                        <span className="truncate tracking-[-0.005em]">{item.label}</span>
-                      )}
-                      {/* The collapsed rail shows only a glyph. Sighted users
-                          get the tooltip; everyone else needs the name. */}
-                      {!showLabels && <span className="sr-only">{item.label}</span>}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+          <ul key={area.group} className="m-0 flex list-none flex-col gap-1 p-0">
+            <li className="sr-only" aria-hidden="true">
+              {area.group}
+            </li>
+            {area.items.map((item) => {
+              const current = isCurrent(item.href);
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    onClick={() => setNavOpen(false)}
+                    aria-current={current ? "page" : undefined}
+                    className={
+                      "flex h-[52px] items-center gap-3.5 rounded-lg px-3.5 text-[15px] no-underline transition-colors " +
+                      (current
+                        ? "bg-accent-subtle font-medium text-text"
+                        : "text-text-secondary hover:bg-surface-sunken hover:text-text")
+                    }
+                  >
+                    {item.icon && (
+                      <Icon
+                        name={item.icon}
+                        size={21}
+                        className={current ? "text-accent" : "text-text-tertiary"}
+                      />
+                    )}
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
         ))}
       </nav>
     );
   }
 
-  const showLabels = !collapsed;
+  /** The signed-in person, at the foot of the sidebar as the mockup places it. */
+  function accountCard() {
+    return (
+      <form action={signOut} className="mt-auto pt-4">
+        <button
+          type="submit"
+          className="flex w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-2 py-2 text-left transition-colors hover:bg-surface-sunken"
+        >
+          <span
+            className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-subtle text-[13px] font-medium text-accent-ink"
+            aria-hidden="true"
+          >
+            {userInitials}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[15px] font-medium text-text">{userLabel}</span>
+            <span className="block truncate text-[13px] text-text-tertiary">
+              {active.roleName ?? "No role assigned"}
+            </span>
+          </span>
+          <Icon name="chevronRight" size={18} className="shrink-0 text-text-tertiary" />
+          <span className="sr-only">Sign out</span>
+        </button>
+      </form>
+    );
+  }
 
   return (
-    <div
-      className="min-h-dvh lg:grid"
-      style={{ gridTemplateColumns: mounted && collapsed ? "64px 1fr" : "228px 1fr" }}
-    >
-      {/* ------------------------------- rail ------------------------------ */}
-      <aside className="hidden lg:flex flex-col gap-6 border-r border-line bg-chrome px-3 pb-4 pt-[22px]">
-        <Link
-          href="/"
-          aria-label="Verity"
-          className="flex h-[26px] items-center px-2 no-underline"
-        >
-          <VerityLockup collapsed={!showLabels} />
+    <div className="min-h-dvh lg:grid" style={{ gridTemplateColumns: "234px 1fr" }}>
+      {/* ----------------------------- sidebar ----------------------------- */}
+      <aside className="hidden flex-col border-r border-line bg-chrome px-4 pb-5 pt-7 lg:flex">
+        <Link href="/" aria-label="Verity" className="mb-8 block px-2 no-underline">
+          <VerityLockup size={30} className="text-text" />
         </Link>
 
-        {showLabels && (
-          <OrganizationSwitcher memberships={memberships} active={active} instanceId="rail" />
-        )}
-
-        {navList(showLabels)}
-
-        <div className="mt-auto flex flex-col gap-0.5 border-t border-line pt-3">
-          <button
-            type="button"
-            onClick={() => setCollapsed((v) => !v)}
-            aria-expanded={showLabels}
-            className={
-              "flex h-[31px] items-center gap-[11px] rounded-md border-0 bg-transparent px-[9px] " +
-              "text-[13px] text-text-tertiary hover:bg-control hover:text-text cursor-pointer transition-colors " +
-              (showLabels ? "" : "justify-center")
-            }
-          >
-            <Icon name={showLabels ? "collapse" : "expand"} size={16} />
-            {showLabels && <span>Collapse</span>}
-            <span className="sr-only">
-              {showLabels ? "Collapse navigation to icons" : "Expand navigation"}
-            </span>
-          </button>
-
-          <form action={signOut}>
-            <button
-              type="submit"
-              className={
-                "flex h-[31px] w-full items-center gap-[11px] rounded-md border-0 bg-transparent px-[9px] " +
-                "text-[13px] text-text-tertiary hover:bg-control hover:text-text cursor-pointer transition-colors " +
-                (showLabels ? "" : "justify-center")
-              }
-            >
-              <Icon name="signOut" size={16} />
-              {showLabels ? <span>Sign out</span> : <span className="sr-only">Sign out</span>}
-            </button>
-          </form>
-        </div>
+        {navList()}
+        {accountCard()}
       </aside>
 
       {/* ------------------------------ main ------------------------------- */}
       <div className="flex min-w-0 flex-col">
-        {/* Desktop header */}
-        <header className="hidden lg:flex h-14 flex-none items-center gap-3.5 border-b border-line bg-chrome px-[22px]">
-          <div className="flex items-center gap-2 text-[12px] text-text-secondary">
-            <Icon name="building" size={13} />
-            <span className="truncate">{active.organizationName ?? active.tenantName}</span>
-          </div>
-
-          <div className="ml-auto flex items-center gap-0.5">
-            <ThemeToggle />
-
-            <Link
-              href="/audit"
-              title="Recent activity"
-              className="relative grid size-[29px] place-items-center rounded-sm text-text-secondary no-underline transition-colors hover:bg-control hover:text-text"
-            >
-              <Icon name="bell" size={15.5} />
-              <span className="sr-only">Recent activity</span>
-            </Link>
-
-            <div className="mx-2 h-5 w-px bg-line" aria-hidden="true" />
-
-            <div className="flex items-center gap-2.5">
-              <span
-                className="grid size-[26px] place-items-center rounded-full border border-accent-line bg-accent-subtle text-[10px] font-medium text-accent-ink"
-                aria-hidden="true"
-              >
-                {userInitials}
-              </span>
-              <span className="flex flex-col leading-[1.25]">
-                <span className="whitespace-nowrap text-[11.5px] font-medium">{userLabel}</span>
-                <span className="whitespace-nowrap text-[10.5px] text-text-tertiary">
-                  {active.roleName ?? "No role assigned"}
-                </span>
-              </span>
-            </div>
-          </div>
-        </header>
-
-        {/* Mobile bar */}
-        <div className="lg:hidden sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-line bg-chrome px-4">
+        {/* Mobile bar. The mockups have no small-screen composition to copy, so
+            this states the identity and offers the sheet, and nothing else. */}
+        <div className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-line bg-canvas px-4 lg:hidden">
           <Link href="/" aria-label="Verity" className="no-underline">
-            <VerityLockup />
+            <VerityLockup size={22} className="text-text" />
           </Link>
           <div className="flex items-center gap-1">
             <ThemeToggle />
@@ -239,7 +177,7 @@ export function ShellChrome({
         </div>
 
         {navOpen && (
-          <div className="lg:hidden fixed inset-0 z-40 flex flex-col">
+          <div className="fixed inset-0 z-40 flex flex-col lg:hidden">
             {/* Bible V4 §1.B permits translucency only for a temporary
                 contextual layer. A scrim behind a sheet is exactly that. */}
             <button
@@ -249,30 +187,60 @@ export function ShellChrome({
             />
             <div
               id="mobile-nav"
-              className="verity-overlay relative mt-14 flex max-h-[calc(100dvh-3.5rem)] flex-col gap-6 overflow-y-auto border-t border-line p-4"
+              className="verity-overlay relative mt-14 flex max-h-[calc(100dvh-3.5rem)] flex-col gap-5 overflow-y-auto border-t border-line p-4"
             >
-              <OrganizationSwitcher
-                memberships={memberships}
-                active={active}
-                instanceId="sheet"
-              />
-              {navList(true)}
-              <div className="border-t border-line pt-4">
-                <p className="m-0 mb-2 text-[13px] text-text-tertiary">
-                  {userLabel} · {active.roleName ?? "No role assigned"}
-                </p>
-                <form action={signOut}>
-                  <Button type="submit" variant="secondary" className="w-full">
-                    Sign out
-                  </Button>
-                </form>
-              </div>
+              <OrganizationSwitcher memberships={memberships} active={active} instanceId="sheet" />
+              {navList()}
+              {accountCard()}
             </div>
           </div>
         )}
 
-        <main id="main" className="min-w-0 flex-1 px-5 py-8 sm:px-8 lg:px-10 lg:py-9">
-          <div className="mx-auto w-full max-w-6xl">{children}</div>
+        {/* -------------------------- top bar --------------------------- */}
+        <div className="hidden h-[76px] shrink-0 items-center gap-4 px-8 lg:flex">
+          {/* Search is centred and dominant, as the mockup draws it. It is a
+              real control over the records already loaded on the page, not a
+              platform-wide index — platform search is DEFERRED and drawing a
+              box that promises one would be a control that lies. */}
+          <div className="relative mx-auto flex w-full max-w-[520px] items-center">
+            <Icon
+              name="search"
+              size={18}
+              className="pointer-events-none absolute left-4 text-text-tertiary"
+            />
+            <label htmlFor="shell-search" className="sr-only">
+              Search this page
+            </label>
+            <input
+              id="shell-search"
+              type="search"
+              placeholder="Search this page"
+              className="h-11 w-full rounded-xl border border-line bg-control pl-12 pr-4 text-[14px] text-text placeholder:text-text-tertiary transition-colors hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-subtle)] focus:outline-none"
+            />
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2.5">
+            <OrganizationSwitcher memberships={memberships} active={active} instanceId="header" />
+            <ThemeToggle />
+            <Link
+              href="/audit"
+              title="Recent activity"
+              className="grid size-11 place-items-center rounded-xl border border-line bg-surface text-text-secondary no-underline transition-colors hover:bg-surface-sunken hover:text-text"
+            >
+              <Icon name="bell" size={19} />
+              <span className="sr-only">Recent activity</span>
+            </Link>
+            <span
+              className="grid size-11 shrink-0 place-items-center rounded-full bg-accent-subtle text-[13px] font-medium text-accent-ink"
+              aria-hidden="true"
+            >
+              {userInitials}
+            </span>
+          </div>
+        </div>
+
+        <main id="main" className="min-w-0 flex-1 px-5 pb-10 pt-6 sm:px-8 lg:px-8 lg:pt-0">
+          {children}
         </main>
       </div>
     </div>

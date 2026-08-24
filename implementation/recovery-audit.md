@@ -1,3 +1,8 @@
+> **SUPERSEDED — 2026-08-24.** Records **274 Vitest passed**. The suite now stands at **285**. Its central finding — that the external audit's claims did not reproduce on this checkout — still holds and is worth keeping as evidence.
+>
+> Current canonical readiness artifact: [`final-platform-readiness.md`](final-platform-readiness.md).
+> Retained as historical evidence; not rewritten.
+
 # Verity Recovery Audit
 
 **Date:** 2026-08-23

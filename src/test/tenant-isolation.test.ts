@@ -1,7 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/server/platform/db";
-import { assertRlsEnforceable, withTenant } from "@/server/platform/tenancy";
+import {
+  assertRlsEnforceable,
+  resetRlsEnforceableCache,
+  withTenant,
+} from "@/server/platform/tenancy";
 
 /**
  * Phase 0 gate test — INV-001, Spec PLA-TEN-001→006.
@@ -22,6 +26,55 @@ if (!hasDatabase) {
   if (process.env.CI) throw new Error(message);
   console.warn(message);
 }
+
+/**
+ * The guard has to fire on the RUNTIME path, not merely exist.
+ *
+ * `assertRlsEnforceable` was called by seventeen test files and by no
+ * application code, so it proved nothing about a real deployment. These two
+ * assertions are about `withTenant` itself: that it refuses to open a
+ * transaction on a bypassing connection, and that it does so before any
+ * tenant-scoped statement runs.
+ */
+describeDb("runtime RLS guard (INV-001)", () => {
+  afterEach(() => resetRlsEnforceableCache());
+
+  it("permits the configured runtime role, which must not bypass RLS", async () => {
+    resetRlsEnforceableCache();
+    const [role] = await prisma.$queryRaw<
+      { rolname: string; rolsuper: boolean; rolbypassrls: boolean }[]
+    >`SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user`;
+
+    expect(role).toBeDefined();
+    expect(role!.rolsuper, `runtime role ${role!.rolname} is SUPERUSER`).toBe(false);
+    expect(role!.rolbypassrls, `runtime role ${role!.rolname} has BYPASSRLS`).toBe(false);
+
+    // And the chokepoint accepts it.
+    await expect(withTenant(randomUUID(), async () => "ok")).resolves.toBe("ok");
+  });
+
+  it("refuses to run a tenant-scoped operation on a bypassing role", async () => {
+    resetRlsEnforceableCache();
+
+    // Stand in for a misconfigured DATABASE_URL by making the role probe report
+    // a bypassing role. The point under test is withTenant's REACTION, which is
+    // what a real misconfiguration would exercise.
+    const spy = vi
+      .spyOn(prisma, "$queryRaw")
+      .mockResolvedValueOnce([
+        { rolname: "postgres", rolsuper: false, rolbypassrls: true },
+      ] as never);
+
+    await expect(
+      withTenant(randomUUID(), async () => {
+        throw new Error("the callback must never run");
+      }),
+    ).rejects.toThrow(/bypasses row-level security/);
+
+    spy.mockRestore();
+    resetRlsEnforceableCache();
+  });
+});
 
 describeDb("tenant isolation (INV-001)", () => {
   const tenantA = randomUUID();

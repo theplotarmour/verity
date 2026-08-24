@@ -15,6 +15,7 @@ import {
   Row,
   RowList,
   Stat,
+  StatRow,
   StateBadge,
 } from "@/components/ui/primitives";
 import { AuditTrail } from "@/components/shell/AuditTrail";
@@ -90,12 +91,11 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
         rows down a definition list where it reads as one attribute among many.
       */}
       <PageHeader
-        eyebrow={`Asset · ${data.asset.location?.name ?? "Unassigned"}`}
         title={data.asset.name}
         description={
           data.isTerminal
-            ? "This asset is in a terminal state and is permanently read-only."
-            : undefined
+            ? `At ${data.asset.location?.name ?? "no location"}. This asset is in a terminal state and is permanently read-only.`
+            : `At ${data.asset.location?.name ?? "no location"}.`
         }
         actions={
           <AssetActions
@@ -107,19 +107,20 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
         }
       />
 
-      <div className="mb-6 grid grid-cols-2 items-stretch gap-3 sm:grid-cols-4">
-        <div className="flex flex-col rounded-lg border border-line bg-surface p-5">
-          <span className="text-[11px] font-medium uppercase tracking-[0.09em] text-text-tertiary">
-            State
-          </span>
-          <span className="mt-2.5">
+      <StatRow className="mb-6">
+        {/* State is a category, not a count, so it does not use `Stat` — but it
+            sits on the same rhythm as the figures beside it: value first, label
+            beneath. */}
+        <div className="flex flex-col px-5 py-4">
+          <span className="flex h-[26px] items-center text-[15px]">
             <StateBadge category={data.category} label={data.asset.state} />
           </span>
+          <span className="mt-2 text-[12px] leading-[1.3] text-text-tertiary">State</span>
         </div>
         <Stat label="Bookings" value={data.bookings.length} />
         <Stat label="Evidence" value={data.evidence.length} />
         <Stat label="Version" value={data.asset.version} hint="Optimistic concurrency" />
-      </div>
+      </StatRow>
 
       <div className="grid items-start gap-6 lg:grid-cols-[1.35fr_1fr]">
         <div className="flex flex-col gap-6">

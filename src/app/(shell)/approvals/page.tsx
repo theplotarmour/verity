@@ -9,6 +9,8 @@ import {
   PermissionDenied,
   Row,
   RowList,
+  Stat,
+  StatRow,
   StateBadge,
 } from "@/components/ui/primitives";
 import { ApprovalQueue } from "./ApprovalQueue";
@@ -77,10 +79,18 @@ export default async function ApprovalsPage() {
         only section that needs the reader to do anything.
       */}
       <PageHeader
-        eyebrow="Capability"
         title="Approvals"
         description="Chains are decided in sequence. A step can only be decided by the role it names."
       />
+
+      {/* The queue's shape at a glance, before the queue itself. Each figure is
+          a count of rows already loaded — nothing here is a second query and
+          nothing can disagree with the sections beneath it. */}
+      <StatRow cols={3} className="mb-6">
+        <Stat label="Awaiting your role" value={awaitingMe.length} />
+        <Stat label="In flight elsewhere" value={awaitingOthers.length} />
+        <Stat label="Settled" value={settled.length} />
+      </StatRow>
 
       <div className="flex flex-col gap-6">
         <Panel

@@ -4,7 +4,13 @@ import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { ENTITY_EVIDENCE } from "@/server/capabilities/evidence";
 import { DataTable } from "@/components/ui/DataTable";
-import { PageHeader, Panel, PermissionDenied, Stat } from "@/components/ui/primitives";
+import {
+  PageHeader,
+  Panel,
+  PermissionDenied,
+  Stat,
+  StatRow,
+} from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
 
@@ -60,12 +66,11 @@ export default async function EvidencePage() {
         is the question this screen exists to answer.
       */}
       <PageHeader
-        eyebrow="Capability"
         title="Evidence"
         description="Immutable field data. Once recorded, evidence cannot be edited or deleted at any privilege level."
       />
 
-      <div className="mb-6 grid grid-cols-2 items-stretch gap-3 sm:grid-cols-4">
+      <StatRow className="mb-6">
         <Stat label="Captures" value={rows.length} />
         <Stat label="Inside fence" value={rows.filter((r) => r.fence === "Inside").length} />
         <Stat label="Outside fence" value={rows.filter((r) => r.fence === "Outside").length} />
@@ -74,7 +79,7 @@ export default async function EvidencePage() {
           value={rows.filter((r) => r.fence === "Not evaluated").length}
           hint="No fence at capture"
         />
-      </div>
+      </StatRow>
 
       <DataTable
         caption="Evidence"

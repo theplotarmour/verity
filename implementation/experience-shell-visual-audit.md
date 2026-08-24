@@ -1,3 +1,8 @@
+> **SUPERSEDED — 2026-08-24.** Records **46** and later **54 Playwright passed**. The suite now stands at **60 Playwright / 285 Vitest**. Its composition findings still hold; its metrics do not.
+>
+> Current canonical readiness artifact: [`final-platform-readiness.md`](final-platform-readiness.md).
+> Retained as historical evidence; not rewritten.
+
 # Experience Shell — Visual Rebuild Audit
 
 **Date:** 2026-08-24

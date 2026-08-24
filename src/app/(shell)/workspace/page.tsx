@@ -10,6 +10,7 @@ import {
   Row,
   RowList,
   Stat,
+  StatRow,
   Surface,
 } from "@/components/ui/primitives";
 
@@ -69,10 +70,18 @@ export default async function WorkspacePage() {
   return (
     <>
       <PageHeader
-        eyebrow="Platform"
         title="Workspace"
         description="What is waiting on you right now. A workspace is for executing; the overview is for reading."
       />
+
+      {/* Real counts of what is actually queued for this actor. `Queues` counts
+          the queues that have anything in them, not the queues that exist —
+          an empty queue is not work. */}
+      <StatRow cols={3} className="mb-6">
+        <Stat label="Items waiting" value={waiting.reduce((n, q) => n + q.value, 0)} />
+        <Stat label="Queues with work" value={waiting.length} />
+        <Stat label="Sync exceptions" value={data.exceptions.length} />
+      </StatRow>
 
       {nothingWaiting ? (
         <Surface>

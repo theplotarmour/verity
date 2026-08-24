@@ -4,7 +4,14 @@ import { PrismaClient } from "@prisma/client";
 import { prisma } from "@/server/platform/db";
 import { assertRlsEnforceable, withTenant } from "@/server/platform/tenancy";
 import { activateCapability, invalidateCapabilityCache } from "@/server/platform/capability";
-import { clearContributions, navigationFor, registerContribution, workspaceContributionsFor } from "@/server/platform/contribution";
+import {
+  clearContributions,
+  navigationFor,
+  registerContribution,
+  runDueWork,
+  schedulesFor,
+  workspaceContributionsFor,
+} from "@/server/platform/contribution";
 import { clockIntentFor } from "@/server/platform/sla";
 import { installCapabilities } from "@/server/capabilities/registry";
 
@@ -292,6 +299,155 @@ describeDb("future capability composition", () => {
     );
     for (const capability of HYPOTHETICAL) {
       expect(activated.map((a) => a.capabilityId)).toContain(capability.id);
+    }
+  });
+});
+
+/**
+ * Scheduled work is the last contribution surface a capability needs, and the
+ * one the platform lacked until now: a capability could declare where it
+ * appears and what queues it owns, but not that it has work which recurs.
+ *
+ * These assertions are architectural. The fixture is not a business capability —
+ * it declares the SHAPE of recurring work and asserts the platform accepts,
+ * discovers and executes it through the public contract, under tenancy, without
+ * the platform knowing anything about the domain.
+ */
+describeDb("composition: scheduled work contributes like any other surface", () => {
+  const tenantId = randomUUID();
+
+  beforeAll(async () => {
+    await assertRlsEnforceable();
+    await withTenant(tenantId, async (tx) => {
+      await tx.tenant.create({ data: { id: tenantId, name: "Composition Schedule" } });
+    });
+  });
+
+  afterAll(async () => {
+    await withTenant(tenantId, async (tx) => {
+      await tx.tenant.deleteMany({ where: { id: tenantId } });
+    });
+  });
+
+  afterEach(() => clearContributions());
+
+  it("discovers recurring work declared by an active capability", () => {
+    registerContribution({
+      capabilityId: "verity.capability.hypothetical",
+      schedules: [
+        { key: "recheck", label: "Recheck due records", cadence: "daily", run: async () => ({}) },
+        { key: "sweep", label: "Sweep elapsed clocks", cadence: "frequent", run: async () => ({}) },
+      ],
+    });
+
+    const all = schedulesFor({ activeCapabilityIds: ["verity.capability.hypothetical"] });
+    expect(all).toHaveLength(2);
+    expect(all.every((s) => s.capabilityId === "verity.capability.hypothetical")).toBe(true);
+
+    // A provider asks for one cadence at a time; it must not receive the rest.
+    const frequent = schedulesFor({
+      activeCapabilityIds: ["verity.capability.hypothetical"],
+      cadence: "frequent",
+    });
+    expect(frequent.map((s) => s.key)).toEqual(["sweep"]);
+  });
+
+  it("offers nothing for a capability the tenant has not activated", () => {
+    registerContribution({
+      capabilityId: "verity.capability.hypothetical",
+      schedules: [{ key: "recheck", label: "Recheck", cadence: "daily", run: async () => ({}) }],
+    });
+    expect(schedulesFor({ activeCapabilityIds: [] })).toHaveLength(0);
+  });
+
+  it("executes the work inside a tenant-scoped transaction", async () => {
+    let sawTenantGuc: string | null = null;
+
+    registerContribution({
+      capabilityId: "verity.capability.hypothetical",
+      schedules: [
+        {
+          key: "observe-scope",
+          label: "Observe the scope it runs in",
+          cadence: "frequent",
+          run: async ({ tx }) => {
+            // Scheduled work must inherit tenancy exactly as a command does.
+            // There is deliberately no privileged path around withTenant.
+            const [row] = await tx.$queryRaw<{ t: string }[]>`
+              SELECT current_setting('verity.tenant_id', true) AS t`;
+            sawTenantGuc = row?.t ?? null;
+            return { events: [{ name: "verity.test.scheduled" }] };
+          },
+        },
+      ],
+    });
+
+    const outcomes = await runDueWork({
+      tenantId,
+      activeCapabilityIds: ["verity.capability.hypothetical"],
+    });
+
+    expect(sawTenantGuc).toBe(tenantId);
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]!.status).toBe("ok");
+    expect(outcomes[0]!.events).toBe(1);
+  });
+
+  it("isolates a failing unit so one job cannot cancel the batch", async () => {
+    const ran: string[] = [];
+
+    registerContribution({
+      capabilityId: "verity.capability.hypothetical",
+      schedules: [
+        {
+          key: "explodes",
+          label: "Fails",
+          cadence: "frequent",
+          run: async () => {
+            ran.push("explodes");
+            throw new Error("provider outage");
+          },
+        },
+        {
+          key: "survives",
+          label: "Succeeds",
+          cadence: "frequent",
+          run: async () => {
+            ran.push("survives");
+            return {};
+          },
+        },
+      ],
+    });
+
+    const outcomes = await runDueWork({
+      tenantId,
+      activeCapabilityIds: ["verity.capability.hypothetical"],
+    });
+
+    expect(ran).toEqual(["explodes", "survives"]);
+    expect(outcomes.find((o) => o.key === "explodes")?.status).toBe("failed");
+    expect(outcomes.find((o) => o.key === "explodes")?.error).toContain("provider outage");
+    expect(outcomes.find((o) => o.key === "survives")?.status).toBe("ok");
+  });
+
+  it("names no scheduler vendor anywhere in the contract", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const source = await readFile("src/server/platform/contribution.ts", "utf8");
+
+    // Comments are stripped first. Prose explaining WHY no vendor is bound is
+    // exactly what this file should contain; what it must not contain is a
+    // dependency on one. The check is about code, not about the word.
+    const code = source
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "")
+      .toLowerCase();
+
+    // DECLARATION must not know about PROVIDER. A capability says "this
+    // recurs"; which runtime calls it is a deployment decision, and no
+    // authority names one.
+    for (const vendor of ["inngest", "vercel", "temporal", "bullmq", "agenda", "quirrel", "cron"]) {
+      expect(code, `contribution.ts must not depend on ${vendor}`).not.toContain(vendor);
     }
   });
 });
