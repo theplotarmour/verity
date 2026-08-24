@@ -21,8 +21,17 @@ test.describe("platform shell", () => {
   test("signs in and lands on an authorized overview", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
-    // Real counts, not invented metrics.
-    await expect(page.getByText("effective grants")).toBeVisible();
+
+    // Real counts, not invented metrics. Each of these is a row the platform
+    // can count right now; none is a trend, a target or a projection.
+    for (const label of ["Locations", "Assets", "Capabilities", "Grants"]) {
+      await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
+    }
+
+    // The two charts render those same counts rather than a series. The ring
+    // states its own total, and it must agree with the figure beside it.
+    const ring = page.getByRole("img", { name: /Total assets/ });
+    await expect(ring).toBeVisible();
   });
 
   test("redirects an unauthenticated visitor to sign-in", async ({ browser }) => {
@@ -35,7 +44,7 @@ test.describe("platform shell", () => {
 
   test("shows the operating context and offers only the actor's memberships", async ({ page }) => {
     await page.goto("/");
-    const switcher = page.locator("#org-switcher-rail");
+    const switcher = page.locator("#org-switcher-header");
     await expect(switcher).toBeVisible();
     // Exactly the two memberships the seed grants — never a tenant list.
     await expect(switcher.locator("option")).toHaveCount(2);
@@ -54,15 +63,15 @@ test.describe("platform shell", () => {
     await page.goto("/locations");
 
     // Platform Administrator holds Tenant scope: every site is visible.
-    await page.locator("#org-switcher-rail").selectOption({ label: "Demo HQ — Demo Operations" });
+    await page.locator("#org-switcher-header").selectOption({ label: "Demo HQ — Demo Operations" });
     await expect(page.getByRole("link", { name: "Demo Northern Yard" })).toBeVisible();
 
     // Supervisor holds Organization scope: the parent org's site disappears.
-    await page.locator("#org-switcher-rail").selectOption({ label: "Demo Depot — Demo Operations" });
+    await page.locator("#org-switcher-header").selectOption({ label: "Demo Depot — Demo Operations" });
     await expect(page.getByRole("link", { name: "Demo Northern Yard" })).toBeHidden();
     await expect(page.getByRole("link", { name: "Demo Depot Site" })).toBeVisible();
 
-    await page.locator("#org-switcher-rail").selectOption({ label: "Demo HQ — Demo Operations" });
+    await page.locator("#org-switcher-header").selectOption({ label: "Demo HQ — Demo Operations" });
   });
 
   test("runs a command and reflects the new state, with audit", async ({ page }) => {

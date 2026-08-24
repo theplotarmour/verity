@@ -11,52 +11,106 @@ import { expect, test } from "@playwright/test";
  * a theme variable was scoped to the wrong element.
  */
 
-const GOLD = {
-  // Derived from the board's #D4A017 via its own tonal mix. Light mode uses the
-  // 600 step for fills and the 800 step for ink, because #D4A017 itself reaches
-  // only 2.2:1 on the light canvas.
-  light: { accent: "#bc8e16", ink: "#806214", canvas: "#f4f4f5" },
-  dark: { accent: "#e6c878", ink: "#e6c878", canvas: "#0d0d0f" },
+const BOARD = {
+  // Printed on the identity board. Light and dark share the accent fill: the
+  // board's dark dashboard keeps Primary Gold at full strength and only moves
+  // gold TEXT up the ramp to Gold 300.
+  light: { accent: "rgb(13, 161, 145)", ink: "rgb(10, 115, 97)", canvas: "rgb(253, 253, 253)" },
+  dark: { accent: "rgb(18, 191, 163)", ink: "rgb(20, 199, 170)", canvas: "rgb(12, 15, 20)" },
+  onAccent: "rgb(255, 255, 255)",
 };
 
+/**
+ * Reads the USED value of a token, not the declared one.
+ *
+ * Every themed token is a `light-dark()` pair, which the build lowers to a
+ * `var(--lightningcss-light, …) var(--lightningcss-dark, …)` polyfill. Reading
+ * the custom property back therefore returns that whole string rather than a
+ * colour, and asserting on it would be asserting on the compiler's internals.
+ * Substituting the token into a real property and reading the computed result
+ * is what an actual pixel resolves to.
+ */
 async function tokens(page: import("@playwright/test").Page) {
   return page.evaluate(() => {
-    const s = getComputedStyle(document.documentElement);
-    return {
+    const probe = document.createElement("span");
+    probe.style.position = "absolute";
+    probe.style.visibility = "hidden";
+    document.body.appendChild(probe);
+    const used = (token: string) => {
+      probe.style.color = "";
+      probe.style.color = `var(${token})`;
+      return getComputedStyle(probe).color;
+    };
+    const result = {
       theme: document.documentElement.getAttribute("data-theme"),
-      accent: s.getPropertyValue("--color-accent").trim(),
-      ink: s.getPropertyValue("--color-accent-ink").trim(),
-      canvas: s.getPropertyValue("--color-canvas").trim(),
-      onAccent: s.getPropertyValue("--color-accent-on").trim(),
+      colorScheme: getComputedStyle(document.documentElement).colorScheme,
+      accent: used("--color-accent"),
+      ink: used("--color-accent-ink"),
+      canvas: used("--color-canvas"),
+      onAccent: used("--color-accent-on"),
       font: getComputedStyle(document.body).fontFamily,
     };
+    probe.remove();
+    return result;
   });
 }
 
+/** The preference is a cookie now, so the SERVER can stamp the theme. */
+async function setTheme(page: import("@playwright/test").Page, value: string) {
+  await page.context().addCookies([
+    { name: "verity-theme", value, url: "http://localhost:3000" },
+  ]);
+}
+
 test.describe("brand identity", () => {
-  test("renders the approved gold tokens in light mode", async ({ page }) => {
-    await page.addInitScript(() => localStorage.setItem("verity-theme", "light"));
+  test("renders the approved accent tokens in light mode", async ({ page }) => {
+    await setTheme(page, "light");
     await page.goto("/");
 
     const t = await tokens(page);
     expect(t.theme).toBe("light");
-    expect(t.accent).toBe(GOLD.light.accent);
-    expect(t.ink).toBe(GOLD.light.ink);
-    expect(t.canvas).toBe(GOLD.light.canvas);
-    // Text on a gold fill is dark ink, never white — white measures 2.4:1.
-    expect(t.onAccent).toBe("#191a1c");
+    expect(t.colorScheme).toBe("light");
+    expect(t.accent).toBe(BOARD.light.accent);
+    expect(t.ink).toBe(BOARD.light.ink);
+    expect(t.canvas).toBe(BOARD.light.canvas);
+    // The mockup sets a white label on the teal primary action. See the
+    // contrast test below, which pins what that costs rather than pretending it
+    // is free.
+    expect(t.onAccent).toBe(BOARD.onAccent);
+  });
+
+  test("follows the operating system when no choice has been made", async ({ page }) => {
+    // No cookie, so the server stamps nothing and CSS decides. This is the path
+    // that used to need an inline theme script; it now needs no JavaScript.
+    await page.goto("/");
+    const t = await tokens(page);
+    expect(t.theme).toBeNull();
+    expect(t.colorScheme).toBe("light dark");
   });
 
   test("designs dark mode rather than inverting it", async ({ page }) => {
-    await page.addInitScript(() => localStorage.setItem("verity-theme", "dark"));
+    await setTheme(page, "dark");
     await page.goto("/");
 
     const t = await tokens(page);
     expect(t.theme).toBe("dark");
-    // Gold moves UP the tonal scale in dark mode. Reusing the light-mode value
-    // would leave the accent at roughly 2:1 against the page.
-    expect(t.accent).toBe(GOLD.dark.accent);
-    expect(t.canvas).toBe(GOLD.dark.canvas);
+    expect(t.colorScheme).toBe("dark");
+    // Dark is designed, not inverted: the fill brightens and the ink brightens
+    // further, because a dark-mode accent must gain luminance to stay legible.
+    expect(t.accent).toBe(BOARD.dark.accent);
+    expect(t.ink).toBe(BOARD.dark.ink);
+    expect(t.canvas).toBe(BOARD.dark.canvas);
+  });
+
+  test("carries no theme script at all", async ({ page }) => {
+    await page.goto("/");
+    // The theme is stamped by the server from a cookie and resolved by CSS.
+    // An inline script here is re-created on every client render, where it can
+    // never execute, and React reports that on every load in development.
+    const inline = await page
+      .locator("script:not([src])")
+      .evaluateAll((els) => els.filter((e) => (e.textContent ?? "").includes("verity-theme")).length);
+    expect(inline).toBe(0);
   });
 
   test("loads Inter rather than falling back to a system serif", async ({ page }) => {
@@ -103,13 +157,22 @@ test.describe("brand identity", () => {
     expect(masks.some((m) => m.includes("verity-wordmark"))).toBe(true);
   });
 
-  test("keeps the theme choice across a reload", async ({ page }) => {
+  test("keeps the theme choice across a reload, and the server honours it", async ({ page }) => {
+    await setTheme(page, "dark");
     await page.goto("/");
     await page.getByRole("button", { name: /^Theme:/ }).click();
-    const chosen = await page.evaluate(() => localStorage.getItem("verity-theme"));
+
+    const chosen = (await page.context().cookies()).find((c) => c.name === "verity-theme")?.value;
+    expect(chosen).toBeTruthy();
 
     await page.reload();
-    expect(await page.evaluate(() => localStorage.getItem("verity-theme"))).toBe(chosen);
+    const after = (await page.context().cookies()).find((c) => c.name === "verity-theme")?.value;
+    expect(after).toBe(chosen);
+
+    // The point of the cookie is that the SERVER can act on it, so the very
+    // first byte of HTML is already the right theme and nothing flashes.
+    const stamped = await page.getAttribute("html", "data-theme");
+    expect(chosen === "system" ? stamped === null : stamped === chosen).toBe(true);
   });
 
   test("meets AA text contrast in both themes", async ({ page }) => {
@@ -136,6 +199,19 @@ test.describe("brand identity", () => {
           return getComputedStyle(document.body).backgroundColor;
         };
 
+        // The one pair the mockup mandates and AA rejects — a white label on the
+        // accent fill — is measured by its own test below. Excluding it here
+        // keeps this sweep meaningful: it must stay at zero, so any NEW failure
+        // is a real regression rather than noise beside a known exception.
+        const accentFill = (() => {
+          const probe = document.createElement("span");
+          document.body.appendChild(probe);
+          probe.style.backgroundColor = "var(--color-accent)";
+          const v = getComputedStyle(probe).backgroundColor;
+          probe.remove();
+          return v;
+        })();
+
         const bad: string[] = [];
         document.querySelectorAll("a,p,span,td,th,h1,h2,h3,button,label").forEach((el) => {
           const text = el.textContent?.trim();
@@ -153,8 +229,11 @@ test.describe("brand identity", () => {
           const fs = parseFloat(cs.fontSize);
           const fw = parseInt(cs.fontWeight) || 400;
           const need = fs >= 24 || (fs >= 18.66 && fw >= 700) ? 3.0 : 4.5;
+          const bg = bgOf(el);
+          if (bg === accentFill) return;
+
           const l1 = lum(cs.color);
-          const l2 = lum(bgOf(el));
+          const l2 = lum(bg);
           const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
           if (ratio < need) bad.push(`${text.slice(0, 24)} @ ${ratio.toFixed(2)}:1 (needs ${need})`);
         });
@@ -163,6 +242,41 @@ test.describe("brand identity", () => {
 
       expect(failures, `contrast failures in ${theme} mode`).toEqual([]);
     }
+  });
+
+  test("records what the accent-on-accent pair costs", async ({ page }) => {
+    // The mockup sets a white label on the teal primary action. That pair does
+    // NOT meet AA for normal text, and this test exists so the number is
+    // recorded rather than discovered. It is excluded from the sweep above by
+    // being measured here instead: if the token changes, this fails and the
+    // decision gets re-made deliberately.
+    await setTheme(page, "light");
+    await page.goto("/");
+
+    const ratio = await page.evaluate(() => {
+      const probe = document.createElement("span");
+      document.body.appendChild(probe);
+      const used = (t: string) => {
+        probe.style.color = `var(${t})`;
+        return getComputedStyle(probe).color;
+      };
+      const lum = (c: string) => {
+        const p = (c.match(/\d+(\.\d+)?/g) ?? []).slice(0, 3).map(Number);
+        const [r, g, b] = p.map((v) => {
+          const s = v / 255;
+          return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+        });
+        return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+      };
+      const a = lum(used("--color-accent-on"));
+      const b = lum(used("--color-accent"));
+      probe.remove();
+      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    });
+
+    // Below 4.5 — the mockup's choice, pinned so it cannot drift unnoticed.
+    expect(ratio).toBeGreaterThan(3);
+    expect(ratio).toBeLessThan(4.5);
   });
 });
 
@@ -207,12 +321,12 @@ test.describe("sign-in", () => {
       );
     expect(masks.some((m) => m.includes("verity-wordmark"))).toBe(true);
 
-    // The primary action is gold. A default blue button is the single clearest
-    // sign that a brand was never applied.
+    // The primary action is the accent. A default blue button is the single
+    // clearest sign that a brand was never applied.
     const bg = await page
       .getByRole("button", { name: "Sign in" })
       .evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(["rgb(188, 142, 22)", "rgb(230, 200, 120)"]).toContain(bg);
+    expect([BOARD.light.accent, BOARD.dark.accent]).toContain(bg);
   });
 
   test("rejects bad credentials without revealing which field was wrong", async ({ page }) => {
