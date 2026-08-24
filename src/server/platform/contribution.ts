@@ -1,5 +1,6 @@
 import "server-only";
 import type { PermissionVerb } from "@prisma/client";
+import { withTenant, type TenantScopedClient } from "./tenancy";
 
 /**
  * Capability experience contributions.
@@ -81,10 +82,72 @@ export type WorkspaceContribution = {
   shells?: ShellKind[];
 };
 
+/**
+ * How often a piece of recurring work should run.
+ *
+ * A cadence, not a cron expression. A capability knows that a clock must be
+ * swept "often" or that a digest is "daily"; it does not know whether
+ * production runs on Vercel Cron, a worker loop, or something not yet chosen,
+ * and encoding `0 3 * * *` here would make the capability responsible for a
+ * decision that belongs to the deployment. The provider adapter translates.
+ *
+ * The set is deliberately closed and short. An open cron string is a
+ * configuration language, and every value in it is a promise the platform would
+ * have to keep on every provider it ever binds.
+ */
+export type ScheduleCadence = "frequent" | "hourly" | "daily" | "weekly";
+
+/**
+ * Recurring work a capability needs the platform to run for it.
+ *
+ * Authority: PLA-CAP-001 (a capability registers its metadata with the
+ * platform). No authority names a scheduler vendor —
+ * `verity-spec/07_workflow_automation/scheduler.md` concerns resource
+ * availability slot math and is `FUTURE_CAPABILITY`; the Temporal material
+ * under `verity-bible/reference/` is research evidence, not implementation
+ * authority. So this declares WHAT must recur and leaves WHEN and BY WHAT to
+ * the deployment.
+ *
+ * Three concerns, deliberately separated:
+ *
+ *   DECLARATION  this type — a capability says "I have recurring work"
+ *   PROVIDER     a deployment adapter that decides when to call `runDueWork`
+ *   EXECUTION    `runDueWork` below, which invokes handlers under `withTenant`
+ *
+ * A capability depends only on the first. It can be written, tested and shipped
+ * before any provider exists, and survives the provider being replaced.
+ */
+export type ScheduleContribution = {
+  /** Stable identifier, unique within the capability. Used for logs and idempotency. */
+  key: string;
+  /** What this work is, in the product's own words. Appears in operator-facing logs. */
+  label: string;
+  cadence: ScheduleCadence;
+  /**
+   * The work itself.
+   *
+   * Receives a tenant-scoped client, so it inherits RLS, the tenant GUC and the
+   * transaction budget exactly as a command does — there is no privileged
+   * scheduling path around tenancy. It returns the events it produced, matching
+   * the shape command handlers already use, so scheduled work feeds the same
+   * event and audit streams as any other write.
+   *
+   * MUST be idempotent. A scheduler that guarantees exactly-once delivery does
+   * not exist; every real provider retries, and the platform will not pretend
+   * otherwise.
+   */
+  run: (context: {
+    tx: TenantScopedClient;
+    tenantId: string;
+    now: Date;
+  }) => Promise<{ events?: Array<{ name: string; entityId?: string }> }>;
+};
+
 export type CapabilityContribution = {
   capabilityId: string;
   navigation?: NavigationContribution[];
   workspace?: WorkspaceContribution[];
+  schedules?: ScheduleContribution[];
 };
 
 const contributions = new Map<string, CapabilityContribution>();
@@ -152,4 +215,89 @@ export function workspaceContributionsFor(args: {
     }
   }
   return items;
+}
+
+/** Recurring work declared by the active capabilities. Declaration only — this runs nothing. */
+export function schedulesFor(args: {
+  activeCapabilityIds: string[];
+  cadence?: ScheduleCadence;
+}): Array<ScheduleContribution & { capabilityId: string }> {
+  const items: Array<ScheduleContribution & { capabilityId: string }> = [];
+
+  for (const capabilityId of args.activeCapabilityIds) {
+    for (const item of contributions.get(capabilityId)?.schedules ?? []) {
+      if (args.cadence && item.cadence !== args.cadence) continue;
+      items.push({ ...item, capabilityId });
+    }
+  }
+  return items;
+}
+
+export type ScheduleOutcome = {
+  capabilityId: string;
+  key: string;
+  status: "ok" | "failed";
+  events: number;
+  ms: number;
+  error?: string;
+};
+
+/**
+ * EXECUTION — runs the due work for ONE tenant.
+ *
+ * A provider adapter calls this; the platform does not decide when. Each unit
+ * runs in its own `withTenant` transaction, which means three things the
+ * platform already guarantees apply unchanged: RLS is enforced on the
+ * connection (`ensureRlsEnforceable`), the tenant GUC is set transaction-
+ * locally, and the transaction budget is the same one every command obeys.
+ *
+ * One failing unit does not abort the rest. Scheduled work is a batch of
+ * unrelated jobs across capabilities that happen to share a clock; letting an
+ * SLA sweep failure cancel a notification drain would make the platform less
+ * reliable than running them separately. Each outcome is returned so the caller
+ * can log, alert or retry per unit rather than per batch.
+ *
+ * Returned, not logged: what to do with an outcome is a deployment decision,
+ * and a platform that writes to stdout has already chosen for the operator.
+ */
+export async function runDueWork(args: {
+  tenantId: string;
+  activeCapabilityIds: string[];
+  cadence?: ScheduleCadence;
+  now?: Date;
+}): Promise<ScheduleOutcome[]> {
+  const now = args.now ?? new Date();
+  const due = schedulesFor({
+    activeCapabilityIds: args.activeCapabilityIds,
+    cadence: args.cadence,
+  });
+
+  const outcomes: ScheduleOutcome[] = [];
+
+  for (const unit of due) {
+    const started = Date.now();
+    try {
+      const result = await withTenant(args.tenantId, (tx) =>
+        unit.run({ tx, tenantId: args.tenantId, now }),
+      );
+      outcomes.push({
+        capabilityId: unit.capabilityId,
+        key: unit.key,
+        status: "ok",
+        events: result.events?.length ?? 0,
+        ms: Date.now() - started,
+      });
+    } catch (error) {
+      outcomes.push({
+        capabilityId: unit.capabilityId,
+        key: unit.key,
+        status: "failed",
+        events: 0,
+        ms: Date.now() - started,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return outcomes;
 }

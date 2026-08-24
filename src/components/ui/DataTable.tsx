@@ -22,6 +22,15 @@ import { Icon } from "./icons";
  * That is what makes an operational table scannable: the eye goes DOWN the
  * first column looking for a record, then across.
  *
+ * WHAT IS DELIBERATELY ABSENT
+ * The mockup's trailing "Actions" column. Its "⋮" implies a menu of per-row
+ * actions, and this platform has exactly one thing to do with a row — open it —
+ * which the first column already does. Rendering it as a second link to the
+ * same destination gave every row two links with overlapping accessible names
+ * ("Demo Support Vehicle" and "Open Demo Support Vehicle"), which is ambiguous
+ * to a screen reader and to any name-based query. It returns when a capability
+ * contributes a row action that is not "open".
+ *
  * TWO ARCHITECTURAL NOTES
  * Columns are supplied by the caller from platform metadata, so a field the
  * actor may not read never reaches this component — Layer 3 strips it
@@ -135,7 +144,6 @@ export function DataTable({
   emptyAction,
   filterable = true,
   toolbar,
-  actionHref,
 }: {
   columns: Column[];
   rows: Array<Record<string, unknown>>;
@@ -148,14 +156,6 @@ export function DataTable({
   filterable?: boolean;
   /** Extra controls in the toolbar, right-aligned beside the filter. */
   toolbar?: React.ReactNode;
-  /**
-   * The mockup's trailing Actions column, as an href with {field} placeholders.
-   *
-   * It is a LINK to the record, not a menu. A "⋮" that opens a list of actions
-   * the platform cannot perform is a control that lies about what exists; when
-   * there is one real thing to do, the honest control is the one that does it.
-   */
-  actionHref?: string;
 }) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
@@ -322,11 +322,6 @@ export function DataTable({
                       </th>
                     );
                   })}
-                  {actionHref && (
-                    <th scope="col" className="w-16 pb-3 pr-1 text-right text-[13px] font-normal text-text-tertiary">
-                      Actions
-                    </th>
-                  )}
                 </tr>
               </thead>
               <tbody>
@@ -357,17 +352,6 @@ export function DataTable({
                         <Cell column={c} row={row} lead={i === 0} />
                       </td>
                     ))}
-                    {actionHref && (
-                      <td className="w-16 py-4 pr-1 align-middle text-right">
-                        <Link
-                          href={fillTemplate(actionHref, row)}
-                          aria-label={`Open ${String(row[columns[0]!.key] ?? key)}`}
-                          className="inline-grid size-9 place-items-center rounded-lg text-text-tertiary no-underline transition-colors hover:bg-surface-sunken hover:text-text"
-                        >
-                          <Icon name="chevronRight" size={17} />
-                        </Link>
-                      </td>
-                    )}
                   </tr>
                   );
                 })}

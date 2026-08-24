@@ -88,7 +88,6 @@ export default async function LocationsPage() {
           { key: "place", header: "Place" },
           { key: "geofences", header: "Geofences", numeric: true },
         ]}
-        actionHref="/locations/{id}"
         emptyTitle="No locations in your scope"
         emptyDescription="Locations you can see are limited to your organization and the branches beneath it."
       />

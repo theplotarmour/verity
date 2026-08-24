@@ -15,9 +15,9 @@ const BOARD = {
   // Printed on the identity board. Light and dark share the accent fill: the
   // board's dark dashboard keeps Primary Gold at full strength and only moves
   // gold TEXT up the ramp to Gold 300.
-  light: { accent: "rgb(13, 161, 145)", ink: "rgb(10, 115, 97)", canvas: "rgb(253, 253, 253)" },
-  dark: { accent: "rgb(18, 191, 163)", ink: "rgb(20, 199, 170)", canvas: "rgb(12, 15, 20)" },
-  onAccent: "rgb(255, 255, 255)",
+  light: { accent: "rgb(212, 160, 23)", ink: "rgb(141, 102, 6)", canvas: "rgb(244, 244, 245)" },
+  dark: { accent: "rgb(212, 160, 23)", ink: "rgb(230, 200, 120)", canvas: "rgb(13, 13, 15)" },
+  onAccent: "rgb(24, 24, 27)",
 };
 
 /**
@@ -73,9 +73,8 @@ test.describe("brand identity", () => {
     expect(t.accent).toBe(BOARD.light.accent);
     expect(t.ink).toBe(BOARD.light.ink);
     expect(t.canvas).toBe(BOARD.light.canvas);
-    // The mockup sets a white label on the teal primary action. See the
-    // contrast test below, which pins what that costs rather than pretending it
-    // is free.
+    // Dark ink on gold, never white. Gold is a LIGHT accent: white on #D4A017
+    // measures 2.38:1 while #18181B measures 7.46:1.
     expect(t.onAccent).toBe(BOARD.onAccent);
   });
 
@@ -199,19 +198,6 @@ test.describe("brand identity", () => {
           return getComputedStyle(document.body).backgroundColor;
         };
 
-        // The one pair the mockup mandates and AA rejects — a white label on the
-        // accent fill — is measured by its own test below. Excluding it here
-        // keeps this sweep meaningful: it must stay at zero, so any NEW failure
-        // is a real regression rather than noise beside a known exception.
-        const accentFill = (() => {
-          const probe = document.createElement("span");
-          document.body.appendChild(probe);
-          probe.style.backgroundColor = "var(--color-accent)";
-          const v = getComputedStyle(probe).backgroundColor;
-          probe.remove();
-          return v;
-        })();
-
         const bad: string[] = [];
         document.querySelectorAll("a,p,span,td,th,h1,h2,h3,button,label").forEach((el) => {
           const text = el.textContent?.trim();
@@ -229,11 +215,8 @@ test.describe("brand identity", () => {
           const fs = parseFloat(cs.fontSize);
           const fw = parseInt(cs.fontWeight) || 400;
           const need = fs >= 24 || (fs >= 18.66 && fw >= 700) ? 3.0 : 4.5;
-          const bg = bgOf(el);
-          if (bg === accentFill) return;
-
           const l1 = lum(cs.color);
-          const l2 = lum(bg);
+          const l2 = lum(bgOf(el));
           const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
           if (ratio < need) bad.push(`${text.slice(0, 24)} @ ${ratio.toFixed(2)}:1 (needs ${need})`);
         });
@@ -244,12 +227,10 @@ test.describe("brand identity", () => {
     }
   });
 
-  test("records what the accent-on-accent pair costs", async ({ page }) => {
-    // The mockup sets a white label on the teal primary action. That pair does
-    // NOT meet AA for normal text, and this test exists so the number is
-    // recorded rather than discovered. It is excluded from the sweep above by
-    // being measured here instead: if the token changes, this fails and the
-    // decision gets re-made deliberately.
+  test("keeps text on the accent fill legible", async ({ page }) => {
+    // Gold is a light accent, so its label is dark ink and the pair clears AA
+    // outright — there is no exception to carve out here. This asserts the
+    // floor so a future accent change cannot quietly reintroduce one.
     await setTheme(page, "light");
     await page.goto("/");
 
@@ -274,9 +255,7 @@ test.describe("brand identity", () => {
       return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
     });
 
-    // Below 4.5 — the mockup's choice, pinned so it cannot drift unnoticed.
-    expect(ratio).toBeGreaterThan(3);
-    expect(ratio).toBeLessThan(4.5);
+    expect(ratio).toBeGreaterThanOrEqual(4.5);
   });
 });
 

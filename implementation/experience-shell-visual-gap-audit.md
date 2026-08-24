@@ -1,3 +1,8 @@
+> **SUPERSEDED — 2026-08-24.** Describes an accent derivation that predates the current token system, which now expresses every themed value as a single `light-dark()` pair resolved by `color-scheme`.
+>
+> Current canonical readiness artifact: [`final-platform-readiness.md`](final-platform-readiness.md).
+> Retained as historical evidence; not rewritten.
+
 # Experience Shell — Visual Gap Audit
 
 **Date:** 2026-08-24

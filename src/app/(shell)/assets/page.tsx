@@ -71,7 +71,6 @@ export default async function AssetsPage() {
           { key: "location", header: "Location" },
           { key: "state", header: "State", variant: "state", categoryKey: "category" },
         ]}
-        actionHref="/assets/{id}"
         emptyTitle="No assets registered"
         emptyDescription="An asset is physical equipment the platform tracks. None has been registered in your scope."
       />

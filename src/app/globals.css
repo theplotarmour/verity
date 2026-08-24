@@ -41,22 +41,28 @@
 
 @theme {
   /* ---------------------------------------------------------------------
-   * ACCENT — sampled from the mockups. The fill is the "+ Add item" button and
-   * the active navigation glyph; the ink is the "View all" link and the "94
-   * Delivered" figure, which sit on the page rather than on the accent.
+   * ACCENT — the repository's approved identity, `verity-app-ui-mockups/`.
    *
-   * `--color-accent-on: #ffffff` is the mockup: its primary button sets a white
-   * label on teal. White on #0DA191 measures 3.22:1 and does not meet WCAG AA
-   * for normal-size text. It ships this way because the mockup is the pinned
-   * authority. To trade exact fidelity for AA, change the light side to
-   * #0f766e (5.47:1) — one token, nothing else moves.
+   * That bundle is a themeable prototype: it offers six accent options and
+   * names its DEFAULT `#D4A017` "Warm Sand Gold". Teal (#0FA894) is among the
+   * six, so a teal build was not off-brand in kind — but the default and the
+   * named identity are gold, and gold is what ships.
+   *
+   * The fill is the primary action and the active navigation glyph; the ink is
+   * gold TEXT, which must be far darker because #D4A017 as type measures
+   * 2.16:1 on the page.
+   *
+   * `--color-accent-on` is dark ink, never white. Gold is a LIGHT accent: white
+   * on #D4A017 measures 2.38:1, while #18181B on it measures 7.46:1. The
+   * mockup states no on-accent rule, so the contrast-correct treatment is the
+   * one that ships.
    * ------------------------------------------------------------------- */
-  --color-accent: light-dark(#0da191, #12bfa3);
-  --color-accent-on: light-dark(#ffffff, #04211d);
-  --color-accent-ink: light-dark(#0a7361, #14c7aa);
-  --color-accent-hover: light-dark(#0b8b7e, #2ad3b6);
-  --color-accent-subtle: light-dark(#f0f8f7, #0f1a1d);
-  --color-accent-line: light-dark(#cfe9e4, #1d3a37);
+  --color-accent: light-dark(#d4a017, #d4a017);
+  --color-accent-on: light-dark(#18181b, #18181b);
+  --color-accent-ink: light-dark(#8d6606, #e6c878);
+  --color-accent-hover: light-dark(#b8860b, #f1d28b);
+  --color-accent-subtle: light-dark(#f6efdc, #241f14);
+  --color-accent-line: light-dark(#e9dcb6, #4a3d16);
 
   /* ---------------------------------------------------------------------
    * SURFACES
@@ -65,23 +71,23 @@
    * single hairline, exactly as the mockup draws them. Cards are pure white.
    * Dark: the page is near-black, cards lift one step, and controls lift again.
    * ------------------------------------------------------------------- */
-  --color-canvas: light-dark(#fdfdfd, #0c0f14);
-  --color-surface: light-dark(#ffffff, #0f1217);
-  --color-surface-sunken: light-dark(#f6f7f8, #0a0d11);
-  --color-surface-raised: light-dark(#ffffff, #13161c);
-  --color-chrome: light-dark(#fdfdfd, #0c0f14);
-  --color-control: light-dark(#ffffff, #13161c);
+  --color-canvas: light-dark(#f4f4f5, #0d0d0f);
+  --color-surface: light-dark(#ffffff, #1c1c1e);
+  --color-surface-sunken: light-dark(#ececed, #141416);
+  --color-surface-raised: light-dark(#ffffff, #242427);
+  --color-chrome: light-dark(#f4f4f5, #0d0d0f);
+  --color-control: light-dark(#ffffff, #1e1e22);
 
-  --color-line: light-dark(#eef0f1, #1c1f24);
-  --color-line-strong: light-dark(#dfe2e5, #2a2f36);
+  --color-line: light-dark(#e4e4e6, #26262a);
+  --color-line-strong: light-dark(#d6d6d9, #35353a);
 
   /* The mockup's greys are lighter than these. They were darkened until every
      one clears WCAG AA against the surface it actually sits on: the mockup's
      own tertiary measured 2.57:1, which is what made the role line under a
      name hard to read at a glance. Readability wins over an exact swatch. */
-  --color-text: light-dark(#101418, #f5f7fa);
-  --color-text-secondary: light-dark(#4b5563, #b6bdc7);
-  --color-text-tertiary: light-dark(#68707b, #949cab);
+  --color-text: light-dark(#18181b, #ececee);
+  --color-text-secondary: light-dark(#4d4d55, #b4b4ba);
+  --color-text-tertiary: light-dark(#67676f, #94949e);
 
   /* ---------------------------------------------------------------------
    * SEMANTIC STATE — maps to StateCategory (ADR-009), never invented per
@@ -89,27 +95,27 @@
    * label: green in stock, amber low, red out. These are those three plus the
    * neutral and informational steps the six canonical categories need.
    * ------------------------------------------------------------------- */
-  --color-state-draft: light-dark(#9aa1a9, #6b7280);
-  --color-state-pending: light-dark(#c2870a, #e8b73f);
-  --color-state-active: light-dark(#0e9f6e, #19bd95);
-  --color-state-blocked: light-dark(#d64545, #f0736f);
-  --color-state-completed: light-dark(#0d8673, #14c7aa);
-  --color-state-cancelled: light-dark(#9aa1a9, #6b7280);
+  --color-state-draft: light-dark(#67676f, #94949e);
+  --color-state-pending: light-dark(#9c7016, #dfae4e);
+  --color-state-active: light-dark(#3a6b96, #7ea8cc);
+  --color-state-blocked: light-dark(#a63d34, #e0796d);
+  --color-state-completed: light-dark(#3f7d53, #6fbe86);
+  --color-state-cancelled: light-dark(#67676f, #94949e);
 
-  --color-danger: light-dark(#d64545, #f0736f);
-  --color-danger-subtle: light-dark(#fdf1f1, #241416);
-  --color-warning: light-dark(#c2870a, #e8b73f);
-  --color-warning-subtle: light-dark(#fdf7ea, #241d12);
-  --color-success: light-dark(#0e9f6e, #19bd95);
-  --color-success-subtle: light-dark(#eefaf5, #0c1d19);
-  --color-info: light-dark(#3b82f6, #7aa9f7);
-  --color-info-subtle: light-dark(#eff4fe, #121a26);
+  --color-danger: light-dark(#a63d34, #e0796d);
+  --color-danger-subtle: light-dark(#fbf0ef, #2a1917);
+  --color-warning: light-dark(#9c7016, #dfae4e);
+  --color-warning-subtle: light-dark(#fbf6ea, #2a2214);
+  --color-success: light-dark(#3f7d53, #6fbe86);
+  --color-success-subtle: light-dark(#eff6f1, #16241b);
+  --color-info: light-dark(#3a6b96, #7ea8cc);
+  --color-info-subtle: light-dark(#eff4f8, #16202a);
 
   /* Temporary layers — Bible V4 §1.B's two permitted translucencies. Written as
      pre-mixed rgba pairs rather than `color-mix`, because `color-mix` resolves
      at computed-value time and `light-dark()` at used-value time. */
-  --color-scrim: light-dark(rgb(16 20 24 / 0.45), rgb(0 0 0 / 0.66));
-  --color-overlay: light-dark(rgb(255 255 255 / 0.92), rgb(15 18 23 / 0.92));
+  --color-scrim: light-dark(rgb(24 24 27 / 0.45), rgb(0 0 0 / 0.66));
+  --color-overlay: light-dark(rgb(255 255 255 / 0.92), rgb(28 28 30 / 0.92));
 
   /* ---------------------------------------------------------------------
    * GEOMETRY — measured off the mockups. Cards carry 16, controls and the
@@ -129,8 +135,8 @@
      themed shadow to one declaration instead of two blocks that drift apart.
      `box-shadow` is not a colour so it cannot take `light-dark()` itself; its
      colour slots can. */
-  --color-shadow-near: light-dark(rgb(16 20 24 / 0.04), rgb(0 0 0 / 0.45));
-  --color-shadow-far: light-dark(rgb(16 20 24 / 0.08), rgb(0 0 0 / 0.72));
+  --color-shadow-near: light-dark(rgb(24 24 27 / 0.04), rgb(0 0 0 / 0.45));
+  --color-shadow-far: light-dark(rgb(24 24 27 / 0.08), rgb(0 0 0 / 0.72));
 
   --shadow-sm: 0 1px 2px var(--color-shadow-near), 0 6px 20px -12px var(--color-shadow-far);
   --shadow-md: 0 1px 3px var(--color-shadow-near), 0 16px 40px -18px var(--color-shadow-far);

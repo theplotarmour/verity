@@ -1,3 +1,8 @@
+> **SUPERSEDED — 2026-08-24.** Records **46 Playwright passed** and describes the shell's accent as gold `#D4A017` sourced from an identity board. The suite now stands at **60 Playwright / 285 Vitest**. Its composition findings still hold; its metrics do not.
+>
+> Current canonical readiness artifact: [`final-platform-readiness.md`](final-platform-readiness.md).
+> Retained as historical evidence; not rewritten.
+
 # Verity Experience Shell Audit
 
 **Date:** 2026-08-24
