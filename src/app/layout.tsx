@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { cookies } from "next/headers";
+import { accentStyle, resolveAccent } from "@/server/platform/accent";
 import { Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -41,38 +42,32 @@ export const viewport = {
   // Never block zoom; some users need it and the layout does not depend on it.
   maximumScale: 5,
   themeColor: [
-    // The board's own page grounds: Sand 100 light, Neutral 900 dark. This is
-    // the colour the OS paints around the viewport, so a mismatch shows as a
-    // seam at the top of a phone screen.
-    { media: "(prefers-color-scheme: light)", color: "#fff7e6" },
-    { media: "(prefers-color-scheme: dark)", color: "#0f1115" },
+    // The design source's own `--base`. This is the colour the OS paints around
+    // the viewport, so a mismatch shows as a seam at the top of a phone screen.
+    { media: "(prefers-color-scheme: light)", color: "#f4f4f5" },
+    { media: "(prefers-color-scheme: dark)", color: "#0d0d0f" },
   ],
 };
 
-/**
- * Resolve the theme before the first byte, not before the first paint.
- *
- * The preference lives in a cookie so the SERVER can stamp it, which is what
- * removes the inline theme script this file used to carry. That script read
- * localStorage and set `data-theme` ahead of rendering; it worked, but React
- * re-creates a script element on every client render — where an inline script
- * can never execute — and reports it as "Encountered a script tag while
- * rendering React component" on every load in development. No placement avoids
- * that; the element itself is the problem.
- *
- * `undefined` is a real answer here and means "follow the operating system".
- * The stylesheet handles that case with `color-scheme: light dark`, so an
- * unstamped document is already correct with no JavaScript at all.
- */
 type Theme = "light" | "dark";
 
-async function storedTheme(): Promise<Theme | undefined> {
-  const value = (await cookies()).get("verity-theme")?.value;
-  return value === "light" || value === "dark" ? value : undefined;
+/**
+ * Theme and accent both come from cookies, for the same reason: the server can
+ * stamp them into the first byte of HTML, so neither needs a script and neither
+ * flashes. `undefined` theme is a real answer meaning "follow the OS", which the
+ * stylesheet handles with `color-scheme: light dark`.
+ */
+async function appearance(): Promise<{ theme?: Theme; accent: string }> {
+  const jar = await cookies();
+  const t = jar.get("verity-theme")?.value;
+  return {
+    theme: t === "light" || t === "dark" ? t : undefined,
+    accent: resolveAccent(jar.get("verity-accent")?.value),
+  };
 }
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const theme = await storedTheme();
+  const { theme, accent } = await appearance();
 
   return (
     // The font variables go on <html>, not <body>. Tailwind v4 emits theme
@@ -91,10 +86,17 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <html
       lang="en"
       data-theme={theme}
+      // Two custom properties carry the whole accent system. The 50→900 ladder
+      // derives from the seed in CSS, so a change here repaints every accent
+      // surface without a single component knowing it happened. `--color-accent-on`
+      // is stamped because choosing it needs a contrast comparison CSS cannot do.
+      style={accentStyle(accent) as CSSProperties}
       className={`${inter.variable} ${plexMono.variable}`}
       suppressHydrationWarning
     >
       <body>
+        {/* Level 0. Fixed, behind everything, never interactive. */}
+        <div className="verity-atmosphere" aria-hidden="true" />
         {/* First stop for a keyboard user on every page. */}
         <a
           href="#main"

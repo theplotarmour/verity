@@ -34,7 +34,7 @@ export function Donut({
   centreValue,
   centreLabel,
   size = 168,
-  thickness = 16,
+  thickness = 11,
 }: {
   segments: Segment[];
   centreValue: number | string;
@@ -78,7 +78,7 @@ export function Donut({
             r={radius}
             fill="none"
             strokeWidth={thickness}
-            className="stroke-line"
+            className="stroke-[var(--color-track)]"
           />
           {arcs.map((a) =>
             a.length === 0 ? null : (
@@ -100,7 +100,7 @@ export function Donut({
           )}
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="tabular text-[28px] font-normal leading-none tracking-[-0.02em] text-text">
+          <span className="tabular text-[30px] font-light leading-none tracking-[-0.02em] text-text">
             {centreValue}
           </span>
           <span className="mt-1.5 text-[13px] text-text-tertiary">{centreLabel}</span>
@@ -156,7 +156,7 @@ export function BarStrip({
       {values.map((v, i) => (
         <span
           key={i}
-          className="w-full min-w-[3px] rounded-[2px] bg-accent/25"
+          className="w-full min-w-[3px] rounded-[2px] bg-[var(--accent-400)] opacity-70"
           style={{ height: `${Math.max((v / peak) * 100, 6)}%` }}
         />
       ))}
@@ -217,8 +217,8 @@ export function FeatureCard({
         : "bg-accent";
 
   return (
-    <div className="flex h-full flex-col justify-end rounded-lg bg-surface-sunken p-5">
-      <span className="mb-auto inline-flex w-fit items-center gap-2 rounded-pill bg-surface px-3 py-1.5 text-[12.5px] text-text-secondary">
+    <div className="glass-control flex h-full flex-col justify-end rounded-lg p-5">
+      <span className="mb-auto inline-flex w-fit items-center gap-2 rounded-pill bg-glass-4 px-3 py-1.5 text-[12.5px] text-text-secondary">
         <span aria-hidden="true" className={"size-[7px] shrink-0 rounded-full " + dot} />
         {pill}
       </span>

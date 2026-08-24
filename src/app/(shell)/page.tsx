@@ -83,12 +83,16 @@ export default async function OverviewPage() {
 
   // The donut's segments and the staircase's figures are the same six canonical
   // categories, so the two charts can never disagree with each other.
+  // The ring shows a DISTRIBUTION, so it is drawn in the accent's tonal ladder
+  // rather than in semantic colour — the same choice the reference boards make.
+  // Meaning is not lost: every segment is labelled, and semantic colour still
+  // carries state everywhere it identifies a single record (see StateBadge).
   const segments = [
-    { label: "Active", value: count("Active"), color: "var(--color-state-active)" },
-    { label: "Pending", value: count("Pending"), color: "var(--color-state-pending)" },
-    { label: "Blocked", value: count("Blocked"), color: "var(--color-state-blocked)" },
-    { label: "Completed", value: count("Completed"), color: "var(--color-state-completed)" },
-    { label: "Draft", value: count("Draft"), color: "var(--color-state-draft)" },
+    { label: "Active", value: count("Active"), color: "var(--accent-500)" },
+    { label: "Pending", value: count("Pending"), color: "var(--accent-400)" },
+    { label: "Blocked", value: count("Blocked"), color: "var(--accent-300)" },
+    { label: "Completed", value: count("Completed"), color: "var(--accent-200)" },
+    { label: "Draft", value: count("Draft"), color: "var(--color-text-tertiary)" },
   ];
 
   // Activity per day for the last twelve days — a real count of real events,

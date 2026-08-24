@@ -1,166 +1,192 @@
 @import "tailwindcss";
 
 /**
- * Verity design tokens.
+ * Verity Experience System — material and accent tokens.
  *
  * AUTHORITY
- *   1. Bible V4 §1 — the UX Constitution.
- *   2. The approved product mockups (light and dark) — the visual authority for
- *      palette, typography, geometry and composition.
+ *   1. Security and tenancy invariants (nothing here touches them).
+ *   2. ADR-011 — glass is a controlled material system, not decoration.
+ *   3. The approved reference boards, `verity-app-ui-mockups/content.png` and
+ *      `content_dark.png`, plus the design source `Verity App.dc.html`.
  *
- * WHAT THE MOCKUPS ESTABLISH
- * A teal accent, near-white light ground with white cards, and a near-black
- * dark ground with lifted cards. Chrome is separated from content by a single
- * hairline, never by a fill. Every value below was sampled from the mockups
- * rather than chosen.
+ * Every value below was measured from that source rather than chosen. Where the
+ * source computes something in JavaScript, it is computed here in CSS instead —
+ * see the accent scale — because a value the stylesheet can derive should not
+ * need a script to exist.
  *
- * HOW LIGHT AND DARK SWITCH — and why there is no theme script
- * Every themed token is one `light-dark()` declaration and the active side is
- * chosen by `color-scheme` on :root. With no `data-theme` attribute the root is
- * `light dark`, so the operating system decides with no JavaScript at all; an
- * explicit choice is stamped by the server from a cookie before the HTML is
- * sent.
- *
- * The previous mechanism was an inline script that read localStorage and
- * stamped the attribute before paint. React re-creates a script element on
- * every client render — where it can never execute — and reports that as
- * "Encountered a script tag while rendering React component" on every load in
- * development. No placement fixes it; the element itself is the problem. Doing
- * the work in CSS removes the script, the warning, and the flash together, and
- * the theme now also works with JavaScript disabled.
- *
- * Bible V4 §1.B still governs one thing: glassmorphic blur is not the identity.
- * Translucency survives only where §1.B names it — `.verity-scrim` and
- * `.verity-overlay` at the end of this file.
- *
- * ONE ACCENT
- * Teal marks what is actionable, selected or live. It is never a heading, never
- * a default border, and never a large decorative field. Neutrals and semantic
- * status colours are a separate system and do not move when the accent does.
+ * TWO SYSTEMS, DELIBERATELY SEPARATE
+ *   BRAND    the Verity mark and wordmark. Fixed. Never recoloured by the UI.
+ *   ACCENT   an Experience System property. Configurable, default Warm Sand Gold.
+ * Conflating them is how a product ends up with a logo that changes colour when
+ * a user picks a theme.
  */
 
 @theme {
   /* ---------------------------------------------------------------------
-   * ACCENT — the repository's approved identity, `verity-app-ui-mockups/`.
-   *
-   * That bundle is a themeable prototype: it offers six accent options and
-   * names its DEFAULT `#D4A017` "Warm Sand Gold". Teal (#0FA894) is among the
-   * six, so a teal build was not off-brand in kind — but the default and the
-   * named identity are gold, and gold is what ships.
-   *
-   * The fill is the primary action and the active navigation glyph; the ink is
-   * gold TEXT, which must be far darker because #D4A017 as type measures
-   * 2.16:1 on the page.
-   *
-   * `--color-accent-on` is dark ink, never white. Gold is a LIGHT accent: white
-   * on #D4A017 measures 2.38:1, while #18181B on it measures 7.46:1. The
-   * mockup states no on-accent rule, so the contrast-correct treatment is the
-   * one that ships.
-   * ------------------------------------------------------------------- */
-  --color-accent: light-dark(#d4a017, #d4a017);
-  --color-accent-on: light-dark(#18181b, #18181b);
-  --color-accent-ink: light-dark(#8d6606, #e6c878);
-  --color-accent-hover: light-dark(#b8860b, #f1d28b);
-  --color-accent-subtle: light-dark(#f6efdc, #241f14);
-  --color-accent-line: light-dark(#e9dcb6, #4a3d16);
-
-  /* ---------------------------------------------------------------------
-   * SURFACES
-   *
-   * Light: the page and the rail are both near-white and are told apart by a
-   * single hairline, exactly as the mockup draws them. Cards are pure white.
-   * Dark: the page is near-black, cards lift one step, and controls lift again.
+   * NEUTRAL FOUNDATION — the design source's own values.
    * ------------------------------------------------------------------- */
   --color-canvas: light-dark(#f4f4f5, #0d0d0f);
-  --color-surface: light-dark(#ffffff, #1c1c1e);
-  --color-surface-sunken: light-dark(#ececed, #141416);
-  --color-surface-raised: light-dark(#ffffff, #242427);
-  --color-chrome: light-dark(#f4f4f5, #0d0d0f);
-  --color-control: light-dark(#ffffff, #1e1e22);
-
-  --color-line: light-dark(#e4e4e6, #26262a);
-  --color-line-strong: light-dark(#d6d6d9, #35353a);
-
-  /* The mockup's greys are lighter than these. They were darkened until every
-     one clears WCAG AA against the surface it actually sits on: the mockup's
-     own tertiary measured 2.57:1, which is what made the role line under a
-     name hard to read at a glance. Readability wins over an exact swatch. */
   --color-text: light-dark(#18181b, #ececee);
-  --color-text-secondary: light-dark(#4d4d55, #b4b4ba);
-  --color-text-tertiary: light-dark(#67676f, #94949e);
+  --color-text-secondary: light-dark(#5c5c60, #a1a1a7);
+  /* The source sets --tx3 to #7A7A7F, which measures 3.9:1 on the light canvas
+     and fails AA for body text. Darkened to the nearest value that clears it;
+     ADR-011 constraint 1 makes accessibility non-negotiable over exact match. */
+  --color-text-tertiary: light-dark(#67676f, #85858b);
 
   /* ---------------------------------------------------------------------
-   * SEMANTIC STATE — maps to StateCategory (ADR-009), never invented per
-   * screen. The mockup's own status vocabulary is a coloured dot beside a
-   * label: green in stock, amber low, red out. These are those three plus the
-   * neutral and informational steps the six canonical categories need.
+   * GLASS LADDER — `--g1`..`--g4` in the design source.
+   *
+   * Four levels, each a different translucency over the atmospheric ground.
+   * These are the material; the blur that completes them lives on the utility
+   * classes at the end of this file, because a colour token cannot carry a
+   * filter and pretending otherwise scatters `backdrop-filter` everywhere.
    * ------------------------------------------------------------------- */
-  --color-state-draft: light-dark(#67676f, #94949e);
+  --color-glass-1: light-dark(rgb(255 255 255 / 0.44), rgb(28 28 32 / 0.46));
+  --color-glass-2: light-dark(rgb(255 255 255 / 0.58), rgb(31 31 35 / 0.58));
+  --color-glass-3: light-dark(rgb(255 255 255 / 0.72), rgb(38 38 43 / 0.68));
+  --color-glass-4: light-dark(rgb(255 255 255 / 0.86), rgb(47 47 52 / 0.80));
+
+  /* Solid surfaces — level 5. Dense tables, long-form text, forms and
+     destructive confirmation live here, per ADR-011. */
+  --color-surface: light-dark(#ffffff, #1c1c1e);
+  --color-surface-elevated: light-dark(#ffffff, #242427);
+  --color-surface-sunken: light-dark(#ececed, #141416);
+  --color-control: light-dark(#ffffff, #1e1e22);
+  --color-chrome: light-dark(#f4f4f5, #0d0d0f);
+
+  /* ---------------------------------------------------------------------
+   * BORDERS — alpha, never solid hex.
+   *
+   * This is why the boards' surfaces read as material rather than as boxes: a
+   * border that is 5.5% ink over whatever sits behind it belongs to the glass,
+   * while a solid #E4E4E6 hairline is a drawn rectangle. Replacing these with
+   * opaque values is the single change that would most flatten the system.
+   * ------------------------------------------------------------------- */
+  --color-line: light-dark(rgb(20 20 23 / 0.055), rgb(255 255 255 / 0.06));
+  --color-line-strong: light-dark(rgb(20 20 23 / 0.11), rgb(255 255 255 / 0.13));
+  --color-separator: light-dark(rgb(20 20 23 / 0.05), rgb(255 255 255 / 0.05));
+  --color-track: light-dark(rgb(20 20 23 / 0.07), rgb(255 255 255 / 0.07));
+
+  /* ---------------------------------------------------------------------
+   * ACCENT — derived in CSS from one seed.
+   *
+   * `--accent-seed` is stamped on <html> by the server from the user's stored
+   * preference; it defaults to Warm Sand Gold below, so the stylesheet is
+   * correct with no cookie, no script and no flash.
+   *
+   * The 50→900 ladder is the design source's `tonal()` function expressed as
+   * `color-mix`, at the same ratios: toward white above 500, toward #0D0D0F
+   * below it. Deriving it here rather than in JavaScript means an accent change
+   * is a single custom property, and no component has to know it happened.
+   * ------------------------------------------------------------------- */
+  --accent-seed: #d4a017;
+
+  --accent-50: color-mix(in srgb, #ffffff 94%, var(--accent-seed));
+  --accent-100: color-mix(in srgb, #ffffff 86%, var(--accent-seed));
+  --accent-200: color-mix(in srgb, #ffffff 70%, var(--accent-seed));
+  --accent-300: color-mix(in srgb, #ffffff 42%, var(--accent-seed));
+  --accent-400: color-mix(in srgb, #ffffff 18%, var(--accent-seed));
+  --accent-500: var(--accent-seed);
+  --accent-600: color-mix(in srgb, #0d0d0f 12%, var(--accent-seed));
+  --accent-700: color-mix(in srgb, #0d0d0f 26%, var(--accent-seed));
+  --accent-800: color-mix(in srgb, #0d0d0f 42%, var(--accent-seed));
+  --accent-900: color-mix(in srgb, #0d0d0f 58%, var(--accent-seed));
+
+  /* The FILL is stamped per theme by the server, not taken from the ladder
+     directly: it is chosen together with its ink so the pair clears WCAG AA,
+     stepping darker (light) or lighter (dark) when the first step does not.
+     Three of the ten presets need that step; Emerald needs two. Defaults below
+     are Warm Sand Gold's, so the stylesheet is correct with no cookie. */
+  --accent-fill-light: #bc8e16;
+  --accent-fill-dark: #e6c878;
+  --accent-ink-light: #191a1c;
+  --accent-ink-dark: #191a1c;
+
+  --color-accent: light-dark(var(--accent-fill-light), var(--accent-fill-dark));
+  --color-accent-hover: light-dark(var(--accent-700), var(--accent-200));
+  --color-accent-active: light-dark(var(--accent-800), var(--accent-100));
+  --color-accent-edge: var(--accent-700);
+
+  /* Accent-tinted materials. Alpha over the seed, so they tint whatever is
+     behind them instead of painting a flat chip. */
+  --color-accent-subtle: light-dark(
+    color-mix(in srgb, transparent 90%, var(--accent-seed)),
+    color-mix(in srgb, transparent 85%, var(--accent-seed))
+  );
+  --color-accent-muted: light-dark(
+    color-mix(in srgb, transparent 94%, var(--accent-seed)),
+    color-mix(in srgb, transparent 91%, var(--accent-seed))
+  );
+  --color-accent-line: light-dark(
+    color-mix(in srgb, transparent 72%, var(--accent-seed)),
+    color-mix(in srgb, transparent 66%, var(--accent-seed))
+  );
+
+  --color-accent-on: light-dark(var(--accent-ink-light), var(--accent-ink-dark));
+
+  /* Gold-coloured TEXT on the page — not on the accent. Must clear AA against
+     the canvas, which the 500 step does not: #D4A017 as type measures 2.16:1. */
+  --color-accent-ink: light-dark(var(--accent-800), var(--accent-300));
+
+  /* ---------------------------------------------------------------------
+   * SEMANTIC — an independent system. Accent carries brand, these carry
+   * meaning, and neither is forced into the other (ADR-011).
+   * ------------------------------------------------------------------- */
+  --color-success: light-dark(#3f7d53, #6fbe86);
+  --color-success-subtle: light-dark(rgb(63 125 83 / 0.10), rgb(111 190 134 / 0.13));
+  --color-warning: light-dark(#9c7016, #dfae4e);
+  --color-warning-subtle: light-dark(rgb(156 112 22 / 0.11), rgb(223 174 78 / 0.13));
+  --color-danger: light-dark(#a63d34, #e0796d);
+  --color-danger-subtle: light-dark(rgb(166 61 52 / 0.10), rgb(224 121 109 / 0.13));
+  --color-info: light-dark(#3a6b96, #7ea8cc);
+  --color-info-subtle: light-dark(rgb(58 107 150 / 0.10), rgb(126 168 204 / 0.13));
+
+  --color-state-draft: light-dark(#67676f, #85858b);
   --color-state-pending: light-dark(#9c7016, #dfae4e);
   --color-state-active: light-dark(#3a6b96, #7ea8cc);
   --color-state-blocked: light-dark(#a63d34, #e0796d);
   --color-state-completed: light-dark(#3f7d53, #6fbe86);
-  --color-state-cancelled: light-dark(#67676f, #94949e);
-
-  --color-danger: light-dark(#a63d34, #e0796d);
-  --color-danger-subtle: light-dark(#fbf0ef, #2a1917);
-  --color-warning: light-dark(#9c7016, #dfae4e);
-  --color-warning-subtle: light-dark(#fbf6ea, #2a2214);
-  --color-success: light-dark(#3f7d53, #6fbe86);
-  --color-success-subtle: light-dark(#eff6f1, #16241b);
-  --color-info: light-dark(#3a6b96, #7ea8cc);
-  --color-info-subtle: light-dark(#eff4f8, #16202a);
-
-  /* Temporary layers — Bible V4 §1.B's two permitted translucencies. Written as
-     pre-mixed rgba pairs rather than `color-mix`, because `color-mix` resolves
-     at computed-value time and `light-dark()` at used-value time. */
-  --color-scrim: light-dark(rgb(24 24 27 / 0.45), rgb(0 0 0 / 0.66));
-  --color-overlay: light-dark(rgb(255 255 255 / 0.92), rgb(28 28 30 / 0.92));
+  --color-state-cancelled: light-dark(#67676f, #85858b);
 
   /* ---------------------------------------------------------------------
-   * GEOMETRY — measured off the mockups. Cards carry 16, controls and the
-   * navigation bed carry 12, small chips are pills.
+   * GEOMETRY, ELEVATION, MOTION — the source's own values.
    * ------------------------------------------------------------------- */
   --radius-xs: 6px;
-  --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  --radius-sm: 9px;
+  --radius-md: 11px;
+  --radius-lg: 14px;
+  --radius-xl: 17px;
   --radius-pill: 999px;
 
-  /* Elevation. Cards sit on a hairline with a soft ambient shadow — depth by
-     spread, never by darkness.
+  /* `--hl` in the source: the inner highlight that gives glass a lit top edge.
+     Strong in light, almost absent in dark — the same trick a real material
+     uses, and the reason these surfaces look lit rather than filled. */
+  --shadow-highlight: inset 0 1px 0 light-dark(rgb(255 255 255 / 0.75), rgb(255 255 255 / 0.045));
 
-     The geometry is written once and only the COLOURS switch, which keeps a
-     themed shadow to one declaration instead of two blocks that drift apart.
-     `box-shadow` is not a colour so it cannot take `light-dark()` itself; its
-     colour slots can. */
-  --color-shadow-near: light-dark(rgb(24 24 27 / 0.04), rgb(0 0 0 / 0.45));
-  --color-shadow-far: light-dark(rgb(24 24 27 / 0.08), rgb(0 0 0 / 0.72));
+  --shadow-sm: 0 1px 1px light-dark(rgb(18 18 21 / 0.025), rgb(0 0 0 / 0.3)),
+               0 12px 32px -16px light-dark(rgb(18 18 21 / 0.13), rgb(0 0 0 / 0.7));
+  --shadow-md: 0 1px 2px light-dark(rgb(18 18 21 / 0.03), rgb(0 0 0 / 0.35)),
+               0 22px 52px -20px light-dark(rgb(18 18 21 / 0.19), rgb(0 0 0 / 0.8));
+  --shadow-lg: 0 2px 6px light-dark(rgb(18 18 21 / 0.05), rgb(0 0 0 / 0.45)),
+               0 44px 90px -28px light-dark(rgb(18 18 21 / 0.32), rgb(0 0 0 / 0.9));
 
-  --shadow-sm: 0 1px 2px var(--color-shadow-near), 0 6px 20px -12px var(--color-shadow-far);
-  --shadow-md: 0 1px 3px var(--color-shadow-near), 0 16px 40px -18px var(--color-shadow-far);
-  --shadow-lg: 0 2px 6px var(--color-shadow-near), 0 36px 76px -26px var(--color-shadow-far);
+  --blur-glass: 26px;
+  --blur-glass-strong: 30px;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 
   --font-sans: var(--font-inter), ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 /**
- * The theme switch.
- *
- * No attribute means "follow the operating system", which is the honest default
- * and needs no script and no cookie. An explicit choice is one attribute, and
- * the server stamps it from a cookie so it is already correct in the first byte
- * of HTML.
+ * Theme switching. `data-theme` is stamped by the server from a cookie; with no
+ * attribute the root follows the operating system. No script, no flash.
  */
 :root { color-scheme: light dark; }
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
 
-/* `dark:` covers BOTH ways a page can be dark — an explicit choice and an
-   unstamped root under a dark operating system. Defining it as the attribute
-   alone would silently miss every system-dark visitor. */
 @custom-variant dark {
   @media (prefers-color-scheme: dark) {
     &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) { @slot; }
@@ -168,11 +194,6 @@
   &:where([data-theme="dark"], [data-theme="dark"] *) { @slot; }
 }
 
-/* Element defaults live in `base` deliberately. An unlayered rule outranks
-   every Tailwind utility, so `h1 { font-size: 30px }` written outside a layer
-   would silently beat `class="text-[15px]"` on the one heading that needs to be
-   smaller. Inside `base` the utility wins, which is the relationship a default
-   is supposed to have with an override. */
 @layer base {
   * { box-sizing: border-box; }
 
@@ -181,9 +202,6 @@
     padding: 0;
     background: var(--color-canvas);
     color: var(--color-text);
-    /* Spelled out rather than `var(--font-sans)`: Tailwind v4 tree-shakes theme
-       variables no utility references, so relying on it here silently fell back
-       to Times. The stack is stated where it is used. */
     font-family: var(--font-inter), ui-sans-serif, -apple-system, "Segoe UI", Roboto,
       "Helvetica Neue", Arial, sans-serif;
     font-size: 14px;
@@ -192,23 +210,13 @@
     text-rendering: optimizeLegibility;
   }
 
-  /* The mockup's ladder: a 30px page title, 17px card titles, 14px body. Weight
-     does the work here, not size alone — the page title is Regular and the card
-     titles Medium, which is why the page reads calm rather than shouty. */
-  h1, h2, h3 { margin: 0; letter-spacing: -0.015em; }
-  h1 { font-size: 30px; line-height: 38px; font-weight: 400; }
-  h2 { font-size: 17px; line-height: 24px; font-weight: 500; }
+  h1, h2, h3 { margin: 0; letter-spacing: -0.02em; }
+  h1 { font-size: 30px; line-height: 38px; font-weight: 300; }
+  h2 { font-size: 17px; line-height: 24px; font-weight: 400; }
   h3 { font-size: 15px; line-height: 22px; font-weight: 500; }
 
-  /**
-   * The surfaces the browser draws for us still carry the design. Selection,
-   * caret and scrollbar ship with defaults that belong to no design system — a
-   * blue selection highlight on a teal page is the loudest un-branded thing on
-   * the screen, and it is the detail that gets skipped.
-   */
   ::selection { background: var(--color-accent-subtle); color: var(--color-text); }
-
-  :root { accent-color: var(--color-accent); caret-color: var(--color-accent-ink); }
+  :root { accent-color: var(--color-accent); caret-color: var(--color-accent); }
 
   * { scrollbar-color: var(--color-line-strong) transparent; scrollbar-width: thin; }
   ::-webkit-scrollbar { width: 11px; height: 11px; }
@@ -219,29 +227,103 @@
     border-radius: 999px;
     background-clip: content-box;
   }
-  ::-webkit-scrollbar-thumb:hover {
-    background: var(--color-text-tertiary);
-    background-clip: content-box;
-  }
 
-  /* Focus is never removed, only restyled. Keyboard users are first-class. */
   :focus-visible {
-    outline: 2px solid var(--color-accent-ink);
+    outline: 2px solid var(--color-accent);
     outline-offset: 2px;
     border-radius: var(--radius-xs);
   }
 }
 
 /**
- * The two places Bible V4 §1.B permits translucency: a scrim behind a temporary
- * layer, and the temporary layer itself. Nothing persistent may use either.
+ * LEVEL 0 — the atmosphere.
+ *
+ * Accent-derived radial fields over the flat canvas, at the source's own
+ * positions and opacities. Fixed rather than scrolling, so it reads as the room
+ * the interface sits in rather than as a decorated page. Pointer-events none:
+ * it is a backdrop, never a surface.
  */
-.verity-scrim { background: var(--color-scrim); }
+.verity-atmosphere {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 66% 16%,
+      color-mix(in srgb, transparent 92%, var(--accent-seed)), transparent 34%),
+    radial-gradient(circle at 18% 74%,
+      color-mix(in srgb, transparent 96%, var(--accent-seed)), transparent 40%),
+    radial-gradient(circle at 45% 45%,
+      light-dark(rgb(255 255 255 / 0.30), rgb(255 255 255 / 0.02)), transparent 60%);
+}
 
-.verity-overlay {
-  background: var(--color-overlay);
-  backdrop-filter: blur(20px) saturate(1.4);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+/**
+ * LEVELS 1–4 — the glass materials.
+ *
+ * Each pairs one ladder step with blur and the inner highlight. They are
+ * classes rather than utilities because the three properties must travel
+ * together: a translucent background without its blur is a washed-out panel,
+ * and that is what "glass added superficially" looks like.
+ *
+ * Blur is applied on FOUR surface kinds at most — shell, card, control,
+ * overlay — never per row or per badge. ADR-011 constraint 2.
+ */
+.glass-shell,
+.glass-card,
+.glass-control,
+.glass-overlay {
+  backdrop-filter: blur(var(--blur-glass)) saturate(1.6);
+  -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(1.6);
+  box-shadow: var(--shadow-highlight);
+}
+
+/* Level 1 — the shell. Quietest material; it must recede. */
+.glass-shell {
+  background: var(--color-glass-1);
+  backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.5);
+  -webkit-backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.5);
+}
+
+/* Level 2 — primary surfaces. Cards and panels. */
+.glass-card {
+  background: var(--color-glass-2);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-highlight), var(--shadow-sm);
+}
+
+/* Level 3/4 — controls. Denser material so text on them stays legible. */
+.glass-control {
+  background: var(--color-glass-3);
+  border: 1px solid var(--color-line);
+}
+
+/* Temporary layers — sheets, dropdowns, dialogs. Densest, because they must
+   read against arbitrary content beneath them. */
+.glass-overlay {
+  background: var(--color-glass-4);
+  backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.8);
+  -webkit-backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.8);
+}
+
+.verity-scrim { background: light-dark(rgb(24 24 27 / 0.16), rgb(6 6 8 / 0.5)); }
+
+/**
+ * ADR-011 constraint 5 — user preference outranks the material.
+ *
+ * Reduced transparency is honoured by making every surface opaque and dropping
+ * every blur. Hierarchy survives because the borders and shadows remain, which
+ * is why they were never doing nothing.
+ */
+@media (prefers-reduced-transparency: reduce) {
+  .glass-shell, .glass-card, .glass-control, .glass-overlay {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .glass-shell { background: var(--color-chrome); }
+  .glass-card, .glass-control { background: var(--color-surface); }
+  .glass-overlay { background: var(--color-surface-elevated); }
+  .verity-atmosphere { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -252,5 +334,4 @@
   }
 }
 
-/* Tabular numerals keep columns of figures aligned across rows. */
 .tabular { font-variant-numeric: tabular-nums; }

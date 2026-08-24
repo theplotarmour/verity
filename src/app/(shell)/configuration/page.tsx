@@ -2,6 +2,8 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { DataTable } from "@/components/ui/DataTable";
 import { PageHeader, Panel, Stat, StatRow } from "@/components/ui/primitives";
+import { AppearanceControls } from "@/components/shell/AppearanceControls";
+import { ACCENT_PRESETS, DEFAULT_ACCENT } from "@/server/platform/accent";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +45,15 @@ export default async function ConfigurationPage() {
       {/* Which of these values this tenant actually owns, and which are the
           platform's own read-only defaults. That distinction is the whole point
           of the resolution order, so it belongs above the table. */}
+      {/* Appearance lives here rather than in a second settings architecture:
+          Configuration is already the platform's resolution surface, and theme
+          and accent are per-user interface preferences, not tenant policy — so
+          they are cookies, not ConfigParameter rows, and platform configuration
+          semantics are untouched. */}
+      <Panel title="Appearance" className="mb-6">
+        <AppearanceControls presets={ACCENT_PRESETS} defaultAccent={DEFAULT_ACCENT} />
+      </Panel>
+
       <StatRow cols={3} className="mb-6">
         <Stat label="Parameters" value={rows.length} />
         <Stat label="Set by this tenant" value={rows.filter((r) => r.scope !== "Global").length} />
