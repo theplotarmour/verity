@@ -11,17 +11,16 @@ import { Icon } from "./icons";
  * Authority: Bible V4 §1.A (high density on desktop, one primary thing at a
  * time on mobile), and the board's table treatment.
  *
- * COMPOSITION
- * The board's table is not a grid of equal cells. It has a clear reading order:
- * a quiet toolbar, tracked-out column labels that recede, a first column that
- * carries the record's identity in full-strength ink, and supporting columns in
- * secondary ink. Separators run between rows and nowhere else — no vertical
- * rules, no border under the last row, no zebra striping. Density is high but
- * rows breathe at ~46px.
+ * WHAT THE MOCKUP'S TABLE IS
+ * A toolbar of 44px controls with the primary action at the right end, then
+ * column labels under a hairline, then rows separated by hairlines and nothing
+ * else — no card frame, no vertical rules, no zebra striping. Rows breathe at
+ * ~64px because the first column carries two lines: the record's name and its
+ * reference beneath in lighter ink.
  *
- * That hierarchy is what makes an operational table scannable: the eye goes down
- * the first column looking for a record, then across. A table where every cell
- * has identical weight forces it to read every cell.
+ * The first column keeps full-strength ink and every other column steps back.
+ * That is what makes an operational table scannable: the eye goes DOWN the
+ * first column looking for a record, then across.
  *
  * TWO ARCHITECTURAL NOTES
  * Columns are supplied by the caller from platform metadata, so a field the
@@ -45,6 +44,25 @@ import { Icon } from "./icons";
  * each page working around it.
  */
 const PAGE = 25;
+
+/**
+ * The page numbers to draw: always the first and last, always the current and
+ * its neighbours, and an ellipsis for each gap. `null` is a gap.
+ *
+ * Rendering every page is fine at three pages and unusable at ninety, which is
+ * exactly the range an audit table covers.
+ */
+function pageNumbers(current: number, total: number): Array<number | null> {
+  const keep = new Set([0, total - 1, current - 1, current, current + 1]);
+  const pages = [...keep].filter((n) => n >= 0 && n < total).sort((a, b) => a - b);
+
+  const out: Array<number | null> = [];
+  pages.forEach((n, i) => {
+    if (i > 0 && n - pages[i - 1]! > 1) out.push(null);
+    out.push(n);
+  });
+  return out;
+}
 
 export type ColumnVariant = "text" | "link" | "state";
 
@@ -117,6 +135,7 @@ export function DataTable({
   emptyAction,
   filterable = true,
   toolbar,
+  actionHref,
 }: {
   columns: Column[];
   rows: Array<Record<string, unknown>>;
@@ -129,10 +148,19 @@ export function DataTable({
   filterable?: boolean;
   /** Extra controls in the toolbar, right-aligned beside the filter. */
   toolbar?: React.ReactNode;
+  /**
+   * The mockup's trailing Actions column, as an href with {field} placeholders.
+   *
+   * It is a LINK to the record, not a menu. A "⋮" that opens a list of actions
+   * the platform cannot perform is a control that lies about what exists; when
+   * there is one real thing to do, the honest control is the one that does it.
+   */
+  actionHref?: string;
 }) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
-  const [limit, setLimit] = useState(PAGE);
+  const [page, setPage] = useState(0);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
 
   const visible = useMemo(() => {
     let out = rows;
@@ -159,8 +187,30 @@ export function DataTable({
     return out;
   }, [rows, columns, query, sort]);
 
-  const shown = visible.slice(0, limit);
-  const hidden = visible.length - shown.length;
+  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE));
+  const current = Math.min(page, pageCount - 1);
+  const shown = visible.slice(current * PAGE, current * PAGE + PAGE);
+
+  const shownKeys = shown.map((r) => String(r[rowKey]));
+  const allShownSelected = shownKeys.length > 0 && shownKeys.every((k) => selected.has(k));
+
+  function toggleRow(key: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleAllShown() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allShownSelected) shownKeys.forEach((k) => next.delete(k));
+      else shownKeys.forEach((k) => next.add(k));
+      return next;
+    });
+  }
 
   if (rows.length === 0) {
     return (
@@ -170,58 +220,72 @@ export function DataTable({
     );
   }
 
-  const showToolbar = (filterable && rows.length > 5) || Boolean(toolbar);
+  const showFilter = filterable && rows.length > 5;
+  const showToolbar = showFilter || Boolean(toolbar);
 
   return (
-    <Surface className="overflow-hidden">
+    <div>
       {showToolbar && (
-        <div className="flex items-center gap-3 border-b border-line px-4 py-2.5">
-          {filterable && rows.length > 5 && (
-            <div className="relative flex min-w-0 flex-1 items-center">
+        <div className="mb-5 flex flex-wrap items-center gap-3">
+          {showFilter && (
+            <div className="relative flex min-w-0 flex-1 items-center sm:max-w-[24rem]">
               <Icon
                 name="search"
-                size={14}
-                className="pointer-events-none absolute left-2.5 text-text-tertiary"
+                size={17}
+                className="pointer-events-none absolute left-4 text-text-tertiary"
               />
               <label htmlFor={`filter-${rowKey}`} className="sr-only">
                 Filter {caption}
               </label>
-              {/* Deliberately borderless. This filters rows already on screen;
-                  dressing it as a bordered input makes it look like the global
-                  search the platform does not have yet. */}
+              {/* The board's toolbar field: bordered, 10px radius, glyph inside
+                  on the left. The placeholder says "Filter" rather than "Search"
+                  because that is what it does — it narrows the rows already on
+                  screen, and calling it search would promise a platform
+                  capability that does not exist yet. */}
               <input
                 id={`filter-${rowKey}`}
                 type="search"
                 placeholder="Filter…"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="h-9 w-full max-w-xs rounded-md border-0 bg-transparent pl-8 pr-2 text-[13px] text-text placeholder:text-text-tertiary focus:outline-none focus:ring-0"
+                className="h-11 w-full rounded-lg border border-line bg-control pl-12 pr-4 text-[14px] text-text placeholder:text-text-tertiary transition-colors hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-subtle)] focus:outline-none"
               />
             </div>
           )}
-          {toolbar && <div className="ml-auto flex items-center gap-2">{toolbar}</div>}
+          {toolbar && <div className="ml-auto flex items-center gap-2.5">{toolbar}</div>}
         </div>
       )}
 
       {visible.length === 0 ? (
-        <EmptyState
-          title="No matches"
-          description={`Nothing in ${caption.toLowerCase()} matches “${query}”.`}
-        />
+        <Surface>
+          <EmptyState
+            title="No matches"
+            description={`Nothing in ${caption.toLowerCase()} matches “${query}”.`}
+          />
+        </Surface>
       ) : (
         <>
           {/* Desktop: dense grid */}
-          <div className="hidden overflow-x-auto md:block">
+          <div className="-mx-2 hidden overflow-x-auto px-2 md:block">
             <table className="w-full border-collapse text-[14px]">
               <caption className="sr-only">{caption}</caption>
               <thead>
                 <tr className="border-b border-line">
+                  <th scope="col" className="w-10 pb-3 pl-1 pr-2">
+                    <input
+                      type="checkbox"
+                      checked={allShownSelected}
+                      onChange={toggleAllShown}
+                      aria-label={`Select all ${caption.toLowerCase()} on this page`}
+                      className="size-[15px] cursor-pointer rounded-[4px] border-line-strong align-middle accent-[var(--color-accent)]"
+                    />
+                  </th>
                   {columns.map((c) => {
                     const sorted = sort?.key === c.key;
                     const label = (
                       <>
                         {c.header}
-                        <span aria-hidden="true" className="ml-1 text-text-tertiary">
+                        <span aria-hidden="true" className="ml-1">
                           {sorted ? (sort!.dir === "asc" ? "↑" : "↓") : ""}
                         </span>
                       </>
@@ -234,7 +298,7 @@ export function DataTable({
                           sorted ? (sort!.dir === "asc" ? "ascending" : "descending") : undefined
                         }
                         className={
-                          "whitespace-nowrap px-5 py-2.5 text-[11px] font-medium uppercase tracking-[0.07em] text-text-tertiary " +
+                          "whitespace-nowrap px-4 pb-3 text-[13px] font-normal text-text-tertiary " +
                           (c.numeric ? "text-right" : "text-left")
                         }
                       >
@@ -243,7 +307,7 @@ export function DataTable({
                         ) : (
                           <button
                             type="button"
-                            className="cursor-pointer border-0 bg-transparent p-0 text-[11px] font-medium uppercase tracking-[0.07em] text-text-tertiary transition-colors hover:text-text"
+                            className="cursor-pointer border-0 bg-transparent p-0 text-[13px] font-normal text-text-tertiary transition-colors hover:text-text"
                             onClick={() =>
                               setSort((s) =>
                                 s?.key === c.key
@@ -258,23 +322,55 @@ export function DataTable({
                       </th>
                     );
                   })}
+                  {actionHref && (
+                    <th scope="col" className="w-16 pb-3 pr-1 text-right text-[13px] font-normal text-text-tertiary">
+                      Actions
+                    </th>
+                  )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-line">
-                {shown.map((row) => (
-                  <tr key={String(row[rowKey])} className="transition-colors hover:bg-surface-sunken">
+              <tbody>
+                {shown.map((row) => {
+                  const key = String(row[rowKey]);
+                  return (
+                  <tr
+                    key={key}
+                    data-selected={selected.has(key) || undefined}
+                    className="border-b border-line transition-colors last:border-b-0 hover:bg-surface-sunken data-selected:bg-accent-subtle"
+                  >
+                    <td className="w-10 py-4 pl-1 pr-2 align-middle">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(key)}
+                        onChange={() => toggleRow(key)}
+                        aria-label={`Select ${String(row[columns[0]!.key] ?? key)}`}
+                        className="size-[15px] cursor-pointer rounded-[4px] border-line-strong align-middle accent-[var(--color-accent)]"
+                      />
+                    </td>
                     {columns.map((c, i) => (
                       <td
                         key={c.key}
                         className={
-                          "px-5 py-3 align-middle " + (c.numeric ? "tabular text-right" : "")
+                          "px-4 py-4 align-middle " + (c.numeric ? "tabular text-right" : "")
                         }
                       >
                         <Cell column={c} row={row} lead={i === 0} />
                       </td>
                     ))}
+                    {actionHref && (
+                      <td className="w-16 py-4 pr-1 align-middle text-right">
+                        <Link
+                          href={fillTemplate(actionHref, row)}
+                          aria-label={`Open ${String(row[columns[0]!.key] ?? key)}`}
+                          className="inline-grid size-9 place-items-center rounded-lg text-text-tertiary no-underline transition-colors hover:bg-surface-sunken hover:text-text"
+                        >
+                          <Icon name="chevronRight" size={17} />
+                        </Link>
+                      </td>
+                    )}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -286,8 +382,8 @@ export function DataTable({
             {shown.map((row) => {
               const [lead, ...rest] = columns;
               return (
-                <li key={String(row[rowKey])} className="flex flex-col gap-2 px-4 py-3.5">
-                  <div className="text-[14px]">
+                <li key={String(row[rowKey])} className="flex flex-col gap-2 py-4">
+                  <div className="text-[15px]">
                     <Cell column={lead!} row={row} lead />
                   </div>
                   <div className="flex flex-col gap-1">
@@ -305,24 +401,65 @@ export function DataTable({
             })}
           </ul>
 
-          <div className="flex items-center justify-between gap-4 border-t border-line px-5 py-2.5">
-            <p className="m-0 text-[12px] text-text-tertiary" aria-live="polite">
-              {visible.length === rows.length
-                ? `Showing ${shown.length} of ${rows.length} ${rows.length === 1 ? "record" : "records"}`
-                : `Showing ${shown.length} of ${visible.length} matched · ${rows.length} total`}
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
+            <p className="m-0 text-[13px] text-text-tertiary" aria-live="polite">
+              {selected.size > 0
+                ? `${selected.size} selected`
+                : `Showing ${current * PAGE + 1} to ${current * PAGE + shown.length} of ${visible.length} ${visible.length === 1 ? "record" : "records"}`}
             </p>
-            {hidden > 0 && (
-              <button
-                type="button"
-                onClick={() => setLimit((n) => n + PAGE)}
-                className="cursor-pointer border-0 bg-transparent p-0 text-[12px] font-medium text-accent-ink hover:underline"
-              >
-                Show {Math.min(hidden, PAGE)} more
-              </button>
+
+            {/* The mockup's numbered pager. It is only drawn when there is more
+                than one page — a pager showing a lone "1" is chrome that tells
+                the reader nothing. */}
+            {pageCount > 1 && (
+              <nav aria-label={`${caption} pages`} className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setPage(current - 1)}
+                  disabled={current === 0}
+                  aria-label="Previous page"
+                  className="grid size-9 cursor-pointer place-items-center rounded-lg border border-line bg-surface text-text-secondary transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Icon name="collapse" size={16} />
+                </button>
+
+                {pageNumbers(current, pageCount).map((n, i) =>
+                  n === null ? (
+                    <span key={`gap-${i}`} className="px-1 text-[13px] text-text-tertiary">
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setPage(n)}
+                      aria-current={n === current ? "page" : undefined}
+                      className={
+                        "tabular grid h-9 min-w-9 cursor-pointer place-items-center rounded-lg px-2 text-[13px] transition-colors " +
+                        (n === current
+                          ? "border border-accent text-accent-ink"
+                          : "border border-line bg-surface text-text-secondary hover:bg-surface-sunken")
+                      }
+                    >
+                      {n + 1}
+                    </button>
+                  ),
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setPage(current + 1)}
+                  disabled={current >= pageCount - 1}
+                  aria-label="Next page"
+                  className="grid size-9 cursor-pointer place-items-center rounded-lg border border-line bg-surface text-text-secondary transition-colors hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Icon name="expand" size={16} />
+                </button>
+              </nav>
             )}
           </div>
         </>
       )}
-    </Surface>
+    </div>
   );
 }
