@@ -4,234 +4,236 @@
  * Verity design tokens.
  *
  * AUTHORITY
- *   1. Bible V4 §1 — the UX Constitution (outranks everything below).
- *   2. Approved brand identity boards, `verity-app-ui-mockups/` — visual
- *      authority for palette, typography, geometry and rhythm.
+ *   1. Bible V4 §1 — the UX Constitution.
+ *   2. The approved product mockups (light and dark) — the visual authority for
+ *      palette, typography, geometry and composition.
  *
- * Bible V4 §1 in force here:
- *   §1.A  Whitespace as structure. Hierarchy comes from alignment and negative
- *         space, not from borders, boxes and card grids.
- *   §1.B  [FACT] Glassmorphic blur is NOT the visual identity. Translucency is
- *         permitted ONLY for temporary contextual layers (sheet, dropdown,
- *         floating panel). The default surface is solid and high-contrast:
- *         #FFFFFF light, #1C1C1E dark.
+ * WHAT THE MOCKUPS ESTABLISH
+ * A teal accent, near-white light ground with white cards, and a near-black
+ * dark ground with lifted cards. Chrome is separated from content by a single
+ * hairline, never by a fill. Every value below was sampled from the mockups
+ * rather than chosen.
  *
- * WHERE THE BOARD AND THE BIBLE DISAGREE — RESOLVED, DO NOT RE-LITIGATE
- * The board renders the rail and header with `backdrop-filter: blur(30px)` over
- * translucent white layers (--g1..--g4). That is persistent chrome, not a
- * temporary layer, so Bible V4 §1.B forbids it and the Bible outranks the board.
+ * HOW LIGHT AND DARK SWITCH — and why there is no theme script
+ * Every themed token is one `light-dark()` declaration and the active side is
+ * chosen by `color-scheme` on :root. With no `data-theme` attribute the root is
+ * `light dark`, so the operating system decides with no JavaScript at all; an
+ * explicit choice is stamped by the server from a cookie before the HTML is
+ * sent.
  *
- * The look is preserved without the blur: each translucent layer was composited
- * against its own base and shipped as the resulting solid colour. `--g1` (white
- * at 44% over #F4F4F5) is #F9F9F9 here. Visually equivalent at rest, legible on
- * top of any content, and it does not repaint a blurred backdrop on every
- * scroll frame. Translucency survives only where the Bible names it — see
- * `.verity-scrim` and `.verity-overlay` at the end of this file.
+ * The previous mechanism was an inline script that read localStorage and
+ * stamped the attribute before paint. React re-creates a script element on
+ * every client render — where it can never execute — and reports that as
+ * "Encountered a script tag while rendering React component" on every load in
+ * development. No placement fixes it; the element itself is the problem. Doing
+ * the work in CSS removes the script, the warning, and the flash together, and
+ * the theme now also works with JavaScript disabled.
+ *
+ * Bible V4 §1.B still governs one thing: glassmorphic blur is not the identity.
+ * Translucency survives only where §1.B names it — `.verity-scrim` and
+ * `.verity-overlay` at the end of this file.
  *
  * ONE ACCENT
- * The board states the rule directly: "One accent drives interaction, selection
- * and state. Neutrals and semantic colours never change." Gold is an accent, not
- * a theme. It marks what is actionable, selected or live — never a heading, a
- * card, a border by default, or a large background region.
+ * Teal marks what is actionable, selected or live. It is never a heading, never
+ * a default border, and never a large decorative field. Neutrals and semantic
+ * status colours are a separate system and do not move when the accent does.
  */
 
 @theme {
   /* ---------------------------------------------------------------------
-   * Gold — the Verity accent.
+   * ACCENT — sampled from the mockups. The fill is the "+ Add item" button and
+   * the active navigation glyph; the ink is the "View all" link and the "94
+   * Delivered" figure, which sit on the page rather than on the accent.
    *
-   * The board defines gold as a *derived tonal scale*, not a flat hex. This
-   * matters: #D4A017 alone reaches only 2.16:1 on the light page, so a single
-   * value cannot serve both modes. Each step below is the board's own mix
-   * function — toward #FFFFFF above 500, toward #0D0D0F below it.
+   * `--color-accent-on: #ffffff` is the mockup: its primary button sets a white
+   * label on teal. White on #0DA191 measures 3.22:1 and does not meet WCAG AA
+   * for normal-size text. It ships this way because the mockup is the pinned
+   * authority. To trade exact fidelity for AA, change the light side to
+   * #0f766e (5.47:1) — one token, nothing else moves.
    * ------------------------------------------------------------------- */
-  --color-gold-50: #fcf9f1;
-  --color-gold-100: #f9f2df;
-  --color-gold-200: #f2e3b9;
-  --color-gold-300: #e6c878;
-  --color-gold-400: #dcb141;
-  --color-gold-500: #d4a017; /* the brand hex, as printed on the board */
-  --color-gold-600: #bc8e16;
-  --color-gold-700: #a07a15;
-  --color-gold-800: #806214;
-  --color-gold-900: #614b12;
-
-  /* Accent roles. Three, because gold behaves differently as a fill than as
-     ink, and collapsing them is how gold interfaces end up illegible. */
-  --color-accent: #bc8e16;        /* fills, indicators, rules, chart strokes */
-  --color-accent-ink: #806214;    /* accent-coloured TEXT and icons — 5.2:1   */
-  --color-accent-on: #191a1c;     /* text ON a gold fill — 7.3:1, never white */
-  --color-accent-subtle: #f6f1e4; /* selected row / active nav bed            */
-  --color-accent-line: #ecdcb0;   /* border of a selected element             */
-  --color-accent-hover: #a07a15;
+  --color-accent: light-dark(#0da191, #12bfa3);
+  --color-accent-on: light-dark(#ffffff, #04211d);
+  --color-accent-ink: light-dark(#0a7361, #14c7aa);
+  --color-accent-hover: light-dark(#0b8b7e, #2ad3b6);
+  --color-accent-subtle: light-dark(#f0f8f7, #0f1a1d);
+  --color-accent-line: light-dark(#cfe9e4, #1d3a37);
 
   /* ---------------------------------------------------------------------
-   * Neutrals. Warm, per the board's "Warm Sand / Gold" direction — the page is
-   * #F4F4F5 rather than pure white so that white surfaces read as raised
-   * without needing a shadow to say so.
+   * SURFACES
+   *
+   * Light: the page and the rail are both near-white and are told apart by a
+   * single hairline, exactly as the mockup draws them. Cards are pure white.
+   * Dark: the page is near-black, cards lift one step, and controls lift again.
    * ------------------------------------------------------------------- */
-  --color-canvas: #f4f4f5;        /* the page itself (board --base)          */
-  --color-surface: #ffffff;       /* Bible §1.B default surface              */
-  --color-surface-sunken: #efeff0;
-  --color-surface-raised: #ffffff;
-  --color-chrome: #f9f9f9;        /* rail + header (board --g1, flattened)   */
-  --color-control: #fcfcfc;       /* inputs and controls (board --g3)        */
+  --color-canvas: light-dark(#fdfdfd, #0c0f14);
+  --color-surface: light-dark(#ffffff, #0f1217);
+  --color-surface-sunken: light-dark(#f6f7f8, #0a0d11);
+  --color-surface-raised: light-dark(#ffffff, #13161c);
+  --color-chrome: light-dark(#fdfdfd, #0c0f14);
+  --color-control: light-dark(#ffffff, #13161c);
 
-  --color-line: #e8e8e9;          /* board --bd, flattened                   */
-  --color-line-strong: #dbdbdd;   /* board --bds, flattened                  */
+  --color-line: light-dark(#eef0f1, #1c1f24);
+  --color-line-strong: light-dark(#dfe2e5, #2a2f36);
 
-  --color-text: #18181b;          /* 16.1:1 on canvas                        */
-  --color-text-secondary: #5c5c60;/*  6.1:1                                  */
-  --color-text-tertiary: #6f6f74; /*  4.6:1 — darkened from the board's       */
-                                  /*  #7A7A7F (3.9:1) to clear AA body text.  */
+  /* The mockup's greys are lighter than these. They were darkened until every
+     one clears WCAG AA against the surface it actually sits on: the mockup's
+     own tertiary measured 2.57:1, which is what made the role line under a
+     name hard to read at a glance. Readability wins over an exact swatch. */
+  --color-text: light-dark(#101418, #f5f7fa);
+  --color-text-secondary: light-dark(#4b5563, #b6bdc7);
+  --color-text-tertiary: light-dark(#68707b, #949cab);
 
   /* ---------------------------------------------------------------------
-   * State colours map to StateCategory (ADR-009) and are never invented per
-   * screen. The board's semantic set is muted on purpose — these are read all
-   * day and saturated status chips become noise by the third screen.
+   * SEMANTIC STATE — maps to StateCategory (ADR-009), never invented per
+   * screen. The mockup's own status vocabulary is a coloured dot beside a
+   * label: green in stock, amber low, red out. These are those three plus the
+   * neutral and informational steps the six canonical categories need.
    * ------------------------------------------------------------------- */
-  --color-state-draft: #6f6f74;
-  --color-state-pending: #8a6313;
-  --color-state-active: #3a6b96;
-  --color-state-blocked: #a63d34;
-  --color-state-completed: #3f7d53;
-  --color-state-cancelled: #6f6f74;
+  --color-state-draft: light-dark(#9aa1a9, #6b7280);
+  --color-state-pending: light-dark(#c2870a, #e8b73f);
+  --color-state-active: light-dark(#0e9f6e, #19bd95);
+  --color-state-blocked: light-dark(#d64545, #f0736f);
+  --color-state-completed: light-dark(#0d8673, #14c7aa);
+  --color-state-cancelled: light-dark(#9aa1a9, #6b7280);
 
-  --color-danger: #a63d34;
-  --color-danger-subtle: #fbf0ef;
-  --color-warning: #8a6313;
-  --color-warning-subtle: #fbf6ea;
-  --color-success: #3f7d53;
-  --color-success-subtle: #eff6f1;
-  --color-info: #3a6b96;
-  --color-info-subtle: #eff4f8;
+  --color-danger: light-dark(#d64545, #f0736f);
+  --color-danger-subtle: light-dark(#fdf1f1, #241416);
+  --color-warning: light-dark(#c2870a, #e8b73f);
+  --color-warning-subtle: light-dark(#fdf7ea, #241d12);
+  --color-success: light-dark(#0e9f6e, #19bd95);
+  --color-success-subtle: light-dark(#eefaf5, #0c1d19);
+  --color-info: light-dark(#3b82f6, #7aa9f7);
+  --color-info-subtle: light-dark(#eff4fe, #121a26);
 
-  /* Radii — the board's actual geometry. Restrained and consistent; a stray
-     radius is the fastest way to make a premium interface look assembled. */
+  /* Temporary layers — Bible V4 §1.B's two permitted translucencies. Written as
+     pre-mixed rgba pairs rather than `color-mix`, because `color-mix` resolves
+     at computed-value time and `light-dark()` at used-value time. */
+  --color-scrim: light-dark(rgb(16 20 24 / 0.45), rgb(0 0 0 / 0.66));
+  --color-overlay: light-dark(rgb(255 255 255 / 0.92), rgb(15 18 23 / 0.92));
+
+  /* ---------------------------------------------------------------------
+   * GEOMETRY — measured off the mockups. Cards carry 16, controls and the
+   * navigation bed carry 12, small chips are pills.
+   * ------------------------------------------------------------------- */
   --radius-xs: 6px;
-  --radius-sm: 9px;
+  --radius-sm: 8px;
   --radius-md: 10px;
   --radius-lg: 12px;
   --radius-xl: 16px;
   --radius-pill: 999px;
 
-  /* Elevation. Low, wide and nearly colourless — depth by shadow *spread*,
-     not darkness. The board never uses a hard drop shadow. */
-  --shadow-sm: 0 1px 1px rgb(18 18 21 / 0.025), 0 12px 32px -16px rgb(18 18 21 / 0.13);
-  --shadow-md: 0 1px 2px rgb(18 18 21 / 0.03), 0 22px 52px -20px rgb(18 18 21 / 0.19);
-  --shadow-lg: 0 2px 6px rgb(18 18 21 / 0.05), 0 44px 90px -28px rgb(18 18 21 / 0.32);
+  /* Elevation. Cards sit on a hairline with a soft ambient shadow — depth by
+     spread, never by darkness.
+
+     The geometry is written once and only the COLOURS switch, which keeps a
+     themed shadow to one declaration instead of two blocks that drift apart.
+     `box-shadow` is not a colour so it cannot take `light-dark()` itself; its
+     colour slots can. */
+  --color-shadow-near: light-dark(rgb(16 20 24 / 0.04), rgb(0 0 0 / 0.45));
+  --color-shadow-far: light-dark(rgb(16 20 24 / 0.08), rgb(0 0 0 / 0.72));
+
+  --shadow-sm: 0 1px 2px var(--color-shadow-near), 0 6px 20px -12px var(--color-shadow-far);
+  --shadow-md: 0 1px 3px var(--color-shadow-near), 0 16px 40px -18px var(--color-shadow-far);
+  --shadow-lg: 0 2px 6px var(--color-shadow-near), 0 36px 76px -26px var(--color-shadow-far);
 
   --font-sans: var(--font-inter), ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 /**
- * Dark mode.
+ * The theme switch.
  *
- * Designed, not inverted. The page drops to near-black (#0D0D0F, the board's
- * dark base) while the surface sits at Bible §1.B's #1C1C1E — so surfaces read
- * as *lifted out of* the page rather than merely lighter than it.
- *
- * Gold moves UP the scale here (300, not 600). A dark-mode accent must gain
- * luminance to stay legible; reusing the light-mode gold would drop it to
- * roughly 2:1 against the page.
+ * No attribute means "follow the operating system", which is the honest default
+ * and needs no script and no cookie. An explicit choice is one attribute, and
+ * the server stamps it from a cookie so it is already correct in the first byte
+ * of HTML.
  */
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+:root { color-scheme: light dark; }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 
-/* `data-theme` is always a RESOLVED value — "light" or "dark", never "system".
-   The inline script in the document head reads the stored preference, resolves
-   "system" against the media query, and stamps the result before first paint.
-   That keeps this file to one dark block instead of duplicating every token
-   into a `prefers-color-scheme` copy that could drift out of sync with it. */
-:root[data-theme="dark"] {
-  --color-accent: #e6c878;        /* 11.9:1 on the dark page */
-  --color-accent-ink: #e6c878;
-  --color-accent-on: #191a1c;     /* still dark ink on gold  */
-  --color-accent-subtle: #241f14;
-  --color-accent-line: #513f12;
-  --color-accent-hover: #f2e3b9;
-
-  --color-canvas: #0d0d0f;
-  --color-surface: #1c1c1e;
-  --color-surface-sunken: #141416;
-  --color-surface-raised: #242427;
-  --color-chrome: #141417;
-  --color-control: #1e1e22;
-
-  --color-line: #26262a;
-  --color-line-strong: #35353a;
-
-  --color-text: #ececee;
-  --color-text-secondary: #a1a1a7;
-  --color-text-tertiary: #85858b;
-
-  --color-state-draft: #85858b;
-  --color-state-pending: #dfae4e;
-  --color-state-active: #7ea8cc;
-  --color-state-blocked: #e0796d;
-  --color-state-completed: #6fbe86;
-  --color-state-cancelled: #85858b;
-
-  --color-danger: #e0796d;
-  --color-danger-subtle: #2a1917;
-  --color-warning: #dfae4e;
-  --color-warning-subtle: #2a2214;
-  --color-success: #6fbe86;
-  --color-success-subtle: #16241b;
-  --color-info: #7ea8cc;
-  --color-info-subtle: #16202a;
-
-  --shadow-sm: 0 1px 1px rgb(0 0 0 / 0.3), 0 16px 40px -18px rgb(0 0 0 / 0.7);
-  --shadow-md: 0 2px 4px rgb(0 0 0 / 0.35), 0 28px 62px -22px rgb(0 0 0 / 0.8);
-  --shadow-lg: 0 3px 8px rgb(0 0 0 / 0.45), 0 50px 100px -30px rgb(0 0 0 / 0.9);
+/* `dark:` covers BOTH ways a page can be dark — an explicit choice and an
+   unstamped root under a dark operating system. Defining it as the attribute
+   alone would silently miss every system-dark visitor. */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) { @slot; }
+  }
+  &:where([data-theme="dark"], [data-theme="dark"] *) { @slot; }
 }
 
-* { box-sizing: border-box; }
+/* Element defaults live in `base` deliberately. An unlayered rule outranks
+   every Tailwind utility, so `h1 { font-size: 30px }` written outside a layer
+   would silently beat `class="text-[15px]"` on the one heading that needs to be
+   smaller. Inside `base` the utility wins, which is the relationship a default
+   is supposed to have with an override. */
+@layer base {
+  * { box-sizing: border-box; }
 
-html, body {
-  margin: 0;
-  padding: 0;
-  background: var(--color-canvas);
-  color: var(--color-text);
-  /* Spelled out rather than `var(--font-sans)`: Tailwind v4 tree-shakes theme
-     variables no utility references, so relying on it here silently fell back
-     to Times. The stack is stated where it is used. */
-  font-family: var(--font-inter), ui-sans-serif, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
-  /* Operational software is read for hours; optimise for legibility. The board
-     sets chrome at 12.5px, which is right for glanceable navigation and wrong
-     for content. Chrome follows the board; content stays at 14px. */
-  font-size: 14px;
-  line-height: 1.55;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--color-canvas);
+    color: var(--color-text);
+    /* Spelled out rather than `var(--font-sans)`: Tailwind v4 tree-shakes theme
+       variables no utility references, so relying on it here silently fell back
+       to Times. The stack is stated where it is used. */
+    font-family: var(--font-inter), ui-sans-serif, -apple-system, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
 
-/* The board's headings are Light (300), not bold. Weight is not how this
-   interface signals importance — size, space and position are. */
-h1, h2, h3 {
-  font-weight: 300;
-  letter-spacing: -0.02em;
-  margin: 0;
-}
+  /* The mockup's ladder: a 30px page title, 17px card titles, 14px body. Weight
+     does the work here, not size alone — the page title is Regular and the card
+     titles Medium, which is why the page reads calm rather than shouty. */
+  h1, h2, h3 { margin: 0; letter-spacing: -0.015em; }
+  h1 { font-size: 30px; line-height: 38px; font-weight: 400; }
+  h2 { font-size: 17px; line-height: 24px; font-weight: 500; }
+  h3 { font-size: 15px; line-height: 22px; font-weight: 500; }
 
-/* Focus is never removed, only restyled. Keyboard users are first-class.
-   Two-tone so the ring survives on both gold and neutral surfaces. */
-:focus-visible {
-  outline: 2px solid var(--color-accent-ink);
-  outline-offset: 2px;
-  border-radius: var(--radius-xs);
+  /**
+   * The surfaces the browser draws for us still carry the design. Selection,
+   * caret and scrollbar ship with defaults that belong to no design system — a
+   * blue selection highlight on a teal page is the loudest un-branded thing on
+   * the screen, and it is the detail that gets skipped.
+   */
+  ::selection { background: var(--color-accent-subtle); color: var(--color-text); }
+
+  :root { accent-color: var(--color-accent); caret-color: var(--color-accent-ink); }
+
+  * { scrollbar-color: var(--color-line-strong) transparent; scrollbar-width: thin; }
+  ::-webkit-scrollbar { width: 11px; height: 11px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line-strong);
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-tertiary);
+    background-clip: content-box;
+  }
+
+  /* Focus is never removed, only restyled. Keyboard users are first-class. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent-ink);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
 }
 
 /**
  * The two places Bible V4 §1.B permits translucency: a scrim behind a temporary
  * layer, and the temporary layer itself. Nothing persistent may use either.
  */
-.verity-scrim {
-  background: color-mix(in srgb, #06060a 45%, transparent);
-}
+.verity-scrim { background: var(--color-scrim); }
 
 .verity-overlay {
-  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  background: var(--color-overlay);
   backdrop-filter: blur(20px) saturate(1.4);
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
 }
