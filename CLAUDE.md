@@ -87,6 +87,38 @@ Every concrete technology choice must cite its authority using one of:
 `Authority: Spec [REQ-ID]` | `Authority: DEC-[N]` | `Authority: EXISTING INFRASTRUCTURE` |
 `Authority: IMPLEMENTATION DECISION REQUIRED`.
 
+## Experience System — approved visual direction (ADR-011)
+
+Verity's approved visual system is **premium Apple-like minimalism combined with restrained,
+purposeful glassmorphism**. The product-owner-supplied Verity reference boards are the visual
+target; `verity-app-ui-mockups/` is the identity authority.
+
+- **Do not flatten the UI into generic opaque enterprise-SaaS surfaces.** A sidebar plus opaque
+  cards plus hairline borders is the failure mode, not the goal.
+- **Brand and accent are separate systems.** The Verity mark is a fixed asset and is never
+  recoloured by the interface. The Experience *accent* is configurable — ten approved presets
+  (Warm Sand Gold, Champagne, Verity Mint, Ocean Blue, Slate Blue, Indigo, Violet, Emerald,
+  Rose, Graphite) plus custom hex — and **defaults to Warm Sand Gold `#D4A017`** because that is
+  the brand's colour. The reference boards render in Verity Mint; that is a preset, not a
+  rebrand. Semantic colours are independent of both: accent is brand, semantic is meaning.
+- **Never hard-code an accent.** Everything derives from `--accent-seed` through `color-mix` in
+  `globals.css`. Adding a component needs no accent work; changing the accent needs no component
+  work. Contrast is computed in `src/server/platform/accent.ts`, never assumed — white does not
+  work on every accent.
+- **Glass must be purposeful, accessible, performant and hierarchical.** Apply it by material
+  level, never indiscriminately. Dense tables, long-form text, high-density forms, semantic
+  status and destructive confirmation stay solid.
+- **Never trade accessibility for appearance.** If glass drops text below WCAG AA against the
+  *composited* result, change the material — not the requirement.
+- **Light and dark are two material interpretations of one system**, not two designs.
+- When implementation conflicts with the approved reference, preserve the reference's material
+  hierarchy unless doing so violates accessibility, performance, or an explicit higher-order
+  product rule.
+
+Anti-regression: do not flatten glass into opaque cards without a stated reason, do not replace
+gold with teal, do not reintroduce scarlet, do not remove atmospheric depth, do not turn the
+shell into generic SaaS, do not apply glass indiscriminately.
+
 ## Constitutional invariants (non-negotiable)
 
 - **INV-001** Strict tenancy isolation — every read/write filtered by tenant; no cross-tenant foreign keys.
@@ -146,7 +178,10 @@ workflows, routes, or terminology, and never add a compatibility layer for them.
 5. `SpecRefTarget` enum: `VEHICLE_BRAND`, `VEHICLE_MODEL`, `VEHICLE_GENERATION`, `DESIGN`, `COLOR`
 6. `SystemRole` enum: `OWNER`, `CO_OWNER`, `MANAGER`, `SUPERVISOR`, `WORKER`, `STORE_MANAGER` — use dynamic Verb+Entity+Scope permissions
 7. Entities `ProductionBatch`, `BomMode`, `QCTemplate`
-8. `.verity-glass` / glassmorphism as UI identity (banned, Bible V4)
+8. `.verity-glass` as a class name, and glass applied as **decoration** — indiscriminate
+   blur, ornamental transparency, low-contrast text over glass. Structural glass is now
+   permitted and expected: see **ADR-011**, which supersedes the stricter reading of
+   Bible V4 §1.B that this line previously carried
 9. Routes `/owner`, `/worker`, `/inspector`, `/supervisor`, `/verity` (legacy role-based routing)
 10. `@@map` to VEDA schema naming
 
@@ -165,6 +200,12 @@ any requirement written because it is "common in ERP/SaaS" rather than traced to
 - **ADR-008** `Resource` is a single schedulable unit backed by exactly one `Party` or `Asset`. Crews, pools, rooms-as-sets and capacity groups are `ResourceGroup` compositions, not a parallel type. Availability and conflict detection run against Resources only. Supersedes ADR-002.
 - **ADR-009** `StateCategory` is closed at `Draft | Pending | Active | Blocked | Completed | Cancelled` — behavioural, not domain. SLA clocks read `category` only, never `key` or `label`. Only `Completed` and `Cancelled` may be terminal.
 - **ADR-010** The spec `Status` field records **provenance**, not ratification. Only `[UNKNOWN_REASON: INTENTIONALLY_DEFERRED]` (6 uses) withholds permission to implement; every other value is permissive. See `verity-spec/00_governance/status-taxonomy.md`.
+- **ADR-011** Glass is a **controlled material system**, not a decoration. Translucency is
+  permitted on persistent surfaces where it establishes depth and hierarchy, bound by six
+  constraints (composited-contrast AA, capped blur layers, hierarchy-first, light/dark parity,
+  reduced-transparency honoured, content over effect). Dense tables, long-form text, forms,
+  semantic status and destructive confirmation stay solid. Supersedes the *interpretation* of
+  Bible V4 §1.B recorded in `globals.css` and the shell audits — not §1.B's text.
 
 ## Identity shape (already decided, do not re-litigate)
 

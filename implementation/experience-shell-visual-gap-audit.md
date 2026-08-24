@@ -3,6 +3,12 @@
 > Current canonical readiness artifact: [`final-platform-readiness.md`](final-platform-readiness.md).
 > Retained as historical evidence; not rewritten.
 
+> **Visual interpretation superseded by ADR-011.** This document records that Bible V4
+> §1.B forbids persistent glass, and composites the reference boards' translucent chrome
+> to solid colour on that basis. ADR-011 supersedes that *interpretation*: glass is a
+> controlled material system and is permitted on persistent surfaces within stated
+> constraints. §1.B's text is unchanged. Everything else here still stands.
+
 # Experience Shell — Visual Gap Audit
 
 **Date:** 2026-08-24
