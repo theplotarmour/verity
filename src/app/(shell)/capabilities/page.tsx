@@ -1,7 +1,11 @@
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { DataTable } from "@/components/ui/DataTable";
-import { PageHeader, Stat } from "@/components/ui/primitives";
+import {
+  PageHeader,
+  Stat,
+  StatRow,
+} from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
 
@@ -50,12 +54,11 @@ export default async function CapabilityRegistryPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Administration"
         title="Capability registry"
         description="Every capability installed on the platform, and whether this tenant has activated it."
       />
 
-      <div className="mb-6 grid grid-cols-2 items-stretch gap-3 sm:grid-cols-3">
+      <StatRow cols={3} className="mb-6">
         <Stat label="Installed" value={rows.length} hint="Available on the platform" />
         <Stat
           label="Active here"
@@ -66,7 +69,7 @@ export default async function CapabilityRegistryPage() {
           label="Not activated"
           value={rows.filter((r) => r.status === "Not activated").length}
         />
-      </div>
+      </StatRow>
 
       <DataTable
         caption="Capabilities"

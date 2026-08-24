@@ -1,7 +1,7 @@
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { DataTable } from "@/components/ui/DataTable";
-import { PageHeader, Panel } from "@/components/ui/primitives";
+import { PageHeader, Panel, Stat, StatRow } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
 
@@ -36,10 +36,18 @@ export default async function ConfigurationPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Administration"
         title="Configuration"
         description="Values resolve narrowest-first: user, then organization, then tenant, then platform default."
       />
+
+      {/* Which of these values this tenant actually owns, and which are the
+          platform's own read-only defaults. That distinction is the whole point
+          of the resolution order, so it belongs above the table. */}
+      <StatRow cols={3} className="mb-6">
+        <Stat label="Parameters" value={rows.length} />
+        <Stat label="Set by this tenant" value={rows.filter((r) => r.scope !== "Global").length} />
+        <Stat label="Platform defaults" value={rows.filter((r) => r.scope === "Global").length} />
+      </StatRow>
 
       <DataTable
         caption="Configuration parameters"

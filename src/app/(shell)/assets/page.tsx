@@ -4,7 +4,13 @@ import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { ENTITY_ASSET } from "@/server/capabilities/asset";
 import { DataTable } from "@/components/ui/DataTable";
-import { DemoDataNotice, PageHeader, PermissionDenied } from "@/components/ui/primitives";
+import {
+  DemoDataNotice,
+  PageHeader,
+  PermissionDenied,
+  Stat,
+  StatRow,
+} from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
 
@@ -40,10 +46,23 @@ export default async function AssetsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Capability"
         title="Assets"
         description="Physical equipment. Equipment-specific attributes live in custom fields, never as platform columns."
       />
+
+      {/* The same opening band every screen uses: real counts, grouped by the
+          canonical StateCategory (ADR-009) rather than by state key, so the
+          figures stay correct when a tenant renames its own labels. */}
+      <StatRow cols={4} className="mb-6">
+        <Stat label="Assets in scope" value={data.length} />
+        <Stat label="Active" value={data.filter((r) => r.category === "Active").length} />
+        <Stat label="Blocked" value={data.filter((r) => r.category === "Blocked").length} />
+        <Stat
+          label="Unassigned"
+          value={data.filter((r) => r.location === "Unassigned").length}
+        />
+      </StatRow>
+
       <DataTable
         caption="Assets"
         rows={data}
@@ -52,6 +71,7 @@ export default async function AssetsPage() {
           { key: "location", header: "Location" },
           { key: "state", header: "State", variant: "state", categoryKey: "category" },
         ]}
+        actionHref="/assets/{id}"
         emptyTitle="No assets registered"
         emptyDescription="An asset is physical equipment the platform tracks. None has been registered in your scope."
       />

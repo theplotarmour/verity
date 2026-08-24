@@ -4,7 +4,13 @@ import { scopeFilter } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { ENTITY_LOCATION } from "@/server/capabilities/location";
 import { DataTable } from "@/components/ui/DataTable";
-import { DemoDataNotice, PageHeader, PermissionDenied } from "@/components/ui/primitives";
+import {
+  DemoDataNotice,
+  PageHeader,
+  PermissionDenied,
+  Stat,
+  StatRow,
+} from "@/components/ui/primitives";
 import { CreateLocationForm } from "./CreateLocationForm";
 
 export const dynamic = "force-dynamic";
@@ -56,19 +62,33 @@ export default async function LocationsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Capability"
         title="Locations"
         description="Operational sites. A Location is where work happens; the Place it references is where it physically is."
-        actions={<CreateLocationForm organizations={result.organizations} />}
       />
+
+      {/* A band of real counts, as the mockup opens every screen. Each is a row
+          the platform can count right now — no trends, no targets, no
+          sparklines, because a comparison implies a series the platform has no
+          analytics layer to derive. */}
+      <StatRow cols={3} className="mb-6">
+        <Stat label="Sites in scope" value={result.rows.length} />
+        <Stat label="Linked to a place" value={result.rows.filter((r) => r.place !== "No place linked").length} />
+        <Stat
+          label="Geofences"
+          value={result.rows.reduce((n, r) => n + Number(r.geofences ?? 0), 0)}
+        />
+      </StatRow>
+
       <DataTable
         caption="Locations"
         rows={result.rows}
+        toolbar={<CreateLocationForm organizations={result.organizations} />}
         columns={[
           { key: "name", header: "Location", variant: "link", href: "/locations/{id}", subKey: "organization" },
           { key: "place", header: "Place" },
           { key: "geofences", header: "Geofences", numeric: true },
         ]}
+        actionHref="/locations/{id}"
         emptyTitle="No locations in your scope"
         emptyDescription="Locations you can see are limited to your organization and the branches beneath it."
       />

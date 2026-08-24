@@ -14,6 +14,7 @@ import {
   Row,
   RowList,
   Stat,
+  StatRow,
 } from "@/components/ui/primitives";
 import { AuditTrail } from "@/components/shell/AuditTrail";
 import { buildFormDescriptor } from "@/server/platform/experience";
@@ -73,22 +74,22 @@ export default async function LocationDetailPage({
     <>
       {/*
         A detail page is an operational record, not a stack of equal cards. The
-        eyebrow carries the parent so the title can be the site's own name, and
-        the identity block sits at full width above the split — it is what the
-        page is ABOUT, and burying it in a left column beside a history feed
-        gives it the same weight as an audit row.
+        title is the site's own name and the description carries the parent, so
+        the masthead reads as one statement rather than a label stacked above a
+        heading. The identity block sits at full width above the split — it is
+        what the page is ABOUT, and burying it in a left column beside a history
+        feed gives it the same weight as an audit row.
       */}
       <PageHeader
-        eyebrow={`Location · ${location.organization.name}`}
         title={location.name}
         description={
           location.place
-            ? `Sited at ${location.place.name}.`
-            : "No place linked — this site has no physical coordinates."
+            ? `${location.organization.name} · sited at ${location.place.name}.`
+            : `${location.organization.name} · no place linked, so this site has no physical coordinates.`
         }
       />
 
-      <div className="mb-6 grid grid-cols-2 items-stretch gap-3 sm:grid-cols-4">
+      <StatRow className="mb-6">
         <Stat label="Assets on site" value={location.assets.length} />
         <Stat label="Assigned users" value={location.assignments.length} />
         <Stat label="Geofences" value={location.geofences.length} />
@@ -100,7 +101,7 @@ export default async function LocationDetailPage({
               : "—"
           }
         />
-      </div>
+      </StatRow>
 
       <div className="grid items-start gap-6 lg:grid-cols-[1.35fr_1fr]">
         <div className="flex flex-col gap-6">

@@ -3,7 +3,15 @@ import { withTenant } from "@/server/platform/tenancy";
 import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { ENTITY_BOOKING } from "@/server/capabilities/scheduling";
-import { EmptyState, PageHeader, Panel, PermissionDenied, Stat, Surface } from "@/components/ui/primitives";
+import {
+  EmptyState,
+  PageHeader,
+  Panel,
+  PermissionDenied,
+  Stat,
+  StatRow,
+  Surface,
+} from "@/components/ui/primitives";
 import { ScheduleGrid } from "./ScheduleGrid";
 
 export const dynamic = "force-dynamic";
@@ -72,7 +80,6 @@ export default async function SchedulingPage() {
         only view that answers "who is free when".
       */}
       <PageHeader
-        eyebrow="Capability"
         title="Scheduling"
         description="Resources across time. A resource is a single schedulable unit backed by exactly one person or asset."
       />
@@ -86,11 +93,11 @@ export default async function SchedulingPage() {
         </Surface>
       ) : (
         <>
-          <div className="mb-6 grid grid-cols-2 items-stretch gap-3 sm:grid-cols-3">
+          <StatRow cols={3} className="mb-6">
             <Stat label="Resources" value={data.resources.length} hint="Schedulable units" />
             <Stat label="Bookings" value={data.bookings.length} hint="In the 14-day window" />
             <Stat label="Unavailable" value={data.unavailable.length} hint="Declared windows" />
-          </div>
+          </StatRow>
 
           <ScheduleGrid
             resources={data.resources}
