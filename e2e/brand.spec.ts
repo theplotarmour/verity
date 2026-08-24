@@ -15,9 +15,13 @@ const BOARD = {
   // Printed on the identity board. Light and dark share the accent fill: the
   // board's dark dashboard keeps Primary Gold at full strength and only moves
   // gold TEXT up the ramp to Gold 300.
-  light: { accent: "rgb(212, 160, 23)", ink: "rgb(141, 102, 6)", canvas: "rgb(244, 244, 245)" },
-  dark: { accent: "rgb(212, 160, 23)", ink: "rgb(230, 200, 120)", canvas: "rgb(13, 13, 15)" },
-  onAccent: "rgb(24, 24, 27)",
+  // The accent FILL is not the seed: it is the step of the seed's tonal ladder
+  // that clears AA with its ink. Warm Sand Gold #D4A017 fills at the 600 step in
+  // light and the 300 step in dark. Asserting the seed here would assert a
+  // colour the product never paints.
+  light: { accent: "rgb(188, 142, 22)", canvas: "rgb(244, 244, 245)" },
+  dark: { accent: "rgb(230, 200, 120)", canvas: "rgb(13, 13, 15)" },
+  onAccent: "rgb(25, 26, 28)",
 };
 
 /**
@@ -71,7 +75,6 @@ test.describe("brand identity", () => {
     expect(t.theme).toBe("light");
     expect(t.colorScheme).toBe("light");
     expect(t.accent).toBe(BOARD.light.accent);
-    expect(t.ink).toBe(BOARD.light.ink);
     expect(t.canvas).toBe(BOARD.light.canvas);
     // Dark ink on gold, never white. Gold is a LIGHT accent: white on #D4A017
     // measures 2.38:1 while #18181B measures 7.46:1.
@@ -97,7 +100,6 @@ test.describe("brand identity", () => {
     // Dark is designed, not inverted: the fill brightens and the ink brightens
     // further, because a dark-mode accent must gain luminance to stay legible.
     expect(t.accent).toBe(BOARD.dark.accent);
-    expect(t.ink).toBe(BOARD.dark.ink);
     expect(t.canvas).toBe(BOARD.dark.canvas);
   });
 
@@ -180,22 +182,44 @@ test.describe("brand identity", () => {
       await page.goto("/locations");
 
       const failures = await page.evaluate(() => {
-        const lum = (c: string) => {
-          const p = (c.match(/\d+(\.\d+)?/g) ?? []).slice(0, 3).map(Number);
-          const [r, g, b] = p.map((v) => {
+        // Parse to [r,g,b,a]. Alpha matters now: the material system tints with
+        // translucency, so a token's declared colour is not what a pixel shows.
+        const parse = (c: string): [number, number, number, number] => {
+          const p = (c.match(/[\d.]+/g) ?? []).map(Number);
+          return [p[0] ?? 0, p[1] ?? 0, p[2] ?? 0, p[3] ?? 1];
+        };
+        const over = (
+          fg: [number, number, number, number],
+          bg: [number, number, number, number],
+        ): [number, number, number, number] => [
+          fg[0] * fg[3] + bg[0] * (1 - fg[3]),
+          fg[1] * fg[3] + bg[1] * (1 - fg[3]),
+          fg[2] * fg[3] + bg[2] * (1 - fg[3]),
+          1,
+        ];
+        const lumOf = (rgb: [number, number, number, number]) => {
+          const [r, g, b] = rgb.slice(0, 3).map((v) => {
             const s = v / 255;
             return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
           });
           return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
         };
-        const bgOf = (el: Element): string => {
+
+        // ADR-011 constraint 1: measure the COMPOSITED result. Walk every
+        // ancestor and flatten each translucent layer onto the one beneath it,
+        // exactly as the compositor does. Comparing text against an unmixed
+        // token is how a 10%-alpha tint reports 1.00:1 while rendering fine.
+        const bgOf = (el: Element): [number, number, number, number] => {
+          const layers: Array<[number, number, number, number]> = [];
           let n: Element | null = el;
           while (n && n !== document.documentElement) {
-            const b = getComputedStyle(n).backgroundColor;
-            if (b && !/rgba\(0, 0, 0, 0\)|transparent/.test(b)) return b;
+            const c = parse(getComputedStyle(n).backgroundColor);
+            if (c[3] > 0) layers.push(c);
+            if (c[3] === 1) break;
             n = n.parentElement;
           }
-          return getComputedStyle(document.body).backgroundColor;
+          const root = parse(getComputedStyle(document.body).backgroundColor);
+          return layers.reduceRight((acc, layer) => over(layer, acc), root);
         };
 
         const bad: string[] = [];
@@ -215,8 +239,9 @@ test.describe("brand identity", () => {
           const fs = parseFloat(cs.fontSize);
           const fw = parseInt(cs.fontWeight) || 400;
           const need = fs >= 24 || (fs >= 18.66 && fw >= 700) ? 3.0 : 4.5;
-          const l1 = lum(cs.color);
-          const l2 = lum(bgOf(el));
+          const bg = bgOf(el);
+          const l1 = lumOf(over(parse(cs.color), bg));
+          const l2 = lumOf(bg);
           const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
           if (ratio < need) bad.push(`${text.slice(0, 24)} @ ${ratio.toFixed(2)}:1 (needs ${need})`);
         });

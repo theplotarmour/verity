@@ -21,8 +21,11 @@ export type NavArea = { group: string; items: NavItem[] };
  *
  * WHAT THE MOCKUP'S SHELL IS
  * A 234px sidebar carrying the lockup, a NAMED navigation list, and the signed-
- * in person at the bottom. It is separated from the content by one hairline and
- * no fill. Navigation items are icon plus label at a 63px pitch; the current
+ * in person at the bottom. It is LEVEL 1 of the material system (ADR-011): the
+ * quietest glass, separated from the content by an alpha hairline rather than a
+ * fill, so it reads as part of the same environment rather than as a docked
+ * panel. The top bar is level 2/4 — floating controls over the atmosphere, not
+ * a toolbar with a background. Navigation items are icon plus label at a 63px pitch; the current
  * one sits on a pale accent bed with an accent glyph and near-black label.
  *
  * Labels are not optional. An icon-only rail makes an operator learn nine
@@ -92,10 +95,11 @@ export function ShellChrome({
                     onClick={() => setNavOpen(false)}
                     aria-current={current ? "page" : undefined}
                     className={
-                      "flex h-[52px] items-center gap-3.5 rounded-lg px-3.5 text-[15px] no-underline transition-colors " +
+                      "flex h-[52px] items-center gap-3.5 rounded-lg px-3.5 text-[15px] no-underline " +
+                      "transition-[background-color,color] duration-200 " +
                       (current
-                        ? "bg-accent-subtle font-medium text-text"
-                        : "text-text-secondary hover:bg-surface-sunken hover:text-text")
+                        ? "bg-accent-subtle font-medium text-text shadow-[inset_0_1px_0_var(--color-accent-line)]"
+                        : "text-text-secondary hover:bg-glass-2 hover:text-text")
                     }
                   >
                     {item.icon && (
@@ -122,7 +126,7 @@ export function ShellChrome({
       <form action={signOut} className="mt-auto pt-4">
         <button
           type="submit"
-          className="flex w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-2 py-2 text-left transition-colors hover:bg-surface-sunken"
+          className="flex w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-2 py-2 text-left transition-colors hover:bg-glass-2"
         >
           <span
             className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-subtle text-[13px] font-medium text-accent-ink"
@@ -146,7 +150,7 @@ export function ShellChrome({
   return (
     <div className="min-h-dvh lg:grid" style={{ gridTemplateColumns: "234px 1fr" }}>
       {/* ----------------------------- sidebar ----------------------------- */}
-      <aside className="hidden flex-col border-r border-line bg-chrome px-4 pb-5 pt-7 lg:flex">
+      <aside className="glass-shell hidden flex-col border-r border-line px-4 pb-5 pt-7 lg:flex">
         <Link href="/" aria-label="Verity" className="mb-8 block px-2 no-underline">
           <VerityLockup size={30} className="text-text" />
         </Link>
@@ -159,7 +163,7 @@ export function ShellChrome({
       <div className="flex min-w-0 flex-col">
         {/* Mobile bar. The mockups have no small-screen composition to copy, so
             this states the identity and offers the sheet, and nothing else. */}
-        <div className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-line bg-canvas px-4 lg:hidden">
+        <div className="glass-shell sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-line px-4 lg:hidden">
           <Link href="/" aria-label="Verity" className="no-underline">
             <VerityLockup size={22} className="text-text" />
           </Link>
@@ -178,8 +182,9 @@ export function ShellChrome({
 
         {navOpen && (
           <div className="fixed inset-0 z-40 flex flex-col lg:hidden">
-            {/* Bible V4 §1.B permits translucency only for a temporary
-                contextual layer. A scrim behind a sheet is exactly that. */}
+            {/* A scrim behind a temporary sheet. Under ADR-011 glass is a
+                material system rather than an exception, but this surface's
+                treatment is unchanged. */}
             <button
               className="verity-scrim absolute inset-0 border-0"
               aria-label="Close navigation"
@@ -187,7 +192,7 @@ export function ShellChrome({
             />
             <div
               id="mobile-nav"
-              className="verity-overlay relative mt-14 flex max-h-[calc(100dvh-3.5rem)] flex-col gap-5 overflow-y-auto border-t border-line p-4"
+              className="glass-overlay relative mt-14 flex max-h-[calc(100dvh-3.5rem)] flex-col gap-5 overflow-y-auto border-t border-line p-4"
             >
               <OrganizationSwitcher memberships={memberships} active={active} instanceId="sheet" />
               {navList()}
@@ -197,7 +202,7 @@ export function ShellChrome({
         )}
 
         {/* -------------------------- top bar --------------------------- */}
-        <div className="hidden h-[76px] shrink-0 items-center gap-4 px-8 lg:flex">
+        <div className="hidden h-[84px] shrink-0 items-center gap-4 px-8 lg:flex">
           {/* Search is centred and dominant, as the mockup draws it. It is a
               real control over the records already loaded on the page, not a
               platform-wide index — platform search is DEFERRED and drawing a
@@ -215,7 +220,7 @@ export function ShellChrome({
               id="shell-search"
               type="search"
               placeholder="Search this page"
-              className="h-11 w-full rounded-xl border border-line bg-control pl-12 pr-4 text-[14px] text-text placeholder:text-text-tertiary transition-colors hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-subtle)] focus:outline-none"
+              className="glass-control h-12 w-full rounded-xl pl-12 pr-4 text-[14px] text-text placeholder:text-text-tertiary transition-[border-color,box-shadow] duration-200 hover:border-line-strong focus:border-accent focus:shadow-[var(--shadow-highlight),0_0_0_3px_var(--color-accent-subtle)] focus:outline-none"
             />
           </div>
 
@@ -225,13 +230,13 @@ export function ShellChrome({
             <Link
               href="/audit"
               title="Recent activity"
-              className="grid size-11 place-items-center rounded-xl border border-line bg-surface text-text-secondary no-underline transition-colors hover:bg-surface-sunken hover:text-text"
+              className="glass-control grid size-11 place-items-center rounded-xl text-text-secondary no-underline transition-colors hover:text-text"
             >
               <Icon name="bell" size={19} />
               <span className="sr-only">Recent activity</span>
             </Link>
             <span
-              className="grid size-11 shrink-0 place-items-center rounded-full bg-accent-subtle text-[13px] font-medium text-accent-ink"
+              className="grid size-11 shrink-0 place-items-center rounded-full bg-accent-subtle text-[13px] font-medium text-accent-ink ring-1 ring-[var(--color-accent-line)]"
               aria-hidden="true"
             >
               {userInitials}

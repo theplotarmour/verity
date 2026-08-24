@@ -41,17 +41,36 @@ function cx(...parts: Array<string | false | undefined>): string {
 export function Surface({
   children,
   bordered = true,
+  solid = false,
   className,
 }: {
   children: ReactNode;
   bordered?: boolean;
+  /**
+   * Level 5 — an opaque surface.
+   *
+   * ADR-011 keeps dense tables, long-form text, high-density forms, semantic
+   * status and destructive confirmation off the glass, because translucency
+   * costs contrast exactly where legibility matters most. This is how a caller
+   * says so, rather than every screen re-deciding.
+   */
+  solid?: boolean;
   className?: string;
 }) {
-  return (
-    <div className={cx("rounded-xl bg-surface", bordered && "border border-line", className)}>
-      {children}
-    </div>
-  );
+  if (solid) {
+    return (
+      <div
+        className={cx(
+          "rounded-xl bg-surface shadow-sm",
+          bordered && "border border-line",
+          className,
+        )}
+      >
+        {children}
+      </div>
+    );
+  }
+  return <div className={cx("glass-card", className)}>{children}</div>;
 }
 
 /**
@@ -183,7 +202,7 @@ export function Stat({
     return (
       <a
         href={href}
-        className="flex flex-col rounded-md px-5 py-4 no-underline transition-colors hover:bg-surface-sunken"
+        className="flex flex-col rounded-md px-5 py-4 no-underline transition-colors hover:bg-glass-2"
       >
         {body}
       </a>
@@ -250,13 +269,19 @@ export function Button({ variant = "secondary", size = "md", className, ...rest 
     md: "h-11 px-5 text-[14px]",
   };
 
-  // Primary is the mockup's teal with a white label. See globals.css for the
-  // contrast note on `--color-accent-on`; it is one token if that is reversed.
+  // Primary is Warm Sand Gold with dark ink. Gold is a LIGHT accent: white on
+  // #D4A017 measures 2.38:1 while #18181B measures 7.46:1, so dark ink is both
+  // the brand treatment and the accessible one.
+  // `text-accent-on` is stamped by the server after a contrast comparison, so a
+  // light accent gets dark ink and a dark accent gets white — automatically, for
+  // any preset or custom hex. Nothing here assumes which.
   const variants = {
-    primary: "bg-accent text-accent-on font-medium hover:bg-accent-hover",
-    secondary: "border border-line bg-surface text-text font-medium hover:bg-surface-sunken",
-    ghost: "bg-transparent text-text-secondary font-medium hover:bg-surface-sunken hover:text-text",
-    danger: "border border-danger/40 bg-surface text-danger font-medium hover:bg-danger-subtle",
+    primary:
+      "bg-accent text-accent-on font-medium hover:bg-accent-hover " +
+      "shadow-[var(--shadow-highlight),0_8px_22px_-8px_var(--color-accent-line)]",
+    secondary: "glass-control text-text font-medium hover:border-line-strong",
+    ghost: "bg-transparent text-text-secondary font-medium hover:bg-glass-2 hover:text-text",
+    danger: "border border-danger/40 bg-danger-subtle text-danger font-medium hover:border-danger/60",
   };
 
   return <button className={cx(base, sizes[size], variants[variant], className)} {...rest} />;
@@ -282,10 +307,9 @@ export function IconButton({
   tone?: "default" | "accent" | "bare";
 }) {
   const tones = {
-    default:
-      "border border-line bg-surface text-text-secondary hover:text-text hover:bg-surface-sunken",
+    default: "glass-control text-text-secondary hover:text-text",
     accent: "border border-transparent bg-accent text-accent-on hover:bg-accent-hover",
-    bare: "border border-transparent bg-transparent text-text-secondary hover:text-text hover:bg-surface-sunken",
+    bare: "border border-transparent bg-transparent text-text-secondary hover:text-text hover:bg-glass-2",
   };
   return (
     <button
@@ -408,10 +432,11 @@ export function Field({
  * as unfinished without anyone being able to say why.
  */
 const controlClass =
-  "w-full h-11 px-4 rounded-lg bg-control text-text text-[14px] " +
-  "border border-line placeholder:text-text-tertiary transition-colors " +
+  "glass-control w-full h-11 px-4 rounded-lg text-text text-[14px] " +
+  "placeholder:text-text-tertiary transition-[border-color,box-shadow] duration-200 " +
   "hover:border-line-strong " +
-  "focus:outline-none focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-subtle)] " +
+  "focus:outline-none focus:border-accent " +
+  "focus:shadow-[var(--shadow-highlight),0_0_0_3px_var(--color-accent-subtle)] " +
   "disabled:cursor-not-allowed disabled:opacity-55";
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
