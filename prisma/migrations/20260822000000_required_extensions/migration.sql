@@ -1,0 +1,73 @@
+-- Required PostgreSQL extensions — reproducibility fix (Phase 0.9, second defect).
+--
+-- WHY THIS EXISTS
+-- The migration history reproduced Verity's schema and — after
+-- 20260826000000_runtime_role_privileges — its runtime privileges, but still did
+-- not reproduce the extensions the runtime actually calls. `pgcrypto` existed in
+-- the development database because Supabase provisioned it, not because Verity
+-- asked for it. On a database built from migrations alone it was absent, and the
+-- encrypted credential registry (MET-AUT-003) silently did not work: three
+-- credential tests failed, and the wrong-key reveal path returned NULL instead
+-- of raising.
+--
+-- Evidence: implementation/pgcrypto-dependency-investigation.md
+--
+-- WHY IT RUNS FIRST
+-- This migration is dated ahead of 20260823000000_init_tenancy so it applies
+-- before anything else, and specifically before 20260823090000_workflow_runtime
+-- creates `verity.credential_store` and `verity.credential_reveal`. Those
+-- functions call `pgp_sym_encrypt` and `pgp_sym_decrypt`.
+--
+-- A later placement also "works", because PostgreSQL does not resolve function
+-- names inside a PL/pgSQL body at CREATE time — the function would be created
+-- happily and fail only when first called. Relying on deferred name resolution
+-- to hide a missing dependency is exactly the reasoning that produced this
+-- defect, so the dependency is made explicit in the ordering instead.
+--
+-- WHY NO SCHEMA IS NAMED
+-- Deliberately no `WITH SCHEMA`. On a clean PostgreSQL database the `extensions`
+-- schema does not exist — it is a Supabase convention, not a platform guarantee
+-- — so `WITH SCHEMA extensions` would abort the migration on precisely the
+-- fresh-database case this migration exists to fix. Unqualified, the extension
+-- installs into the first schema on the search_path (`public` on a clean
+-- database) and stays where it already is on a database that has it.
+--
+-- Both locations resolve at call time: `verity.credential_store` and
+-- `verity.credential_reveal` declare
+-- `SET search_path = public, verity, extensions, pg_temp`, which covers the
+-- clean-database location and the Supabase one.
+--
+-- WHAT IS DEPENDED ON, AND WHAT IS NOT
+-- `pgcrypto` is a genuine application dependency: three call sites in
+-- 20260823090000_workflow_runtime.
+--
+-- Deliberately NOT created here, because Verity does not use them:
+--   uuid-ossp          — zero uses of uuid_generate_v*. Five migrations call
+--                        gen_random_uuid(), a PostgreSQL core builtin since 13.
+--   pg_stat_statements — zero uses in src/ or prisma/. Platform observability
+--                        supplied by the deployment environment.
+-- Creating either for parity with the development database would restate the
+-- same error this migration corrects, in the opposite direction: treating
+-- environment furniture as an application requirement.
+--
+-- PRIVILEGES
+-- `pgcrypto` is a TRUSTED extension in PostgreSQL 13+, so the database owner may
+-- create it without SUPERUSER. Verified: the migration role created it on a
+-- disposable database while NOT being a superuser.
+--
+-- The extension's functions carry PostgreSQL's default EXECUTE-to-PUBLIC, and
+-- 20260826000000_runtime_role_privileges grants the runtime role USAGE on
+-- `public`, so no additional grant is required. pgcrypto creates functions only,
+-- no tables, so it adds nothing for that migration's table loop to grant.
+--
+-- Idempotent: `IF NOT EXISTS` is a clean no-op where the extension already
+-- exists, whatever schema it lives in. This migration therefore changes nothing
+-- on the existing development database.
+--
+-- IF THIS STATEMENT FAILS
+-- A hardened environment that forbids extension creation will fail here, loudly,
+-- at the first migration — rather than succeeding and failing later at the first
+-- credential write. That is the intended behaviour: an unmet dependency should
+-- stop a deployment, not survive it.
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
