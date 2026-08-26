@@ -17,6 +17,8 @@
     "prisma:push": "prisma db push",
     "seed": "tsx prisma/seed.ts",
     "db:migrate": "prisma migrate dev",
+    "deploy:preview": "vercel deploy --yes",
+    "env:pull:preview": "vercel env pull .vercel/env.preview.local --environment=preview --yes",
     "build:analyze": "ANALYZE=true next build --webpack"
   },
   "dependencies": {
