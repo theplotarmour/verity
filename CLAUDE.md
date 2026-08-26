@@ -95,12 +95,16 @@ target; `verity-app-ui-mockups/` is the identity authority.
 
 - **Do not flatten the UI into generic opaque enterprise-SaaS surfaces.** A sidebar plus opaque
   cards plus hairline borders is the failure mode, not the goal.
-- **Brand and accent are separate systems.** The Verity mark is a fixed asset and is never
-  recoloured by the interface. The Experience *accent* is configurable — ten approved presets
-  (Warm Sand Gold, Champagne, Verity Mint, Ocean Blue, Slate Blue, Indigo, Violet, Emerald,
-  Rose, Graphite) plus custom hex — and **defaults to Warm Sand Gold `#D4A017`** because that is
-  the brand's colour. The reference boards render in Verity Mint; that is a preset, not a
-  rebrand. Semantic colours are independent of both: accent is brand, semantic is meaning.
+- **Brand and accent are separate systems.** The Verity mark is a fixed asset, monochrome, and is
+  never recoloured by the interface — including in the favicon and app icon. The Experience
+  *accent* is configurable — ten approved presets (Verity Mint, Warm Sand Gold, Champagne, Ocean
+  Blue, Slate Blue, Indigo, Violet, Emerald, Rose, Graphite) plus custom hex — and **defaults to
+  Verity Mint `#00D1B2`**, the swatch `design/verity asthetics.png` labels Primary (ADR-012).
+  Warm Sand Gold `#D4A017` remains a preset. Semantic colours are independent of the accent:
+  accent is theme, semantic is meaning, and with a teal accent that separation is load-bearing —
+  success is a leaf green, deliberately not the accent hue.
+- **The brand sheet is the palette authority.** Neutrals are `#F7F8FA` · `#0F1115` · `#1C1F24` ·
+  `#2A2E33` · `#E6E8EB`; type is Inter (Thin / Light / Regular / Medium); icons are thin outline.
 - **Never hard-code an accent.** Everything derives from `--accent-seed` through `color-mix` in
   `globals.css`. Adding a component needs no accent work; changing the accent needs no component
   work. Contrast is computed in `src/server/platform/accent.ts`, never assumed — white does not
@@ -115,9 +119,13 @@ target; `verity-app-ui-mockups/` is the identity authority.
   hierarchy unless doing so violates accessibility, performance, or an explicit higher-order
   product rule.
 
-Anti-regression: do not flatten glass into opaque cards without a stated reason, do not replace
-gold with teal, do not reintroduce scarlet, do not remove atmospheric depth, do not turn the
-shell into generic SaaS, do not apply glass indiscriminately.
+Anti-regression: do not flatten glass into opaque cards without a stated reason, do not hard-code
+any accent value into a component, do not recolour the mark with the accent, do not collapse
+semantic success into the accent hue, do not reintroduce scarlet, do not remove atmospheric depth,
+do not turn the shell into generic SaaS, do not apply glass indiscriminately.
+
+The earlier rule "do not replace gold with teal" is **withdrawn by ADR-012** — the brand sheet
+names `#00D1B2` Primary, and gold is now one preset among ten.
 
 ## Constitutional invariants (non-negotiable)
 
@@ -205,7 +213,12 @@ any requirement written because it is "common in ERP/SaaS" rather than traced to
   constraints (composited-contrast AA, capped blur layers, hierarchy-first, light/dark parity,
   reduced-transparency honoured, content over effect). Dense tables, long-form text, forms,
   semantic status and destructive confirmation stay solid. Supersedes the *interpretation* of
-  Bible V4 §1.B recorded in `globals.css` and the shell audits — not §1.B's text.
+  Bible V4 §1.B recorded in `globals.css` and the shell audits — not §1.B's text. Its accent-default
+  clause alone is superseded by ADR-012; the material system stands in full.
+- **ADR-012** The brand sheet `design/verity asthetics.png` is the palette authority. Default accent
+  becomes `#00D1B2`; neutrals are reconciled to the sheet; semantic success is retuned away from the
+  accent hue so status and theme cannot read as one signal; the mark is monochrome everywhere,
+  including favicon and app icon. Supersedes ADR-011 in part — accent default only.
 
 ## Identity shape (already decided, do not re-litigate)
 

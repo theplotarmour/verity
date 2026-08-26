@@ -3,13 +3,13 @@ import "server-only";
 /**
  * The Experience System's accent.
  *
- * Authority: ADR-011 and the approved design source `Verity App.dc.html`, whose
- * palette and `onAccent` rule are reproduced exactly.
+ * Authority: ADR-011 (accent architecture and computed contrast) and ADR-012
+ * (which value is the default, and the preset list corrected to the brand sheet).
  *
  * BRAND IS NOT ACCENT. The Verity mark and wordmark are fixed assets and are
- * never recoloured by this. Warm Sand Gold is the DEFAULT accent because it is
- * the brand's colour, but a tenant choosing Ocean Blue changes the interface,
- * not the identity.
+ * never recoloured by this. `#00D1B2` is the DEFAULT accent because the brand
+ * sheet names it Primary, but a tenant choosing Ocean Blue changes the
+ * interface, not the identity.
  *
  * Only two things are computed here rather than in CSS. The 50→900 tonal ladder
  * is derived by `color-mix` in `globals.css`, because a stylesheet that can
@@ -18,11 +18,15 @@ import "server-only";
  * or light — so that decision, and validating a custom hex, live here.
  */
 
-/** The approved presets, names and values exactly as the design source lists them. */
+/**
+ * The approved presets. `Verity Mint` carries the brand sheet's Primary swatch
+ * (ADR-012); it previously held `#0FA894`, a value that appears in neither the
+ * brand sheet nor the theme boards.
+ */
 export const ACCENT_PRESETS = [
+  { name: "Verity Mint", hex: "#00D1B2" },
   { name: "Warm Sand Gold", hex: "#D4A017" },
   { name: "Champagne", hex: "#C39B4E" },
-  { name: "Verity Mint", hex: "#0FA894" },
   { name: "Ocean Blue", hex: "#2E7BE8" },
   { name: "Slate Blue", hex: "#4C6FE0" },
   { name: "Indigo", hex: "#6C5CE0" },
@@ -32,8 +36,11 @@ export const ACCENT_PRESETS = [
   { name: "Graphite", hex: "#5A5F66" },
 ] as const;
 
-/** Warm Sand Gold. The brand's own colour, and the default the design source sets. */
-export const DEFAULT_ACCENT = "#D4A017";
+/**
+ * The brand sheet's Primary swatch. ADR-012 makes it the default accent; the
+ * earlier gold default is retained as an ordinary preset rather than removed.
+ */
+export const DEFAULT_ACCENT = "#00D1B2";
 
 /**
  * The two candidates for text ON the accent.
@@ -65,7 +72,7 @@ export function contrastRatio(a: string, b: string): number {
  * Text colour for a label sitting on the accent fill.
  *
  * Whichever of the two candidates contrasts better wins. This is why a light
- * accent like Warm Sand Gold takes dark ink (7.46:1 rather than white's 2.38:1)
+ * accent like #00D1B2 takes dark ink (7.00:1 rather than white's 2.40:1)
  * while Ocean Blue takes white — and why neither is hard-coded. Assuming white
  * works on every accent is the specific mistake this function exists to prevent.
  */

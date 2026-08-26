@@ -269,9 +269,8 @@ export function Button({ variant = "secondary", size = "md", className, ...rest 
     md: "h-11 px-5 text-[14px]",
   };
 
-  // Primary is Warm Sand Gold with dark ink. Gold is a LIGHT accent: white on
-  // #D4A017 measures 2.38:1 while #18181B measures 7.46:1, so dark ink is both
-  // the brand treatment and the accessible one.
+  // Primary fills with the accent and takes dark ink by default: #00D1B2 is a
+  // LIGHT accent, where white measures 2.40:1 and #191A1C measures 7.00:1.
   // `text-accent-on` is stamped by the server after a contrast comparison, so a
   // light accent gets dark ink and a dark accent gets white — automatically, for
   // any preset or custom hex. Nothing here assumes which.

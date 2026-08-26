@@ -148,22 +148,40 @@ export function ShellChrome({
   }
 
   return (
-    <div className="min-h-dvh lg:grid" style={{ gridTemplateColumns: "234px 1fr" }}>
-      {/* ----------------------------- sidebar ----------------------------- */}
-      <aside className="glass-shell hidden flex-col border-r border-line px-4 pb-5 pt-7 lg:flex">
-        <Link href="/" aria-label="Verity" className="mb-8 block px-2 no-underline">
+    /**
+     * SCROLL OWNERSHIP (ADR-012; work plan D11–D14).
+     *
+     * The shell is fixed and the CONTENT scrolls, rather than the document
+     * scrolling as one long page. That is why the top bar, the sidebar and the
+     * account card stay put: they are not sticky elements racing the viewport,
+     * they simply never move because nothing under them is the scroller.
+     *
+     * `h-dvh` plus `overflow-hidden` here, `min-h-0` on every flex descendant
+     * that must be allowed to shrink, and exactly one `overflow-y-auto` per
+     * region. Omitting `min-h-0` is what makes a flex child refuse to scroll and
+     * push the page taller instead — the failure this replaces.
+     */
+    <div
+      className="flex h-dvh flex-col overflow-hidden lg:grid"
+      style={{ gridTemplateColumns: "234px 1fr" }}
+    >
+      {/* ----------------------------- sidebar -----------------------------
+          Header and account card are stable; the NAVIGATION REGION ALONE
+          scrolls, and only when the list outgrows the viewport (D12). */}
+      <aside className="glass-shell hidden min-h-0 flex-col border-r border-line px-4 pb-5 pt-7 lg:flex">
+        <Link href="/" aria-label="Verity" className="mb-8 block shrink-0 px-2 no-underline">
           <VerityLockup size={30} className="text-text" />
         </Link>
 
-        {navList()}
-        {accountCard()}
+        <div className="min-h-0 flex-1 overflow-y-auto">{navList()}</div>
+        <div className="shrink-0">{accountCard()}</div>
       </aside>
 
       {/* ------------------------------ main ------------------------------- */}
-      <div className="flex min-w-0 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Mobile bar. The mockups have no small-screen composition to copy, so
             this states the identity and offers the sheet, and nothing else. */}
-        <div className="glass-shell sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-line px-4 lg:hidden">
+        <div className="glass-shell z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line px-4 lg:hidden">
           <Link href="/" aria-label="Verity" className="no-underline">
             <VerityLockup size={22} className="text-text" />
           </Link>
@@ -201,7 +219,9 @@ export function ShellChrome({
           </div>
         )}
 
-        {/* -------------------------- top bar --------------------------- */}
+        {/* -------------------------- top bar ---------------------------
+            Persistent chrome, as the boards draw it. It needs no `sticky`:
+            the main region below owns the scroll, so this never travels. */}
         <div className="hidden h-[84px] shrink-0 items-center gap-4 px-8 lg:flex">
           {/* Search is centred and dominant, as the mockup draws it. It is a
               real control over the records already loaded on the page, not a
@@ -244,7 +264,12 @@ export function ShellChrome({
           </div>
         </div>
 
-        <main id="main" className="min-w-0 flex-1 px-5 pb-10 pt-6 sm:px-8 lg:px-8 lg:pt-0">
+        {/* The one scroller in the application. Pages compose inside it and do
+            not create a second one unless a dense region owns its own (D13). */}
+        <main
+          id="main"
+          className="min-h-0 min-w-0 flex-1 overflow-y-auto px-5 pb-10 pt-6 sm:px-8 lg:px-8 lg:pt-0"
+        >
           {children}
         </main>
       </div>

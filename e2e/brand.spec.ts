@@ -12,15 +12,14 @@ import { expect, test } from "@playwright/test";
  */
 
 const BOARD = {
-  // Printed on the identity board. Light and dark share the accent fill: the
-  // board's dark dashboard keeps Primary Gold at full strength and only moves
-  // gold TEXT up the ramp to Gold 300.
+  // Printed on the identity board `design/verity asthetics.png`: Primary
+  // #00D1B2, Background #F7F8FA, Text #0F1115 (ADR-012).
   // The accent FILL is not the seed: it is the step of the seed's tonal ladder
-  // that clears AA with its ink. Warm Sand Gold #D4A017 fills at the 600 step in
-  // light and the 300 step in dark. Asserting the seed here would assert a
-  // colour the product never paints.
-  light: { accent: "rgb(188, 142, 22)", canvas: "rgb(244, 244, 245)" },
-  dark: { accent: "rgb(230, 200, 120)", canvas: "rgb(13, 13, 15)" },
+  // that clears AA with its ink. #00D1B2 fills at the 600 step in light and the
+  // 300 step in dark. Asserting the seed here would assert a colour the product
+  // never paints.
+  light: { accent: "rgb(2, 185, 158)", canvas: "rgb(247, 248, 250)" },
+  dark: { accent: "rgb(107, 228, 210)", canvas: "rgb(15, 17, 21)" },
   onAccent: "rgb(25, 26, 28)",
 };
 
@@ -76,8 +75,8 @@ test.describe("brand identity", () => {
     expect(t.colorScheme).toBe("light");
     expect(t.accent).toBe(BOARD.light.accent);
     expect(t.canvas).toBe(BOARD.light.canvas);
-    // Dark ink on gold, never white. Gold is a LIGHT accent: white on #D4A017
-    // measures 2.38:1 while #18181B measures 7.46:1.
+    // Dark ink on the accent, never white. #00D1B2 is a LIGHT accent: white on
+    // its light fill measures 2.40:1 while #191A1C measures 7.00:1.
     expect(t.onAccent).toBe(BOARD.onAccent);
   });
 

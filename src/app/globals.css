@@ -6,6 +6,7 @@
  * AUTHORITY
  *   1. Security and tenancy invariants (nothing here touches them).
  *   2. ADR-011 — glass is a controlled material system, not decoration.
+ *   3. ADR-012 — brand-sheet neutrals, default accent, semantic separation.
  *   3. The approved reference boards, `verity-app-ui-mockups/content.png` and
  *      `content_dark.png`, plus the design source `Verity App.dc.html`.
  *
@@ -16,17 +17,19 @@
  *
  * TWO SYSTEMS, DELIBERATELY SEPARATE
  *   BRAND    the Verity mark and wordmark. Fixed. Never recoloured by the UI.
- *   ACCENT   an Experience System property. Configurable, default Warm Sand Gold.
+ *   ACCENT   an Experience System property. Configurable, default #00D1B2 —
+ *            the Primary swatch named by design/verity asthetics.png (ADR-012).
  * Conflating them is how a product ends up with a logo that changes colour when
  * a user picks a theme.
  */
 
 @theme {
   /* ---------------------------------------------------------------------
-   * NEUTRAL FOUNDATION — the design source's own values.
+   * NEUTRAL FOUNDATION — design/verity asthetics.png, the brand sheet (ADR-012).
+   * #F7F8FA Background · #0F1115 Text · #1C1F24 · #2A2E33 · #E6E8EB.
    * ------------------------------------------------------------------- */
-  --color-canvas: light-dark(#f4f4f5, #0d0d0f);
-  --color-text: light-dark(#18181b, #ececee);
+  --color-canvas: light-dark(#f7f8fa, #0f1115);
+  --color-text: light-dark(#0f1115, #e6e8eb);
   --color-text-secondary: light-dark(#5c5c60, #a1a1a7);
   /* The source sets --tx3 to #7A7A7F, which measures 3.9:1 on the light canvas
      and fails AA for body text. Darkened to the nearest value that clears it;
@@ -48,11 +51,11 @@
 
   /* Solid surfaces — level 5. Dense tables, long-form text, forms and
      destructive confirmation live here, per ADR-011. */
-  --color-surface: light-dark(#ffffff, #1c1c1e);
-  --color-surface-elevated: light-dark(#ffffff, #242427);
-  --color-surface-sunken: light-dark(#ececed, #141416);
-  --color-control: light-dark(#ffffff, #1e1e22);
-  --color-chrome: light-dark(#f4f4f5, #0d0d0f);
+  --color-surface: light-dark(#ffffff, #1c1f24);
+  --color-surface-elevated: light-dark(#ffffff, #2a2e33);
+  --color-surface-sunken: light-dark(#ececee, #131619);
+  --color-control: light-dark(#ffffff, #1c1f24);
+  --color-chrome: light-dark(#f7f8fa, #0f1115);
 
   /* ---------------------------------------------------------------------
    * BORDERS — alpha, never solid hex.
@@ -71,7 +74,7 @@
    * ACCENT — derived in CSS from one seed.
    *
    * `--accent-seed` is stamped on <html> by the server from the user's stored
-   * preference; it defaults to Warm Sand Gold below, so the stylesheet is
+   * preference; it defaults to the brand sheet Primary below, so the stylesheet is
    * correct with no cookie, no script and no flash.
    *
    * The 50→900 ladder is the design source's `tonal()` function expressed as
@@ -79,7 +82,7 @@
    * below it. Deriving it here rather than in JavaScript means an accent change
    * is a single custom property, and no component has to know it happened.
    * ------------------------------------------------------------------- */
-  --accent-seed: #d4a017;
+  --accent-seed: #00d1b2;
 
   --accent-50: color-mix(in srgb, #ffffff 94%, var(--accent-seed));
   --accent-100: color-mix(in srgb, #ffffff 86%, var(--accent-seed));
@@ -96,9 +99,9 @@
      directly: it is chosen together with its ink so the pair clears WCAG AA,
      stepping darker (light) or lighter (dark) when the first step does not.
      Three of the ten presets need that step; Emerald needs two. Defaults below
-     are Warm Sand Gold's, so the stylesheet is correct with no cookie. */
-  --accent-fill-light: #bc8e16;
-  --accent-fill-dark: #e6c878;
+     are the brand-sheet Primary's, so the stylesheet is correct with no cookie. */
+  --accent-fill-light: #02b99e;
+  --accent-fill-dark: #6be4d2;
   --accent-ink-light: #191a1c;
   --accent-ink-dark: #191a1c;
 
@@ -124,28 +127,28 @@
 
   --color-accent-on: light-dark(var(--accent-ink-light), var(--accent-ink-dark));
 
-  /* Gold-coloured TEXT on the page — not on the accent. Must clear AA against
-     the canvas, which the 500 step does not: #D4A017 as type measures 2.16:1. */
-  --color-accent-ink: light-dark(var(--accent-800), var(--accent-300));
+  /* Accent-coloured TEXT on the page — not on the accent. Must clear AA against
+     the canvas, which the 500 step does not: #00D1B2 as type measures 1.9:1.
+     The 800 step measures 4.63:1 on #F7F8FA, the 300 step 12.29:1 on #0F1115. */
 
   /* ---------------------------------------------------------------------
    * SEMANTIC — an independent system. Accent carries brand, these carry
    * meaning, and neither is forced into the other (ADR-011).
    * ------------------------------------------------------------------- */
-  --color-success: light-dark(#3f7d53, #6fbe86);
-  --color-success-subtle: light-dark(rgb(63 125 83 / 0.10), rgb(111 190 134 / 0.13));
-  --color-warning: light-dark(#9c7016, #dfae4e);
-  --color-warning-subtle: light-dark(rgb(156 112 22 / 0.11), rgb(223 174 78 / 0.13));
+  --color-success: light-dark(#2f7a3e, #7cc98a);
+  --color-success-subtle: light-dark(rgb(47 122 62 / 0.10), rgb(124 201 138 / 0.13));
+  --color-warning: light-dark(#8a6212, #dfae4e);
+  --color-warning-subtle: light-dark(rgb(138 98 18 / 0.11), rgb(223 174 78 / 0.13));
   --color-danger: light-dark(#a63d34, #e0796d);
   --color-danger-subtle: light-dark(rgb(166 61 52 / 0.10), rgb(224 121 109 / 0.13));
   --color-info: light-dark(#3a6b96, #7ea8cc);
   --color-info-subtle: light-dark(rgb(58 107 150 / 0.10), rgb(126 168 204 / 0.13));
 
   --color-state-draft: light-dark(#67676f, #85858b);
-  --color-state-pending: light-dark(#9c7016, #dfae4e);
+  --color-state-pending: light-dark(#8a6212, #dfae4e);
   --color-state-active: light-dark(#3a6b96, #7ea8cc);
   --color-state-blocked: light-dark(#a63d34, #e0796d);
-  --color-state-completed: light-dark(#3f7d53, #6fbe86);
+  --color-state-completed: light-dark(#2f7a3e, #7cc98a);
   --color-state-cancelled: light-dark(#67676f, #85858b);
 
   /* ---------------------------------------------------------------------
