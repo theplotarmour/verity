@@ -46,8 +46,20 @@ test.describe("platform shell", () => {
     await page.goto("/");
     const switcher = page.locator("#org-switcher-header");
     await expect(switcher).toBeVisible();
-    // Exactly the two memberships the seed grants — never a tenant list.
-    await expect(switcher.locator("option")).toHaveCount(2);
+
+    // A fixed count is the wrong assertion now, and the reason is worth stating:
+    // memberships are EARNED, so this list legitimately grows. The seed grants
+    // two; bootstrapping HQ grants the platform one; creating or entering a
+    // client as an operator grants one there too (ADR-013 — entering is a write,
+    // not a link).
+    //
+    // What must never happen is the switcher becoming a TENANT LIST. This
+    // database holds tenants this actor has no membership in — the isolation
+    // suites create and leave them — so their absence is the real property, and
+    // it is the one that would break if the switcher ever enumerated tenants.
+    const labels = await switcher.locator("option").allTextContents();
+    expect(labels.filter((l) => l.includes("Demo"))).toHaveLength(2);
+    expect(labels.filter((l) => /boundary-|Probe Tenant|Location Tenant/.test(l))).toHaveLength(0);
   });
 
   test("navigation is derived from capability contributions", async ({ page }) => {
