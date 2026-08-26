@@ -54,6 +54,9 @@ tmp_backup_verity/
 # Claude Code personal, machine-specific overrides (never shared)
 .claude/settings.local.json
 
+# Local environment notes (secrets; never shared)
+.claude/env.txt
+
 # graphify: generated outputs and machine-specific scan state.
 # The graph is reproducible from the corpus; these embed absolute local paths.
 graphify-out/graph.json
