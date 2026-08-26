@@ -37,6 +37,11 @@ model Tenant {
   /// IANA zone for reckoning local time. Null means UTC, stated explicitly
   /// rather than guessed — a wrong guess misplaces every deadline by the offset.
   timeZone     String?  @map("time_zone")
+  /// True for the single Verity platform tenant whose members are HQ operators;
+  /// never true for a client. D18 requires that "operator" and "tenant user" be
+  /// distinguishable in code, in the UI and in audit, and a naming convention
+  /// cannot answer an authority question (ADR-013).
+  isPlatform   Boolean  @default(false) @map("is_platform")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
   version      Int      @default(1)
@@ -569,6 +574,11 @@ model Activity {
 enum SecurityEventType {
   AuthSuccess
   AuthFailed
+  /// An authenticated principal was refused a privileged surface. Distinct from
+  /// AuthFailed, which is a failure to prove identity — merging the two would
+  /// make "someone is probing HQ" and "someone mistyped a password" the same
+  /// signal (ADR-013 answer 11, D18).
+  AuthorizationDenied
   PermissionEscalated
   PermissionRevoked
   RoleAssigned

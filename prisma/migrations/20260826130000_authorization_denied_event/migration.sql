@@ -1,0 +1,26 @@
+-- ---------------------------------------------------------------------------
+-- SecurityEventType: AuthorizationDenied
+--
+-- Cause (PLATFORM-FREEZE §"Every future platform change must state its cause"):
+--
+--   1. The requirement. ADR-013 answer 11 and D18 require that a tenant user
+--      reaching an HQ surface be REFUSED AND OBSERVABLE, and work plan Workflow
+--      D asserts exactly that: "operation rejected, no leakage, security event
+--      recorded". Refusal alone is not the requirement; the record is.
+--
+--   2. Why the existing contract could not express it. The stream has seven
+--      event types and none of them is a refused authorization. `AuthFailed` is
+--      authentication — a principal who could not prove who they are — and
+--      using it here would merge two different incidents into one signal, so
+--      "someone is probing HQ" and "someone mistyped a password" would be
+--      indistinguishable in the one place they most need to be told apart.
+--      `PermissionEscalated` is the successful case, not the refused one.
+--
+--   3. Why it belongs at platform level. The denial happens in the platform's
+--      authorization layer, before any capability is reached. A capability
+--      cannot record it because no capability is involved.
+--
+-- Additive: one enum value. No table, policy, function or existing row changes.
+-- ---------------------------------------------------------------------------
+
+ALTER TYPE "SecurityEventType" ADD VALUE IF NOT EXISTS 'AuthorizationDenied';

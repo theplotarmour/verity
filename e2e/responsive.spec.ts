@@ -67,3 +67,73 @@ test.describe("responsive shell", () => {
     }
   });
 });
+
+/**
+ * Shell scroll ownership (ADR-012; work plan D11–D14, §5.7).
+ *
+ * The application is not a long document. The shell is fixed and exactly one
+ * region scrolls, which is why the top bar and the sidebar's header and account
+ * card never travel. These assert the property rather than the CSS: an element
+ * that stays put after a large scroll is doing its job whatever the rule is
+ * called.
+ */
+test.describe("shell scroll ownership", () => {
+  test.skip(({ isMobile }) => isMobile, "the fixed rail is a desktop composition");
+
+  test("the document itself does not scroll", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/audit");
+
+    // A taller-than-viewport body is the failure this replaces: it is what let
+    // the top bar scroll out of view.
+    const documentScrolls = await page.evaluate(
+      () => document.documentElement.scrollHeight > document.documentElement.clientHeight + 1,
+    );
+    expect(documentScrolls).toBe(false);
+  });
+
+  test("content scrolls while the chrome stays", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/audit");
+
+    const main = page.locator("#main");
+    const bar = page.getByPlaceholder("Search this page");
+    const lockup = page.getByRole("link", { name: "Verity" }).first();
+
+    const barBefore = await bar.boundingBox();
+    const lockupBefore = await lockup.boundingBox();
+
+    await main.evaluate((el) => el.scrollTo(0, 600));
+    const scrolled = await main.evaluate((el) => el.scrollTop);
+    // If the assertion below is to mean anything, the region must actually have
+    // scrolled — a page with too little content would pass vacuously.
+    expect(scrolled).toBeGreaterThan(0);
+
+    expect((await bar.boundingBox())?.y).toBe(barBefore?.y);
+    expect((await lockup.boundingBox())?.y).toBe(lockupBefore?.y);
+  });
+
+  test("the navigation region alone scrolls, and only when it must", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/");
+
+    const navRegion = page.locator("aside > div").first();
+    // Nine items fit at this height, so no scrollbar. D12: a rail that always
+    // shows one is chrome apologising for itself.
+    expect(
+      await navRegion.evaluate((el) => el.scrollHeight > el.clientHeight + 1),
+    ).toBe(false);
+
+    // A short viewport is the case that decides whether the region scrolls or
+    // the shell breaks.
+    await page.setViewportSize({ width: 1440, height: 520 });
+    expect(
+      await navRegion.evaluate((el) => el.scrollHeight > el.clientHeight + 1),
+    ).toBe(true);
+
+    // Header and account card stay put regardless — they are outside the
+    // scroller, which is the whole point of the three-part rail.
+    await expect(page.getByRole("link", { name: "Verity" }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: /Sign out/ })).toBeVisible();
+  });
+});

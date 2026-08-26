@@ -106,9 +106,13 @@ export function VerityWordmark({ size = 20, className }: { size?: number; classN
  * `size` is the WORDMARK height, because that is what the eye reads as the
  * logo's size; the symbol and gap derive from it at the measured ratios.
  *
- * The symbol is gold and the wordmark takes the text colour — that is the
- * board's primary lockup. Rendering the whole thing gold is the most common
- * way this identity gets misused.
+ * MONOCHROME, both halves. The brand sheet gives the mark exactly three
+ * variations — dark on white, white on dark, dark on mint — and none of them
+ * paints the symbol in the interface's accent. An earlier revision rendered the
+ * symbol `text-accent`, which made the identity a function of a theme setting:
+ * change the accent preset and the logo changed with it. ADR-012 §2 ends that.
+ * Both halves now take `currentColor`, so the lockup inherits whatever ink the
+ * surface sets and stays one colour on every preset.
  */
 export function VerityLockup({
   collapsed = false,
@@ -128,8 +132,8 @@ export function VerityLockup({
         gap: collapsed ? 0 : size * LOCKUP_GAP_SCALE,
       }}
     >
-      <VeritySymbol size={size * LOCKUP_SYMBOL_SCALE} className="text-accent" />
-      {!collapsed && <VerityWordmark size={size} className="text-text" />}
+      <VeritySymbol size={size * LOCKUP_SYMBOL_SCALE} />
+      {!collapsed && <VerityWordmark size={size} />}
       <span className="sr-only">Verity</span>
     </span>
   );
