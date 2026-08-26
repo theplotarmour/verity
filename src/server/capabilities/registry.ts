@@ -4,8 +4,6 @@ import { registerAssetCapability } from "./asset";
 import { registerEvidenceCapability } from "./evidence";
 import { registerSchedulingCapability } from "./scheduling";
 import { registerApprovalCapability } from "./approval";
-// THROWAWAY — gate 9 composition probe. Removed with the capability.
-import { registerProbeCapability } from "./probe";
 
 /**
  * Installs every shipped capability into the running process.
@@ -25,5 +23,4 @@ export function installCapabilities(): void {
   registerEvidenceCapability();
   registerSchedulingCapability();
   registerApprovalCapability();
-  registerProbeCapability();
 }
