@@ -7,7 +7,8 @@ import { diffFields, recordActivity } from "@/server/platform/audit";
 import { applyStateToClocks, startClock, remainingMinutes, urgencyFor } from "@/server/platform/sla";
 import { notify } from "@/server/platform/notification";
 import { resolveConfig } from "@/server/platform/capability";
-import { withTenant } from "@/server/platform/tenancy";
+import { withTenant, type TenantScopedClient } from "@/server/platform/tenancy";
+import { effectiveTimeZone } from "@/server/platform/temporal";
 
 /**
  * CAPABILITY: Dine-in — `verity.capability.dinein`
@@ -1173,6 +1174,7 @@ export type FloorTable = {
   id: string;
   label: string;
   seats: number;
+  shape: string | null;
   state: string;
   posX: number;
   posY: number;
@@ -1209,6 +1211,7 @@ export const listFloor: QueryDefinition<Record<string, never>, FloorTable[]> = {
         id: table.id,
         label: table.label,
         seats: table.seats,
+        shape: table.shape,
         state: table.state,
         posX: table.posX,
         posY: table.posY,
@@ -1463,13 +1466,42 @@ export type SalesSummary = {
  * Settled bills only. Counting an open bill as revenue would report money the
  * restaurant has not been paid, and every figure here traces to a stored fact.
  */
-export const salesSummary: QueryDefinition<{ from: string; to: string }, SalesSummary> = {
+/**
+ * One service day, in the restaurant's own clock.
+ *
+ * A restaurant in Delhi is still serving at 19:00 UTC, so a day boundary taken
+ * from the server would cut one evening's service across two reports and make
+ * the summary disagree with the till. The zone comes from the organization,
+ * resolved by the platform rather than guessed here.
+ *
+ * The day runs to 05:00 the next morning: a bill settled at 00:40 belongs to the
+ * night that earned it, which is what anyone reading a day summary means.
+ */
+export async function serviceDayRange(
+  tx: TenantScopedClient,
+  organizationId: string,
+  day?: string,
+): Promise<{ from: Date; to: Date; day: string; timeZone: string }> {
+  const timeZone = await effectiveTimeZone(tx, organizationId);
+
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone }).format(new Date());
+  const chosen = day && /^d{4}-d{2}-d{2}$/.test(day) ? day : today;
+
+  const [rows] = await tx.$queryRaw<Array<{ from: Date; to: Date }>>`
+    SELECT (${chosen}::date::timestamp AT TIME ZONE ${timeZone}) AS "from",
+           ((${chosen}::date + 1)::timestamp + interval '5 hours') AT TIME ZONE ${timeZone} AS "to"`;
+
+  return { from: rows.from, to: rows.to, day: chosen, timeZone };
+}
+
+export const salesSummary: QueryDefinition<{ day?: string }, SalesSummary & { day: string }> = {
   key: "verity.dinein.sales_summary",
   entity: ENTITY_BILL,
-  input: z.object({ from: z.string(), to: z.string() }),
+  input: z.object({ day: z.string().optional() }),
   handler: async (ctx, input) => {
-    const from = new Date(input.from);
-    const to = new Date(input.to);
+    const range = await serviceDayRange(ctx.tx, ctx.actor.organizationId, input.day);
+    const from = range.from;
+    const to = range.to;
 
     const bills = await ctx.tx.bill.findMany({
       where: { state: "settled", settledAt: { gte: from, lte: to } },
@@ -1503,6 +1535,7 @@ export const salesSummary: QueryDefinition<{ from: string; to: string }, SalesSu
     }
 
     return {
+      day: range.day,
       billsSettled: bills.length,
       grossMinor,
       discountMinor,
@@ -1571,6 +1604,27 @@ export function registerDineinCapability(): void {
         order: 22,
         icon: "evidence",
         requiresEntity: ENTITY_MENU_ITEM,
+        shells: ["platform"],
+      },
+      {
+        href: "/reports",
+        label: "Day summary",
+        group: "Capabilities",
+        order: 23,
+        icon: "audit",
+        requiresEntity: ENTITY_BILL,
+        shells: ["platform"],
+      },
+      {
+        href: "/floor/setup",
+        label: "Floor plan",
+        group: "Administration",
+        order: 24,
+        icon: "locations",
+        // Gated on CREATE rather than READ: everyone who works a shift can see
+        // the floor, and only whoever shapes the room should reach the editor.
+        requiresEntity: ENTITY_TABLE,
+        requiresVerb: "Create",
         shells: ["platform"],
       },
     ],
