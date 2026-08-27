@@ -17,6 +17,18 @@ import {
 import { recordSecurityEvent } from "@/server/platform/audit";
 import { withTenant } from "@/server/platform/tenancy";
 import { installCapabilities } from "@/server/capabilities/registry";
+import {
+  toActionFailure,
+  type ActionFailure,
+  type ActionResult,
+} from "@/server/platform/action-error";
+
+// NOT re-exported. `export type { … }` from a "use server" module compiles
+// cleanly and then fails at runtime: the server-actions loader rewrites this
+// file's exports and emits a value re-export for the erased type, so importing
+// it throws `ActionFailure is not defined` before any code runs — which took
+// down sign-in. Components import the shape from `@/server/platform/action-error`
+// directly instead.
 
 /**
  * The bridge between the interface and the platform.
@@ -36,38 +48,6 @@ import { installCapabilities } from "@/server/capabilities/registry";
  * or whether retrying is safe.
  */
 
-export type ActionFailure = {
-  ok: false;
-  code: "E_FORBIDDEN" | "E_VALIDATION" | "E_CONFLICT" | "E_CAPABILITY_INACTIVE" | "E_UNKNOWN";
-  message: string;
-  issues?: string[];
-  /** Whether repeating the call could succeed without the user changing anything. */
-  retryable: boolean;
-};
-
-export type ActionResult<T> = { ok: true; data: T } | ActionFailure;
-
-function toFailure(error: unknown): ActionFailure {
-  if (error instanceof ForbiddenError) {
-    return { ok: false, code: "E_FORBIDDEN", message: error.message, retryable: false };
-  }
-  if (error instanceof CapabilityError) {
-    return { ok: false, code: "E_CAPABILITY_INACTIVE", message: error.message, retryable: false };
-  }
-  if (error instanceof CustomFieldValidationError) {
-    return { ok: false, code: "E_VALIDATION", message: error.message, issues: error.issues, retryable: false };
-  }
-  if (error instanceof ValidationError) {
-    return { ok: false, code: "E_VALIDATION", message: error.message, issues: error.issues, retryable: false };
-  }
-  if (error instanceof ConflictError) {
-    // Someone else changed the record; reloading and retrying can succeed.
-    return { ok: false, code: "E_CONFLICT", message: error.message, retryable: true };
-  }
-  const message = error instanceof Error ? error.message : String(error);
-  return { ok: false, code: "E_UNKNOWN", message, retryable: false };
-}
-
 /** Runs a registered command as the authenticated actor. */
 export async function runCommand<T = unknown>(
   key: string,
@@ -85,7 +65,7 @@ export async function runCommand<T = unknown>(
     if (revalidate) revalidatePath(revalidate);
     return { ok: true, data };
   } catch (error) {
-    return toFailure(error);
+    return toActionFailure(error);
   }
 }
 
@@ -100,7 +80,7 @@ export async function runQuery<T = unknown>(key: string, input: unknown): Promis
     const data = (await executeQuery(actor, definition, input)) as T;
     return { ok: true, data };
   } catch (error) {
-    return toFailure(error);
+    return toActionFailure(error);
   }
 }
 
@@ -139,7 +119,7 @@ export async function switchOrganization(membershipId: string): Promise<ActionRe
     revalidatePath("/", "layout");
     return { ok: true, data: null };
   } catch (error) {
-    return toFailure(error);
+    return toActionFailure(error);
   }
 }
 

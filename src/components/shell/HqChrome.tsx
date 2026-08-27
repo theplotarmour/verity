@@ -29,6 +29,7 @@ const NAV: Array<{ href: string; label: string; icon: IconName }> = [
   { href: "/hq", label: "Overview", icon: "overview" },
   { href: "/hq/clients", label: "Clients", icon: "building" },
   { href: "/hq/audit", label: "Platform audit", icon: "audit" },
+  { href: "/hq/settings", label: "Settings", icon: "configuration" },
 ];
 
 export function HqChrome({

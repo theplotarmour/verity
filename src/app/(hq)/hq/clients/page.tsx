@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { PageHeader, Panel, EmptyState, Button } from "@/components/ui/primitives";
 import { clientDirectory, requireOperator } from "@/server/platform/operator";
 import { enterClientAction } from "@/server/actions/hq";
@@ -40,7 +41,7 @@ export default async function HqClientsPage() {
             <caption className="sr-only">Clients on this installation</caption>
             <thead>
               <tr>
-                {["Client", "People", "Organizations", "Created", ""].map((h, i) => (
+                {["Client", "People", "Organizations", "Created", "", ""].map((h, i) => (
                   <th
                     key={h || i}
                     className={
@@ -56,8 +57,13 @@ export default async function HqClientsPage() {
             <tbody>
               {clients.map((client) => (
                 <tr key={client.tenantId}>
-                  <td className="border-b border-line px-3 py-3 text-[14px] text-text">
-                    {client.name}
+                  <td className="border-b border-line px-3 py-3 text-[14px]">
+                    <Link
+                      href={`/hq/clients/${client.tenantId}`}
+                      className="text-text no-underline hover:text-accent"
+                    >
+                      {client.name}
+                    </Link>
                   </td>
                   <td className="tabular border-b border-line px-3 py-3 text-right text-[14px]">
                     {client.memberCount}
@@ -67,6 +73,14 @@ export default async function HqClientsPage() {
                   </td>
                   <td className="border-b border-line px-3 py-3 text-right text-[13px] text-text-secondary">
                     {client.createdAt.toISOString().slice(0, 10)}
+                  </td>
+                  <td className="border-b border-line px-3 py-3 text-right">
+                    <Link
+                      href={`/hq/clients/${client.tenantId}`}
+                      className="text-[13px] text-text-secondary no-underline hover:text-text"
+                    >
+                      Administer
+                    </Link>
                   </td>
                   <td className="border-b border-line px-3 py-3 text-right">
                     <form action={enterClientAction}>

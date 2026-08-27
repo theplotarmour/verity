@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, EmptyState, ErrorState, Field, Input, StateBadge } from "@/components/ui/primitives";
-import { runCommand, type ActionFailure } from "@/server/actions/platform";
+import { runCommand } from "@/server/actions/platform";
+import type { ActionFailure } from "@/server/platform/action-error";
 
 type Request = {
   id: string;

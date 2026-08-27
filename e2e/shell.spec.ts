@@ -59,7 +59,7 @@ test.describe("platform shell", () => {
     // it is the one that would break if the switcher ever enumerated tenants.
     const labels = await switcher.locator("option").allTextContents();
     expect(labels.filter((l) => l.includes("Demo"))).toHaveLength(2);
-    expect(labels.filter((l) => /boundary-|Probe Tenant|Location Tenant/.test(l))).toHaveLength(0);
+    expect(labels.filter((l) => /Probe Tenant|Location Tenant|Admin Client/.test(l))).toHaveLength(0);
   });
 
   test("navigation is derived from capability contributions", async ({ page }) => {

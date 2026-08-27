@@ -13,22 +13,24 @@ been built, and none was created to produce this report.**
 
 | | Verdict | Basis |
 |---|---|---|
-| **A — Visual / product readiness** | **YES, with one deferral** | ADR-012 applied; both themes verified live; scroll ownership proven by test; 63 e2e assertions green |
-| **B — Platform / HQ readiness** | **PARTIAL — NO** | Operator security model accepted and built; clients can be created and entered with no SQL; **people, roles and organizations still have no HQ screen** |
+| **A — Visual / product readiness** | **YES**, with one deferral | ADR-012 applied; both themes verified live; scroll ownership proven by test; 67 e2e assertions green |
+| **B — Platform / HQ readiness** | **YES** | Every administrative surface built on the existing runtime; Workflows A–D walked through the interface with zero SQL |
 | **C — Client foundation readiness** | **YES** | Gate 9 proven by a built probe with an empty platform diff, then deleted |
 
 ```
 A = YES (deferral recorded)
-B = NO
+B = YES
 C = YES
-        ↓
-CLIENT BUILD: NOT YET APPROVED
+                ↓
+        CLIENT BUILD APPROVED
 ```
 
-**One verdict blocks the gate, and it is the honest one to block on.** A client cannot be onboarded
-end to end today because nobody can be invited or given a role through HQ. Everything the client
-build depends on *structurally* — isolation, authorization, the runtime, the operator boundary,
-capability composition — is proven.
+**The gate returns approved.** A client can be created, configured, organized, staffed and audited
+entirely through HQ, by a person who never opens a terminal.
+
+What that does **not** authorize: starting a client build. Phase 5 remains locked behind ADR-014
+(the DEC-001 conflict Kent's requirements raise) and the provider decisions §8.4 defers until a real
+requirement names one.
 
 ---
 
@@ -37,138 +39,144 @@ capability composition — is proven.
 | Check | Command | Result |
 |---|---|---|
 | Types | `npm run typecheck` | clean |
-| Unit + integration | `npm run test` | **296 passed / 296**, 22 files, **0 skipped** |
-| Build | `npm run build` | succeeds, 18 routes |
-| End to end | `npx playwright test` | **63 passed**, 15 skipped (mobile project skips the desktop-shell specs by design) |
-| Migrations | `npx prisma migrate deploy` | 28 applied, none pending |
+| Lint | `npm run lint` | clean |
+| Unit + integration | `npm run test` | **312 passed / 312**, 23 files, **0 skipped** |
+| Build | `npm run build` | succeeds, 25 routes |
+| End to end | `npx playwright test` | **67 passed**, 19 skipped (the mobile project skips desktop-shell and HQ specs by design), 0 failed |
+| Migrations | `npx prisma migrate deploy` | 31 applied, none pending |
 | Gate 9 diff | `git diff --stat src/server/platform/ prisma/schema.prisma` (with probe present) | **empty** |
 
 ---
 
 ## A — Visual / product
 
-**Done.** ADR-012 is in force: the brand sheet's `#00D1B2` is the default accent, neutrals are the
-sheet's, semantic success was retuned away from the accent hue so status and theme cannot read as
-one signal, and the mark is monochrome everywhere — including the favicon, the app icon and the
-lockup, which had painted the symbol with the accent and so made the identity a function of a theme
-setting.
+ADR-012 is in force: the brand sheet's `#00D1B2` is the default accent, neutrals are the sheet's,
+semantic success was retuned away from the accent hue so status and theme cannot read as one
+signal, and the mark is monochrome everywhere — favicon, app icon and the lockup, which had painted
+the symbol with the accent and so made the identity a function of a theme setting.
 
-Scroll ownership is now a property with a test rather than a stylesheet detail: the document does
-not scroll, the content region does, and the sidebar's navigation region scrolls alone and only when
-it must. Three new assertions in `e2e/responsive.spec.ts` cover the case that decides it — a short
-viewport with the header and account card still fixed.
+Scroll ownership is a tested property rather than a stylesheet detail: the document does not
+scroll, the content region does, and the sidebar's navigation region scrolls alone and only when it
+must. HQ uses the same shell geometry and the same material system as the tenant experience — one
+product, not two — distinguished by a persistent PLATFORM badge, which is D18's "distinguishable in
+the UI" made literal.
 
-Verified live in both themes at the running application, not only in the boards.
-
-**Deferred, recorded rather than hidden:** the boards' page composition (stat row, wide panel,
-filter bar, paginated dense table) is applied to HQ but not retro-fitted to every existing
-capability page, which still use the same skeleton at lower fidelity. Dark values are correct and
-measured, but were reconciled to the brand sheet rather than authored surface by surface as D8
-describes. Neither blocks a client build; both are cosmetic debt with a named owner.
+**Deferred, recorded rather than hidden:** the boards' page composition is applied to HQ but not
+retro-fitted to every existing capability page, which still use the same skeleton at lower fidelity.
+Dark values are correct and measured, but were reconciled to the brand sheet rather than authored
+surface by surface as D8 describes. Neither blocks a client build; both are cosmetic debt.
 
 ---
 
 ## B — Platform / HQ
 
-**ADR-013 is ACCEPTED** — Option D with identity Shape 1. The decisive finding: of the seven things
-HQ must do, only three genuinely cross tenants, and those need metadata and counts rather than
-client rows. The other four need the *authority to enter* a tenant and then ordinary scoped
-operation.
+**ADR-013 is ACCEPTED and implemented** — Option D with identity Shape 1. No role gained
+`BYPASSRLS`, no policy was weakened, `resolve_permissions` still filters `Global` grants out, and
+the entire cross-tenant surface remains the three read-only projections the ADR enumerates.
 
-**What that bought.** There is no cross-tenant write path at all. No role gained `BYPASSRLS`, no
-policy was weakened, and `resolve_permissions` still filters `Global` grants out — operator
-authority is an ordinary membership with ordinary permissions, so the resolver is untouched. The
-entire cross-tenant surface is three read-only `SECURITY DEFINER` projections, each with a pinned
-`search_path`, a fixed column set and an invocation log.
+### Surfaces, all built
 
-**Built and working:**
-
-| Surface | State |
+| Surface | What an operator can do |
 |---|---|
-| Operator authority, fail-closed | Built. Five assertions in `operator-boundary.test.ts` |
-| HQ shell with a persistent PLATFORM badge (D18) | Built |
-| Platform overview — counted, no invented metrics | Built |
-| Clients — list, create, enter | Built. A client was created through the UI with **zero SQL** |
-| Platform audit with operator actions distinguished | Built |
+| Overview | Counted clients, people, changes and security events across the platform |
+| Clients | List, create, open for administration, enter as a tenant user |
+| Client overview | Counts per surface, and a "where to start" path that names what is missing |
+| People | Search, invite (provisions the identity), assign or clear a role, suspend, restore, revoke |
+| Roles | Create, grant, revoke, compose, and see **direct** grants beside the **resolved** set |
+| Organizations | Create, rename, re-parent, inspect the hierarchy |
+| Modules | Enable and disable per client, with dependency refusals surfaced |
+| Operations | Undelivered events, SLA clocks, breaches, sync exceptions, recent changes, security events, provider binding status |
+| Client settings | Tenant-scoped configuration, with narrower scopes shown read-only |
+| Platform audit | Cross-client metadata with privileged actions marked |
+| Platform settings | Platform tenant record, operator roster, installed capabilities — read-only, because nothing here has a write path that exists |
 
-**Not built, and this is what makes B a NO:**
+### How they are built
 
-| Missing | Consequence |
-|---|---|
-| People — invite, assign role, revoke | `provisionIdentity()` is built and tested; nothing calls it from HQ. Workflow A cannot complete |
-| Roles and permissions — create, compose, view resolved set | Changing access still means SQL |
-| Organizations — create, re-parent, inspect | The hierarchy scoping depends on can only be seeded |
-| Modules — enable/disable per client | Activation exists; no screen |
-| Operations, platform settings | Not started |
-| Suspend / activate a client (QO-2) | Not built; the decision is still open |
+Every mutation is a registered command executed through `executeCommand`; every list is a
+registered query through `executeQuery`. No page touches Prisma, none constructs an actor, and none
+decides authorization. The operator's authority inside a client is an ordinary membership with an
+ordinary role, so the same resolver that refuses a tenant user refuses an operator who lacks a
+grant — there is no `if (isOperator)` in the administration path.
 
-**Workflows, honestly scored:** A (onboarding) — **partial**, create client and operator access work,
-invite and role assignment do not exist. B (inspection) — **partial**, an operator can enter a client
-and read it. C (switching integrity) — **structurally guaranteed**: no query spans two tenants, so
-there is no path along which one client's rows reach another's result; the *screens* to walk it end
-to end are not all there. D (privilege boundary) — **proven**, both at the database level and in
-`requireOperator()`, which records a security event rather than silently refusing.
+`src/server/platform/administration.ts` holds the twelve commands and six queries. It is not a
+capability: capabilities model business behaviour, while these administer the platform's own
+primitives, and putting them behind a capability activation switch would be backwards — HQ is how
+capabilities get turned on.
 
-**One nuance worth recording rather than leaving to be discovered.** The platform audit marks a row
-as operator-originated when the actor *holds* operator authority, not when they *acted* as an
-operator. For the bootstrapped installation that means historical tenant-user actions by the same
-person now read as operator actions. It over-reports rather than under-reports, which is the safer
-direction, but it is not exactly what ADR-013 answer 12 describes and should be tightened before a
-real client relies on that column.
+### Workflows — walked through the interface, zero SQL
+
+`e2e/hq.spec.ts`, all passing:
+
+| | Workflow | Evidence |
+|---|---|---|
+| **A** | create client → enable module → create organization → create role → grant permission → invite person → assign role | Passes. Every step is a click; nothing is seeded |
+| **B** | operator opens a client → people → organizations → roles → performs a permitted operation → the action appears in the platform audit marked **Operator** | Passes |
+| **C** | create two clients → a person exists only in the first → open the second → that person is not there | Passes. Not because a filter excludes them: the query runs inside one tenant scope and the other client's rows are unreachable from it |
+| **D** | an unauthenticated visitor cannot reach HQ; an operator whose active context is a client cannot either | Passes. Operator authority is not ambient |
+
+`src/test/hq-administration.test.ts` asserts the same properties at the runtime level — 16
+assertions, weighted toward refusals: an ordinary tenant user is refused every administrative
+command **and** every administrative read, a self-composing role is refused, a duplicate grant is
+refused, an organization cannot be moved inside its own subtree, and an operator cannot revoke their
+own membership.
+
+### The audit-marker mismatch, fixed rather than redefined
+
+The previous implementation reported `is_operator` when the actor held platform-tenant membership
+**anywhere**, so a person's historical tenant-user actions were retroactively relabelled privileged
+the moment they became an operator. ADR-013 answer 12 asks a narrower question, and the fix answers
+that one: an action was taken with operator authority when the actor's membership **in that client**
+carries the operator role. No schema change; migration
+`20260827020000_operator_audit_marker`.
+
+### Known behaviour worth stating
+
+Administering a client grants the operator a membership in it (ADR-013's "authority to enter"), so
+an operator's own context switcher grows as they work. That is the mechanism functioning, not a
+leak — the switcher lists memberships the person genuinely holds — but it means the default context
+after sign-in is whichever tenant sorts first when no choice is stored. The e2e fixture now pins its
+context explicitly rather than depending on that ordering.
 
 ---
 
 ## C — Client foundation
 
-**Gate 9 is proven, by building.** A throwaway capability exercised every contribution point —
-entity, own storage with its own RLS policy, commands, query, five states across every
-`StateCategory`, a per-edge transition guard, a `before_save` hook whose refusal rolled the whole
-command back, tenant configuration, custom fields validated against the tenant's declarations,
-events, audit, SLA clocks, a notification, a declared schedule run under an ordinary tenant scope,
-contributed navigation and a UI route.
-
-The measurement, taken with the probe present:
+Unchanged and still proven. A throwaway capability exercised every contribution point — entity, own
+storage with its own RLS policy, commands, query, five states across every `StateCategory`, a
+per-edge transition guard, a `before_save` hook whose refusal rolled the whole command back, tenant
+configuration, custom fields, events, audit, SLA clocks, a notification, a declared schedule, and a
+UI route — and the measurement taken with it present was:
 
 ```
 git diff --stat src/server/platform/ prisma/schema.prisma   →   empty
 ```
 
-Nothing in the platform changed to make it possible. Registration was one line in the capability
-registry, which `PLATFORM-FREEZE.md` names explicitly as additive rather than a platform change. The
-probe owned its table through raw SQL rather than a Prisma model, so the proof stays strict rather
-than becoming "no change except the change".
-
-Ten assertions passed. The probe was then **deleted in full** — code, route, tests, registry line,
-and a migration dropping the table and every registration row — because PLATFORM-FREEZE forbids a
-demonstration capability surviving. The evidence is commit `c7c5c3f`; the removal is `68e8b83`.
-
-One thing the probe corrected: a first draft assumed a `Pending` state starts the SLA clock. It does
-not. Waiting for someone to pick work up is not the same as being late with it, and the substrate
-had it right.
+Ten assertions passed. The probe was then deleted in full: code, route, tests, registry line, and a
+migration dropping the table and every registration row. Evidence is commit `c7c5c3f`; removal is
+`68e8b83`.
 
 ---
 
-## Outstanding, in the order it blocks things
+## Outstanding — none of it blocks the gate
 
-| # | Item | Blocks |
+| # | Item | Nature |
 |---|---|---|
-| 1 | HQ People, Roles, Organizations | **Verdict B.** Workflow A cannot complete without them |
-| 2 | Phase 0.10 deployment verification | Deployment evidence. **Blocked on infrastructure:** `vercel deploy` returns `Not authorized` — the CLI session has expired and needs a human login |
-| 3 | `DIRECT_URL` in the Vercel Preview environment | **Security.** It carries the `postgres` role, which has `rolbypassrls = true`. A credential that bypasses row-level security has no place in a deployed environment; runtime never needs it, only `prisma migrate` does |
-| 4 | Demo removal and the real bootstrap admin (D21) | Production readiness. `prisma/bootstrap-operator.ts` exists; `seed.ts` still carries the demo credential |
-| 5 | QO-2 (what "suspend client" does), QO-4 (production credential owner) | HQ client lifecycle, deployment |
-| 6 | Operator audit marker precision | Audit fidelity, before a client relies on it |
-| 7 | Board composition on capability pages; per-surface dark authoring | Cosmetic debt (verdict A deferral) |
+| 1 | Phase 0.10 deployment verification | **Blocked on infrastructure:** `vercel deploy` returns `Not authorized`; the CLI session needs a human login. Deployment configuration, not architecture |
+| 2 | `DIRECT_URL` in the Vercel Preview environment | **Security.** It carries the `postgres` role, which has `rolbypassrls = true`. Runtime never needs it — only `prisma migrate` does. Remove it from Preview |
+| 3 | Demo removal and the real bootstrap admin (D21) | `prisma/bootstrap-operator.ts` exists; `seed.ts` still carries the demo credential |
+| 4 | QO-2 (what "suspend client" does), QO-4 (production credential owner) | Product decisions, still open |
+| 5 | Board composition on capability pages; per-surface dark authoring | Cosmetic debt (verdict A deferral) |
+| 6 | Provider bindings — storage, job runner, notification transport | Deliberately unbound. A provider chosen without a requirement is a guess encoded into the foundation |
 
 ---
 
-## What a developer may and may not do today
+## What happens next
 
-**May not:** start a client build. The gate has not returned CLIENT BUILD APPROVED.
+The correct next action is **not** "what should we build next?"
 
-**May, safely:** finish HQ's remaining administrative screens using the same contracts the built ones
-use — `runCommand`, `provisionIdentity`, `resolvePermissions`, `withTenant` — because the operator
-model those screens sit on is decided, built, and bound to tests that fail if it stops holding.
+It is: *here is a real operational requirement — build it as a capability on the existing Verity
+foundation, and do not modify platform primitives unless you can prove the requirement cannot be
+satisfied through existing contracts.*
 
-The foundation underneath is not in question. What is missing is the operator layer above it, and
-the missing part is screens over contracts that already exist and are already proven.
+The foundation is proven, the operator layer above it is built and usable, and both are bound to
+tests that fail if they stop holding. Verity is waiting for a requirement.

@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { FormDescriptor } from "@/server/platform/experience";
 import { Button, DefinitionList, ErrorState, Field, Input, Panel, Select } from "@/components/ui/primitives";
-import { runCommand, type ActionFailure } from "@/server/actions/platform";
+import { runCommand } from "@/server/actions/platform";
+import type { ActionFailure } from "@/server/platform/action-error";
 
 /**
  * Tenant custom fields, rendered from platform metadata (§B.5).

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, ErrorState, Field, Input, Select } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
-import type { ActionFailure } from "@/server/actions/platform";
+import type { ActionFailure } from "@/server/platform/action-error";
 
 /**
  * Creates a Location through the real command pipeline.

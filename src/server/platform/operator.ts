@@ -5,6 +5,7 @@ import { getAuthUser, resolveActor, setActiveMembership } from "./auth";
 import { recordSecurityEvent } from "./audit";
 import { withTenant } from "./tenancy";
 import { ForbiddenError } from "./authorization";
+import type { ActorContext } from "./command";
 
 /**
  * Global HQ operator authority.
@@ -213,6 +214,67 @@ export async function platformAudit(
 }
 
 /* ------------------------------------------------------------------------- *
+ * Platform settings — the operator's own tenant
+ * ------------------------------------------------------------------------- */
+
+export type PlatformSettings = {
+  tenantName: string;
+  timeZone: string | null;
+  operators: Array<{ displayName: string; email: string | null; roleName: string | null }>;
+  installedCapabilities: Array<{ id: string; name: string; version: string }>;
+};
+
+/**
+ * What the platform itself is configured with.
+ *
+ * Read inside the PLATFORM tenant's own scope — an operator is an ordinary
+ * member of it, so this needs no projection and no elevation. That it works
+ * through the same RLS as everything else is the point: the platform tenant is
+ * a tenant, and HQ reading its own roster is just a member reading their own
+ * tenant.
+ *
+ * Read-only, because nothing here has a write path that exists. Global-scope
+ * configuration is deliberately not tenant-writable, operator membership is
+ * granted by `prisma/bootstrap-operator.ts` under a human's hand, and capability
+ * definitions are installed by migration. Offering buttons for any of that would
+ * be offering controls that lie.
+ */
+export async function platformSettings(): Promise<PlatformSettings> {
+  const operator = await requireOperator();
+
+  return withTenant(operator.platformTenantId, async (tx) => {
+    const [tenant, memberships, capabilities] = await Promise.all([
+      tx.tenant.findUniqueOrThrow({
+        where: { id: operator.platformTenantId },
+        select: { name: true, timeZone: true },
+      }),
+      tx.tenantMembership.findMany({
+        include: {
+          user: { include: { party: { select: { displayName: true, email: true } } } },
+          role: { select: { name: true } },
+        },
+        orderBy: { createdAt: "asc" },
+      }),
+      tx.capabilityDefinition.findMany({
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, version: true },
+      }),
+    ]);
+
+    return {
+      tenantName: tenant.name,
+      timeZone: tenant.timeZone,
+      operators: memberships.map((membership) => ({
+        displayName: membership.user.party.displayName,
+        email: membership.user.party.email,
+        roleName: membership.role?.name ?? null,
+      })),
+      installedCapabilities: capabilities,
+    };
+  });
+}
+
+/* ------------------------------------------------------------------------- *
  * Scope elevation — entering a client
  * ------------------------------------------------------------------------- */
 
@@ -342,24 +404,122 @@ async function operatorRoleFor(
     where: { tenantId, name: OPERATOR_ROLE_NAME },
     select: { id: true },
   });
-  if (existing) return existing.id;
 
-  const role = await tx.role.create({
-    data: { tenantId, name: OPERATOR_ROLE_NAME },
-    select: { id: true },
+  const roleId =
+    existing?.id ??
+    (
+      await tx.role.create({
+        data: { tenantId, name: OPERATOR_ROLE_NAME },
+        select: { id: true },
+      })
+    ).id;
+
+  // Reconciled on every entry, not only at creation. A client onboarded before
+  // an HQ surface existed would otherwise carry a role missing the grant that
+  // surface needs, and the failure would appear as an unexplained E_FORBIDDEN
+  // in one client and not another. `skipDuplicates` makes this idempotent
+  // rather than merely repeatable.
+  const held = await tx.permission.findMany({
+    where: { roleId },
+    select: { verb: true, entity: true },
   });
+  const has = new Set(held.map((p) => `${p.verb}:${p.entity}`));
 
-  await tx.permission.createMany({
-    data: OPERATOR_GRANTS.map((grant) => ({
+  const missing = OPERATOR_GRANTS.filter((g) => !has.has(`${g.verb}:${g.entity}`));
+  if (missing.length > 0) {
+    await tx.permission.createMany({
+      data: missing.map((grant) => ({
+        tenantId,
+        roleId,
+        verb: grant.verb,
+        entity: grant.entity,
+        scope: "Tenant" as const,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  return roleId;
+}
+
+/**
+ * An ActorContext for the operator INSIDE one client.
+ *
+ * This is ADR-013 answers 3 and 4 in code: the operator selects a client, the
+ * selection is re-verified server-side against their platform authority, and
+ * only then does an actor exist for that tenant. Everything downstream —
+ * `executeCommand`, `executeQuery`, RLS, audit — then behaves exactly as it does
+ * for an ordinary user of that client, because it IS an ordinary membership.
+ *
+ * Deliberately does NOT switch the operator's active membership cookie the way
+ * `enterClient` does. Administering a client from HQ and working inside it as a
+ * tenant user are different acts, and conflating them would mean every visit to
+ * an HQ page silently changed which tenant the operator's other tabs belong to.
+ */
+export async function operatorActorFor(tenantId: string): Promise<ActorContext> {
+  const operator = await requireOperator();
+
+  return withTenant(tenantId, async (tx) => {
+    const [tenant] = await tx.$queryRaw<{ id: string; is_platform: boolean }[]>`
+      SELECT id, is_platform FROM tenant WHERE id = ${tenantId}::uuid`;
+    if (!tenant) throw new ForbiddenError("E_FORBIDDEN: no such client");
+    if (tenant.is_platform) {
+      throw new ForbiddenError("E_FORBIDDEN: the platform tenant is not administered as a client");
+    }
+
+    const existing = await tx.tenantMembership.findFirst({
+      where: { tenantId, userId: operator.userId },
+      select: { id: true, organizationId: true, roleId: true },
+    });
+
+    const roleId = await operatorRoleFor(tx, tenantId);
+
+    if (existing) {
+      // An operator membership that lost its role, or never had one, grants
+      // nothing — a membership with a null role fails closed by design. Restore
+      // it rather than returning an actor who will be refused everywhere.
+      if (existing.roleId !== roleId) {
+        await tx.tenantMembership.update({ where: { id: existing.id }, data: { roleId } });
+      }
+      return {
+        tenantId,
+        userId: operator.userId,
+        membershipId: existing.id,
+        organizationId: existing.organizationId,
+        roleId,
+      };
+    }
+
+    const organization = await tx.organization.findFirst({
+      where: { tenantId, parentId: null },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (!organization) throw new ForbiddenError("E_FORBIDDEN: client has no root organization");
+
+    const created = await tx.tenantMembership.create({
+      data: { tenantId, userId: operator.userId, organizationId: organization.id, roleId },
+      select: { id: true },
+    });
+
+    // QO-3: the client's own trail records that an operator took authority
+    // inside it. A privileged action a client cannot see is one they cannot
+    // question.
+    await recordSecurityEvent(tx, {
       tenantId,
-      roleId: role.id,
-      verb: grant.verb,
-      entity: grant.entity,
-      scope: "Tenant" as const,
-    })),
-  });
+      eventType: "PermissionEscalated",
+      actorUserId: operator.userId,
+      payload: { reason: "operator_administration", operator: true },
+    });
 
-  return role.id;
+    return {
+      tenantId,
+      userId: operator.userId,
+      membershipId: created.id,
+      organizationId: organization.id,
+      roleId,
+    };
+  });
 }
 
 export const OPERATOR_ROLE_NAME = "Verity Operator";
@@ -384,4 +544,10 @@ export const OPERATOR_GRANTS = [
   { verb: "Read" as const, entity: "verity.platform.role" },
   { verb: "Create" as const, entity: "verity.platform.role" },
   { verb: "Edit" as const, entity: "verity.platform.role" },
+  // Module enablement and tenant configuration. ActionExecute rather than Edit
+  // because turning a capability on is an action with consequences, not a field
+  // change — and the verb an operator holds should read like what they are
+  // doing (PLA-AUT-003).
+  { verb: "ActionExecute" as const, entity: "verity.platform.tenant" },
+  { verb: "Edit" as const, entity: "verity.platform.tenant" },
 ];

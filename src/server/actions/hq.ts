@@ -2,32 +2,43 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createClient, enterClient } from "@/server/platform/operator";
+import { createClient, enterClient, operatorActorFor } from "@/server/platform/operator";
+import { executeCommand, getCommand } from "@/server/platform/command";
+import { executeQuery, getQuery } from "@/server/platform/query";
+import { installAdministration } from "@/server/platform/administration";
+import { installCapabilities } from "@/server/capabilities/registry";
+import { toActionFailure, type ActionResult } from "@/server/platform/action-error";
 
 /**
  * HQ operator actions.
  *
- * Thin by design. Every one of these delegates to `src/server/platform/operator.ts`,
- * which performs the authorization check, the audit write and the scope
- * handling. An action that did any of that itself would be a second security
- * path, and ADR-013 exists precisely to keep there being one.
+ * Thin by design. Every one of these delegates to the platform — the operator
+ * check, the audit write and the scope handling all live in
+ * `src/server/platform/operator.ts` and the command runtime. An action that did
+ * any of that itself would be a second security path, and ADR-013 exists
+ * precisely to keep there being one.
  *
- * `FormData` in, plain result out — the actor is never read from the payload
- * (PLA-TEN-006). A caller who forged a tenant id in a form field would be
- * ignored, because no function below takes an actor from its input.
+ * The actor is never read from the payload. `operatorActorFor` derives it from
+ * the verified session and the operator's platform authority, so a forged tenant
+ * id in a form field produces a refusal rather than the wrong tenant
+ * (PLA-TEN-006).
  */
 
 export type HqActionResult = { ok: true } | { ok: false; message: string };
 
 function message(error: unknown): string {
-  if (error instanceof Error) {
-    // E_FORBIDDEN and E_VALIDATION are safe to surface; anything else is an
-    // internal failure and its text is not the operator's business.
-    if (error.message.startsWith("E_FORBIDDEN")) return "You do not have operator authority.";
-    if (error.message.startsWith("E_VALIDATION")) return error.message.replace("E_VALIDATION: ", "");
+  const failure = toActionFailure(error);
+  // E_FORBIDDEN and E_VALIDATION are safe to surface — the first tells an
+  // operator they lack authority, the second tells them what to fix. Anything
+  // else is an internal failure whose text is not the operator's business.
+  if (failure.code === "E_FORBIDDEN") return "You do not have operator authority for that.";
+  if (failure.code === "E_VALIDATION") {
+    return failure.message.replace(/^E_VALIDATION:\s*/, "");
   }
   return "Something went wrong. The action was not applied.";
 }
+
+/* ------------------------------- clients --------------------------------- */
 
 export async function createClientAction(
   _prev: HqActionResult | null,
@@ -50,13 +61,66 @@ export async function createClientAction(
 /**
  * Enters a client and lands in that client's workspace.
  *
- * The redirect is the point: entering a client is a context change, and leaving
- * the operator on an HQ page afterwards would leave them unsure which tenant
- * their next click applies to.
+ * The redirect is the point: entering is a context change, and leaving the
+ * operator on an HQ page afterwards would leave them unsure which tenant their
+ * next click applies to.
  */
 export async function enterClientAction(form: FormData): Promise<void> {
   const tenantId = String(form.get("tenantId") ?? "");
   if (!tenantId) return;
   await enterClient(tenantId);
   redirect("/");
+}
+
+/* -------------------------- administration bridge ------------------------- */
+
+/**
+ * Runs a registered command inside one client, as the operator.
+ *
+ * This is the only write path HQ has, and it is the ordinary one: the same
+ * `executeCommand` a tenant user's action goes through, with an actor whose
+ * authority in that client is a real membership and a real role. Nothing here
+ * elevates anything — the elevation, such as it is, happened when
+ * `operatorActorFor` verified platform authority and produced the actor.
+ */
+export async function runClientCommand<T = unknown>(
+  tenantId: string,
+  key: string,
+  input: unknown,
+  revalidate?: string,
+): Promise<ActionResult<T>> {
+  installCapabilities();
+  installAdministration();
+  try {
+    const definition = getCommand(key);
+    if (!definition) throw new Error(`Unknown command: ${key}`);
+
+    const actor = await operatorActorFor(tenantId);
+    const data = (await executeCommand(actor, definition, input)) as T;
+
+    if (revalidate) revalidatePath(revalidate);
+    return { ok: true, data };
+  } catch (error) {
+    return toActionFailure(error);
+  }
+}
+
+/** Runs a registered query inside one client, as the operator. */
+export async function runClientQuery<T = unknown>(
+  tenantId: string,
+  key: string,
+  input: unknown,
+): Promise<ActionResult<T>> {
+  installCapabilities();
+  installAdministration();
+  try {
+    const definition = getQuery(key);
+    if (!definition) throw new Error(`Unknown query: ${key}`);
+
+    const actor = await operatorActorFor(tenantId);
+    const data = (await executeQuery(actor, definition, input)) as T;
+    return { ok: true, data };
+  } catch (error) {
+    return toActionFailure(error);
+  }
 }
