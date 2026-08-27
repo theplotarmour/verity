@@ -243,6 +243,41 @@ describe("conformance: capability contracts (Phase E)", () => {
   });
 });
 
+describe("conformance: DEC-001 boundary (ADR-014)", () => {
+  it("keeps kitchen vocabulary out of the platform", () => {
+    // ADR-014 permits a kitchen SCREEN inside a client capability and leaves
+    // DEC-001's exclusion of a kitchen MODULE from core untouched. The
+    // difference is whether anything kitchen-shaped can escape the capability,
+    // so that is what is checked rather than trusted.
+    const platform = sourceFiles(join(ROOT, "src/server/platform"));
+    const offenders = platform.filter((file) =>
+      /kitchen|bump[ _-]?timer|recipe|prep[ _-]?queue/i.test(
+        readFileSync(file, "utf8"),
+      ),
+    );
+    expect(offenders.map((file) => relative(ROOT, file))).toEqual([]);
+  });
+
+  it("keeps the kitchen screen inside the capability that owns it", () => {
+    // A shared component would be the excluded module wearing a different name:
+    // the moment a second capability can render this board, it has generalised.
+    const shared = sourceFiles(join(ROOT, "src/components")).filter((file) =>
+      /kitchen/i.test(readFileSync(file, "utf8")),
+    );
+    expect(shared.map((file) => relative(ROOT, file))).toEqual([]);
+  });
+
+  it("has no recipe or inventory logic anywhere in the dine-in capability", () => {
+    // The two things DEC-001's rationale names stay excluded outright. The
+    // screen shows what was ordered; it does not know what a dish is made of.
+    const capability = sourceFiles(join(ROOT, "src/server/capabilities/dinein"));
+    const offenders = capability.filter((file) =>
+      /recipe|ingredient|stock[ _-]?level|deplet/i.test(readFileSync(file, "utf8")),
+    );
+    expect(offenders.map((file) => relative(ROOT, file))).toEqual([]);
+  });
+});
+
 describe("conformance: over-genericity (Phase G)", () => {
   it("keeps JSON columns to the declared extension points", () => {
     // Json is legitimate for custom_fields (PLA-EXT-001), event and automation

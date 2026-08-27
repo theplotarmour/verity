@@ -4,7 +4,13 @@ import { registerCommand, ValidationError, type CommandDefinition } from "@/serv
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import { registerTransitionGuard, transition } from "@/server/platform/state";
 import { diffFields, recordActivity } from "@/server/platform/audit";
-import { applyStateToClocks, startClock, remainingMinutes, urgencyFor } from "@/server/platform/sla";
+import {
+  applyStateToClocks,
+  startClock,
+  remainingMinutes,
+  sweepBreaches,
+  urgencyFor,
+} from "@/server/platform/sla";
 import { notify } from "@/server/platform/notification";
 import { resolveConfig } from "@/server/platform/capability";
 import { withTenant, type TenantScopedClient } from "@/server/platform/tenancy";
@@ -1589,6 +1595,18 @@ export function registerDineinCapability(): void {
         shells: ["platform", "operations"],
       },
       {
+        // Permitted by ADR-014: capability-private, no platform vocabulary, no
+        // recipe logic, timing from the SLA substrate. DEC-001 still excludes a
+        // kitchen module from core.
+        href: "/kitchen",
+        label: "Kitchen",
+        group: "Capabilities",
+        order: 19,
+        icon: "workspace",
+        requiresEntity: ENTITY_ORDER_LINE,
+        shells: ["platform", "operations"],
+      },
+      {
         href: "/counter",
         label: "Counter",
         group: "Capabilities",
@@ -1626,6 +1644,28 @@ export function registerDineinCapability(): void {
         requiresEntity: ENTITY_TABLE,
         requiresVerb: "Create",
         shells: ["platform"],
+      },
+    ],
+    schedules: [
+      {
+        key: "verity.dinein.sweep_prep_breaches",
+        label: "Sweep kitchen prep breaches",
+        // "Frequent" rather than a cron string: the capability knows a late
+        // dish is worth knowing about soon, and does not know whether this
+        // deployment runs cron, a worker or something not yet chosen.
+        cadence: "frequent",
+        run: async ({ tx, now }) => {
+          // Idempotent by construction — sweepBreaches only marks clocks past
+          // their deadline that are not already breached, so a scheduler that
+          // retries (and every real one does) changes nothing the second time.
+          const breached = await sweepBreaches(tx, now);
+          return {
+            events: breached.map((event) => ({
+              name: event.name,
+              entityId: event.entityId ?? undefined,
+            })),
+          };
+        },
       },
     ],
     workspace: [

@@ -1,7 +1,16 @@
 # Decision audit — D11, D7, D2
 
 **Date:** 2026-08-28
-**Status:** **AUDIT ONLY. Nothing here is decided, and no code was written for any option below.**
+**Status:** **RESOLVED 2026-08-28.** The product owner chose Option A on all three.
+
+| | Decision | Outcome |
+|---|---|---|
+| **D11** | Option A — DEC-001 governs core only | **ADR-014** accepted; `/kitchen` built inside the capability, boundary enforced by conformance tests |
+| **D7** | Option A — leave it | No ADR, no code. Personal sign-in stands; revisit after real service friction |
+| **D2** | Option A — host cron to an authenticated route | **ADR-015** accepted; `POST /api/scheduled` bound, sweep declared as a `frequent` cadence |
+
+The audit below is left as written, because the options that were not taken are
+the reason the one that was taken is defensible.
 **Requirement source:** `KentsRestaurant.md` §17. All three are Kent's-driven; none is speculative.
 **Why now:** Kent's dine-in reached 330/330 tests with an empty `src/server/platform/` diff. What
 remains cannot be built without answering these three, and guessing any of them would put a
