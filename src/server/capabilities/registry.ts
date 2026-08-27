@@ -4,6 +4,7 @@ import { registerAssetCapability } from "./asset";
 import { registerEvidenceCapability } from "./evidence";
 import { registerSchedulingCapability } from "./scheduling";
 import { registerApprovalCapability } from "./approval";
+import { registerDineinCapability } from "./dinein";
 
 /**
  * Installs every shipped capability into the running process.
@@ -23,4 +24,5 @@ export function installCapabilities(): void {
   registerEvidenceCapability();
   registerSchedulingCapability();
   registerApprovalCapability();
+  registerDineinCapability();
 }

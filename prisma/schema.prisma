@@ -88,6 +88,19 @@ model Tenant {
   notificationPreferences NotificationPreference[]
   notifications           Notification[]
 
+  // Capability: dine-in. Back-relations only — Prisma requires the opposite
+  // side of every relation, so a capability's tables show up here whether or not
+  // the platform cares about them. Nothing on this side is platform behaviour.
+  menuCategories          MenuCategory[]
+  menuItems               MenuItem[]
+  menuVariants            MenuItemVariant[]
+  diningZones             DiningZone[]
+  diningTables            DiningTable[]
+  diningOrders            DiningOrder[]
+  orderLines              OrderLine[]
+  bills                   Bill[]
+  payments                Payment[]
+
   @@map("tenant")
 }
 
@@ -1693,4 +1706,292 @@ model Notification {
   @@index([tenantId, recipientId, readAt])
   @@index([tenantId, status])
   @@map("notification")
+}
+
+// ===========================================================================
+// CAPABILITY: Dine-in  (verity.capability.dinein)
+//
+// Kent's Restaurant, Defence Colony — the first real client requirement.
+// Authority: KentsRestaurant.md §6, implementation/kents-gap-analysis.md.
+//
+// Capability-owned, which PLATFORM-FREEZE names as expected and additive: new
+// tables under a capability's own name change nothing about tenancy, the
+// command runtime, authorization or the shell. Every model below carries the
+// base-entity shape (id, tenantId, createdAt, updatedAt, version, customFields)
+// and is protected by the same RLS policy as every other tenant-scoped table.
+//
+// MONEY IS INTEGER MINOR UNITS (paise). Floating-point money drifts by the
+// third addition, and a bill that disagrees with itself by a paisa is a bill
+// nobody trusts. Currency comes from configuration; the arithmetic does not.
+// ===========================================================================
+
+/// A section of the menu — Starters, Breads, Desserts.
+model MenuCategory {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  name         String
+  sortOrder    Int      @default(0) @map("sort_order")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  items  MenuItem[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id], name: "menu_category_tenant_scoped_id")
+  @@index([tenantId, sortOrder])
+  @@map("menu_category")
+}
+
+/// Something orderable, with the price it is sold at today.
+///
+/// Never deleted — retired through `active`, because a bill from last month must
+/// still render what was charged. Order lines snapshot name and price anyway;
+/// this keeps the catalogue honest as well as the history.
+model MenuItem {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  categoryId   String   @map("category_id") @db.Uuid
+  name         String
+  description  String?
+  priceMinor   Int      @map("price_minor")
+  /// What the item costs the kitchen. Restricted by FieldPermission so margin
+  /// never reaches a shared floor tablet.
+  costMinor    Int?     @map("cost_minor")
+  active       Boolean  @default(true)
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category MenuCategory      @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  variants MenuItemVariant[]
+  lines    OrderLine[]
+
+  @@unique([tenantId, id], name: "menu_item_tenant_scoped_id")
+  @@index([tenantId, categoryId, sortOrder])
+  @@map("menu_item")
+}
+
+/// A portion of an item — Half, Full — priced as a delta from the item.
+model MenuItemVariant {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  itemId          String   @map("item_id") @db.Uuid
+  name            String
+  priceDeltaMinor Int      @default(0) @map("price_delta_minor")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  version         Int      @default(1)
+  customFields    Json     @default("{}") @map("custom_fields")
+
+  tenant Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  item   MenuItem @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([tenantId, itemId, name])
+  @@unique([tenantId, id], name: "menu_variant_tenant_scoped_id")
+  @@map("menu_variant")
+}
+
+/// A part of the floor — Ground, Mezzanine, Terrace.
+model DiningZone {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  name         String
+  floorLabel   String?  @map("floor_label")
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tables DiningTable[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id], name: "dining_zone_tenant_scoped_id")
+  @@map("dining_zone")
+}
+
+/// A physical table, where it sits on the floor plan, and what it is doing.
+///
+/// Not a Resource and not an Asset (ADR-008 considered and rejected in
+/// KentsRestaurant.md §6 M2): occupancy is discrete state, not calendar
+/// scheduling, and double-seating is prevented by the occupy precondition
+/// rather than by an overlap trigger.
+model DiningTable {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  zoneId       String   @map("zone_id") @db.Uuid
+  label        String
+  seats        Int      @default(2)
+  shape        String?
+  /// Floor-plan canvas coordinates. Real numbers a manager dragged, not a
+  /// generic diagram abstraction.
+  posX         Int      @default(0) @map("pos_x")
+  posY         Int      @default(0) @map("pos_y")
+  state        String   @default("available")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  zone   DiningZone    @relation(fields: [tenantId, zoneId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  orders DiningOrder[]
+
+  @@unique([tenantId, label])
+  @@unique([tenantId, id], name: "dining_table_tenant_scoped_id")
+  @@index([tenantId, state])
+  @@map("dining_table")
+}
+
+/// One table's service, from cart to settled.
+///
+/// This is the domain's Work instance (Bible V2 WORK): a unit of service
+/// execution moving through states under commands. Called an order because that
+/// is what a restaurant calls it — never a ticket, job card or event run.
+model DiningOrder {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  tableId       String    @map("table_id") @db.Uuid
+  /// Resolved from the session, never from a payload (PLA-TEN-006).
+  takenByUserId String    @map("taken_by_user_id") @db.Uuid
+  covers        Int       @default(1)
+  state         String    @default("draft")
+  /// Plain fields for the occasional B2B invoice. Deliberately NOT a Party — a
+  /// walk-in diner has no login and must not mint a platform identity
+  /// (ADR-001, ADR-007).
+  customerName  String?   @map("customer_name")
+  customerPhone String?   @map("customer_phone")
+  placedAt      DateTime? @map("placed_at")
+  servedAt      DateTime? @map("served_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  version       Int       @default(1)
+  customFields  Json      @default("{}") @map("custom_fields")
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  table  DiningTable @relation(fields: [tenantId, tableId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  lines  OrderLine[]
+  bill   Bill?
+
+  @@unique([tenantId, id], name: "dining_order_tenant_scoped_id")
+  @@index([tenantId, state])
+  @@index([tenantId, tableId, state])
+  @@map("dining_order")
+}
+
+/// One line on an order, with its own progress through the kitchen.
+///
+/// A twelve-item order is not done when one dish is, which is why the line —
+/// not the order — is what the kitchen advances.
+///
+/// Name and price are SNAPSHOTS. Menu edits are forward-looking; a bill from
+/// last month must render exactly what was charged even after the item is
+/// renamed, repriced or retired. Same principle as Evidence immutability.
+model OrderLine {
+  id                  String   @id @default(uuid()) @db.Uuid
+  tenantId            String   @map("tenant_id") @db.Uuid
+  orderId             String   @map("order_id") @db.Uuid
+  itemId              String   @map("item_id") @db.Uuid
+  variantId           String?  @map("variant_id") @db.Uuid
+  itemNameSnapshot    String   @map("item_name_snapshot")
+  variantNameSnapshot String?  @map("variant_name_snapshot")
+  unitPriceMinor      Int      @map("unit_price_minor")
+  qty                 Int      @default(1)
+  lineNote            String?  @map("line_note")
+  state               String   @default("queued")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  version             Int      @default(1)
+  customFields        Json     @default("{}") @map("custom_fields")
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order  DiningOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  item   MenuItem    @relation(fields: [tenantId, itemId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, id], name: "order_line_tenant_scoped_id")
+  @@index([tenantId, orderId])
+  @@index([tenantId, state])
+  @@map("order_line")
+}
+
+/// The guest's bill for one order.
+///
+/// Amounts are computed once, server-side, at generation — including the tax
+/// breakdown, which is stored rather than recomputed on render, so a reprint a
+/// year later shows the rate that actually applied.
+model Bill {
+  id                String    @id @default(uuid()) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  orderId           String    @unique @map("order_id") @db.Uuid
+  subtotalMinor     Int       @map("subtotal_minor")
+  discountMinor     Int       @default(0) @map("discount_minor")
+  /// The tax that applied, in columns rather than a JSON blob.
+  ///
+  /// An Indian restaurant bill for an intra-state supply carries exactly two
+  /// components, so two pairs of columns model it completely. The rate is stored
+  /// beside the amount because PRN-001 requires the math be visible on the bill,
+  /// and because a reprint a year later must show the rate that actually
+  /// applied rather than today's.
+  ///
+  /// Rates are BASIS POINTS: 2.5% is 250. Integer money deserves integer rates,
+  /// and a float rate would reintroduce on the tax line exactly the drift the
+  /// paise columns exist to avoid.
+  cgstRateBp        Int       @default(0) @map("cgst_rate_bp")
+  cgstMinor         Int       @default(0) @map("cgst_minor")
+  sgstRateBp        Int       @default(0) @map("sgst_rate_bp")
+  sgstMinor         Int       @default(0) @map("sgst_minor")
+  taxableMinor      Int       @default(0) @map("taxable_minor")
+  totalMinor        Int       @map("total_minor")
+  roundingMinor     Int       @default(0) @map("rounding_minor")
+  state             String    @default("open")
+  generatedByUserId String    @map("generated_by_user_id") @db.Uuid
+  settledAt         DateTime? @map("settled_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  version           Int       @default(1)
+  customFields      Json      @default("{}") @map("custom_fields")
+
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  order    DiningOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  payments Payment[]
+
+  // One bill per order in v1. The pair is unique as well as the id, because the
+  // relation is defined on the tenant-scoped composite key and Prisma needs the
+  // defining side of a one-to-one to be unique on exactly those columns.
+  @@unique([tenantId, orderId], name: "bill_tenant_scoped_order")
+  @@unique([tenantId, id], name: "bill_tenant_scoped_id")
+  @@index([tenantId, state])
+  @@map("bill")
+}
+
+/// Money received against a bill. Several rows settle a split payment.
+model Payment {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  billId           String   @map("bill_id") @db.Uuid
+  method           String
+  amountMinor      Int      @map("amount_minor")
+  /// UPI transaction id or card reference. Record-and-print only: no terminal
+  /// integration, no gateway (GOV-SCO-006).
+  reference        String?
+  receivedByUserId String   @map("received_by_user_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  version          Int      @default(1)
+  customFields     Json     @default("{}") @map("custom_fields")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  bill   Bill   @relation(fields: [tenantId, billId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([tenantId, id], name: "payment_tenant_scoped_id")
+  @@index([tenantId, billId])
+  @@map("payment")
 }

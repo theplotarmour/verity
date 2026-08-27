@@ -163,6 +163,10 @@ describe("conformance: capability contracts (Phase E)", () => {
     evidence: ["location"],
     scheduling: ["asset"],
     approval: [],
+    // Kent's Restaurant, the first real client. Depends on nothing: a menu, a
+    // floor and a bill need no other capability, and declaring one it does not
+    // use would make the graph a wish rather than a fact.
+    dinein: [],
   };
 
   const capabilityDirs = readdirSync(join(ROOT, "src/server/capabilities")).filter((entry) =>

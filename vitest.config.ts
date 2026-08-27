@@ -11,6 +11,18 @@ export default defineConfig({
     // latency rather than on behaviour, which is the worst kind of red test.
     testTimeout: 30_000,
     hookTimeout: 30_000,
+    // One file at a time, against one database.
+    //
+    // Every suite here opens interactive transactions on the same pooled
+    // PostgreSQL, and running files in parallel multiplied that by the worker
+    // count — past the pooler's limit, where connections queue and suites fail
+    // on the wait rather than on anything they assert. The symptom was the
+    // giveaway: a different file failed on each run, with tests reported as
+    // skipped rather than failed.
+    //
+    // Serial is also the honest shape. These share seeded data and mutate it;
+    // parallelism was never safe here, it merely hid.
+    fileParallelism: false,
   },
   resolve: {
     alias: {
