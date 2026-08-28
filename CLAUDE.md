@@ -312,9 +312,19 @@ Layer 2 through `ctx.scope()`.
 
 - `implementation/02-foundation-build-order/vertical-slice-strategy.md` still lists `DEC-BIBLE-001` as open; it was resolved by ADR-001. The ADR wins.
 - **`Global` scope is defined but never granted.** PLA-AUT-002 defines cross-tenant platform administration, but honouring it means bypassing the RLS that enforces INV-001. `verity.resolve_permissions` filters `Global` grants out, so such a row can exist without silently taking effect. Wiring it up needs a security decision and an ADR.
+- ~~**No storage driver is bound.**~~ **CLOSED 2026-08-28.** Supabase Storage is bound in
+  `src/server/storage/supabase.ts` and registered through the platform's extension point — nothing
+  in `src/server/platform/` changed. The plywood client forced it: an LR scan is `Evidence`, and
+  Evidence with no file is a row claiming a photograph exists. A deployment with the variables
+  unset still runs; `files.ts` refuses at the point of use rather than at boot.
 - **Credential encryption key location is an implementation decision.** MET-AUT-003 requires an encrypted credential registry but does not say where the key lives. It is currently supplied per call from the application environment and never stored in the database, so a dump yields ciphertext alone. A managed KMS would be stronger and needs a platform decision.
 - **`own` permission scope is an open decision.** PLA-AUT-002 enumerates `Global | Tenant | Organization | Location`. `team` and `resource` need no platform change — they are axes and the scope-resolver registry handles them. `own` is actor-relative, appears in neither Bible nor spec, and needs an ADR before it is added.
-- **Nothing runs on a schedule.** SLA breach sweeps and notification dispatch are implemented and idempotent but nothing invokes them. Bind a job runner before a capability depends on a deadline firing.
+- ~~**Nothing runs on a schedule.**~~ **CLOSED 2026-08-28.** ADR-015 bound the trigger
+  (`POST|GET /api/scheduled`, constant-time secret, 503 rather than running unauthenticated) and
+  ADR-016 permits it to enumerate tenants, because a tenant id is runtime data and a cron schedule
+  is build-time configuration — a per-tenant schedule was unwritable, not merely verbose.
+  `vercel.json` carries one cron per cadence. **`CRON_SECRET` must be set on the deployment or
+  nothing runs**, by design.
 - **The Bible is not editable.** One amendment (AMD-001, `factoryId` -> `tenantId`, Volume V §1.A.1 and Volume VI) was authorised by the product owner as a one-time edit and is already applied. Do not modify `verity-bible/` again without a fresh explicit instruction.
 
 ## Stop conditions — escalate, do not improvise

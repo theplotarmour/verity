@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { runDueWork, type ScheduleCadence } from "@/server/platform/contribution";
+import { prisma } from "@/server/platform/db";
 import { withTenant } from "@/server/platform/tenancy";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { installAdministration } from "@/server/platform/administration";
@@ -21,14 +22,20 @@ export const dynamic = "force-dynamic";
  * nothing a capability can see, which is the property the cadence abstraction
  * was built to have.
  *
- * ONE TENANT PER CALL, DELIBERATELY
- * The caller names the tenant. Enumerating tenants here would be a cross-tenant
- * read, and ADR-013 lists exactly three of those — adding a fourth is a
- * deliberate act with its own decision, not something a cron endpoint does on
- * the way past. One schedule entry per client is honest at Kent's scale; when
- * there are enough clients for that to hurt, that is the requirement that
- * forces the enumeration decision, and it can be answered then with the real
- * number in hand.
+ * THE CALLER NAMES THE TENANT, OR ASKS FOR ALL OF THEM
+ * `?tenant=<uuid>` runs one tenant. `?tenant=all` enumerates, which ADR-016
+ * decides and which this route previously refused to do on its own authority.
+ *
+ * What forced that decision was not a client count. A tenant id is runtime data
+ * — tenants are created in the HQ console with generated UUIDs — while a cron
+ * schedule is static configuration written at build time, so a per-tenant
+ * schedule is unwritable rather than merely verbose, and every new client would
+ * need a redeploy before any of its deadlines fired.
+ *
+ * Enumeration returns IDS ONLY, from a function whose whole body is a distinct
+ * select over active activations. The work for each tenant then runs inside
+ * `withTenant` exactly as the single-tenant path does — nothing crosses the
+ * boundary, and there is no privileged path around tenancy anywhere here.
  */
 
 /**
@@ -45,7 +52,7 @@ function secretMatches(provided: string, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-export async function POST(request: Request): Promise<NextResponse> {
+async function dispatch(request: Request): Promise<NextResponse> {
   const expected = process.env.CRON_SECRET;
   if (!expected) {
     // Refuse rather than run unauthenticated. A scheduler endpoint with no
@@ -62,10 +69,11 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   const url = new URL(request.url);
-  const tenantId = url.searchParams.get("tenant");
+  const requested = url.searchParams.get("tenant");
   const cadence = (url.searchParams.get("cadence") ?? "frequent") as ScheduleCadence;
 
-  if (!tenantId || !/^[0-9a-f-]{36}$/i.test(tenantId)) {
+  const everyTenant = requested === "all";
+  if (!everyTenant && (!requested || !/^[0-9a-f-]{36}$/i.test(requested))) {
     return NextResponse.json({ error: "a tenant is required" }, { status: 400 });
   }
   if (!["frequent", "hourly", "daily", "weekly"].includes(cadence)) {
@@ -75,6 +83,42 @@ export async function POST(request: Request): Promise<NextResponse> {
   installCapabilities();
   installAdministration();
 
+  const tenantIds = everyTenant ? await schedulerTenantIds() : [requested!];
+
+  // Sequential, not parallel. Fanning out would multiply concurrent database
+  // connections by the tenant count against a pooled database — ADR-016 records
+  // that a slow tenant delays the ones after it, and that a queue is the answer
+  // when that becomes the constraint rather than a prediction.
+  const results = [];
+  for (const tenantId of tenantIds) {
+    results.push(await runForTenant(tenantId, cadence));
+  }
+
+  return NextResponse.json({
+    cadence,
+    tenants: results.length,
+    ran: results.reduce((sum, result) => sum + result.ran, 0),
+    results,
+  });
+}
+
+/**
+ * Ids of tenants with something to run (ADR-016).
+ *
+ * A named SECURITY DEFINER function rather than a direct read of the `tenant`
+ * table: the latter would work only because the runtime role happens to see that
+ * table, which is the kind of accident that makes an isolation boundary depend on
+ * nobody noticing. A function with a stated purpose can be reviewed, granted and
+ * revoked.
+ */
+async function schedulerTenantIds(): Promise<string[]> {
+  const rows = await prisma.$queryRaw<{ tenant_id: string }[]>`
+    SELECT tenant_id FROM verity.scheduler_tenant_ids()`;
+  return rows.map((row) => row.tenant_id);
+}
+
+/** One tenant's due work, entirely inside that tenant's own scope. */
+async function runForTenant(tenantId: string, cadence: ScheduleCadence) {
   // Which capabilities are active is read inside the tenant's own scope, under
   // its own policies. There is no privileged path around tenancy here, and
   // `runDueWork` runs each unit under `withTenant` for the same reason.
@@ -88,9 +132,8 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const outcomes = await runDueWork({ tenantId, activeCapabilityIds, cadence });
 
-  return NextResponse.json({
+  return {
     tenantId,
-    cadence,
     ran: outcomes.length,
     outcomes: outcomes.map((outcome) => ({
       key: outcome.key,
@@ -101,5 +144,22 @@ export async function POST(request: Request): Promise<NextResponse> {
       // is the only thing that can act on a failed unit. It reaches no browser.
       error: outcome.error,
     })),
-  });
+  };
+}
+
+/**
+ * Vercel Cron issues a GET and sets `Authorization: Bearer $CRON_SECRET` itself,
+ * so GET is the shape the deployment host actually calls. POST is kept because a
+ * trigger that is a mutation reads honestly, and because a worker or a managed
+ * scheduler put in front of this later will reach for it.
+ *
+ * Both run the same code and both require the same secret. GET is not a weaker
+ * door.
+ */
+export async function GET(request: Request): Promise<NextResponse> {
+  return dispatch(request);
+}
+
+export async function POST(request: Request): Promise<NextResponse> {
+  return dispatch(request);
 }
