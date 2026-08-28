@@ -69,3 +69,8 @@ graphify-out/cache/
 /test-results/
 /playwright-report/
 /e2e/.auth/
+.mcp.json
+tmp-010-envsync.mts
+tmp-010-run.mts
+tmp-010-smoke.mjs
+tmp-010-inspect.mts
