@@ -11,11 +11,16 @@ import {
   Stat,
   StatRow,
 } from "@/components/ui/primitives";
+import { OperationalHistory } from "./OperationalHistory";
 
 export const dynamic = "force-dynamic";
 
 type ActivityRow = Record<string, unknown> & {
   id: string; entity: string; field: string; change: string; at: string; command: string;
+  // Full detail for the Context Panel — the table columns above stay
+  // truncated/formatted for scanning; the panel shows the untruncated facts.
+  entityKey: string; entityId: string; oldValue: string; newValue: string;
+  commandFull: string; actor: string; occurredAtFull: string;
 };
 type SecurityRow = Record<string, unknown> & { id: string; type: string; at: string; ip: string };
 
@@ -61,6 +66,15 @@ export default async function AuditPage() {
         change: `${a.oldValue ?? "empty"} → ${a.newValue ?? "empty"}`,
         at: a.occurredAt.toISOString().replace("T", " ").slice(0, 16),
         command: a.commandKey ?? "—",
+        entityKey: a.entityKey,
+        entityId: a.entityId,
+        oldValue: a.oldValue ?? "empty",
+        newValue: a.newValue ?? "empty",
+        commandFull: a.commandKey ?? "—",
+        // Unjoined by design, matching `operator.ts`'s `platformAudit` — an
+        // audit row's actor is a raw id, not a Party lookup this query owns.
+        actor: a.actorUserId ?? "System",
+        occurredAtFull: a.occurredAt.toISOString(),
       })),
       security: security.map<SecurityRow>((s) => ({
         id: s.id,
@@ -100,18 +114,7 @@ export default async function AuditPage() {
       <div className="flex flex-col gap-8">
         <section>
           <SectionHeading note="Newest first">Operational history</SectionHeading>
-          <DataTable
-            caption="Operational history"
-            rows={data.activity}
-            columns={[
-              { key: "entity", header: "Record", subKey: "field" },
-              { key: "change", header: "Change" },
-              { key: "command", header: "Command" },
-              { key: "at", header: "When" },
-            ]}
-            emptyTitle="No changes recorded yet"
-            emptyDescription="History begins when a command modifies a record."
-          />
+          <OperationalHistory rows={data.activity} />
         </section>
 
         <section>

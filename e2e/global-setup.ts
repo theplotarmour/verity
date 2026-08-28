@@ -20,7 +20,12 @@ async function globalSetup(config: FullConfig) {
   await page.getByLabel("Password").fill("verity-demo-password");
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await page.waitForURL("/", { timeout: 30_000 });
+  // A Platform Operator now lands on `/hq` rather than `/` (Issue 1 fix,
+  // 2026-08-28) — this fixture account holds operator authority, so it takes
+  // that path. Either landing is a successful sign-in; the client shell (with
+  // the org switcher the block below needs) is reached explicitly next.
+  await page.waitForURL(/\/(hq)?$/, { timeout: 30_000 });
+  await page.goto("/");
 
   // Pin the operating context to the seeded client rather than inheriting
   // whichever membership happens to sort first.

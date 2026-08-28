@@ -61,7 +61,7 @@ const PAGE = 25;
  * Rendering every page is fine at three pages and unusable at ninety, which is
  * exactly the range an audit table covers.
  */
-function pageNumbers(current: number, total: number): Array<number | null> {
+export function pageNumbers(current: number, total: number): Array<number | null> {
   const keep = new Set([0, total - 1, current - 1, current, current + 1]);
   const pages = [...keep].filter((n) => n >= 0 && n < total).sort((a, b) => a - b);
 
@@ -94,7 +94,7 @@ function fillTemplate(template: string, row: Record<string, unknown>): string {
   return template.replace(/\{(\w+)\}/g, (_, field: string) => String(row[field] ?? ""));
 }
 
-function Cell({
+export function Cell({
   column,
   row,
   lead,
