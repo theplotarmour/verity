@@ -48,6 +48,28 @@ CREATE UNIQUE INDEX IF NOT EXISTS tenant_single_platform
 -- on the operator entity — the ordinary Verb + Entity + Scope model, with no
 -- second authorization path beside it.
 
+-- ---------------------------------------------------------------------------
+-- Replay note (added 2026-08-28)
+--
+-- `prisma migrate reset` drops the `public` schema but NOT `verity`, because
+-- `verity` is outside the schema Prisma manages. Every function below therefore
+-- SURVIVES a reset, and a later migration that changes one of their return types
+-- (20260826140000 changes all three projections from TIMESTAMPTZ to TIMESTAMP(3))
+-- leaves the newer signature in place. Replaying this migration from scratch
+-- then fails with 42P13 -- "cannot change return type of existing function" --
+-- because CREATE OR REPLACE cannot alter an OUT-parameter row type.
+--
+-- The explicit DROPs below make this migration idempotent against a database
+-- that still carries a previous run's functions, which is what makes a reset
+-- repeatable. They are DROP ... IF EXISTS, so a genuinely empty database is
+-- unaffected.
+-- ---------------------------------------------------------------------------
+
+DROP FUNCTION IF EXISTS verity.is_platform_operator(UUID);
+DROP FUNCTION IF EXISTS verity.operator_client_directory(UUID);
+DROP FUNCTION IF EXISTS verity.operator_platform_activity(UUID);
+DROP FUNCTION IF EXISTS verity.operator_platform_audit(UUID, INT);
+
 CREATE OR REPLACE FUNCTION verity.is_platform_operator(p_auth_user_id UUID)
 RETURNS BOOLEAN
 LANGUAGE sql

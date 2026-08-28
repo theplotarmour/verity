@@ -1,0 +1,473 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Button,
+  EmptyState,
+  ErrorState,
+  Field,
+  Input,
+  Panel,
+  Select,
+  StateBadge,
+} from "@/components/ui/primitives";
+import { runCommand } from "@/server/actions/platform";
+import type { ActionFailure } from "@/server/platform/action-error";
+
+type PurchaseOrder = {
+  id: string;
+  supplierName: string;
+  state: string;
+  totalCostPaise: number;
+  outstandingUnits: number;
+};
+
+type Supplier = {
+  id: string;
+  displayName: string;
+  gstin: string | null;
+  stateCode: string | null;
+  openOrders: number;
+};
+
+function rupees(paise: number): string {
+  return `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
+}
+
+/** State keys are the capability's; these are what a buyer calls them. */
+const STATE_LABEL: Record<string, string> = {
+  draft: "Draft",
+  submitted: "With supplier",
+  receiving: "Part delivered",
+  completed: "Complete",
+  cancelled: "Cancelled",
+};
+
+/** The behavioural category each state declares (ADR-009), for the badge. */
+const STATE_CATEGORY: Record<string, string> = {
+  draft: "Draft",
+  submitted: "Pending",
+  receiving: "Active",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
+/**
+ * The buying desk.
+ *
+ * Open orders lead, because the half-delivered order is the one this screen
+ * exists for — a completed order is history and a draft is a note to self.
+ * Suppliers sit underneath as a reference list rather than above as a directory:
+ * nobody opens this screen to look at a supplier, they open it to chase goods.
+ */
+export function PurchaseDesk({
+  orders,
+  suppliers,
+  godowns,
+  boards,
+}: {
+  orders: PurchaseOrder[];
+  suppliers: Supplier[];
+  godowns: Array<{ id: string; name: string }>;
+  boards: Array<{ id: string; label: string }>;
+}) {
+  const router = useRouter();
+  const [failure, setFailure] = useState<ActionFailure | null>(null);
+  const [newOrder, setNewOrder] = useState(false);
+  const [newSupplier, setNewSupplier] = useState(false);
+  const [receiving, setReceiving] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function run(key: string, input: unknown, after?: () => void) {
+    setFailure(null);
+    startTransition(async () => {
+      const result = await runCommand(key, input, "/purchases");
+      if (result.ok) {
+        after?.();
+        router.refresh();
+      } else {
+        setFailure(result);
+      }
+    });
+  }
+
+  const canOrder = suppliers.length > 0 && godowns.length > 0 && boards.length > 0;
+
+  return (
+    <>
+      {failure && (
+        <div className="mb-4">
+          <ErrorState
+            title="That was refused"
+            message={failure.message}
+            issues={failure.issues}
+            retryable={failure.retryable}
+          />
+        </div>
+      )}
+
+      <div className="mb-4 flex justify-end gap-2">
+        <Button onClick={() => setNewSupplier((open) => !open)}>
+          {newSupplier ? "Cancel" : "New supplier"}
+        </Button>
+        <Button
+          variant="primary"
+          disabled={!canOrder}
+          onClick={() => setNewOrder((open) => !open)}
+        >
+          {newOrder ? "Cancel" : "New order"}
+        </Button>
+      </div>
+
+      {newSupplier && (
+        <div className="mb-6">
+          <Panel title="New supplier">
+            <form
+              className="flex flex-wrap items-end gap-3"
+              action={(formData) =>
+                run(
+                  "verity.plywood.create_supplier",
+                  {
+                    displayName: String(formData.get("name") ?? ""),
+                    ...(formData.get("gstin") ? { gstin: String(formData.get("gstin")) } : {}),
+                    ...(formData.get("state")
+                      ? { stateCode: String(formData.get("state")) }
+                      : {}),
+                    ...(formData.get("phone") ? { phone: String(formData.get("phone")) } : {}),
+                  },
+                  () => setNewSupplier(false),
+                )
+              }
+            >
+              <div className="min-w-[240px] flex-1">
+                <Field label="Supplier" htmlFor="supplier-name" required>
+                  <Input id="supplier-name" name="name" required autoFocus />
+                </Field>
+              </div>
+              <div className="w-[200px]">
+                <Field label="GSTIN" htmlFor="supplier-gstin" hint="15 characters">
+                  <Input id="supplier-gstin" name="gstin" />
+                </Field>
+              </div>
+              <div className="w-[120px]">
+                <Field
+                  label="State code"
+                  htmlFor="supplier-state"
+                  hint="Two digits"
+                >
+                  <Input id="supplier-state" name="state" inputMode="numeric" pattern="[0-9]{2}" />
+                </Field>
+              </div>
+              <div className="w-[160px]">
+                <Field label="Phone" htmlFor="supplier-phone">
+                  <Input id="supplier-phone" name="phone" />
+                </Field>
+              </div>
+              <Button type="submit" variant="primary" disabled={pending}>
+                Create
+              </Button>
+            </form>
+          </Panel>
+        </div>
+      )}
+
+      {newOrder && canOrder && (
+        <div className="mb-6">
+          <Panel title="New purchase order">
+            <form
+              className="flex flex-wrap items-end gap-3"
+              action={(formData) =>
+                run(
+                  "verity.plywood.create_purchase_order",
+                  {
+                    supplierId: String(formData.get("supplierId") ?? ""),
+                    locationId: String(formData.get("locationId") ?? ""),
+                    ...(formData.get("reference")
+                      ? { reference: String(formData.get("reference")) }
+                      : {}),
+                    lines: [
+                      {
+                        productId: String(formData.get("productId") ?? ""),
+                        qtyOrdered: Number(formData.get("qty") ?? 0),
+                        // Blank means "use the negotiated price". Sending zero
+                        // instead would book a free delivery and poison the
+                        // weighted average.
+                        ...(String(formData.get("cost") ?? "") === ""
+                          ? {}
+                          : { unitCostPaise: Math.round(Number(formData.get("cost")) * 100) }),
+                      },
+                    ],
+                  },
+                  () => setNewOrder(false),
+                )
+              }
+            >
+              <div className="min-w-[200px]">
+                <Field label="Supplier" htmlFor="order-supplier" required>
+                  <Select id="order-supplier" name="supplierId" required defaultValue="">
+                    <option value="" disabled>
+                      Choose a supplier
+                    </option>
+                    {suppliers.map((supplier) => (
+                      <option key={supplier.id} value={supplier.id}>
+                        {supplier.displayName}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+              <div className="min-w-[180px]">
+                <Field label="Deliver to" htmlFor="order-godown" required>
+                  <Select id="order-godown" name="locationId" required defaultValue="">
+                    <option value="" disabled>
+                      Choose a godown
+                    </option>
+                    {godowns.map((godown) => (
+                      <option key={godown.id} value={godown.id}>
+                        {godown.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+              <div className="min-w-[240px] flex-1">
+                <Field label="Board" htmlFor="order-board" required>
+                  <Select id="order-board" name="productId" required defaultValue="">
+                    <option value="" disabled>
+                      Choose a board
+                    </option>
+                    {boards.map((board) => (
+                      <option key={board.id} value={board.id}>
+                        {board.label}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+              <div className="w-[120px]">
+                <Field label="Quantity" htmlFor="order-qty" required>
+                  <Input id="order-qty" name="qty" type="number" min="1" required />
+                </Field>
+              </div>
+              <div className="w-[150px]">
+                <Field
+                  label="Cost per unit (₹)"
+                  htmlFor="order-cost"
+                  hint="Blank uses agreed price"
+                >
+                  <Input id="order-cost" name="cost" type="number" step="0.01" min="0" />
+                </Field>
+              </div>
+              <div className="w-[150px]">
+                <Field label="Reference" htmlFor="order-reference">
+                  <Input id="order-reference" name="reference" />
+                </Field>
+              </div>
+              <Button type="submit" variant="primary" disabled={pending}>
+                Create
+              </Button>
+            </form>
+          </Panel>
+        </div>
+      )}
+
+      <div className="mb-4">
+        <Panel title="Open orders" flush={orders.length === 0}>
+          {orders.length === 0 ? (
+            <EmptyState
+              compact
+              title="Nothing on order"
+              description={
+                canOrder
+                  ? "Place an order and it appears here until every line is delivered."
+                  : "Add a supplier, a godown and a board first."
+              }
+            />
+          ) : (
+            <table className="w-full border-collapse">
+              <caption className="sr-only">Open purchase orders</caption>
+              <thead>
+                <tr>
+                  {["Supplier", "State", "Outstanding", "Order value", ""].map((heading, index) => (
+                    <th
+                      key={heading || index}
+                      className={
+                        "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
+                        (index <= 1 ? "text-left" : "text-right")
+                      }
+                    >
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map((order) => (
+                  <tr key={order.id}>
+                    <td className="border-b border-line px-3 py-2 text-[14px] text-text">
+                      {order.supplierName}
+                    </td>
+                    <td className="border-b border-line px-3 py-2">
+                      <StateBadge
+                        category={STATE_CATEGORY[order.state] ?? "Pending"}
+                        label={STATE_LABEL[order.state] ?? order.state}
+                      />
+                    </td>
+                    <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
+                      {order.outstandingUnits === 0 ? "—" : order.outstandingUnits}
+                    </td>
+                    <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
+                      {rupees(order.totalCostPaise)}
+                    </td>
+                    <td className="border-b border-line px-3 py-2 text-right">
+                      <div className="flex justify-end gap-2">
+                        {order.state === "draft" && (
+                          <Button
+                            size="sm"
+                            disabled={pending}
+                            onClick={() =>
+                              run("verity.plywood.submit_purchase_order", { orderId: order.id })
+                            }
+                          >
+                            Send to supplier
+                          </Button>
+                        )}
+                        {(order.state === "submitted" || order.state === "receiving") && (
+                          <Button
+                            size="sm"
+                            disabled={pending}
+                            onClick={() =>
+                              setReceiving(receiving === order.id ? null : order.id)
+                            }
+                          >
+                            {receiving === order.id ? "Close" : "Receive"}
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {receiving && (
+            <ReceiveForm
+              orderId={receiving}
+              boards={boards}
+              pending={pending}
+              onSubmit={(input) =>
+                run("verity.plywood.receive_goods", input, () => setReceiving(null))
+              }
+            />
+          )}
+        </Panel>
+      </div>
+
+      {suppliers.length > 0 && (
+        <Panel title="Suppliers">
+          <table className="w-full border-collapse">
+            <caption className="sr-only">Suppliers</caption>
+            <thead>
+              <tr>
+                {["Supplier", "GSTIN", "State", "Open orders"].map((heading, index) => (
+                  <th
+                    key={heading}
+                    className={
+                      "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
+                      (index === 0 ? "text-left" : "text-right")
+                    }
+                  >
+                    {heading}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {suppliers.map((supplier) => (
+                <tr key={supplier.id}>
+                  <td className="border-b border-line px-3 py-2 text-[14px] text-text">
+                    {supplier.displayName}
+                  </td>
+                  <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
+                    {supplier.gstin ?? "—"}
+                  </td>
+                  <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
+                    {supplier.stateCode ?? "—"}
+                  </td>
+                  <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
+                    {supplier.openOrders === 0 ? "—" : supplier.openOrders}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Panel>
+      )}
+    </>
+  );
+}
+
+/**
+ * Receiving a delivery.
+ *
+ * Quantity only — the cost is whatever the order said, because a delivery does
+ * not renegotiate a price. A cost field here would let the godown quietly change
+ * what the business agreed to pay.
+ */
+function ReceiveForm({
+  orderId,
+  boards,
+  pending,
+  onSubmit,
+}: {
+  orderId: string;
+  boards: Array<{ id: string; label: string }>;
+  pending: boolean;
+  onSubmit: (input: unknown) => void;
+}) {
+  return (
+    <form
+      className="mt-4 flex flex-wrap items-end gap-3 rounded-lg bg-glass-2 p-3"
+      action={(formData) =>
+        onSubmit({
+          orderId,
+          lines: [
+            {
+              productId: String(formData.get("productId") ?? ""),
+              qtyReceived: Number(formData.get("qty") ?? 0),
+            },
+          ],
+        })
+      }
+    >
+      <div className="min-w-[240px] flex-1">
+        <Field label="Board delivered" htmlFor={`receive-board-${orderId}`} required>
+          <Select id={`receive-board-${orderId}`} name="productId" required defaultValue="">
+            <option value="" disabled>
+              Choose a board
+            </option>
+            {boards.map((board) => (
+              <option key={board.id} value={board.id}>
+                {board.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+      <div className="w-[130px]">
+        <Field label="Quantity" htmlFor={`receive-qty-${orderId}`} required>
+          <Input id={`receive-qty-${orderId}`} name="qty" type="number" min="1" required />
+        </Field>
+      </div>
+      <Button type="submit" variant="primary" disabled={pending}>
+        Receive
+      </Button>
+      <p className="m-0 w-full text-[12px] text-text-tertiary">
+        Costed at what the order agreed. Receiving moves the stock into the godown in the same step,
+        and more than was ordered is refused rather than accepted.
+      </p>
+    </form>
+  );
+}

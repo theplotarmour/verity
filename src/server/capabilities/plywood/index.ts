@@ -11,6 +11,8 @@ import {
   ENTITY_PRODUCT,
   ENTITY_STOCK_BALANCE,
   ENTITY_STOCK_LEDGER,
+  ENTITY_PURCHASE_ORDER,
+  ENTITY_SALES_ORDER,
   HSN_CODE,
   PLYWOOD_CAPABILITY,
 } from "./keys";
@@ -25,6 +27,28 @@ import {
   stockOnHand,
   transferStock,
 } from "./stock";
+import {
+  approveCredit,
+  cancelPurchaseOrder,
+  cancelSalesOrder,
+  createCustomer,
+  createPurchaseOrder,
+  createSalesOrder,
+  createSupplier,
+  dispatchOrder,
+  listCustomers,
+  listSuppliers,
+  openOrders,
+  purchaseOrderDetail,
+  receiveGoods,
+  reserveForOrder,
+  salesOrderDetail,
+  setCreditLimit,
+  setCustomerPrice,
+  setSupplierPrice,
+  stockAvailability,
+  submitPurchaseOrder,
+} from "./trading";
 
 /**
  * CAPABILITY: Plywood trading — `verity.capability.plywood`
@@ -33,12 +57,16 @@ import {
  * and reusable by the next board trader without a fork: brands, sizes, grades,
  * godowns and racks are all data.
  *
- * STAGE 1 OF 8 — the catalogue and the floor.
- * `implementation/plywood-gap-analysis.md` §6 sequences this build, and stage 1
- * is the only stage gated by none of the six open decisions (P1..P6). Stock
- * movements wait on the costing method and the reservation model; invoicing
- * waits on numbering, balance location and place of supply. Nothing here
- * anticipates any of them.
+ * BUILT IN STAGES. `implementation/plywood-gap-analysis.md` §6 sequences them and
+ * `implementation/plywood-decisions.md` records the six decisions they turn on.
+ *   1 — catalogue and godown racks (this file)
+ *   2 — the stock ledger and weighted average cost (`stock.ts`)
+ *   3, 4 — suppliers, customers, purchase and sales orders (`trading.ts`)
+ * Logistics, finance, the dashboard and the service-chain fixture follow.
+ *
+ * This file holds the catalogue and the capability's registration; each later
+ * stage is its own module so the capability can grow without one file becoming
+ * the place everything is looked for.
  *
  * WHAT THIS CAPABILITY REUSES
  * A godown is a `Location` (ADR-004), not a new primitive — the capability adds
@@ -54,6 +82,7 @@ import {
 
 export * from "./keys";
 export * from "./stock";
+export * from "./trading";
 
 /* ================================= brands ================================= */
 
@@ -473,6 +502,24 @@ export function registerPlywoodCapability(): void {
         shells: ["platform", "operations"],
       },
       {
+        href: "/purchases",
+        label: "Purchases",
+        group: "Capabilities",
+        order: 27,
+        icon: "approvals",
+        requiresEntity: ENTITY_PURCHASE_ORDER,
+        shells: ["platform", "operations"],
+      },
+      {
+        href: "/sales",
+        label: "Sales",
+        group: "Capabilities",
+        order: 28,
+        icon: "workspace",
+        requiresEntity: ENTITY_SALES_ORDER,
+        shells: ["platform", "operations"],
+      },
+      {
         href: "/godowns",
         label: "Godowns",
         group: "Administration",
@@ -582,10 +629,30 @@ export function registerPlywoodCapability(): void {
   registerCommand(adjustStock);
   registerCommand(recordDamagedStock);
   registerCommand(recordReturnedStock);
+  registerCommand(createSupplier);
+  registerCommand(setSupplierPrice);
+  registerCommand(createCustomer);
+  registerCommand(setCustomerPrice);
+  registerCommand(setCreditLimit);
+  registerCommand(createPurchaseOrder);
+  registerCommand(submitPurchaseOrder);
+  registerCommand(receiveGoods);
+  registerCommand(cancelPurchaseOrder);
+  registerCommand(createSalesOrder);
+  registerCommand(approveCredit);
+  registerCommand(reserveForOrder);
+  registerCommand(dispatchOrder);
+  registerCommand(cancelSalesOrder);
 
   registerQuery(listCatalogue);
   registerQuery(listGodownRacks);
   registerQuery(stockOnHand);
   registerQuery(lowStock);
   registerQuery(productMovements);
+  registerQuery(listSuppliers);
+  registerQuery(listCustomers);
+  registerQuery(purchaseOrderDetail);
+  registerQuery(salesOrderDetail);
+  registerQuery(openOrders);
+  registerQuery(stockAvailability);
 }

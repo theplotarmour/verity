@@ -53,6 +53,12 @@ async function main() {
   // NULL makes every sign-in fail with "Database error querying schema" — a
   // message that points at the schema rather than at the row. Normalising them
   // to empty strings is what makes a hand-inserted user actually usable.
+  //
+  // `phone` is deliberately NOT in this list. Supabase puts a UNIQUE index on
+  // it and treats '' as a value rather than as absence, so coercing a second
+  // account to '' fails with a duplicate key — which means the trick works for
+  // exactly one user in the project and then breaks the seed for everybody
+  // else. It stays NULL, which the index permits any number of times.
   await db.$executeRawUnsafe(
     `UPDATE auth.users SET
        confirmation_token = coalesce(confirmation_token, ''),
@@ -60,7 +66,6 @@ async function main() {
        email_change_token_new = coalesce(email_change_token_new, ''),
        email_change = coalesce(email_change, ''),
        email_change_token_current = coalesce(email_change_token_current, ''),
-       phone = coalesce(phone, ''),
        phone_change = coalesce(phone_change, ''),
        phone_change_token = coalesce(phone_change_token, ''),
        reauthentication_token = coalesce(reauthentication_token, '')

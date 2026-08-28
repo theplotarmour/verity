@@ -102,11 +102,20 @@ model Tenant {
   payments       Payment[]
 
   // Capability: plywood trading. Back-relations only, as above.
-  plywoodBrands   PlywoodBrand[]
-  plywoodProducts PlywoodProduct[]
-  godownRacks     GodownRack[]
-  stockLedger     StockLedgerEntry[]
-  stockBalances   StockBalance[]
+  plywoodBrands             PlywoodBrand[]
+  plywoodProducts           PlywoodProduct[]
+  godownRacks               GodownRack[]
+  stockLedger               StockLedgerEntry[]
+  stockBalances             StockBalance[]
+  plywoodSuppliers          PlywoodSupplier[]
+  plywoodSupplierPrices     PlywoodSupplierPrice[]
+  plywoodCustomers          PlywoodCustomer[]
+  plywoodCustomerPrices     PlywoodCustomerPrice[]
+  plywoodPurchaseOrders     PlywoodPurchaseOrder[]
+  plywoodPurchaseOrderLines PlywoodPurchaseOrderLine[]
+  plywoodSalesOrders        PlywoodSalesOrder[]
+  plywoodSalesOrderLines    PlywoodSalesOrderLine[]
+  plywoodStockReservations  PlywoodStockReservation[]
 
   @@map("tenant")
 }
@@ -1050,15 +1059,18 @@ model Location {
   version        Int      @default(1)
   customFields   Json     @default("{}") @map("custom_fields")
 
-  tenant             Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  organization       Organization         @relation(fields: [tenantId, organizationId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
-  place              Place?               @relation(fields: [tenantId, placeId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  geofences          Geofence[]
-  assignments        LocationAssignment[]
-  assets             Asset[]
-  godownRacks        GodownRack[]
-  stockLedger        StockLedgerEntry[]
-  stockBalances      StockBalance[]
+  tenant                   Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  organization             Organization              @relation(fields: [tenantId, organizationId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  place                    Place?                    @relation(fields: [tenantId, placeId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  geofences                Geofence[]
+  assignments              LocationAssignment[]
+  assets                   Asset[]
+  godownRacks              GodownRack[]
+  stockLedger              StockLedgerEntry[]
+  stockBalances            StockBalance[]
+  plywoodPurchaseOrders    PlywoodPurchaseOrder[]
+  plywoodSalesOrders       PlywoodSalesOrder[]
+  plywoodStockReservations PlywoodStockReservation[]
 
   @@unique([tenantId, id], name: "location_tenant_scoped_id")
   @@index([tenantId, organizationId])
@@ -2070,10 +2082,15 @@ model PlywoodProduct {
   version           Int      @default(1)
   customFields      Json     @default("{}") @map("custom_fields")
 
-  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  brand     PlywoodBrand       @relation(fields: [tenantId, brandId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  movements StockLedgerEntry[]
-  balances  StockBalance[]
+  tenant                    Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  brand                     PlywoodBrand               @relation(fields: [tenantId, brandId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  movements                 StockLedgerEntry[]
+  balances                  StockBalance[]
+  plywoodSupplierPrices     PlywoodSupplierPrice[]
+  plywoodCustomerPrices     PlywoodCustomerPrice[]
+  plywoodPurchaseOrderLines PlywoodPurchaseOrderLine[]
+  plywoodSalesOrderLines    PlywoodSalesOrderLine[]
+  plywoodStockReservations  PlywoodStockReservation[]
 
   @@unique([tenantId, id], name: "plywood_product_tenant_scoped_id")
   @@index([tenantId, brandId, name])
@@ -2174,4 +2191,234 @@ model StockBalance {
   @@unique([tenantId, productId, locationId])
   @@index([tenantId, locationId])
   @@map("stock_balance")
+}
+
+// ---------------------------------------------------------------------------
+// Plywood stages 3 and 4 — trading partners and orders
+//
+// Symmetric on purpose: a purchase and a sale are the same shape pointing in
+// opposite directions. Modelling them as one abstraction with a direction flag
+// would collapse two different sets of rules — credit limits, receipts,
+// reservations — into a discriminated union nobody can read.
+// ---------------------------------------------------------------------------
+
+/// Someone this business buys from.
+model PlywoodSupplier {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  displayName  String   @map("display_name")
+  gstin        String?
+  phone        String?
+  email        String?
+  /// Two-digit GST state code. Present so the invoice command can decide
+  /// CGST + SGST against IGST by comparing it with the tenant's own (P4).
+  stateCode    String?  @map("state_code")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant  Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pricing PlywoodSupplierPrice[]
+  orders  PlywoodPurchaseOrder[]
+
+  @@unique([tenantId, id], name: "plywood_supplier_tenant_scoped_id")
+  @@index([tenantId, displayName])
+  @@map("plywood_supplier")
+}
+
+/// A negotiated cost for one board from one supplier.
+model PlywoodSupplierPrice {
+  id                  String   @id @default(uuid()) @db.Uuid
+  tenantId            String   @map("tenant_id") @db.Uuid
+  supplierId          String   @map("supplier_id") @db.Uuid
+  productId           String   @map("product_id") @db.Uuid
+  negotiatedCostPaise Int      @map("negotiated_cost_paise")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  version             Int      @default(1)
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier PlywoodSupplier @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  product  PlywoodProduct  @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([tenantId, supplierId, productId])
+  @@map("plywood_supplier_price")
+}
+
+/// Someone this business sells to — dealer, contractor, walk-in trade.
+model PlywoodCustomer {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  displayName      String   @map("display_name")
+  gstin            String?
+  phone            String?
+  email            String?
+  stateCode        String?  @map("state_code")
+  /// Zero means cash only: every order needs approval. There is deliberately no
+  /// "unlimited" value — unlimited credit is a decision someone should make per
+  /// order rather than configure once and forget.
+  creditLimitPaise Int      @default(0) @map("credit_limit_paise")
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  version          Int      @default(1)
+  customFields     Json     @default("{}") @map("custom_fields")
+
+  tenant  Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pricing PlywoodCustomerPrice[]
+  orders  PlywoodSalesOrder[]
+
+  @@unique([tenantId, id], name: "plywood_customer_tenant_scoped_id")
+  @@index([tenantId, displayName])
+  @@map("plywood_customer")
+}
+
+/// A customer-specific price for one board.
+model PlywoodCustomerPrice {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  customerId       String   @map("customer_id") @db.Uuid
+  productId        String   @map("product_id") @db.Uuid
+  customPricePaise Int      @map("custom_price_paise")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  version          Int      @default(1)
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer PlywoodCustomer @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  product  PlywoodProduct  @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([tenantId, customerId, productId])
+  @@map("plywood_customer_price")
+}
+
+/// An order placed with a supplier.
+model PlywoodPurchaseOrder {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  supplierId     String   @map("supplier_id") @db.Uuid
+  /// Where the goods are expected. Known at ordering rather than at receipt,
+  /// because it is what the supplier was told.
+  locationId     String   @map("location_id") @db.Uuid
+  reference      String?
+  state          String   @default("draft")
+  totalCostPaise Int      @default(0) @map("total_cost_paise")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  version        Int      @default(1)
+  customFields   Json     @default("{}") @map("custom_fields")
+
+  tenant   Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplier PlywoodSupplier            @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  location Location                   @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  lines    PlywoodPurchaseOrderLine[]
+
+  @@unique([tenantId, id], name: "plywood_purchase_order_tenant_scoped_id")
+  @@index([tenantId, state])
+  @@map("plywood_purchase_order")
+}
+
+/// One board on a purchase order.
+///
+/// A table, not a JSON column. Ordered against received per line is exactly what
+/// a partial receipt turns on, and what is still owed on a given order must be
+/// answerable without loading every purchase order.
+model PlywoodPurchaseOrderLine {
+  id                  String @id @default(uuid()) @db.Uuid
+  tenantId            String @map("tenant_id") @db.Uuid
+  purchaseOrderId     String @map("purchase_order_id") @db.Uuid
+  productId           String @map("product_id") @db.Uuid
+  /// Snapshots. A catalogue edit must never rewrite a placed order.
+  productNameSnapshot String @map("product_name_snapshot")
+  hsnCodeSnapshot     String @map("hsn_code_snapshot")
+  qtyOrdered          Int    @map("qty_ordered")
+  qtyReceived         Int    @default(0) @map("qty_received")
+  unitCostPaise       Int    @map("unit_cost_paise")
+
+  tenant        Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchaseOrder PlywoodPurchaseOrder @relation(fields: [tenantId, purchaseOrderId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  product       PlywoodProduct       @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, id], name: "plywood_purchase_order_line_tenant_scoped_id")
+  @@unique([tenantId, purchaseOrderId, productId])
+  @@map("plywood_purchase_order_line")
+}
+
+/// An order taken from a customer.
+model PlywoodSalesOrder {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  customerId      String   @map("customer_id") @db.Uuid
+  /// Which godown fulfils it. Reservations are held there.
+  locationId      String   @map("location_id") @db.Uuid
+  reference       String?
+  state           String   @default("draft")
+  totalPricePaise Int      @default(0) @map("total_price_paise")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  version         Int      @default(1)
+  customFields    Json     @default("{}") @map("custom_fields")
+
+  tenant       Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer     PlywoodCustomer           @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  location     Location                  @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  lines        PlywoodSalesOrderLine[]
+  reservations PlywoodStockReservation[]
+
+  @@unique([tenantId, id], name: "plywood_sales_order_tenant_scoped_id")
+  @@index([tenantId, state])
+  @@map("plywood_sales_order")
+}
+
+/// One board on a sales order.
+model PlywoodSalesOrderLine {
+  id                  String @id @default(uuid()) @db.Uuid
+  tenantId            String @map("tenant_id") @db.Uuid
+  salesOrderId        String @map("sales_order_id") @db.Uuid
+  productId           String @map("product_id") @db.Uuid
+  productNameSnapshot String @map("product_name_snapshot")
+  hsnCodeSnapshot     String @map("hsn_code_snapshot")
+  qtyOrdered          Int    @map("qty_ordered")
+  qtyShipped          Int    @default(0) @map("qty_shipped")
+  unitPricePaise      Int    @map("unit_price_paise")
+
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  salesOrder PlywoodSalesOrder @relation(fields: [tenantId, salesOrderId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  product    PlywoodProduct    @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, id], name: "plywood_sales_order_line_tenant_scoped_id")
+  @@unique([tenantId, salesOrderId, productId])
+  @@map("plywood_sales_order_line")
+}
+
+/// Stock held for an order but not yet moved — P5.
+///
+/// A reservation is not a movement: nothing leaves the godown, so it does not
+/// belong in an append-only movement ledger. Available is on hand minus active
+/// reservations. Released on dispatch or on cancellation.
+model PlywoodStockReservation {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  productId     String    @map("product_id") @db.Uuid
+  locationId    String    @map("location_id") @db.Uuid
+  salesOrderId  String    @map("sales_order_id") @db.Uuid
+  qtyUnits      Int       @map("qty_units")
+  /// Null while the hold is live. Set rather than deleted, so why a board could
+  /// not be sold last Tuesday still has an answer.
+  releasedAt    DateTime? @map("released_at")
+  releaseReason String?   @map("release_reason")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  version       Int       @default(1)
+
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product    PlywoodProduct    @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  location   Location          @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  salesOrder PlywoodSalesOrder @relation(fields: [tenantId, salesOrderId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([tenantId, productId, locationId, releasedAt])
+  @@index([tenantId, salesOrderId])
+  @@map("plywood_stock_reservation")
 }
