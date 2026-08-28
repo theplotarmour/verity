@@ -13,6 +13,7 @@ import {
   ENTITY_STOCK_LEDGER,
   ENTITY_PURCHASE_ORDER,
   ENTITY_SALES_ORDER,
+  ENTITY_SHIPMENT,
   HSN_CODE,
   PLYWOOD_CAPABILITY,
 } from "./keys";
@@ -49,6 +50,16 @@ import {
   stockAvailability,
   submitPurchaseOrder,
 } from "./trading";
+import {
+  assignCarrier,
+  confirmDelivery,
+  createShipment,
+  createTransporter,
+  dispatchShipment,
+  listTransporters,
+  reportShipmentLost,
+  trackMaterial,
+} from "./logistics";
 
 /**
  * CAPABILITY: Plywood trading — `verity.capability.plywood`
@@ -83,6 +94,7 @@ import {
 export * from "./keys";
 export * from "./stock";
 export * from "./trading";
+export * from "./logistics";
 
 /* ================================= brands ================================= */
 
@@ -520,6 +532,15 @@ export function registerPlywoodCapability(): void {
         shells: ["platform", "operations"],
       },
       {
+        href: "/logistics",
+        label: "Logistics",
+        group: "Capabilities",
+        order: 26,
+        icon: "scheduling",
+        requiresEntity: ENTITY_SHIPMENT,
+        shells: ["platform", "operations"],
+      },
+      {
         href: "/godowns",
         label: "Godowns",
         group: "Administration",
@@ -643,6 +664,12 @@ export function registerPlywoodCapability(): void {
   registerCommand(reserveForOrder);
   registerCommand(dispatchOrder);
   registerCommand(cancelSalesOrder);
+  registerCommand(createTransporter);
+  registerCommand(createShipment);
+  registerCommand(assignCarrier);
+  registerCommand(dispatchShipment);
+  registerCommand(confirmDelivery);
+  registerCommand(reportShipmentLost);
 
   registerQuery(listCatalogue);
   registerQuery(listGodownRacks);
@@ -655,4 +682,6 @@ export function registerPlywoodCapability(): void {
   registerQuery(salesOrderDetail);
   registerQuery(openOrders);
   registerQuery(stockAvailability);
+  registerQuery(listTransporters);
+  registerQuery(trackMaterial);
 }

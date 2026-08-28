@@ -167,12 +167,12 @@ describe("conformance: capability contracts (Phase E)", () => {
     // floor and a bill need no other capability, and declaring one it does not
     // use would make the graph a wish rather than a fact.
     dinein: [],
-    // The plywood trader, the second real client. Depends on Location because a
-    // godown IS a Location (ADR-004) — the capability adds only the rack inside
-    // it. That is the first time a client capability has reused a shared one,
-    // and the dependency is declared here and in the install migration so the
-    // database refuses the activation if Location is not active.
-    plywood: ["location"],
+    // The plywood trader, the second real client, and the first capability to
+    // depend on shared ones: a godown IS a Location (ADR-004), a delivery
+    // vehicle IS an Asset, and an LR scan IS Evidence. Declared here and in the
+    // install migrations, so the database refuses the activation when any of the
+    // three is inactive rather than discovering it at a failing foreign key.
+    plywood: ["location", "asset", "evidence"],
   };
 
   const capabilityDirs = readdirSync(join(ROOT, "src/server/capabilities")).filter((entry) =>

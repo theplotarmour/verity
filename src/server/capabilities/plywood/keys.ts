@@ -40,3 +40,7 @@ export const ENTITY_PURCHASE_ORDER_LINE = "verity.plywood.purchase_order_line";
 export const ENTITY_SALES_ORDER = "verity.plywood.sales_order";
 export const ENTITY_SALES_ORDER_LINE = "verity.plywood.sales_order_line";
 export const ENTITY_RESERVATION = "verity.plywood.reservation";
+
+/* Stage 5 — logistics. */
+export const ENTITY_TRANSPORTER = "verity.plywood.transporter";
+export const ENTITY_SHIPMENT = "verity.plywood.shipment";
