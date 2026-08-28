@@ -160,6 +160,21 @@ export async function signInWithPassword(formData: FormData): Promise<ActionFail
 
   // A successful sign-in *does* have a tenant, once the actor resolves.
   await recordAuthSuccess();
+
+  // Sends a Platform Operator to `/hq` instead of the client workspace default.
+  // `resolveActor()`'s membership fallback is alphabetical by tenant name (see
+  // `memberships_for_auth_user`), which is fine for an ordinary user with one
+  // membership and wrong for an operator who has since accumulated client
+  // memberships via ADR-013 entry — the platform tenant is not guaranteed to
+  // sort first. Sign-in is the one place it is safe to *choose* the active
+  // membership rather than merely resolve it, because nothing has rendered yet.
+  const memberships = await listMemberships();
+  const platformMembership = memberships.find((m) => m.isPlatform);
+  if (platformMembership) {
+    await setActiveMembership(platformMembership.membershipId);
+    redirect("/hq");
+  }
+
   redirect("/");
 }
 

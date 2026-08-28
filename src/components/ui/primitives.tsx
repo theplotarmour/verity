@@ -447,6 +447,45 @@ export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
 }
 
 /**
+ * A labelled checkbox, styled to the same glass/accent/focus-ring language as
+ * `Input`/`Select` rather than the browser default box.
+ */
+const CHECKBOX_TICK =
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E\")";
+
+export function Checkbox({
+  label,
+  className,
+  ...rest
+}: InputHTMLAttributes<HTMLInputElement> & { label: ReactNode }) {
+  return (
+    <label className={cx("flex cursor-pointer items-center gap-2.5 text-[13px] text-text", className)}>
+      <input
+        type="checkbox"
+        {...rest}
+        style={{
+          // Only painted when actually checked — a plain CSS background-image
+          // is not gated by `:checked` like the Tailwind `checked:` variant is,
+          // so an unconditional one here would show the tick on every box.
+          backgroundImage: rest.checked ? CHECKBOX_TICK : "none",
+          backgroundSize: "12px",
+          ...rest.style,
+        }}
+        className={cx(
+          "size-[18px] shrink-0 cursor-pointer appearance-none rounded-[5px] border border-line-strong",
+          "bg-surface bg-center bg-no-repeat transition-[background-color,border-color,box-shadow] duration-150",
+          "checked:border-accent checked:bg-accent",
+          "hover:border-line-strong focus-visible:outline-none",
+          "focus-visible:shadow-[0_0_0_3px_var(--color-accent-subtle)]",
+          "disabled:cursor-not-allowed disabled:opacity-55",
+        )}
+      />
+      {label}
+    </label>
+  );
+}
+
+/**
  * A group of fields under one heading, separated from the next by a hairline.
  *
  * Long forms need visible grouping or every field looks equally important. This
@@ -511,6 +550,28 @@ export function StateBadge({ category, label }: { category: string; label?: stri
       <span aria-hidden="true" className={cx("size-[7px] shrink-0 rounded-full", preset.color)} />
       {/* The tenant's own label when there is one, the category otherwise. */}
       {label ?? preset.label}
+    </span>
+  );
+}
+
+/**
+ * A small neutral label pill — for provenance, not for `StateCategory`.
+ *
+ * `StateBadge` owns the six canonical categories (Bible V4 §5.A) and must not
+ * gain a second use. This is for facts like "Tenant Override" / "Platform
+ * Default" that are never a business state.
+ */
+export function Badge({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "accent" }) {
+  return (
+    <span
+      className={cx(
+        "inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-medium",
+        tone === "accent"
+          ? "bg-accent-subtle text-accent-ink"
+          : "bg-glass-2 text-text-tertiary",
+      )}
+    >
+      {children}
     </span>
   );
 }

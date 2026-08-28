@@ -7,6 +7,9 @@ import { provisionIdentity } from "./identity";
 import { resolvePermissions } from "./authorization";
 import { activateCapability, suspendCapability, setConfig } from "./capability";
 import { ValidationError } from "./command";
+import { OPERATOR_ROLE_NAME } from "./operator";
+import type { TenantScopedClient } from "./tenancy";
+import { entityLabel } from "./label";
 
 /**
  * Platform administration — the write and read contracts HQ operates through.
@@ -722,6 +725,12 @@ export const setCapabilityState: CommandDefinition<
   handler: async (ctx, input) => {
     if (input.enabled) {
       await activateCapability(ctx.tx, ctx.actor.tenantId, input.capabilityId);
+      await syncOperatorReadOnActivation(
+        ctx.tx,
+        ctx.actor.tenantId,
+        ctx.actor.roleId,
+        input.capabilityId,
+      );
     } else {
       // A dependency trigger refuses this when another active capability still
       // needs it. The error surfaces rather than being swallowed: "disable
@@ -757,6 +766,109 @@ export const setCapabilityState: CommandDefinition<
         },
       ],
     };
+  },
+};
+
+/**
+ * Grants Read on a newly-activated capability's entities to the acting
+ * operator's own role, so the nav item they just turned on is visible to them
+ * immediately.
+ *
+ * Deliberately narrow (Issue 3 decision, 2026-08-28): activation alone does not
+ * know which role is "the client's admin" — no such marker exists on `Role`,
+ * and inventing one is a platform-primitive decision, not a bug fix. The one
+ * unambiguous target is the well-known `OPERATOR_ROLE_NAME` role this same
+ * actor is acting through when they toggle a module from HQ. A client's own
+ * admin role still needs a manual grant — surfaced as a prompt in the Roles UI
+ * (Issue 4/5 follow-up), not guessed here.
+ */
+async function syncOperatorReadOnActivation(
+  tx: TenantScopedClient,
+  tenantId: string,
+  roleId: string | null,
+  capabilityId: string,
+): Promise<void> {
+  if (!roleId) return;
+
+  const role = await tx.role.findUnique({ where: { id: roleId }, select: { name: true } });
+  if (role?.name !== OPERATOR_ROLE_NAME) return;
+
+  const entities = await tx.entityDefinition.findMany({
+    where: { capability: capabilityId },
+    select: { key: true },
+  });
+  if (entities.length === 0) return;
+
+  await tx.permission.createMany({
+    data: entities.map((e) => ({
+      tenantId,
+      roleId,
+      verb: "Read" as const,
+      entity: e.key,
+      scope: "Tenant" as const,
+    })),
+    skipDuplicates: true,
+  });
+}
+
+export type GrantableEntity = { key: string; label: string };
+export type GrantableGroup = { group: string; entities: GrantableEntity[] };
+
+/**
+ * The fixed platform ontology's own entities — never rows in
+ * `EntityDefinition`, because that table is for capability-owned entities
+ * (MET-ENT-004) and these four are the platform's, not a capability's
+ * (PLA-AUT-002/003). Hardcoding this one closed set is not the same mistake as
+ * Issue 3's "which role is the admin": there, no fixed answer exists; here,
+ * the platform administration entities are enumerated in code already
+ * (`ENTITY_TENANT` etc., just above) and do not change per capability.
+ */
+const PLATFORM_ADMIN_ENTITIES = [ENTITY_TENANT, ENTITY_ORGANIZATION, ENTITY_MEMBERSHIP, ENTITY_ROLE];
+
+/**
+ * Entities a role's permissions can target, grouped by owning capability —
+ * the catalog the Roles checkbox matrix renders (Issue 4). Limited to
+ * ACTIVE capabilities: granting access to an inactive one's entities would
+ * offer a control for something `requireCapabilityActive` blocks anyway.
+ */
+export const listGrantableEntities: QueryDefinition<Record<string, never>, GrantableGroup[]> = {
+  key: "verity.platform.list_grantable_entities",
+  entity: ENTITY_ROLE,
+  input: z.object({}),
+  handler: async (ctx) => {
+    const activations = await ctx.tx.tenantActivation.findMany({
+      where: { status: "Active" },
+      include: { capability: true },
+    });
+
+    const capabilityIds = activations.map((a) => a.capabilityId);
+    const entities = capabilityIds.length
+      ? await ctx.tx.entityDefinition.findMany({
+          where: { capability: { in: capabilityIds } },
+          orderBy: { key: "asc" },
+        })
+      : [];
+
+    const capabilityName = new Map(activations.map((a) => [a.capabilityId, a.capability.name]));
+    const byGroup = new Map<string, GrantableEntity[]>();
+    for (const e of entities) {
+      const group = capabilityName.get(e.capability) ?? e.capability;
+      const list = byGroup.get(group) ?? [];
+      list.push({ key: e.key, label: entityLabel(e.key) });
+      byGroup.set(group, list);
+    }
+
+    const groups: GrantableGroup[] = [
+      {
+        group: "Platform Administration",
+        entities: PLATFORM_ADMIN_ENTITIES.map((key) => ({ key, label: entityLabel(key) })),
+      },
+      ...[...byGroup.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([group, list]) => ({ group, entities: list })),
+    ];
+
+    return groups;
   },
 };
 
@@ -955,6 +1067,7 @@ export function installAdministration(): void {
   registerQuery(listOrganizations);
   registerQuery(listPeople);
   registerQuery(listRoles);
+  registerQuery(listGrantableEntities);
   registerQuery(listModules);
   registerQuery(listConfiguration);
   registerQuery(operationsSnapshot);

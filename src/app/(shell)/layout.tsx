@@ -4,6 +4,7 @@ import { getAuthUser, listMemberships, resolveActor } from "@/server/platform/au
 import { withTenant } from "@/server/platform/tenancy";
 import { resolvePermissions } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
+import { installAdministration } from "@/server/platform/administration";
 import { navigationFor } from "@/server/platform/contribution";
 import { ShellChrome, type NavArea, type NavItem } from "@/components/shell/ShellChrome";
 import { isIconName } from "@/components/ui/icons";
@@ -24,6 +25,12 @@ export const dynamic = "force-dynamic";
  */
 export default async function ShellLayout({ children }: { children: ReactNode }) {
   installCapabilities();
+  // Pre-existing gap, not introduced here: only HQ routes called this
+  // (`hq.ts`), so `verity.platform.set_configuration` and the rest of the
+  // administration command/query registry were unregistered on any request
+  // that never touched `/hq` in this server process — including this client
+  // shell's own `/configuration` Save button. Idempotent, same as above.
+  installAdministration();
 
   const actor = await resolveActor();
   if (!actor) redirect("/sign-in");
@@ -87,7 +94,11 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     {
       group: "Administration",
       items: [
-        { href: "/capabilities", label: "Capability registry", icon: "capabilities" as const },
+        // Raw system-level capability toggling is platform-tenant-only (see
+        // capabilities/page.tsx) — a client tenant must never see the link.
+        ...(active.isPlatform
+          ? [{ href: "/capabilities", label: "Capability registry", icon: "capabilities" as const }]
+          : []),
         ...contributed.filter((c) => c.group === "Administration").map(toItem),
         ...(canConfigure
           ? [{ href: "/configuration", label: "Configuration", icon: "configuration" as const }]

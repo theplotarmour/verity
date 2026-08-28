@@ -3,6 +3,7 @@ import { withTenant } from "@/server/platform/tenancy";
 import { PageHeader, Panel, Stat, StatRow } from "@/components/ui/primitives";
 import { AppearanceControls } from "@/components/shell/AppearanceControls";
 import { ACCENT_PRESETS, DEFAULT_ACCENT } from "@/server/platform/accent";
+import { configKeyInfo, humanizeSegment } from "@/server/platform/label";
 import { ConfigurationEditor } from "./ConfigurationEditor";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +34,11 @@ export default async function ConfigurationPage() {
   const actor = await requireActor();
 
   const rows = await withTenant(actor.tenantId, async (tx) => {
-    const parameters = await tx.configParameter.findMany({ orderBy: [{ key: "asc" }] });
+    const [parameters, capabilities] = await Promise.all([
+      tx.configParameter.findMany({ orderBy: [{ key: "asc" }] }),
+      tx.capabilityDefinition.findMany({ select: { id: true, name: true } }),
+    ]);
+    const capabilityName = new Map(capabilities.map((c) => [c.id, c.name]));
 
     // One row per key, showing what actually resolves. A tenant value shadows
     // the platform default rather than sitting beside it, so listing both would
@@ -54,7 +59,15 @@ export default async function ConfigurationPage() {
         inherited: !tenantOwned,
       });
     }
-    return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
+
+    return [...byKey.values()]
+      .map((row) => {
+        const info = configKeyInfo(row.key);
+        const groupLabel =
+          capabilityName.get(`verity.capability.${info.groupSlug}`) ?? humanizeSegment(info.groupSlug);
+        return { ...row, ...info, groupLabel };
+      })
+      .sort((a, b) => a.groupLabel.localeCompare(b.groupLabel) || a.key.localeCompare(b.key));
   });
 
   return (

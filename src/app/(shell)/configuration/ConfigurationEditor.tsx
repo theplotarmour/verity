@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, ErrorState, Field, Input, Panel } from "@/components/ui/primitives";
+import { Badge, Button, ErrorState, Field, Input, Panel } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
+import { basisPointsToPercent, percentToBasisPoints } from "@/server/platform/label";
 
 type Parameter = {
   key: string;
@@ -12,6 +13,10 @@ type Parameter = {
   value: string;
   /** True when the value comes from a platform default rather than this tenant. */
   inherited: boolean;
+  groupSlug: string;
+  groupLabel: string;
+  fieldLabel: string;
+  isBasisPoints: boolean;
 };
 
 /**
@@ -23,10 +28,16 @@ type Parameter = {
  * write path here, deliberately — a settings screen that calls a helper directly
  * is the second place validation gets forgotten.
  *
+ * Grouped by owning capability (Odoo-style sidebar, `HQ_UX_Redesign.md` §3)
+ * rather than one flat list, and each key gets a humanized label instead of
+ * its raw database string. Both are derived from the key at read time
+ * (`configKeyInfo` in `label.ts`) — a capability that did not exist when this
+ * file was written still gets a readable, if plainer, default label.
+ *
  * An inherited value is shown with its default filled in rather than blank. The
  * difference between "the platform's 9%" and "this tenant chose 9%" matters to
- * the person reading it, so the row says which it is, and saving turns the first
- * into the second.
+ * the person reading it, so the row carries a badge saying which, and saving
+ * turns the first into the second.
  *
  * Clearing is offered separately from saving an empty string. `temporal.ts`
  * treats an unset zone as UTC by decision, and an empty string would be neither
@@ -37,6 +48,19 @@ export function ConfigurationEditor({ parameters }: { parameters: Parameter[] })
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [adding, setAdding] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  const groups = useMemo(() => {
+    const byGroup = new Map<string, Parameter[]>();
+    for (const p of parameters) {
+      const list = byGroup.get(p.groupLabel) ?? [];
+      list.push(p);
+      byGroup.set(p.groupLabel, list);
+    }
+    return [...byGroup.entries()];
+  }, [parameters]);
+
+  const [activeGroup, setActiveGroup] = useState<string | null>(groups[0]?.[0] ?? null);
+  const active = groups.find(([label]) => label === activeGroup) ?? groups[0];
 
   function write(key: string, value: string | null, after?: () => void) {
     setFailure(null);
@@ -110,48 +134,109 @@ export function ConfigurationEditor({ parameters }: { parameters: Parameter[] })
         </div>
       )}
 
-      <Panel title="Values">
-        <div className="flex flex-col gap-3">
-          {parameters.map((parameter) => (
-            <form
-              key={parameter.key}
-              className="flex flex-wrap items-end gap-3 rounded-lg bg-glass-2 p-3"
-              action={(formData) => write(parameter.key, String(formData.get("value") ?? ""))}
-            >
-              <div className="min-w-[300px] flex-1">
-                <Field
-                  label={parameter.key}
-                  htmlFor={`config-${parameter.key}`}
-                  hint={
-                    parameter.inherited
-                      ? "Platform default — saving makes it this tenant's own"
-                      : "Set by this tenant"
-                  }
-                >
-                  <Input
-                    id={`config-${parameter.key}`}
-                    name="value"
-                    defaultValue={parameter.value}
-                  />
-                </Field>
-              </div>
-              <Button type="submit" disabled={pending}>
-                Save
-              </Button>
-              {!parameter.inherited && (
-                <Button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => write(parameter.key, null)}
-                  title="Clear this tenant's value and fall back to the platform default"
-                >
-                  Clear
-                </Button>
-              )}
-            </form>
-          ))}
+      {groups.length === 0 ? (
+        <Panel title="Values">
+          <p className="m-0 text-[13px] text-text-secondary">No configuration parameters yet.</p>
+        </Panel>
+      ) : (
+        <div className="flex gap-6">
+          <nav className="w-[200px] shrink-0">
+            <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+              {groups.map(([label, rows]) => (
+                <li key={label}>
+                  <button
+                    type="button"
+                    onClick={() => setActiveGroup(label)}
+                    className={
+                      "block w-full cursor-pointer rounded-md px-3 py-2 text-left text-[13px] transition-colors duration-150 " +
+                      (label === active?.[0]
+                        ? "bg-accent-subtle font-medium text-accent-ink"
+                        : "text-text-secondary hover:bg-glass-2 hover:text-text")
+                    }
+                  >
+                    {label}
+                    <span className="ml-1.5 text-[11px] text-text-tertiary">{rows.length}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          {active && (
+            <div className="min-w-0 flex-1">
+              <Panel title={active[0]}>
+                <div className="flex flex-col gap-3">
+                  {active[1].map((parameter) => (
+                    <ConfigRow key={parameter.key} parameter={parameter} pending={pending} onWrite={write} />
+                  ))}
+                </div>
+              </Panel>
+            </div>
+          )}
         </div>
-      </Panel>
+      )}
     </>
+  );
+}
+
+function ConfigRow({
+  parameter,
+  pending,
+  onWrite,
+}: {
+  parameter: Parameter;
+  pending: boolean;
+  onWrite: (key: string, value: string | null) => void;
+}) {
+  // Basis points are stored and sent as the integer the command expects; only
+  // the display value is a percent, so the round-trip through the number
+  // input never touches what actually gets persisted except at submit time.
+  const displayValue = parameter.isBasisPoints
+    ? String(basisPointsToPercent(Number(parameter.value) || 0))
+    : parameter.value;
+
+  return (
+    <form
+      className="flex flex-wrap items-end gap-3 rounded-lg bg-glass-2 p-3"
+      action={(formData) => {
+        const typed = String(formData.get("value") ?? "");
+        const value = parameter.isBasisPoints
+          ? String(percentToBasisPoints(Number(typed) || 0))
+          : typed;
+        onWrite(parameter.key, value);
+      }}
+    >
+      <div className="min-w-[300px] flex-1">
+        <Field
+          label={parameter.fieldLabel}
+          htmlFor={`config-${parameter.key}`}
+          hint={parameter.key}
+        >
+          <Input
+            id={`config-${parameter.key}`}
+            name="value"
+            type={parameter.isBasisPoints ? "number" : "text"}
+            step={parameter.isBasisPoints ? "0.01" : undefined}
+            defaultValue={displayValue}
+          />
+        </Field>
+      </div>
+      <Badge tone={parameter.inherited ? "neutral" : "accent"}>
+        {parameter.inherited ? "Platform default" : "Tenant override"}
+      </Badge>
+      <Button type="submit" disabled={pending}>
+        Save
+      </Button>
+      {!parameter.inherited && (
+        <Button
+          type="button"
+          disabled={pending}
+          onClick={() => onWrite(parameter.key, null)}
+          title="Clear this tenant's value and fall back to the platform default"
+        >
+          Clear
+        </Button>
+      )}
+    </form>
   );
 }

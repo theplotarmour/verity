@@ -112,6 +112,7 @@ export type MembershipOption = {
   userId: string;
   tenantId: string;
   tenantName: string;
+  isPlatform: boolean;
   organizationId: string;
   organizationName: string;
   roleId: string | null;
@@ -137,7 +138,7 @@ export async function listMemberships(): Promise<MembershipOption[]> {
   const rows = await prisma.$queryRaw<
     Array<{
       membership_id: string; user_id: string; tenant_id: string; tenant_name: string;
-      organization_id: string; organization_name: string;
+      is_platform: boolean; organization_id: string; organization_name: string;
       role_id: string | null; role_name: string | null;
     }>
   >`SELECT * FROM verity.memberships_for_auth_user(${authUser.id}::uuid)`;
@@ -147,6 +148,7 @@ export async function listMemberships(): Promise<MembershipOption[]> {
     userId: r.user_id,
     tenantId: r.tenant_id,
     tenantName: r.tenant_name,
+    isPlatform: r.is_platform,
     organizationId: r.organization_id,
     organizationName: r.organization_name,
     roleId: r.role_id,

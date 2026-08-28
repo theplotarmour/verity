@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { PageHeader, Panel, Stat, StatRow, StateBadge } from "@/components/ui/primitives";
@@ -25,6 +26,18 @@ export const dynamic = "force-dynamic";
  */
 export default async function CapabilityRegistryPage() {
   const actor = await requireActor();
+
+  // Raw system-level capability toggling belongs to the operator console
+  // (`/hq/clients/[tenantId]/modules`), not a client workspace — activating or
+  // deactivating a database-level module bypasses licensing boundaries and can
+  // break dependent capabilities. This screen is the platform tenant's own
+  // registry, reachable only when the active membership IS the platform tenant.
+  const isPlatform = await withTenant(actor.tenantId, async (tx) => {
+    const [row] = await tx.$queryRaw<{ is_platform: boolean }[]>`
+      SELECT is_platform FROM tenant WHERE id = ${actor.tenantId}::uuid`;
+    return row?.is_platform === true;
+  });
+  if (!isPlatform) redirect("/");
 
   const rows = await withTenant(actor.tenantId, async (tx) => {
     const [definitions, activations] = await Promise.all([

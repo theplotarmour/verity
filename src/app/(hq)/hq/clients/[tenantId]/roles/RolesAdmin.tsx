@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Button,
+  Checkbox,
   EmptyState,
   ErrorState,
   Field,
@@ -13,10 +14,18 @@ import {
 } from "@/components/ui/primitives";
 import { runClientCommand } from "@/server/actions/hq";
 import type { ActionFailure } from "@/server/platform/action-error";
-import type { RoleRow } from "@/server/platform/administration";
+import type { GrantableGroup, RoleRow } from "@/server/platform/administration";
 
 const VERBS = ["Read", "Create", "Edit", "Delete", "ActionExecute"] as const;
 const SCOPES = ["Tenant", "Organization", "Location"] as const;
+
+type DirectGrant = RoleRow["directGrants"][number];
+
+/** Grant/revoke pair for one matrix cell — Manage is Create+Edit together. */
+function matrixCell(directGrants: DirectGrant[], entity: string, verbs: readonly string[]) {
+  const rows = verbs.map((verb) => directGrants.find((g) => g.entity === entity && g.verb === verb && g.scope === "Tenant"));
+  return { checked: rows.every(Boolean), ids: rows.filter((r): r is DirectGrant => !!r).map((r) => r.id) };
+}
 
 /**
  * Roles and permissions for one client.
@@ -31,10 +40,19 @@ const SCOPES = ["Tenant", "Organization", "Location"] as const;
  * PLA-AUT-002 but deliberately filtered out of resolution, so offering it would
  * be offering a grant that looks effective and does nothing.
  */
-export function RolesAdmin({ tenantId, roles }: { tenantId: string; roles: RoleRow[] }) {
+export function RolesAdmin({
+  tenantId,
+  roles,
+  grantable,
+}: {
+  tenantId: string;
+  roles: RoleRow[];
+  grantable: GrantableGroup[];
+}) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(roles[0]?.id ?? null);
+  const [advanced, setAdvanced] = useState<Record<string, boolean>>({});
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -48,6 +66,28 @@ export function RolesAdmin({ tenantId, roles }: { tenantId: string; roles: RoleR
       } else {
         setFailure(result);
       }
+    });
+  }
+
+  /** Toggles one matrix cell: grants every missing verb, or revokes every held one. */
+  function toggleCell(roleId: string, entity: string, verbs: readonly string[], cell: ReturnType<typeof matrixCell>) {
+    setFailure(null);
+    startTransition(async () => {
+      const actions = cell.checked
+        ? cell.ids.map((permissionId) => ({ key: "verity.platform.revoke_permission", input: { permissionId } }))
+        : verbs.map((verb) => ({
+            key: "verity.platform.grant_permission",
+            input: { roleId, verb, entity, scope: "Tenant" },
+          }));
+
+      for (const action of actions) {
+        const result = await runClientCommand(tenantId, action.key, action.input);
+        if (!result.ok) {
+          setFailure(result);
+          return;
+        }
+      }
+      router.refresh();
     });
   }
 
@@ -186,59 +226,136 @@ export function RolesAdmin({ tenantId, roles }: { tenantId: string; roles: RoleR
                     )}
 
                     <section>
-                      <h3 className="mb-2">Grant a permission</h3>
-                      <form
-                        className="flex flex-wrap items-end gap-3"
-                        action={(formData) =>
-                          run("verity.platform.grant_permission", {
-                            roleId: role.id,
-                            verb: String(formData.get("verb") ?? "Read"),
-                            entity: String(formData.get("entity") ?? ""),
-                            scope: String(formData.get("scope") ?? "Tenant"),
-                          })
-                        }
+                      <h3 className="mb-2">Permissions</h3>
+                      {grantable.length === 0 ? (
+                        <p className="m-0 text-[13px] text-text-secondary">
+                          No capability is active for this client yet — activate one under Modules
+                          first, or use Advanced below for a platform administration grant.
+                        </p>
+                      ) : (
+                        <div className="flex flex-col gap-4">
+                          {grantable.map((group) => (
+                            <div key={group.group}>
+                              <p className="m-0 mb-1.5 text-[12px] font-medium text-text-tertiary">
+                                {group.group}
+                              </p>
+                              <div className="overflow-hidden rounded-lg border border-line">
+                                <table className="w-full border-collapse text-[13px]">
+                                  <thead>
+                                    <tr className="bg-glass-2 text-left text-[11px] uppercase tracking-wide text-text-tertiary">
+                                      <th className="px-3 py-2 font-medium">Entity</th>
+                                      <th className="w-[90px] px-3 py-2 font-medium">View</th>
+                                      <th className="w-[90px] px-3 py-2 font-medium">Manage</th>
+                                      <th className="w-[90px] px-3 py-2 font-medium">Delete</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {group.entities.map((entity) => {
+                                      const view = matrixCell(role.directGrants, entity.key, ["Read"]);
+                                      const manage = matrixCell(role.directGrants, entity.key, ["Create", "Edit"]);
+                                      const del = matrixCell(role.directGrants, entity.key, ["Delete"]);
+                                      return (
+                                        <tr key={entity.key} className="border-t border-line">
+                                          <td className="px-3 py-2 text-text">{entity.label}</td>
+                                          <td className="px-3 py-2">
+                                            <Checkbox
+                                              label={<span className="sr-only">View {entity.label}</span>}
+                                              checked={view.checked}
+                                              disabled={pending}
+                                              onChange={() => toggleCell(role.id, entity.key, ["Read"], view)}
+                                            />
+                                          </td>
+                                          <td className="px-3 py-2">
+                                            <Checkbox
+                                              label={<span className="sr-only">Manage {entity.label}</span>}
+                                              checked={manage.checked}
+                                              disabled={pending}
+                                              onChange={() => toggleCell(role.id, entity.key, ["Create", "Edit"], manage)}
+                                            />
+                                          </td>
+                                          <td className="px-3 py-2">
+                                            <Checkbox
+                                              label={<span className="sr-only">Delete {entity.label}</span>}
+                                              checked={del.checked}
+                                              disabled={pending}
+                                              onChange={() => toggleCell(role.id, entity.key, ["Delete"], del)}
+                                            />
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+
+                    <section>
+                      <button
+                        type="button"
+                        className="m-0 cursor-pointer border-0 bg-transparent p-0 text-[12px] font-medium text-text-tertiary underline decoration-dotted underline-offset-4 hover:text-text"
+                        onClick={() => setAdvanced((s) => ({ ...s, [role.id]: !s[role.id] }))}
                       >
-                        <div className="w-[150px]">
-                          <Field label="Verb" htmlFor={`verb-${role.id}`}>
-                            <Select id={`verb-${role.id}`} name="verb" defaultValue="Read">
-                              {VERBS.map((verb) => (
-                                <option key={verb} value={verb}>
-                                  {verb}
-                                </option>
-                              ))}
-                            </Select>
-                          </Field>
-                        </div>
-                        <div className="min-w-[260px] flex-1">
-                          <Field
-                            label="Entity"
-                            htmlFor={`entity-${role.id}`}
-                            hint="A capability's entity key, e.g. verity.asset.asset. Free text by design — a new capability must not need a platform change to be grantable."
-                            required
-                          >
-                            <Input
-                              id={`entity-${role.id}`}
-                              name="entity"
-                              placeholder="verity.asset.asset"
+                        {advanced[role.id] ? "Hide advanced grant" : "Advanced: custom grant, Organization/Location scope"}
+                      </button>
+
+                      {advanced[role.id] && (
+                        <form
+                          className="mt-3 flex flex-wrap items-end gap-3"
+                          action={(formData) =>
+                            run("verity.platform.grant_permission", {
+                              roleId: role.id,
+                              verb: String(formData.get("verb") ?? "Read"),
+                              entity: String(formData.get("entity") ?? ""),
+                              scope: String(formData.get("scope") ?? "Tenant"),
+                            })
+                          }
+                        >
+                          <div className="w-[150px]">
+                            <Field label="Verb" htmlFor={`verb-${role.id}`}>
+                              <Select id={`verb-${role.id}`} name="verb" defaultValue="Read">
+                                {VERBS.map((verb) => (
+                                  <option key={verb} value={verb}>
+                                    {verb}
+                                  </option>
+                                ))}
+                              </Select>
+                            </Field>
+                          </div>
+                          <div className="min-w-[260px] flex-1">
+                            <Field
+                              label="Entity"
+                              htmlFor={`entity-${role.id}`}
+                              hint="A capability's entity key, e.g. verity.asset.asset. Free text by design — a new capability must not need a platform change to be grantable."
                               required
-                            />
-                          </Field>
-                        </div>
-                        <div className="w-[170px]">
-                          <Field label="Scope" htmlFor={`scope-${role.id}`}>
-                            <Select id={`scope-${role.id}`} name="scope" defaultValue="Tenant">
-                              {SCOPES.map((scope) => (
-                                <option key={scope} value={scope}>
-                                  {scope}
-                                </option>
-                              ))}
-                            </Select>
-                          </Field>
-                        </div>
-                        <Button type="submit" variant="primary" disabled={pending}>
-                          Grant
-                        </Button>
-                      </form>
+                            >
+                              <Input
+                                id={`entity-${role.id}`}
+                                name="entity"
+                                placeholder="verity.asset.asset"
+                                required
+                              />
+                            </Field>
+                          </div>
+                          <div className="w-[170px]">
+                            <Field label="Scope" htmlFor={`scope-${role.id}`}>
+                              <Select id={`scope-${role.id}`} name="scope" defaultValue="Tenant">
+                                {SCOPES.map((scope) => (
+                                  <option key={scope} value={scope}>
+                                    {scope}
+                                  </option>
+                                ))}
+                              </Select>
+                            </Field>
+                          </div>
+                          <Button type="submit" variant="primary" disabled={pending}>
+                            Grant
+                          </Button>
+                        </form>
+                      )}
                     </section>
 
                     <section>
