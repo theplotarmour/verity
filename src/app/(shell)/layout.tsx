@@ -6,6 +6,7 @@ import { resolvePermissions } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { installAdministration } from "@/server/platform/administration";
 import { navigationFor } from "@/server/platform/contribution";
+import { PLYWOOD_CAPABILITY } from "@/server/capabilities/plywood/keys";
 import { ShellChrome, type NavArea, type NavItem } from "@/components/shell/ShellChrome";
 import { isIconName } from "@/components/ui/icons";
 
@@ -62,11 +63,25 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   // previously held a hard-coded id-to-route map, which meant every new
   // capability required an edit to platform code — exactly the coupling the
   // capability system exists to prevent.
+  const activeCapabilityIds = capabilities.map((c) => c.id);
   const contributed = navigationFor({
-    activeCapabilityIds: capabilities.map((c) => c.id),
+    activeCapabilityIds,
     shell: "platform",
     canRead: (entity, verb) => grants.some((g) => g.entity === entity && g.verb === verb),
-  });
+  })
+    // Plywood supersedes the generic Location/Asset nav for its own tenants —
+    // godowns are Locations under the hood (a real dependency, see the
+    // capability's own `dependencies` array) but reachable via Godowns' own
+    // "Go to Locations" empty-state link, and Assets isn't a Plywood
+    // dependency at all. Named exception, not a generic "supersedes"
+    // registry: this is Plywood-specific UI judgment, not a platform rule.
+    .filter(
+      (c) =>
+        !(
+          activeCapabilityIds.includes(PLYWOOD_CAPABILITY) &&
+          (c.href === "/locations" || c.href === "/assets")
+        ),
+    );
 
   // Icons come from the contribution, never from a route-to-icon map here —
   // that map is the same coupling the capability system exists to prevent, and

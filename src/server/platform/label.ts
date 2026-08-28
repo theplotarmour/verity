@@ -59,6 +59,44 @@ export function configKeyInfo(key: string): ConfigKeyInfo {
   return { groupSlug, fieldLabel, isBasisPoints };
 }
 
+/**
+ * Business-language labels for the `ActionExecute` verb — the one verb the
+ * checkbox matrix's View/Manage/Delete columns cannot express, because it
+ * gates commands like "dispatch this shipment" or "approve this sales
+ * order's credit hold" rather than a CRUD operation.
+ *
+ * `authorize()` checks the exact (verb, entity) pair — a role either holds
+ * `ActionExecute` on an entity or it does not, with no finer grain (Bible
+ * PLA-AUT-003: verbs are closed, entity is the only axis). Several distinct
+ * commands often share one entity's `ActionExecute` grant (e.g. a shipment's
+ * covers assign-carrier, dispatch, confirm-delivery AND report-lost), so a
+ * label here is necessarily a composite of everything that one checkbox
+ * actually unlocks — never a single command's name standing in for the whole
+ * grant, which would misrepresent what got turned on.
+ *
+ * A curated map, not a generic derivation: unlike `entityLabel()`, a business
+ * action can't be algorithmically guessed from a dot-namespaced key. An entity
+ * missing from this map simply gets no Action column cell — a made-up verb
+ * for a command that may not even exist would be worse than an empty cell.
+ */
+const ACTION_EXECUTE_LABELS: Record<string, string> = {
+  "verity.plywood.shipment": "Assign carriers, dispatch & confirm delivery",
+  "verity.plywood.customer": "Set customer credit limits",
+  "verity.plywood.purchase_order": "Submit, receive goods & cancel purchase orders",
+  "verity.plywood.sales_order": "Approve credit, dispatch & cancel sales orders",
+  "verity.plywood.stock_ledger": "Adjust, write off & return stock",
+  "verity.approval.request": "Decide pending approvals",
+  "verity.dinein.menu_item": "Retire or restore menu items",
+  "verity.dinein.table": "Move tables on the floor plan",
+  "verity.dinein.order": "Send orders to the kitchen & cancel orders",
+  "verity.dinein.order_line": "Advance or void order lines",
+  "verity.dinein.bill": "Apply discounts & settle bills",
+};
+
+export function actionExecuteLabel(entityKey: string): string | null {
+  return ACTION_EXECUTE_LABELS[entityKey] ?? null;
+}
+
 /** Basis points (900) <-> a percent value as typed/displayed (9 or 9.00). */
 export function basisPointsToPercent(value: number): number {
   return Math.round((value / 100) * 100) / 100;

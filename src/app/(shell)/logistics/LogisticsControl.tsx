@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Button,
   EmptyState,
@@ -42,6 +43,22 @@ type Transporter = {
 
 function rupees(paise: number): string {
   return `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
+}
+
+/** Joins the missing prerequisites for one disabled action into "X, Y and Z". */
+function joinPrereqs(parts: Array<ReactNode | false>): ReactNode | null {
+  const present = parts.filter((p): p is ReactNode => p !== false);
+  if (present.length === 0) return null;
+  return present.map((part, i) => (
+    <span key={i}>
+      {i > 0 && (i === present.length - 1 ? " and " : ", ")}
+      {part}
+    </span>
+  ));
+}
+
+function PrereqHint({ children, className }: { children: ReactNode; className?: string }) {
+  return <p className={`text-right text-[12px] text-text-tertiary ${className ?? ""}`}>{children}</p>;
 }
 
 const STATE_LABEL: Record<string, string> = {
@@ -112,6 +129,13 @@ export function LogisticsControl({
 
   const inTransit = shipments.filter((shipment) => shipment.state === "in_transit").length;
 
+  const shipmentHint = joinPrereqs([
+    godowns.length === 0 && <>a godown in <Link href="/locations" className="text-accent-ink hover:underline">Locations</Link></>,
+    salesOrders.length === 0 && purchaseOrders.length === 0 && (
+      <>an order to ship, from <Link href="/sales" className="text-accent-ink hover:underline">Sales</Link> or <Link href="/purchases" className="text-accent-ink hover:underline">Purchases</Link></>
+    ),
+  ]);
+
   return (
     <>
       {failure && (
@@ -161,7 +185,7 @@ export function LogisticsControl({
         </Panel>
       </div>
 
-      <div className="mb-4 flex justify-end gap-2">
+      <div className="mb-1.5 flex justify-end gap-2">
         <Button onClick={() => setNewCarrier((open) => !open)}>
           {newCarrier ? "Cancel" : "New carrier"}
         </Button>
@@ -175,6 +199,8 @@ export function LogisticsControl({
           {newShipment ? "Cancel" : "New shipment"}
         </Button>
       </div>
+
+      {shipmentHint && <PrereqHint className="mb-4">New shipment needs {shipmentHint}.</PrereqHint>}
 
       {newCarrier && (
         <div className="mb-6">

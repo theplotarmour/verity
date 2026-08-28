@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Button,
   EmptyState,
@@ -35,6 +36,22 @@ type Customer = {
 
 function rupees(paise: number): string {
   return `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
+}
+
+/** Joins the missing prerequisites for one disabled action into "X, Y and Z". */
+function joinPrereqs(parts: Array<ReactNode | false>): ReactNode | null {
+  const present = parts.filter((p): p is ReactNode => p !== false);
+  if (present.length === 0) return null;
+  return present.map((part, i) => (
+    <span key={i}>
+      {i > 0 && (i === present.length - 1 ? " and " : ", ")}
+      {part}
+    </span>
+  ));
+}
+
+function PrereqHint({ children, className }: { children: ReactNode; className?: string }) {
+  return <p className={`text-right text-[12px] text-text-tertiary ${className ?? ""}`}>{children}</p>;
 }
 
 const STATE_LABEL: Record<string, string> = {
@@ -104,6 +121,16 @@ export function SalesDesk({
 
   const canOrder = customers.length > 0 && godowns.length > 0 && boards.length > 0;
 
+  const priceHint = joinPrereqs([
+    customers.length === 0 && "a customer",
+    boards.length === 0 && <>a board in <Link href="/catalogue" className="text-accent-ink hover:underline">Catalogue</Link></>,
+  ]);
+  const orderHint = joinPrereqs([
+    customers.length === 0 && "a customer",
+    godowns.length === 0 && <>a godown in <Link href="/locations" className="text-accent-ink hover:underline">Locations</Link></>,
+    boards.length === 0 && <>a board in <Link href="/catalogue" className="text-accent-ink hover:underline">Catalogue</Link></>,
+  ]);
+
   return (
     <>
       {failure && (
@@ -117,7 +144,7 @@ export function SalesDesk({
         </div>
       )}
 
-      <div className="mb-4 flex flex-wrap justify-end gap-2">
+      <div className="mb-1.5 flex flex-wrap justify-end gap-2">
         <Button onClick={() => setNewCustomer((open) => !open)}>
           {newCustomer ? "Cancel" : "New customer"}
         </Button>
@@ -131,6 +158,9 @@ export function SalesDesk({
           {newOrder ? "Cancel" : "New order"}
         </Button>
       </div>
+
+      {priceHint && <PrereqHint className="mb-1.5">Set a price needs {priceHint}.</PrereqHint>}
+      {orderHint && <PrereqHint className="mb-4">New order needs {orderHint}.</PrereqHint>}
 
       {pricing && (
         <div className="mb-6">

@@ -547,7 +547,10 @@ export function registerPlywoodCapability(): void {
       },
       {
         href: "/overview",
-        label: "Overview",
+        // "Overview" collided with the shell's own hard-coded "/" nav item —
+        // both read "Overview" in the sidebar, indistinguishable. This one is
+        // Plywood's business dashboard specifically.
+        label: "Business Overview",
         group: "Capabilities",
         order: 24,
         icon: "workspace",

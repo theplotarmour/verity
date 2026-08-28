@@ -15,6 +15,7 @@ import {
 import { runClientCommand } from "@/server/actions/hq";
 import type { ActionFailure } from "@/server/platform/action-error";
 import type { GrantableGroup, RoleRow } from "@/server/platform/administration";
+import { actionExecuteLabel } from "@/server/platform/label";
 
 const VERBS = ["Read", "Create", "Edit", "Delete", "ActionExecute"] as const;
 const SCOPES = ["Tenant", "Organization", "Location"] as const;
@@ -247,6 +248,7 @@ export function RolesAdmin({
                                       <th className="w-[90px] px-3 py-2 font-medium">View</th>
                                       <th className="w-[90px] px-3 py-2 font-medium">Manage</th>
                                       <th className="w-[90px] px-3 py-2 font-medium">Delete</th>
+                                      <th className="px-3 py-2 font-medium">Action</th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -254,6 +256,10 @@ export function RolesAdmin({
                                       const view = matrixCell(role.directGrants, entity.key, ["Read"]);
                                       const manage = matrixCell(role.directGrants, entity.key, ["Create", "Edit"]);
                                       const del = matrixCell(role.directGrants, entity.key, ["Delete"]);
+                                      const actionLabel = actionExecuteLabel(entity.key);
+                                      const action = actionLabel
+                                        ? matrixCell(role.directGrants, entity.key, ["ActionExecute"])
+                                        : null;
                                       return (
                                         <tr key={entity.key} className="border-t border-line">
                                           <td className="px-3 py-2 text-text">{entity.label}</td>
@@ -280,6 +286,18 @@ export function RolesAdmin({
                                               disabled={pending}
                                               onChange={() => toggleCell(role.id, entity.key, ["Delete"], del)}
                                             />
+                                          </td>
+                                          <td className="px-3 py-2">
+                                            {action && (
+                                              <Checkbox
+                                                label={<span className="text-[12.5px] text-text-secondary">{actionLabel}</span>}
+                                                checked={action.checked}
+                                                disabled={pending}
+                                                onChange={() =>
+                                                  toggleCell(role.id, entity.key, ["ActionExecute"], action)
+                                                }
+                                              />
+                                            )}
                                           </td>
                                         </tr>
                                       );

@@ -56,7 +56,7 @@ export default async function OverviewPage() {
   return (
     <>
       <PageHeader
-        title="Overview"
+        title="Business Overview"
         description="Today's trade, what the godowns hold, and what is owed in each direction. Every figure is the sum of records — follow any of them through to the screen it came from."
       />
 

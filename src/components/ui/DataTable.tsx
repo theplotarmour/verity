@@ -213,9 +213,15 @@ export function DataTable({
   }
 
   if (rows.length === 0) {
+    // A caller that passes `toolbar` (its creation form) but never sets
+    // `emptyAction` would otherwise strand a fresh tenant on a table with no
+    // visible way to create the first record — `toolbar` only renders in the
+    // populated branch below. Falling back to it here completes what this
+    // prop was already documented to do, for every caller, not just the ones
+    // that remembered to pass both.
     return (
       <Surface>
-        <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} />
+        <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction ?? toolbar} />
       </Surface>
     );
   }
