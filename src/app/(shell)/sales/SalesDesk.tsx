@@ -84,6 +84,9 @@ export function SalesDesk({
   const [newOrder, setNewOrder] = useState(false);
   const [newCustomer, setNewCustomer] = useState(false);
   const [approving, setApproving] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState<string | null>(null);
+  const [pricing, setPricing] = useState(false);
+  const [creditFor, setCreditFor] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function run(key: string, input: unknown, after?: () => void) {
@@ -114,14 +117,82 @@ export function SalesDesk({
         </div>
       )}
 
-      <div className="mb-4 flex justify-end gap-2">
+      <div className="mb-4 flex flex-wrap justify-end gap-2">
         <Button onClick={() => setNewCustomer((open) => !open)}>
           {newCustomer ? "Cancel" : "New customer"}
+        </Button>
+        <Button
+          disabled={customers.length === 0 || boards.length === 0}
+          onClick={() => setPricing((open) => !open)}
+        >
+          {pricing ? "Cancel" : "Set a price"}
         </Button>
         <Button variant="primary" disabled={!canOrder} onClick={() => setNewOrder((o) => !o)}>
           {newOrder ? "Cancel" : "New order"}
         </Button>
       </div>
+
+      {pricing && (
+        <div className="mb-6">
+          <Panel title="A customer's price for a board">
+            <form
+              className="flex flex-wrap items-end gap-3"
+              action={(formData) =>
+                run(
+                  "verity.plywood.set_customer_price",
+                  {
+                    customerId: String(formData.get("customerId") ?? ""),
+                    productId: String(formData.get("productId") ?? ""),
+                    customPricePaise: Math.round(Number(formData.get("price") ?? 0) * 100),
+                  },
+                  () => setPricing(false),
+                )
+              }
+            >
+              <div className="min-w-[200px]">
+                <Field label="Customer" htmlFor="cprice-customer" required>
+                  <Select id="cprice-customer" name="customerId" required defaultValue="">
+                    <option value="" disabled>
+                      Choose a customer
+                    </option>
+                    {customers.map((customer) => (
+                      <option key={customer.id} value={customer.id}>
+                        {customer.displayName}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+              <div className="min-w-[260px] flex-1">
+                <Field label="Board" htmlFor="cprice-board" required>
+                  <Select id="cprice-board" name="productId" required defaultValue="">
+                    <option value="" disabled>
+                      Choose a board
+                    </option>
+                    {boards.map((board) => (
+                      <option key={board.id} value={board.id}>
+                        {board.label}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+              <div className="w-[170px]">
+                <Field label="Price (₹)" htmlFor="cprice-value" required>
+                  <Input id="cprice-value" name="price" type="number" step="0.01" min="0" required />
+                </Field>
+              </div>
+              <Button type="submit" variant="primary" disabled={pending}>
+                Save
+              </Button>
+              <p className="m-0 w-full text-[12px] text-text-tertiary">
+                Used when an order leaves the price blank. A price already on a placed order does
+                not move — the line snapshotted it.
+              </p>
+            </form>
+          </Panel>
+        </div>
+      )}
 
       {newCustomer && (
         <div className="mb-6">
@@ -368,12 +439,52 @@ export function SalesDesk({
                             Dispatch
                           </Button>
                         )}
+                        <Button
+                          size="sm"
+                          disabled={pending}
+                          onClick={() => setCancelling(cancelling === order.id ? null : order.id)}
+                        >
+                          {cancelling === order.id ? "Close" : "Cancel"}
+                        </Button>
                       </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          )}
+
+          {cancelling && (
+            <form
+              className="mt-4 flex flex-wrap items-end gap-3 rounded-lg bg-glass-2 p-3"
+              action={(formData) =>
+                run(
+                  "verity.plywood.cancel_sales_order",
+                  { orderId: cancelling, reason: String(formData.get("reason") ?? "") },
+                  () => setCancelling(null),
+                )
+              }
+            >
+              <div className="min-w-[320px] flex-1">
+                <Field label="Why is this order being cancelled?" htmlFor="cancel-so" required>
+                  <Input
+                    id="cancel-so"
+                    name="reason"
+                    required
+                    autoFocus
+                    minLength={3}
+                    placeholder="Customer changed their mind"
+                  />
+                </Field>
+              </div>
+              <Button type="submit" variant="danger" disabled={pending}>
+                Cancel order
+              </Button>
+              <p className="m-0 w-full text-[12px] text-text-tertiary">
+                Any stock held for this order is released in the same step. Stock held for an order
+                nobody will fulfil is stock that cannot be sold.
+              </p>
+            </form>
           )}
 
           {approving && (
@@ -420,17 +531,19 @@ export function SalesDesk({
             <caption className="sr-only">Customers and credit headroom</caption>
             <thead>
               <tr>
-                {["Customer", "GSTIN", "Limit", "Committed", "Headroom"].map((heading, index) => (
-                  <th
-                    key={heading}
-                    className={
-                      "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                      (index === 0 ? "text-left" : "text-right")
-                    }
-                  >
-                    {heading}
-                  </th>
-                ))}
+                {["Customer", "GSTIN", "Limit", "Committed", "Headroom", ""].map(
+                  (heading, index) => (
+                    <th
+                      key={heading || index}
+                      className={
+                        "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
+                        (index === 0 ? "text-left" : "text-right")
+                      }
+                    >
+                      {heading}
+                    </th>
+                  ),
+                )}
               </tr>
             </thead>
             <tbody>
@@ -460,11 +573,67 @@ export function SalesDesk({
                     >
                       {rupees(headroom)}
                     </td>
+                    <td className="border-b border-line px-3 py-2 text-right">
+                      <Button
+                        size="sm"
+                        disabled={pending}
+                        onClick={() =>
+                          setCreditFor(creditFor === customer.id ? null : customer.id)
+                        }
+                      >
+                        {creditFor === customer.id ? "Close" : "Credit limit"}
+                      </Button>
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
+
+          {creditFor && (
+            <form
+              className="mt-4 flex flex-wrap items-end gap-3 rounded-lg bg-glass-2 p-3"
+              action={(formData) =>
+                run(
+                  "verity.plywood.set_credit_limit",
+                  {
+                    customerId: creditFor,
+                    creditLimitPaise: Math.round(Number(formData.get("limit") ?? 0) * 100),
+                  },
+                  () => setCreditFor(null),
+                )
+              }
+            >
+              <div className="w-[200px]">
+                <Field
+                  label="Credit limit (₹)"
+                  htmlFor={`limit-${creditFor}`}
+                  required
+                  hint="Zero means cash only"
+                >
+                  <Input
+                    id={`limit-${creditFor}`}
+                    name="limit"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    autoFocus
+                    defaultValue={(
+                      (customers.find((c) => c.id === creditFor)?.creditLimitPaise ?? 0) / 100
+                    ).toFixed(2)}
+                  />
+                </Field>
+              </div>
+              <Button type="submit" variant="primary" disabled={pending}>
+                Save
+              </Button>
+              <p className="m-0 w-full text-[12px] text-text-tertiary">
+                Who raised whose limit, and from what, is the first question after a bad debt — so
+                the change is recorded against the customer.
+              </p>
+            </form>
+          )}
         </Panel>
       )}
     </>

@@ -51,6 +51,7 @@ function rupeesRound(paise: number): string {
 }
 
 type Movement = "receive" | "issue" | "transfer";
+type Correction = "adjust" | "damaged" | "returned";
 
 /**
  * The stock board.
@@ -61,9 +62,11 @@ type Movement = "receive" | "issue" | "transfer";
  * knowing which of the three they came to do — and the fields that differ
  * between them are two.
  *
- * Adjustments are deliberately absent from this screen. An adjustment asserts
- * the system is wrong, rides a different permission, and belongs where it is
- * deliberate rather than one row below the ordinary receipts.
+ * Corrections sit in their own panel below, not among the movement buttons. An
+ * adjustment asserts the system is wrong; damage and returns are events rather
+ * than trade. All three demand a reason, and all three ride ActionExecute rather
+ * than Create so they can be held by the owner without also withholding ordinary
+ * receipts and issues.
  */
 export function StockBoard({
   onHand,
@@ -79,6 +82,7 @@ export function StockBoard({
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [movement, setMovement] = useState<Movement | null>(null);
+  const [correction, setCorrection] = useState<Correction | null>(null);
   const [pending, startTransition] = useTransition();
 
   const totalValuePaise = useMemo(
@@ -106,6 +110,7 @@ export function StockBoard({
       const result = await runCommand(key, input, "/stock");
       if (result.ok) {
         setMovement(null);
+        setCorrection(null);
         router.refresh();
       } else {
         setFailure(result);
@@ -155,6 +160,46 @@ export function StockBoard({
               {kind === "receive" ? "Receive" : kind === "issue" ? "Issue" : "Transfer"}
             </Button>
           ))}
+        </div>
+      )}
+
+      {canMove && (
+        <div className="mb-4 flex justify-end gap-2">
+          {(["adjust", "damaged", "returned"] as const).map((kind) => (
+            <Button
+              key={kind}
+              variant={correction === kind ? "primary" : "secondary"}
+              onClick={() => setCorrection(correction === kind ? null : kind)}
+            >
+              {kind === "adjust"
+                ? "Stock count"
+                : kind === "damaged"
+                  ? "Damaged"
+                  : "Returned"}
+            </Button>
+          ))}
+        </div>
+      )}
+
+      {correction && (
+        <div className="mb-6">
+          <Panel
+            title={
+              correction === "adjust"
+                ? "Correct a stock count"
+                : correction === "damaged"
+                  ? "Write off damaged stock"
+                  : "Take returned stock back in"
+            }
+          >
+            <CorrectionForm
+              correction={correction}
+              godowns={godowns}
+              boards={boards}
+              pending={pending}
+              onSubmit={run}
+            />
+          </Panel>
         </div>
       )}
 
@@ -423,6 +468,136 @@ function MovementForm({
             : "Cost travels with the stock. A transfer moves boards between godowns without creating or destroying value."}
         </p>
       )}
+    </form>
+  );
+}
+
+/**
+ * Corrections: a stock count, damage, or goods coming back.
+ *
+ * A reason is required on all three, and the command enforces a minimum length —
+ * "x" is not a reason. These are the entries somebody asks about six months
+ * later, which is precisely when nobody remembers, so the answer has to be
+ * written at the moment it is still obvious.
+ *
+ * None of them takes a cost. Found stock and returned goods re-enter at what the
+ * godown already carries the board at; damage leaves at the same. A cost field
+ * here would invite somebody to book a price nobody paid.
+ */
+function CorrectionForm({
+  correction,
+  godowns,
+  boards,
+  pending,
+  onSubmit,
+}: {
+  correction: Correction;
+  godowns: Array<{ id: string; name: string }>;
+  boards: Array<{ id: string; label: string; unitLabel: string }>;
+  pending: boolean;
+  onSubmit: (key: string, input: unknown) => void;
+}) {
+  return (
+    <form
+      className="flex flex-wrap items-end gap-3"
+      action={(formData) => {
+        const base = {
+          productId: String(formData.get("productId") ?? ""),
+          locationId: String(formData.get("locationId") ?? ""),
+          qtyUnits: Number(formData.get("qty") ?? 0),
+          reason: String(formData.get("reason") ?? ""),
+        };
+        if (correction === "adjust") {
+          onSubmit("verity.plywood.adjust_stock", {
+            ...base,
+            direction: String(formData.get("direction") ?? "out"),
+          });
+        } else if (correction === "damaged") {
+          onSubmit("verity.plywood.record_damaged_stock", base);
+        } else {
+          onSubmit("verity.plywood.record_returned_stock", base);
+        }
+      }}
+    >
+      <div className="min-w-[240px] flex-1">
+        <Field label="Board" htmlFor="correction-product" required>
+          <Select id="correction-product" name="productId" required defaultValue="">
+            <option value="" disabled>
+              Choose a board
+            </option>
+            {boards.map((board) => (
+              <option key={board.id} value={board.id}>
+                {board.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+
+      <div className="min-w-[170px]">
+        <Field label="Godown" htmlFor="correction-location" required>
+          <Select id="correction-location" name="locationId" required defaultValue="">
+            <option value="" disabled>
+              Choose a godown
+            </option>
+            {godowns.map((godown) => (
+              <option key={godown.id} value={godown.id}>
+                {godown.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+
+      {correction === "adjust" && (
+        <div className="w-[150px]">
+          <Field label="Direction" htmlFor="correction-direction" required>
+            <Select id="correction-direction" name="direction" required defaultValue="out">
+              <option value="out">Short — remove</option>
+              <option value="in">Found — add</option>
+            </Select>
+          </Field>
+        </div>
+      )}
+
+      <div className="w-[120px]">
+        <Field label="Quantity" htmlFor="correction-qty" required>
+          <Input id="correction-qty" name="qty" type="number" min="1" step="1" required />
+        </Field>
+      </div>
+
+      <div className="min-w-[280px] flex-1">
+        <Field
+          label="Reason"
+          htmlFor="correction-reason"
+          required
+          hint="Read by whoever asks about this later"
+        >
+          <Input
+            id="correction-reason"
+            name="reason"
+            required
+            minLength={3}
+            placeholder={
+              correction === "adjust"
+                ? "Physical count on 28 August found three short"
+                : correction === "damaged"
+                  ? "Water damage in the corner stack"
+                  : "Customer returned five sheets, unopened"
+            }
+          />
+        </Field>
+      </div>
+
+      <Button type="submit" variant="primary" disabled={pending}>
+        Record
+      </Button>
+
+      <p className="m-0 w-full text-[12px] text-text-tertiary">
+        {correction === "returned"
+          ? "Re-enters at what the godown carries the board at, never at what it was sold for — a return is not a purchase."
+          : "Costed at the godown's weighted average. The movement is appended to the ledger and can never be edited away."}
+      </p>
     </form>
   );
 }

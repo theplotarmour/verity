@@ -77,6 +77,8 @@ export function PurchaseDesk({
   const [newOrder, setNewOrder] = useState(false);
   const [newSupplier, setNewSupplier] = useState(false);
   const [receiving, setReceiving] = useState<string | null>(null);
+  const [pricing, setPricing] = useState(false);
+  const [cancelling, setCancelling] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function run(key: string, input: unknown, after?: () => void) {
@@ -107,9 +109,15 @@ export function PurchaseDesk({
         </div>
       )}
 
-      <div className="mb-4 flex justify-end gap-2">
+      <div className="mb-4 flex flex-wrap justify-end gap-2">
         <Button onClick={() => setNewSupplier((open) => !open)}>
           {newSupplier ? "Cancel" : "New supplier"}
+        </Button>
+        <Button
+          disabled={suppliers.length === 0 || boards.length === 0}
+          onClick={() => setPricing((open) => !open)}
+        >
+          {pricing ? "Cancel" : "Agree a price"}
         </Button>
         <Button
           variant="primary"
@@ -167,6 +175,68 @@ export function PurchaseDesk({
               <Button type="submit" variant="primary" disabled={pending}>
                 Create
               </Button>
+            </form>
+          </Panel>
+        </div>
+      )}
+
+      {pricing && (
+        <div className="mb-6">
+          <Panel title="Agreed price with a supplier">
+            <form
+              className="flex flex-wrap items-end gap-3"
+              action={(formData) =>
+                run(
+                  "verity.plywood.set_supplier_price",
+                  {
+                    supplierId: String(formData.get("supplierId") ?? ""),
+                    productId: String(formData.get("productId") ?? ""),
+                    negotiatedCostPaise: Math.round(Number(formData.get("cost") ?? 0) * 100),
+                  },
+                  () => setPricing(false),
+                )
+              }
+            >
+              <div className="min-w-[200px]">
+                <Field label="Supplier" htmlFor="price-supplier" required>
+                  <Select id="price-supplier" name="supplierId" required defaultValue="">
+                    <option value="" disabled>
+                      Choose a supplier
+                    </option>
+                    {suppliers.map((supplier) => (
+                      <option key={supplier.id} value={supplier.id}>
+                        {supplier.displayName}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+              <div className="min-w-[260px] flex-1">
+                <Field label="Board" htmlFor="price-board" required>
+                  <Select id="price-board" name="productId" required defaultValue="">
+                    <option value="" disabled>
+                      Choose a board
+                    </option>
+                    {boards.map((board) => (
+                      <option key={board.id} value={board.id}>
+                        {board.label}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+              <div className="w-[170px]">
+                <Field label="Agreed cost (₹)" htmlFor="price-cost" required>
+                  <Input id="price-cost" name="cost" type="number" step="0.01" min="0" required />
+                </Field>
+              </div>
+              <Button type="submit" variant="primary" disabled={pending}>
+                Save
+              </Button>
+              <p className="m-0 w-full text-[12px] text-text-tertiary">
+                Used when an order leaves the cost blank. One current price per supplier per board;
+                what it used to be lives in the orders that were placed at it.
+              </p>
             </form>
           </Panel>
         </div>
@@ -344,12 +414,56 @@ export function PurchaseDesk({
                             {receiving === order.id ? "Close" : "Receive"}
                           </Button>
                         )}
+                        {order.state !== "completed" && (
+                          <Button
+                            size="sm"
+                            disabled={pending}
+                            onClick={() =>
+                              setCancelling(cancelling === order.id ? null : order.id)
+                            }
+                          >
+                            {cancelling === order.id ? "Close" : "Cancel"}
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          )}
+
+          {cancelling && (
+            <form
+              className="mt-4 flex flex-wrap items-end gap-3 rounded-lg bg-glass-2 p-3"
+              action={(formData) =>
+                run(
+                  "verity.plywood.cancel_purchase_order",
+                  { orderId: cancelling, reason: String(formData.get("reason") ?? "") },
+                  () => setCancelling(null),
+                )
+              }
+            >
+              <div className="min-w-[320px] flex-1">
+                <Field label="Why is this order being cancelled?" htmlFor="cancel-po" required>
+                  <Input
+                    id="cancel-po"
+                    name="reason"
+                    required
+                    autoFocus
+                    minLength={3}
+                    placeholder="Supplier cannot supply before the season"
+                  />
+                </Field>
+              </div>
+              <Button type="submit" variant="danger" disabled={pending}>
+                Cancel order
+              </Button>
+              <p className="m-0 w-full text-[12px] text-text-tertiary">
+                Anything already received stays received. Cancelling closes what is still owed; it
+                does not unwind stock that came through the door.
+              </p>
+            </form>
           )}
 
           {receiving && (

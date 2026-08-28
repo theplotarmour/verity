@@ -75,16 +75,26 @@ const STATE_CATEGORY: Record<string, string> = {
 export function LogisticsControl({
   shipments,
   transporters,
+  godowns,
+  customers,
+  salesOrders,
+  purchaseOrders,
   query,
 }: {
   shipments: Shipment[];
   transporters: Transporter[];
+  godowns: Array<{ id: string; name: string }>;
+  customers: Array<{ id: string; name: string }>;
+  salesOrders: Array<{ id: string; label: string }>;
+  purchaseOrders: Array<{ id: string; label: string }>;
   query: string;
 }) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [assigning, setAssigning] = useState<string | null>(null);
   const [losing, setLosing] = useState<string | null>(null);
+  const [newCarrier, setNewCarrier] = useState(false);
+  const [newShipment, setNewShipment] = useState(false);
   const [pending, startTransition] = useTransition();
 
   function run(key: string, input: unknown, after?: () => void) {
@@ -150,6 +160,82 @@ export function LogisticsControl({
           </form>
         </Panel>
       </div>
+
+      <div className="mb-4 flex justify-end gap-2">
+        <Button onClick={() => setNewCarrier((open) => !open)}>
+          {newCarrier ? "Cancel" : "New carrier"}
+        </Button>
+        <Button
+          variant="primary"
+          disabled={
+            godowns.length === 0 || (salesOrders.length === 0 && purchaseOrders.length === 0)
+          }
+          onClick={() => setNewShipment((open) => !open)}
+        >
+          {newShipment ? "Cancel" : "New shipment"}
+        </Button>
+      </div>
+
+      {newCarrier && (
+        <div className="mb-6">
+          <Panel title="New carrier">
+            <form
+              className="flex flex-wrap items-end gap-3"
+              action={(formData) =>
+                run(
+                  "verity.plywood.create_transporter",
+                  {
+                    name: String(formData.get("name") ?? ""),
+                    ...(formData.get("phone") ? { phone: String(formData.get("phone")) } : {}),
+                  },
+                  () => setNewCarrier(false),
+                )
+              }
+            >
+              <div className="min-w-[240px] flex-1">
+                <Field label="Carrier" htmlFor="carrier-name" required>
+                  <Input
+                    id="carrier-name"
+                    name="name"
+                    required
+                    autoFocus
+                    placeholder="Delhi Roadways"
+                  />
+                </Field>
+              </div>
+              <div className="w-[180px]">
+                <Field label="Phone" htmlFor="carrier-phone">
+                  <Input id="carrier-phone" name="phone" />
+                </Field>
+              </div>
+              <Button type="submit" variant="primary" disabled={pending}>
+                Create
+              </Button>
+              <p className="m-0 w-full text-[12px] text-text-tertiary">
+                A record, not a login. Transit status is updated by the coordinator, which is how
+                the business runs today.
+              </p>
+            </form>
+          </Panel>
+        </div>
+      )}
+
+      {newShipment && (
+        <div className="mb-6">
+          <Panel title="New shipment">
+            <NewShipmentForm
+              godowns={godowns}
+              customers={customers}
+              salesOrders={salesOrders}
+              purchaseOrders={purchaseOrders}
+              pending={pending}
+              onSubmit={(input) =>
+                run("verity.plywood.create_shipment", input, () => setNewShipment(false))
+              }
+            />
+          </Panel>
+        </div>
+      )}
 
       {shipments.length === 0 ? (
         <Panel flush>
@@ -389,5 +475,179 @@ export function LogisticsControl({
         </Panel>
       )}
     </>
+  );
+}
+
+/**
+ * Raising a shipment.
+ *
+ * Outbound or inbound is one choice and it decides everything else: outbound
+ * leaves a godown for a customer against a sales order, inbound arrives at a
+ * godown against a purchase order. The command requires exactly one order and
+ * exactly one destination, and two check constraints agree with it — so this
+ * form simply never offers a combination that would be refused.
+ */
+function NewShipmentForm({
+  godowns,
+  customers,
+  salesOrders,
+  purchaseOrders,
+  pending,
+  onSubmit,
+}: {
+  godowns: Array<{ id: string; name: string }>;
+  customers: Array<{ id: string; name: string }>;
+  salesOrders: Array<{ id: string; label: string }>;
+  purchaseOrders: Array<{ id: string; label: string }>;
+  pending: boolean;
+  onSubmit: (input: unknown) => void;
+}) {
+  const [direction, setDirection] = useState<"outbound" | "inbound">(
+    salesOrders.length > 0 ? "outbound" : "inbound",
+  );
+
+  const outbound = direction === "outbound";
+  const orders = outbound ? salesOrders : purchaseOrders;
+
+  return (
+    <form
+      className="flex flex-wrap items-end gap-3"
+      action={(formData) => {
+        const base = {
+          sourceLocationId: String(formData.get("sourceLocationId") ?? ""),
+          // Rupees in, paise out, as everywhere else.
+          freightChargePaise: Math.round(Number(formData.get("freight") ?? 0) * 100),
+          freightPayer: String(formData.get("freightPayer") ?? "tenant"),
+        };
+        onSubmit(
+          outbound
+            ? {
+                ...base,
+                salesOrderId: String(formData.get("orderId") ?? ""),
+                destCustomerId: String(formData.get("destCustomerId") ?? ""),
+              }
+            : {
+                ...base,
+                purchaseOrderId: String(formData.get("orderId") ?? ""),
+                destLocationId: String(formData.get("destLocationId") ?? ""),
+              },
+        );
+      }}
+    >
+      <div className="w-[170px]">
+        <Field label="Direction" htmlFor="shipment-direction" required>
+          <Select
+            id="shipment-direction"
+            name="direction"
+            value={direction}
+            onChange={(event) => setDirection(event.target.value as "outbound" | "inbound")}
+          >
+            <option value="outbound" disabled={salesOrders.length === 0}>
+              Out to a customer
+            </option>
+            <option value="inbound" disabled={purchaseOrders.length === 0}>
+              In to a godown
+            </option>
+          </Select>
+        </Field>
+      </div>
+
+      <div className="min-w-[220px] flex-1">
+        <Field
+          label={outbound ? "Sales order" : "Purchase order"}
+          htmlFor="shipment-order"
+          required
+        >
+          <Select id="shipment-order" name="orderId" required defaultValue="">
+            <option value="" disabled>
+              Choose an order
+            </option>
+            {orders.map((order) => (
+              <option key={order.id} value={order.id}>
+                {order.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+
+      <div className="min-w-[170px]">
+        <Field label="From godown" htmlFor="shipment-source" required>
+          <Select id="shipment-source" name="sourceLocationId" required defaultValue="">
+            <option value="" disabled>
+              Choose a godown
+            </option>
+            {godowns.map((godown) => (
+              <option key={godown.id} value={godown.id}>
+                {godown.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+
+      <div className="min-w-[190px]">
+        {outbound ? (
+          <Field label="To customer" htmlFor="shipment-dest-customer" required>
+            <Select id="shipment-dest-customer" name="destCustomerId" required defaultValue="">
+              <option value="" disabled>
+                Choose a customer
+              </option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : (
+          <Field label="To godown" htmlFor="shipment-dest-godown" required>
+            <Select id="shipment-dest-godown" name="destLocationId" required defaultValue="">
+              <option value="" disabled>
+                Choose a godown
+              </option>
+              {godowns.map((godown) => (
+                <option key={godown.id} value={godown.id}>
+                  {godown.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
+      </div>
+
+      <div className="w-[150px]">
+        <Field label="Freight (₹)" htmlFor="shipment-freight">
+          <Input
+            id="shipment-freight"
+            name="freight"
+            type="number"
+            step="0.01"
+            min="0"
+            defaultValue={0}
+          />
+        </Field>
+      </div>
+
+      <div className="w-[160px]">
+        <Field label="Freight paid by" htmlFor="shipment-payer" required>
+          <Select id="shipment-payer" name="freightPayer" required defaultValue="tenant">
+            <option value="tenant">Us</option>
+            <option value="customer">Customer</option>
+            <option value="supplier">Supplier</option>
+          </Select>
+        </Field>
+      </div>
+
+      <Button type="submit" variant="primary" disabled={pending}>
+        Create
+      </Button>
+
+      <p className="m-0 w-full text-[12px] text-text-tertiary">
+        Who bears the freight changes the margin on the sale, so it is recorded rather than assumed
+        at reporting time. Assign a carrier and an LR number next — a shipment without one cannot be
+        chased.
+      </p>
+    </form>
   );
 }

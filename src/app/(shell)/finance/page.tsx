@@ -52,6 +52,15 @@ export default async function FinancePage() {
         invoiceableOrders={orders.sales.filter(
           (order) => order.state !== "draft" && order.state !== "cancelled",
         )}
+        // A purchase invoice records what a supplier billed. Only orders that
+        // have actually been sent to the supplier can carry one.
+        invoiceablePurchases={orders.purchases
+          .filter((order) => order.state !== "draft" && order.state !== "cancelled")
+          .map((order) => ({
+            id: order.id,
+            supplierName: order.supplierName,
+            totalCostPaise: order.totalCostPaise,
+          }))}
       />
     </>
   );

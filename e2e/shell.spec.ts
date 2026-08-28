@@ -124,11 +124,22 @@ test.describe("platform shell", () => {
     await expect(page.getByRole("heading", { name: "Workspace" })).toBeVisible();
   });
 
-  test("capability registry reports real activation state", async ({ page }) => {
+  test("capability registry reports real activation state and can change it", async ({ page }) => {
     await page.goto("/capabilities");
     await expect(page.getByRole("heading", { name: "Capability registry" })).toBeVisible();
-    await expect(page.getByRole("cell", { name: "Location", exact: true }).first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "Depends on" })).toBeVisible();
+
+    // One panel per capability rather than a table: the dependency story sits
+    // beside the control, which is the reason the control is safe to offer.
+    await expect(page.getByRole("heading", { name: "Location", exact: true })).toBeVisible();
+
+    // The registry was read-only until a tenant could not be set up without SQL.
+    // Every capability now carries an activate or deactivate control.
+    const controls = page.getByRole("button", { name: /^(Activate|Deactivate)$/ });
+    expect(await controls.count()).toBeGreaterThan(0);
+
+    // And the consequences are stated before the click, not after it. Asset
+    // depends on Location, so Location cannot be deactivated while Asset is on.
+    await expect(page.getByText(/Depends on|Required by/).first()).toBeVisible();
   });
 
   test("audit shows recorded history", async ({ page }) => {

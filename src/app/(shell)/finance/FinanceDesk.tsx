@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Button,
@@ -62,14 +63,17 @@ export function FinanceDesk({
   invoices,
   receivables,
   invoiceableOrders,
+  invoiceablePurchases,
 }: {
   invoices: Invoice[];
   receivables: Receivable[];
   invoiceableOrders: Array<{ id: string; customerName: string; totalPricePaise: number }>;
+  invoiceablePurchases: Array<{ id: string; supplierName: string; totalCostPaise: number }>;
 }) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [raising, setRaising] = useState(false);
+  const [raisingPurchase, setRaisingPurchase] = useState(false);
   const [paying, setPaying] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -123,11 +127,79 @@ export function FinanceDesk({
         </StatRow>
       </div>
 
-      {invoiceableOrders.length > 0 && (
-        <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex flex-wrap justify-end gap-2">
+        <Link href="/ledgers">
+          <Button>Ledgers</Button>
+        </Link>
+        {invoiceablePurchases.length > 0 && (
+          <Button onClick={() => setRaisingPurchase((open) => !open)}>
+            {raisingPurchase ? "Cancel" : "Record supplier bill"}
+          </Button>
+        )}
+        {invoiceableOrders.length > 0 && (
           <Button variant="primary" onClick={() => setRaising((open) => !open)}>
             {raising ? "Cancel" : "Raise invoice"}
           </Button>
+        )}
+      </div>
+
+      {raisingPurchase && (
+        <div className="mb-6">
+          <Panel title="Record what a supplier billed">
+            <form
+              className="flex flex-wrap items-end gap-3"
+              action={(formData) =>
+                run(
+                  "verity.plywood.raise_purchase_invoice",
+                  {
+                    purchaseOrderId: String(formData.get("purchaseOrderId") ?? ""),
+                    supplierInvoiceTotalPaise: Math.round(Number(formData.get("total") ?? 0) * 100),
+                  },
+                  () => setRaisingPurchase(false),
+                )
+              }
+            >
+              <div className="min-w-[300px] flex-1">
+                <Field label="Purchase order" htmlFor="purchase-invoice-order" required>
+                  <Select id="purchase-invoice-order" name="purchaseOrderId" required defaultValue="">
+                    <option value="" disabled>
+                      Choose an order
+                    </option>
+                    {invoiceablePurchases.map((order) => (
+                      <option key={order.id} value={order.id}>
+                        {order.supplierName} — {rupees(order.totalCostPaise)} ordered
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+              <div className="w-[190px]">
+                <Field
+                  label="Amount billed (₹)"
+                  htmlFor="purchase-invoice-total"
+                  required
+                  hint="As the supplier wrote it"
+                >
+                  <Input
+                    id="purchase-invoice-total"
+                    name="total"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                  />
+                </Field>
+              </div>
+              <Button type="submit" variant="primary" disabled={pending}>
+                Record
+              </Button>
+              <p className="m-0 w-full text-[12px] text-text-tertiary">
+                Recorded as given rather than recomputed from the order. What this business owes is
+                what the supplier billed, and a disagreement with the order is a conversation to
+                have — not a correction to make silently.
+              </p>
+            </form>
+          </Panel>
         </div>
       )}
 
@@ -198,8 +270,13 @@ export function FinanceDesk({
                   const age = daysSince(row.oldestUnpaidAt);
                   return (
                     <tr key={row.customerId}>
-                      <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                        {row.customerName}
+                      <td className="border-b border-line px-3 py-2 text-[14px]">
+                        <Link
+                          href={`/ledgers?customer=${row.customerId}`}
+                          className="text-text no-underline hover:underline"
+                        >
+                          {row.customerName}
+                        </Link>
                       </td>
                       <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
                         {rupees(row.invoicedPaise)}
@@ -257,8 +334,13 @@ export function FinanceDesk({
             <tbody>
               {invoices.map((invoice) => (
                 <tr key={invoice.id}>
-                  <td className="tabular border-b border-line px-3 py-2 text-[14px] text-text">
-                    {invoice.invoiceNumber}
+                  <td className="tabular border-b border-line px-3 py-2 text-[14px]">
+                    <Link
+                      href={`/finance/${invoice.id}`}
+                      className="text-text no-underline hover:underline"
+                    >
+                      {invoice.invoiceNumber}
+                    </Link>
                   </td>
                   <td className="border-b border-line px-3 py-2 text-[14px] text-text-secondary">
                     {invoice.partyName}

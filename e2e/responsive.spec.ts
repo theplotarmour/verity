@@ -93,7 +93,13 @@ test.describe("shell scroll ownership", () => {
   });
 
   test("content scrolls while the chrome stays", async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+    // A short desktop viewport rather than a tall one, deliberately. The
+    // assertion below needs the region to actually scroll, and how much content
+    // /audit holds depends on how much history the environment has accumulated —
+    // which made this test pass or fail on the age of the database rather than
+    // on the shell. A 560px-tall window is a real desktop shape (a laptop with
+    // browser chrome and a dock) and overflows on any populated screen.
+    await page.setViewportSize({ width: 1440, height: 560 });
     await page.goto("/audit");
 
     const main = page.locator("#main");

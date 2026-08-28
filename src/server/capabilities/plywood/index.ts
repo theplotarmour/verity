@@ -15,6 +15,7 @@ import {
   ENTITY_SALES_ORDER,
   ENTITY_SHIPMENT,
   ENTITY_INVOICE,
+  ENTITY_LEDGER_ENTRY,
   HSN_CODE,
   PLYWOOD_CAPABILITY,
 } from "./keys";
@@ -560,6 +561,15 @@ export function registerPlywoodCapability(): void {
         order: 25,
         icon: "audit",
         requiresEntity: ENTITY_INVOICE,
+        shells: ["platform"],
+      },
+      {
+        href: "/ledgers",
+        label: "Ledgers",
+        group: "Capabilities",
+        order: 24.5,
+        icon: "audit",
+        requiresEntity: ENTITY_LEDGER_ENTRY,
         shells: ["platform"],
       },
       {

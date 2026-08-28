@@ -37,6 +37,27 @@ import {
 /* ================================== tax =================================== */
 
 /**
+ * A configuration value read as a number.
+ *
+ * `setConfig` stores JSON, and the two writers disagree about type: a test
+ * writes `900`, while the Configuration screen writes what the operator typed,
+ * which is `"900"`. JavaScript would coerce the string through the arithmetic
+ * below and produce the right answer by accident — until somebody types `9 %`
+ * and gets `NaN` silently folded into a tax figure.
+ *
+ * So it is converted once, here, and a value that is not a number is refused
+ * rather than propagated. Tax is the last place to trust coercion.
+ */
+function configNumber(value: unknown, key: string): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  const parsed = typeof value === "number" ? value : Number(String(value).trim());
+  if (!Number.isFinite(parsed)) {
+    throw new ValidationError(`E_VALIDATION: ${key} is not a number (${String(value)})`);
+  }
+  return parsed;
+}
+
+/**
  * Indian financial years run April to March, so a calendar year would split an
  * invoice series across two of them — and a series that restarts mid-year is not
  * the gapless sequence GST asks for.
@@ -165,7 +186,9 @@ export const raiseSalesInvoice: CommandDefinition<
       throw new ValidationError("E_VALIDATION: only an approved order can be invoiced");
     }
 
-    const supplyStateCode = await resolveConfig<string>(ctx.tx, CONFIG_TENANT_STATE_CODE);
+    const supplyStateCode = String(
+      (await resolveConfig<unknown>(ctx.tx, CONFIG_TENANT_STATE_CODE)) ?? "",
+    ).trim();
     if (!supplyStateCode) {
       throw new ValidationError(
         "E_VALIDATION: this business has no state code configured, so tax cannot be decided",
@@ -175,11 +198,14 @@ export const raiseSalesInvoice: CommandDefinition<
     // retrospectively change how an old invoice was taxed.
     const placeOfSupplyStateCode = order.customer.stateCode ?? supplyStateCode;
 
-    const [cgstRateBp, sgstRateBp, igstRateBp] = await Promise.all([
-      resolveConfig<number>(ctx.tx, CONFIG_CGST_RATE_BP),
-      resolveConfig<number>(ctx.tx, CONFIG_SGST_RATE_BP),
-      resolveConfig<number>(ctx.tx, CONFIG_IGST_RATE_BP),
+    const [rawCgst, rawSgst, rawIgst] = await Promise.all([
+      resolveConfig<unknown>(ctx.tx, CONFIG_CGST_RATE_BP),
+      resolveConfig<unknown>(ctx.tx, CONFIG_SGST_RATE_BP),
+      resolveConfig<unknown>(ctx.tx, CONFIG_IGST_RATE_BP),
     ]);
+    const cgstRateBp = configNumber(rawCgst, CONFIG_CGST_RATE_BP);
+    const sgstRateBp = configNumber(rawSgst, CONFIG_SGST_RATE_BP);
+    const igstRateBp = configNumber(rawIgst, CONFIG_IGST_RATE_BP);
 
     const taxablePaise = order.lines.reduce(
       (sum, line) => sum + line.qtyOrdered * line.unitPricePaise,
@@ -556,9 +582,20 @@ export const invoiceDetail: QueryDefinition<
   {
     id: string;
     invoiceNumber: string;
+    direction: "sales" | "purchase";
     partyName: string;
+    /// Legally required on a tax invoice alongside the supplier's own.
+    partyGstin: string | null;
     issuedAt: Date;
     interState: boolean;
+    supplyStateCode: string;
+    placeOfSupplyStateCode: string;
+    /// Basis points, as they were when the invoice was raised. A rate change
+    /// next quarter must not restate a filed document, so these are read from
+    /// the invoice rather than from configuration.
+    cgstRateBp: number;
+    sgstRateBp: number;
+    igstRateBp: number;
     taxablePaise: number;
     cgstPaise: number;
     sgstPaise: number;
@@ -566,6 +603,12 @@ export const invoiceDetail: QueryDefinition<
     totalPaise: number;
     paidPaise: number;
     outstandingPaise: number;
+    payments: Array<{
+      method: string;
+      amountPaise: number;
+      reference: string | null;
+      receivedAt: Date;
+    }>;
     lines: Array<{
       name: string;
       hsnCode: string;
@@ -584,8 +627,8 @@ export const invoiceDetail: QueryDefinition<
       include: {
         lines: true,
         payments: true,
-        customer: { select: { displayName: true } },
-        supplier: { select: { displayName: true } },
+        customer: { select: { displayName: true, gstin: true } },
+        supplier: { select: { displayName: true, gstin: true } },
       },
     });
     if (!invoice) return null;
@@ -594,9 +637,25 @@ export const invoiceDetail: QueryDefinition<
     return {
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
+      direction: invoice.customerId ? ("sales" as const) : ("purchase" as const),
       partyName: invoice.customer?.displayName ?? invoice.supplier?.displayName ?? "—",
+      partyGstin: invoice.customer?.gstin ?? invoice.supplier?.gstin ?? null,
       issuedAt: invoice.issuedAt,
       interState: invoice.igstPaise > 0,
+      supplyStateCode: invoice.supplyStateCode,
+      placeOfSupplyStateCode: invoice.placeOfSupplyStateCode,
+      cgstRateBp: invoice.cgstRateBp,
+      sgstRateBp: invoice.sgstRateBp,
+      igstRateBp: invoice.igstRateBp,
+      payments: invoice.payments
+        .slice()
+        .sort((a, b) => a.receivedAt.getTime() - b.receivedAt.getTime())
+        .map((payment) => ({
+          method: payment.method,
+          amountPaise: payment.amountPaise,
+          reference: payment.reference,
+          receivedAt: payment.receivedAt,
+        })),
       taxablePaise: invoice.taxablePaise,
       cgstPaise: invoice.cgstPaise,
       sgstPaise: invoice.sgstPaise,
