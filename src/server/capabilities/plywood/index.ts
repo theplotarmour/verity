@@ -3,6 +3,28 @@ import { registerContribution } from "@/server/platform/contribution";
 import { registerCommand, ValidationError, type CommandDefinition } from "@/server/platform/command";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import { diffFields, recordActivity } from "@/server/platform/audit";
+import { notify } from "@/server/platform/notification";
+import { withTenant, type TenantScopedClient } from "@/server/platform/tenancy";
+import {
+  ENTITY_BRAND,
+  ENTITY_GODOWN_RACK,
+  ENTITY_PRODUCT,
+  ENTITY_STOCK_BALANCE,
+  ENTITY_STOCK_LEDGER,
+  HSN_CODE,
+  PLYWOOD_CAPABILITY,
+} from "./keys";
+import {
+  adjustStock,
+  issueStock,
+  lowStock,
+  productMovements,
+  receiveStock,
+  recordDamagedStock,
+  recordReturnedStock,
+  stockOnHand,
+  transferStock,
+} from "./stock";
 
 /**
  * CAPABILITY: Plywood trading — `verity.capability.plywood`
@@ -30,25 +52,8 @@ import { diffFields, recordActivity } from "@/server/platform/audit";
  * RLS policy on each new table.
  */
 
-export const PLYWOOD_CAPABILITY = "verity.capability.plywood";
-
-export const ENTITY_BRAND = "verity.plywood.brand";
-export const ENTITY_PRODUCT = "verity.plywood.product";
-export const ENTITY_GODOWN_RACK = "verity.plywood.godown_rack";
-
-/**
- * HSN codes are 4, 6 or 8 digits — CBIC notification 78/2020 sets which by the
- * business's turnover. The rule is the shape; the digit count is the client's
- * accountant's decision, and hard-coding one would be wrong for the other two.
- *
- * The same expression is a CHECK constraint on the column. Validating here as
- * well is not duplication for its own sake: it produces a named validation
- * failure instead of a constraint violation, and the constraint remains the
- * thing that cannot be forgotten by a second writer.
- */
-const HSN_CODE = z
-  .string()
-  .regex(/^[0-9]{4}([0-9]{2}([0-9]{2})?)?$/, "HSN code must be 4, 6 or 8 digits");
+export * from "./keys";
+export * from "./stock";
 
 /* ================================= brands ================================= */
 
@@ -459,6 +464,15 @@ export function registerPlywoodCapability(): void {
         shells: ["platform"],
       },
       {
+        href: "/stock",
+        label: "Stock",
+        group: "Capabilities",
+        order: 29,
+        icon: "workspace",
+        requiresEntity: ENTITY_STOCK_BALANCE,
+        shells: ["platform", "operations"],
+      },
+      {
         href: "/godowns",
         label: "Godowns",
         group: "Administration",
@@ -471,9 +485,88 @@ export function registerPlywoodCapability(): void {
         shells: ["platform"],
       },
     ],
-    // No workspace queues and no schedules yet. The low-stock sweep belongs to
-    // stage 2, and declaring it now would announce a queue that counts nothing
-    // because no stock movement exists to count.
+    workspace: [
+      {
+        key: "verity.plywood.low_stock",
+        label: "Boards at or below reorder level",
+        href: "/stock",
+        count: async ({ tenantId }) =>
+          withTenant(tenantId, async (tx) => {
+            const rows = await tx.$queryRaw<{ count: bigint }[]>`
+              SELECT count(*)::bigint AS count
+                FROM plywood_product p
+               WHERE p.active
+                 AND p.reorder_level_units > 0
+                 AND COALESCE((
+                       SELECT sum(b.qty_units) FROM stock_balance b WHERE b.product_id = p.id
+                     ), 0) <= p.reorder_level_units`;
+            return Number(rows[0]?.count ?? 0);
+          }),
+        shells: ["platform", "operations"],
+      },
+    ],
+    schedules: [
+      {
+        key: "verity.plywood.sweep_low_stock",
+        label: "Notify on boards at or below reorder level",
+        // Daily, not frequent. A board that dropped below its reorder level an
+        // hour ago is not a different fact from one that dropped this morning,
+        // and a purchase decision is made once a day. Cadence rather than a cron
+        // string: the capability knows how often the fact changes and does not
+        // know what runs it.
+        cadence: "daily",
+        run: async ({ tx, tenantId }) => {
+          const short = await tx.$queryRaw<
+            { id: string; name: string; on_hand: bigint; reorder_level_units: number }[]
+          >`SELECT p.id,
+                   p.name,
+                   COALESCE((SELECT sum(b.qty_units) FROM stock_balance b WHERE b.product_id = p.id), 0) AS on_hand,
+                   p.reorder_level_units
+              FROM plywood_product p
+             WHERE p.active
+               AND p.reorder_level_units > 0
+               AND COALESCE((SELECT sum(b.qty_units) FROM stock_balance b WHERE b.product_id = p.id), 0)
+                   <= p.reorder_level_units`;
+
+          if (short.length === 0) return { events: [] };
+
+          // Whoever may create a purchase order is who needs to know. Derived
+          // from the permission rather than from a role name, because role names
+          // belong to the client and permissions are the model.
+          const buyers = await tx.tenantMembership.findMany({
+            where: {
+              role: { permissions: { some: { verb: "Create", entity: ENTITY_STOCK_LEDGER } } },
+            },
+            select: { userId: true },
+          });
+
+          if (buyers.length > 0) {
+            await notify(tx, {
+              tenantId,
+              key: "verity.plywood.low_stock",
+              recipientIds: buyers.map((membership) => membership.userId),
+              variables: { count: String(short.length) },
+              fallback: {
+                subject: `${short.length} board${short.length === 1 ? "" : "s"} at or below reorder level`,
+                body: short
+                  .map((row) => `${row.name}: ${row.on_hand} left, reorder at ${row.reorder_level_units}`)
+                  .join("\n"),
+              },
+            });
+          }
+
+          // Idempotent by construction: the sweep reads a condition and notifies,
+          // writing no state that a retry would double. Every real scheduler
+          // retries, and this one changes nothing the second time.
+          return {
+            events: short.map((row) => ({
+              name: "verity.plywood.stock_below_reorder_level",
+              entityId: row.id,
+            })),
+          };
+        },
+      },
+    ],
   });
 
   registerCommand(createBrand);
@@ -483,7 +576,16 @@ export function registerPlywoodCapability(): void {
   registerCommand(setProductActive);
   registerCommand(defineGodownRack);
   registerCommand(setGodownRackActive);
+  registerCommand(receiveStock);
+  registerCommand(issueStock);
+  registerCommand(transferStock);
+  registerCommand(adjustStock);
+  registerCommand(recordDamagedStock);
+  registerCommand(recordReturnedStock);
 
   registerQuery(listCatalogue);
   registerQuery(listGodownRacks);
+  registerQuery(stockOnHand);
+  registerQuery(lowStock);
+  registerQuery(productMovements);
 }

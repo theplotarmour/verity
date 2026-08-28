@@ -371,7 +371,20 @@ describeDb("conformance: database enforcement", () => {
       const guarded = rows.map((r) => r.tablename).sort();
       // Evidence joins the audit tables: a proof-of-attendance photograph that
       // can be edited afterwards is not evidence.
-      expect(guarded).toEqual(["activity", "domain_event", "evidence", "security_audit_event"]);
+      //
+      // `stock_ledger_entry` is a capability table and belongs on this list for
+      // the same reason. plywood.md calls the stock ledger append-only, and a
+      // ledger that is append-only only because no code writes an UPDATE stays
+      // that way exactly until someone writes one. Listing it here means a later
+      // migration that drops the trigger fails a test rather than quietly making
+      // a business's stock history editable.
+      expect(guarded).toEqual([
+        "activity",
+        "domain_event",
+        "evidence",
+        "security_audit_event",
+        "stock_ledger_entry",
+      ]);
     } finally {
       await admin.$disconnect();
     }

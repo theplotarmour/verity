@@ -105,6 +105,8 @@ model Tenant {
   plywoodBrands   PlywoodBrand[]
   plywoodProducts PlywoodProduct[]
   godownRacks     GodownRack[]
+  stockLedger     StockLedgerEntry[]
+  stockBalances   StockBalance[]
 
   @@map("tenant")
 }
@@ -1048,13 +1050,15 @@ model Location {
   version        Int      @default(1)
   customFields   Json     @default("{}") @map("custom_fields")
 
-  tenant       Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  organization Organization         @relation(fields: [tenantId, organizationId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
-  place        Place?               @relation(fields: [tenantId, placeId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  geofences    Geofence[]
-  assignments  LocationAssignment[]
-  assets       Asset[]
-  godownRacks  GodownRack[]
+  tenant             Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  organization       Organization         @relation(fields: [tenantId, organizationId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  place              Place?               @relation(fields: [tenantId, placeId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  geofences          Geofence[]
+  assignments        LocationAssignment[]
+  assets             Asset[]
+  godownRacks        GodownRack[]
+  stockLedger        StockLedgerEntry[]
+  stockBalances      StockBalance[]
 
   @@unique([tenantId, id], name: "location_tenant_scoped_id")
   @@index([tenantId, organizationId])
@@ -2066,8 +2070,10 @@ model PlywoodProduct {
   version           Int      @default(1)
   customFields      Json     @default("{}") @map("custom_fields")
 
-  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  brand  PlywoodBrand @relation(fields: [tenantId, brandId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  brand     PlywoodBrand       @relation(fields: [tenantId, brandId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  movements StockLedgerEntry[]
+  balances  StockBalance[]
 
   @@unique([tenantId, id], name: "plywood_product_tenant_scoped_id")
   @@index([tenantId, brandId, name])
@@ -2090,11 +2096,82 @@ model GodownRack {
   version      Int      @default(1)
   customFields Json     @default("{}") @map("custom_fields")
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  location Location @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location  Location           @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  movements StockLedgerEntry[]
 
   @@unique([tenantId, locationId, rackLabel])
   @@unique([tenantId, id], name: "godown_rack_tenant_scoped_id")
   @@index([tenantId, locationId])
   @@map("godown_rack")
+}
+
+// ---------------------------------------------------------------------------
+// Plywood stage 2 — the stock ledger
+//
+// Two tables that say the same thing at two speeds. The ledger is the truth and
+// is append-only, enforced by trigger. The balance is a maintained summary whose
+// invariant — qty equals the sum of the movements — is asserted by a test that
+// replays the ledger, so it cannot silently diverge from what it summarises.
+// ---------------------------------------------------------------------------
+
+/// One movement of stock. Never edited, never deleted; a correction is a new
+/// entry in the opposite direction with a reason.
+model StockLedgerEntry {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  productId     String   @map("product_id") @db.Uuid
+  locationId    String   @map("location_id") @db.Uuid
+  rackId        String?  @map("rack_id") @db.Uuid
+  /// Why the stock moved. The direction is carried by the signed quantity; this
+  /// is the reason, and a check constraint keeps the two consistent.
+  kind          String
+  /// Signed. Positive is into the godown, negative is out of it. Signed rather
+  /// than a positive magnitude plus a direction flag, because a sum over this
+  /// column is then the balance with no case analysis anywhere.
+  qtyDeltaUnits Int      @map("qty_delta_units")
+  /// Cost per unit for this movement. On an inward movement it is what was
+  /// paid; on an outward movement it is the weighted average standing at that
+  /// moment, recorded so a past sale's margin stays a stored fact rather than a
+  /// recomputation that later purchases would move.
+  unitCostPaise Int      @map("unit_cost_paise")
+  /// Mandatory for an adjustment. A stock count that moved 40 sheets without a
+  /// reason is the entry nobody can explain six months later.
+  reason        String?
+  byUserId      String   @map("by_user_id") @db.Uuid
+  occurredAt    DateTime @default(now()) @map("occurred_at")
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product  PlywoodProduct @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  location Location       @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  rack     GodownRack?    @relation(fields: [tenantId, rackId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([tenantId, productId, locationId, occurredAt])
+  @@index([tenantId, occurredAt])
+  @@map("stock_ledger_entry")
+}
+
+/// On-hand quantity and weighted average cost for one board in one godown.
+///
+/// Maintained inside the same transaction as every movement, under a row lock.
+/// Derived data, deliberately stored: a weighted average IS a running figure,
+/// and recomputing it would mean replaying every movement on every read.
+model StockBalance {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  productId        String   @map("product_id") @db.Uuid
+  locationId       String   @map("location_id") @db.Uuid
+  qtyUnits         Int      @default(0) @map("qty_units")
+  /// P1: weighted average cost. Not FIFO, and the valuation screen says so.
+  avgUnitCostPaise Int      @default(0) @map("avg_unit_cost_paise")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  version          Int      @default(1)
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product  PlywoodProduct @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  location Location       @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([tenantId, productId, locationId])
+  @@index([tenantId, locationId])
+  @@map("stock_balance")
 }
