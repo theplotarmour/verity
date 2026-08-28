@@ -1,0 +1,95 @@
+# Sub-daily scheduled work (ADR-015, ADR-016)
+#
+# WHY THIS EXISTS RATHER THAN vercel.json
+# Vercel's Hobby plan permits daily cron jobs only, and this deployment is on
+# Hobby. The daily cadence stays in vercel.json where it belongs; the frequent,
+# hourly and weekly cadences run from here instead.
+#
+# That split is ugly and it is honest. The alternative was to ship a vercel.json
+# declaring a five-minute cron that the platform silently refuses to deploy —
+# and a capability that declares a cadence and never runs is worse than one that
+# declares none, because the screen says a manager will be told and the manager
+# is not told. Kent's prep-breach sweep is exactly that case.
+#
+# ADR-015 anticipated this: "Replacing it with a worker or a managed scheduler
+# later changes nothing a capability can see, which is the property the cadence
+# abstraction was built to have." A GitHub Actions schedule is that replacement,
+# and moving to Vercel Pro is deleting this file and restoring the three entries
+# to vercel.json.
+#
+# GitHub's scheduled workflows are best-effort and can be delayed under load, so
+# treat "*/5" as "about every five minutes". Every unit `runDueWork` invokes is
+# idempotent, which is what makes a late or repeated run harmless.
+#
+# SETUP — two repository secrets:
+#   VERITY_BASE_URL   https://<your-deployment>.vercel.app
+#   CRON_SECRET       the same value as the Vercel environment variable
+# Without them the job fails loudly rather than appearing to succeed.
+
+name: Scheduled work
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+    - cron: "7 * * * *"
+    - cron: "41 1 * * 1"
+  # So the binding can be proved on demand rather than only by waiting.
+  workflow_dispatch:
+    inputs:
+      cadence:
+        description: Cadence to run
+        required: true
+        default: frequent
+        type: choice
+        options: [frequent, hourly, daily, weekly]
+
+concurrency:
+  # A slow run must not overlap the next tick. Dispatch is sequential per tenant
+  # by design (ADR-016), so two overlapping runs would double the connections
+  # against a pooled database for no benefit.
+  group: scheduled-work
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Pick the cadence for this trigger
+        id: cadence
+        run: |
+          case "${{ github.event.schedule }}" in
+            "*/5 * * * *")  echo "value=frequent" >> "$GITHUB_OUTPUT" ;;
+            "7 * * * *")    echo "value=hourly"   >> "$GITHUB_OUTPUT" ;;
+            "41 1 * * 1")   echo "value=weekly"   >> "$GITHUB_OUTPUT" ;;
+            *)              echo "value=${{ inputs.cadence || 'frequent' }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Run due work for every tenant
+        env:
+          BASE_URL: ${{ secrets.VERITY_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          CADENCE: ${{ steps.cadence.outputs.value }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "VERITY_BASE_URL or CRON_SECRET is not set on this repository." >&2
+            exit 1
+          fi
+
+          # -f so a 401 or a 503 fails the job. A scheduler that reports success
+          # while the endpoint refuses it is worse than no scheduler at all.
+          #
+          # The secret goes in a header, never in the URL: query strings are
+          # logged by proxies and show up in browser history and analytics.
+          status=$(curl -sS -f -o response.json -w '%{http_code}' \
+            -X POST \
+            -H "authorization: Bearer ${CRON_SECRET}" \
+            "${BASE_URL}/api/scheduled?tenant=all&cadence=${CADENCE}")
+
+          echo "HTTP ${status} for cadence ${CADENCE}"
+          # Outcomes only. The response carries per-unit errors for the
+          # scheduler, which is the only thing that can act on them.
+          jq -r '"tenants=\(.tenants) ran=\(.ran)"' response.json
+          jq -e '[.results[].outcomes[] | select(.status != "ok")] | length == 0' response.json > /dev/null \
+            || { echo "Some units failed:"; jq '.results' response.json; exit 1; }

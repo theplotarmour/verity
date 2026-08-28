@@ -6,20 +6,8 @@
   "framework": "nextjs",
   "crons": [
     {
-      "path": "/api/scheduled?tenant=all&cadence=frequent",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/scheduled?tenant=all&cadence=hourly",
-      "schedule": "7 * * * *"
-    },
-    {
       "path": "/api/scheduled?tenant=all&cadence=daily",
       "schedule": "23 1 * * *"
-    },
-    {
-      "path": "/api/scheduled?tenant=all&cadence=weekly",
-      "schedule": "41 1 * * 1"
     }
   ]
 }
