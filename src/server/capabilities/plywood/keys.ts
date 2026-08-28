@@ -44,3 +44,20 @@ export const ENTITY_RESERVATION = "verity.plywood.reservation";
 /* Stage 5 — logistics. */
 export const ENTITY_TRANSPORTER = "verity.plywood.transporter";
 export const ENTITY_SHIPMENT = "verity.plywood.shipment";
+
+/* Stage 6 — finance. */
+export const ENTITY_INVOICE = "verity.plywood.invoice";
+export const ENTITY_PAYMENT = "verity.plywood.payment";
+export const ENTITY_LEDGER_ENTRY = "verity.plywood.ledger_entry";
+
+/**
+ * Configuration this capability reads. Rates vary between businesses and change
+ * by notification; the arithmetic that uses them does not.
+ *
+ * Basis points, not percentages: 2.5% is 250. A percentage stored as a float is
+ * a rounding error waiting for a filing.
+ */
+export const CONFIG_TENANT_STATE_CODE = "verity.plywood.tax.state_code";
+export const CONFIG_CGST_RATE_BP = "verity.plywood.tax.cgst_rate_bp";
+export const CONFIG_SGST_RATE_BP = "verity.plywood.tax.sgst_rate_bp";
+export const CONFIG_IGST_RATE_BP = "verity.plywood.tax.igst_rate_bp";

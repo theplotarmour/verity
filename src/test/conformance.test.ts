@@ -378,10 +378,17 @@ describeDb("conformance: database enforcement", () => {
       // that way exactly until someone writes one. Listing it here means a later
       // migration that drops the trigger fails a test rather than quietly making
       // a business's stock history editable.
+      //
+      // The plywood finance tables join for the same reason. A ledger entry is
+      // what a balance is computed from (P3), and an invoice is a legal document
+      // whose number, tax and totals are fixed once raised — a correction is a
+      // credit note, which is a new document rather than an edit to an old one.
       expect(guarded).toEqual([
         "activity",
         "domain_event",
         "evidence",
+        "plywood_invoice",
+        "plywood_ledger_entry",
         "security_audit_event",
         "stock_ledger_entry",
       ]);

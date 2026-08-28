@@ -15,6 +15,8 @@ import { ForbiddenError, clearScopeResolvers } from "@/server/platform/authoriza
 import { clearTransitionGuards } from "@/server/platform/state";
 import { clearContributions } from "@/server/platform/contribution";
 import { provisionIdentity } from "@/server/platform/identity";
+import { ASSET_CAPABILITY } from "@/server/capabilities/asset";
+import { EVIDENCE_CAPABILITY } from "@/server/capabilities/evidence";
 import { LOCATION_CAPABILITY } from "@/server/capabilities/location";
 import {
   ENTITY_BRAND,
@@ -141,7 +143,13 @@ describeDb("capability: Plywood trading — stock", () => {
       await tx.tenant.create({
         data: { id: tenantId, name: "Stock Test Traders", timeZone: "Asia/Kolkata" },
       });
+      // Plywood declares Location, Asset and Evidence: a godown IS a Location,
+      // a delivery vehicle IS an Asset, an LR scan IS Evidence. The database
+      // refuses the activation without all three, which is the dependency graph
+      // doing its job rather than a test detail.
       await activateCapability(tx, tenantId, LOCATION_CAPABILITY);
+      await activateCapability(tx, tenantId, ASSET_CAPABILITY);
+      await activateCapability(tx, tenantId, EVIDENCE_CAPABILITY);
       await activateCapability(tx, tenantId, PLYWOOD_CAPABILITY);
 
       organizationId = (await tx.organization.create({ data: { tenantId, name: "HQ" } })).id;

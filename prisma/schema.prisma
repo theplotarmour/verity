@@ -118,6 +118,11 @@ model Tenant {
   plywoodStockReservations  PlywoodStockReservation[]
   plywoodTransporters       PlywoodTransporter[]
   plywoodShipments          PlywoodShipment[]
+  plywoodInvoiceSeries      PlywoodInvoiceSeries[]
+  plywoodInvoices           PlywoodInvoice[]
+  plywoodInvoiceLines       PlywoodInvoiceLine[]
+  plywoodPayments           PlywoodPayment[]
+  plywoodLedgerEntries      PlywoodLedgerEntry[]
 
   @@map("tenant")
 }
@@ -2096,6 +2101,7 @@ model PlywoodProduct {
   plywoodPurchaseOrderLines PlywoodPurchaseOrderLine[]
   plywoodSalesOrderLines    PlywoodSalesOrderLine[]
   plywoodStockReservations  PlywoodStockReservation[]
+  plywoodInvoiceLines       PlywoodInvoiceLine[]
 
   @@unique([tenantId, id], name: "plywood_product_tenant_scoped_id")
   @@index([tenantId, brandId, name])
@@ -2224,9 +2230,11 @@ model PlywoodSupplier {
   version      Int      @default(1)
   customFields Json     @default("{}") @map("custom_fields")
 
-  tenant  Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  pricing PlywoodSupplierPrice[]
-  orders  PlywoodPurchaseOrder[]
+  tenant               Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pricing              PlywoodSupplierPrice[]
+  orders               PlywoodPurchaseOrder[]
+  plywoodInvoices      PlywoodInvoice[]
+  plywoodLedgerEntries PlywoodLedgerEntry[]
 
   @@unique([tenantId, id], name: "plywood_supplier_tenant_scoped_id")
   @@index([tenantId, displayName])
@@ -2271,10 +2279,12 @@ model PlywoodCustomer {
   version          Int      @default(1)
   customFields     Json     @default("{}") @map("custom_fields")
 
-  tenant           Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  pricing          PlywoodCustomerPrice[]
-  orders           PlywoodSalesOrder[]
-  plywoodShipments PlywoodShipment[]
+  tenant               Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pricing              PlywoodCustomerPrice[]
+  orders               PlywoodSalesOrder[]
+  plywoodShipments     PlywoodShipment[]
+  plywoodInvoices      PlywoodInvoice[]
+  plywoodLedgerEntries PlywoodLedgerEntry[]
 
   @@unique([tenantId, id], name: "plywood_customer_tenant_scoped_id")
   @@index([tenantId, displayName])
@@ -2321,6 +2331,7 @@ model PlywoodPurchaseOrder {
   location         Location                   @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   lines            PlywoodPurchaseOrderLine[]
   plywoodShipments PlywoodShipment[]
+  plywoodInvoices  PlywoodInvoice[]
 
   @@unique([tenantId, id], name: "plywood_purchase_order_tenant_scoped_id")
   @@index([tenantId, state])
@@ -2374,6 +2385,7 @@ model PlywoodSalesOrder {
   lines            PlywoodSalesOrderLine[]
   reservations     PlywoodStockReservation[]
   plywoodShipments PlywoodShipment[]
+  plywoodInvoices  PlywoodInvoice[]
 
   @@unique([tenantId, id], name: "plywood_sales_order_tenant_scoped_id")
   @@index([tenantId, state])
@@ -2516,4 +2528,187 @@ model PlywoodShipment {
   @@index([tenantId, state])
   @@index([tenantId, lrNumber])
   @@map("plywood_shipment")
+}
+
+// ---------------------------------------------------------------------------
+// Plywood stage 6 — finance
+//
+// P2: invoice numbers come from a counter row locked inside the invoice
+// transaction, not from a PostgreSQL sequence. Sequences are non-transactional
+// by design, so a rolled-back invoice burns its number and leaves a gap — and
+// under GST a tax invoice series must be sequential and gapless within a
+// financial year. That is a legal constraint, not a preference.
+//
+// P3: a party's balance is DERIVED from the append-only ledger. There is no
+// cached balance column on a customer or a supplier, and no running balance on a
+// ledger entry. When a cache and a ledger disagree — and eventually they do —
+// nobody can say which is right.
+//
+// P4: place of supply decides CGST + SGST against IGST, from the tenant's state
+// code and the party's. The rule lives in one function and is visible.
+// ---------------------------------------------------------------------------
+
+/// The gapless counter for one invoice series in one financial year.
+model PlywoodInvoiceSeries {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  /// "SALES", "PURCHASE" — the client's own series names.
+  seriesKey     String   @map("series_key")
+  /// "2026-27". Indian financial years run April to March, so a calendar year
+  /// would split a series across two of them.
+  financialYear String   @map("financial_year")
+  /// The number the NEXT invoice will take. Read and incremented under a row
+  /// lock inside the same transaction as the invoice, so a rollback returns it.
+  nextNumber    Int      @default(1) @map("next_number")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  version       Int      @default(1)
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoices PlywoodInvoice[]
+
+  @@unique([tenantId, seriesKey, financialYear])
+  @@unique([tenantId, id], name: "plywood_invoice_series_tenant_scoped_id")
+  @@map("plywood_invoice_series")
+}
+
+/// A tax invoice, raised against a sale or a purchase.
+model PlywoodInvoice {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  seriesId String @map("series_id") @db.Uuid
+
+  /// Exactly one party and exactly one order, both typed and check-constrained.
+  customerId      String? @map("customer_id") @db.Uuid
+  supplierId      String? @map("supplier_id") @db.Uuid
+  salesOrderId    String? @map("sales_order_id") @db.Uuid
+  purchaseOrderId String? @map("purchase_order_id") @db.Uuid
+
+  /// "SALES/2026-27/0001". Assembled once and stored, because the parts that
+  /// compose it can be renamed and a raised invoice number never changes.
+  invoiceNumber  String @map("invoice_number")
+  sequenceNumber Int    @map("sequence_number")
+  financialYear  String @map("financial_year")
+
+  /// The party's state code at the moment the invoice was raised. Snapshotted
+  /// rather than read through the customer, because a customer who later moves
+  /// state must not retrospectively change how an old invoice was taxed.
+  placeOfSupplyStateCode String @map("place_of_supply_state_code")
+  supplyStateCode        String @map("supply_state_code")
+
+  /// Basis points, snapshotted with the invoice. 2.5% is 250. A rate change next
+  /// quarter must not restate a filed invoice.
+  cgstRateBp Int @default(0) @map("cgst_rate_bp")
+  sgstRateBp Int @default(0) @map("sgst_rate_bp")
+  igstRateBp Int @default(0) @map("igst_rate_bp")
+
+  taxablePaise Int @map("taxable_paise")
+  cgstPaise    Int @default(0) @map("cgst_paise")
+  sgstPaise    Int @default(0) @map("sgst_paise")
+  igstPaise    Int @default(0) @map("igst_paise")
+  totalPaise   Int @map("total_paise")
+
+  issuedAt     DateTime @default(now()) @map("issued_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant        Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  series        PlywoodInvoiceSeries  @relation(fields: [tenantId, seriesId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  customer      PlywoodCustomer?      @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  supplier      PlywoodSupplier?      @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  salesOrder    PlywoodSalesOrder?    @relation(fields: [tenantId, salesOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  purchaseOrder PlywoodPurchaseOrder? @relation(fields: [tenantId, purchaseOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  lines         PlywoodInvoiceLine[]
+  payments      PlywoodPayment[]
+  ledgerEntries PlywoodLedgerEntry[]
+
+  @@unique([tenantId, invoiceNumber])
+  @@unique([tenantId, id], name: "plywood_invoice_tenant_scoped_id")
+  @@index([tenantId, issuedAt])
+  @@map("plywood_invoice")
+}
+
+/// One line on an invoice, snapshotted whole.
+model PlywoodInvoiceLine {
+  id                  String @id @default(uuid()) @db.Uuid
+  tenantId            String @map("tenant_id") @db.Uuid
+  invoiceId           String @map("invoice_id") @db.Uuid
+  productId           String @map("product_id") @db.Uuid
+  productNameSnapshot String @map("product_name_snapshot")
+  hsnCodeSnapshot     String @map("hsn_code_snapshot")
+  qtyUnits            Int    @map("qty_units")
+  unitPricePaise      Int    @map("unit_price_paise")
+  lineTotalPaise      Int    @map("line_total_paise")
+
+  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoice PlywoodInvoice @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  product PlywoodProduct @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, id], name: "plywood_invoice_line_tenant_scoped_id")
+  @@index([tenantId, invoiceId])
+  @@map("plywood_invoice_line")
+}
+
+/// Money received against a sales invoice, or paid against a purchase one.
+model PlywoodPayment {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  invoiceId   String   @map("invoice_id") @db.Uuid
+  method      String
+  amountPaise Int      @map("amount_paise")
+  /// UTR, UPI transaction id, cheque number. Record-and-print only: no gateway
+  /// and no terminal (GOV-SCO-006).
+  reference   String?
+  receivedAt  DateTime @default(now()) @map("received_at")
+  byUserId    String   @map("by_user_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  version     Int      @default(1)
+
+  tenant        Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoice       PlywoodInvoice       @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  ledgerEntries PlywoodLedgerEntry[]
+
+  @@unique([tenantId, id], name: "plywood_payment_tenant_scoped_id")
+  @@index([tenantId, invoiceId])
+  @@map("plywood_payment")
+}
+
+/// One movement of money against a party. Append-only, enforced by trigger.
+///
+/// A balance is the sum of these (P3). There is no cached total anywhere, and no
+/// running balance on the row: both would be a second source of truth that can
+/// disagree with the first.
+model PlywoodLedgerEntry {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+
+  /// Typed, exactly one. Not a partyType plus partyId pair — that carries no
+  /// foreign key, so nothing stops an entry pointing at a deleted party.
+  customerId String? @map("customer_id") @db.Uuid
+  supplierId String? @map("supplier_id") @db.Uuid
+
+  /// `debit` increases what the party owes this business; `credit` reduces it.
+  /// Named from this business's point of view, consistently, because a ledger
+  /// that flips perspective between customers and suppliers is unreadable.
+  entryType   String @map("entry_type")
+  amountPaise Int    @map("amount_paise")
+
+  invoiceId String? @map("invoice_id") @db.Uuid
+  paymentId String? @map("payment_id") @db.Uuid
+  narration String?
+
+  occurredAt DateTime @default(now()) @map("occurred_at")
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer PlywoodCustomer? @relation(fields: [tenantId, customerId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  supplier PlywoodSupplier? @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  invoice  PlywoodInvoice?  @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  payment  PlywoodPayment?  @relation(fields: [tenantId, paymentId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([tenantId, customerId, occurredAt])
+  @@index([tenantId, supplierId, occurredAt])
+  @@map("plywood_ledger_entry")
 }

@@ -14,6 +14,7 @@ import {
   ENTITY_PURCHASE_ORDER,
   ENTITY_SALES_ORDER,
   ENTITY_SHIPMENT,
+  ENTITY_INVOICE,
   HSN_CODE,
   PLYWOOD_CAPABILITY,
 } from "./keys";
@@ -60,6 +61,17 @@ import {
   reportShipmentLost,
   trackMaterial,
 } from "./logistics";
+import {
+  invoiceDetail,
+  listInvoices,
+  outstandingReceivables,
+  partyLedger,
+  raisePurchaseInvoice,
+  marginReport,
+  ownerConsole,
+  raiseSalesInvoice,
+  recordPayment,
+} from "./finance";
 
 /**
  * CAPABILITY: Plywood trading — `verity.capability.plywood`
@@ -95,6 +107,7 @@ export * from "./keys";
 export * from "./stock";
 export * from "./trading";
 export * from "./logistics";
+export * from "./finance";
 
 /* ================================= brands ================================= */
 
@@ -532,6 +545,24 @@ export function registerPlywoodCapability(): void {
         shells: ["platform", "operations"],
       },
       {
+        href: "/overview",
+        label: "Overview",
+        group: "Capabilities",
+        order: 24,
+        icon: "workspace",
+        requiresEntity: ENTITY_INVOICE,
+        shells: ["platform"],
+      },
+      {
+        href: "/finance",
+        label: "Finance",
+        group: "Capabilities",
+        order: 25,
+        icon: "audit",
+        requiresEntity: ENTITY_INVOICE,
+        shells: ["platform"],
+      },
+      {
         href: "/logistics",
         label: "Logistics",
         group: "Capabilities",
@@ -670,6 +701,9 @@ export function registerPlywoodCapability(): void {
   registerCommand(dispatchShipment);
   registerCommand(confirmDelivery);
   registerCommand(reportShipmentLost);
+  registerCommand(raiseSalesInvoice);
+  registerCommand(raisePurchaseInvoice);
+  registerCommand(recordPayment);
 
   registerQuery(listCatalogue);
   registerQuery(listGodownRacks);
@@ -684,4 +718,10 @@ export function registerPlywoodCapability(): void {
   registerQuery(stockAvailability);
   registerQuery(listTransporters);
   registerQuery(trackMaterial);
+  registerQuery(listInvoices);
+  registerQuery(invoiceDetail);
+  registerQuery(outstandingReceivables);
+  registerQuery(partyLedger);
+  registerQuery(ownerConsole);
+  registerQuery(marginReport);
 }
