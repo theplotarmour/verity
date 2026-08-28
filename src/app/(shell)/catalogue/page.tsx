@@ -1,0 +1,39 @@
+import { requireActor } from "@/server/platform/auth";
+import { installCapabilities } from "@/server/capabilities/registry";
+import { executeQuery } from "@/server/platform/query";
+import { ForbiddenError } from "@/server/platform/authorization";
+import { listCatalogue } from "@/server/capabilities/plywood";
+import { PageHeader, PermissionDenied } from "@/components/ui/primitives";
+import { CatalogueAdmin } from "./CatalogueAdmin";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * The board catalogue.
+ *
+ * Withdrawn products are shown here and nowhere else, for the same reason the
+ * menu shows retired dishes: a purchase order from last quarter references what
+ * was traded, so nothing is ever deleted.
+ */
+export default async function CataloguePage() {
+  installCapabilities();
+  const actor = await requireActor();
+
+  let catalogue: Awaited<ReturnType<typeof listCatalogue.handler>>;
+  try {
+    catalogue = await executeQuery(actor, listCatalogue, { includeInactive: true });
+  } catch (error) {
+    if (error instanceof ForbiddenError) return <PermissionDenied what="the catalogue" />;
+    throw error;
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="Catalogue"
+        description="Every board this business trades, by brand. A size is fixed at creation — an 18 mm board and a 12 mm board are two products, not one that was corrected."
+      />
+      <CatalogueAdmin catalogue={catalogue} />
+    </>
+  );
+}

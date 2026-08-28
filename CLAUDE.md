@@ -417,7 +417,10 @@ before touching framework-sensitive code.
 # CLAUDE.md — Frontend Website Rules
 
 ## Always Do First
-- **Invoke the `frontend-design` skill** before writing any frontend code, every session, no exceptions.
+- **Invoke the `impeccable` skill** (`~/.claude/skills/impeccable/SKILL.md`) before writing any frontend
+  code, every session, no exceptions. It is the standing craft authority; the Experience System section
+  above (ADR-011, ADR-012) still decides Verity's specifics — accent tokens, material hierarchy, the
+  monochrome mark — and impeccable never overrides an accepted ADR.
 
 ## Reference Images
 - If a reference image is provided: match layout, spacing, typography, and color exactly. Swap in placeholder content (images via `https://placehold.co/`, generic copy). Do not improve or add to the design.

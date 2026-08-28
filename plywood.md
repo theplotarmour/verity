@@ -57,7 +57,12 @@ A plywood, laminate, MDF, and board trading management system covering:
 
 ### Derived operational requirements (made explicit so scope is testable)
 - **Paise-granular arithmetic**: All pricing, invoice totals, payments, and ledger balances are stored in integer minor units (paise) to prevent float representation drift.
-- **Append-only Ledgers**: Stock ledger movements and financial ledger entries are append-only. Once written, they are never edited or deleted; adjustments are recorded as new transaction lines with mandatory reason references.
+- **Append-only Ledgers**: Stock ledger movements and financial ledger entries are append-only. Once
+  written, they are never edited or deleted; adjustments are recorded as new transaction lines with
+  mandatory reason references. **This is enforced by a database trigger that rejects UPDATE and
+  DELETE**, following the pattern `activity`, `security_audit_event` and `domain_event` already use.
+  A ledger that is append-only only because no code writes an UPDATE stays append-only exactly until
+  someone writes one.
 - **Transporter Handoffs & LR (Lorries Receipt)**: Shipping transitions require a document/number reference (LR No.) and a transit state machine (In Transit -> Delivered) to satisfy tracking queries.
 - **Tax Breakdown Preservation**: Invoices snapshot CGST, SGST, IGST rates and values at execution. Catalogue edits never retrospectively alter tax or price totals on completed bills.
 
@@ -77,7 +82,11 @@ A plywood, laminate, MDF, and board trading management system covering:
 - **Godowns** map to the platform's `Location` primitive.
 - **Delivery vehicles** map to the platform's `Asset` primitive.
 - **Transport documents, LR scans, and invoice PDFs** map to the platform's `Evidence` primitive (stored checksum-frozen files).
-- **Sales Orders, Purchase Orders, and Shipments** map to the platform's `Work` primitive (each is a unit of service execution with dynamic states under commands).
+- **Sales Orders, Purchase Orders, and Shipments** are **capability-owned entities with their own
+  state machines**, declared through the platform's `StateDefinition` / `TransitionDefinition`
+  registries and driven by the command runtime. They do **not** map to a `Work` primitive: no `Work`
+  capability exists, and describing them that way would send a reader looking for a reuse that is not
+  there. This is the same shape as Kent's `DiningOrder`, and it is the correct one.
 - **B2B Partners (Customers, Suppliers, Transporters)** map to capability-owned entities that link to `Party` records when logins are required (e.g. for transporter tracking).
 - No core platform changes are proposed; all models are capability-private database extensions.
 
@@ -89,7 +98,8 @@ A plywood, laminate, MDF, and board trading management system covering:
 All names respect GOV-TER-001..017.
 - **`Location`** is used for Warehouses and Godowns.
 - **`Asset`** is used for Vehicles.
-- **`Work`** instances are `SalesOrder`, `PurchaseOrder`, and `Shipment`.
+- **`SalesOrder`**, **`PurchaseOrder`** and **`Shipment`** are capability-owned entities. `Work` is
+  the canonical term for a Work Order (GOV-TER-004) and is deliberately **not** claimed here.
 - **`Customer`**, **`Supplier`**, and **`Transporter`** are capability-owned entities.
 - **`Evidence`** is used for LR documents and signed delivery receipts.
 
@@ -104,7 +114,7 @@ All names respect GOV-TER-001..017.
 | Godowns / Warehouses | `Location` primitive (Place + Address) | BUILT / PROVEN |
 | Delivery Vehicles | `Asset` primitive | BUILT / PROVEN |
 | LR documents, confirmation signatures | `Evidence` (checksum-frozen `StoredFile` references) | BUILT / PROVEN |
-| Sales Orders, POs, Shipments | `Work` primitive (dynamic state machines via `StateDefinition`) | BUILT / PROVEN |
+| Sales Orders, POs, Shipments | Capability-owned entities; state machines via `StateDefinition` / `TransitionDefinition` | Runtime BUILT / PROVEN; entities DEMONSTRATED |
 | Stock / Financial Ledgers | Capability-owned append-only tables | DEMONSTRATED |
 | GST Invoice PDFs | `Evidence` / `StoredFile` two-phase contract | BUILT / PROVEN |
 | Owner Alerts (Low Stock, Exceeded Credit) | Notification substrate (`notify()`, templates, suppressions) | BUILT |
@@ -157,20 +167,49 @@ Every model carries the base-entity shape (`id, tenantId, createdAt, updatedAt, 
 
 ### Module M1 — Product Catalog (`verity.plywood.product`, `verity.plywood.brand`)
 - **Brand**: `name`, `active`.
-- **Product**: `brandId FK`, `name`, `thicknessMm Int` (basis points/tenths, e.g. 180 for 18.0mm), `widthMm Int`, `heightMm Int`, `grade` (e.g. BWR, MR, Marine), `sheetWeightKg Int?`, `reorderLevelUnits Int`, `unitLabel` (default "sheets").
+- **Product**: `brandId FK`, `name`, `hsnCode String` (**required on a GST invoice by law** — CBIC
+  notification 78/2020 sets the digit count by turnover; the field is stored as given and validated
+  for length, not invented), `thicknessTenthMm Int` (tenths of a millimetre, e.g. 180 for 18.0 mm),
+  `widthMm Int`, `heightMm Int`, `grade` (e.g. BWR, MR, Marine), `sheetWeightGrams Int?`,
+  `reorderLevelUnits Int`, `unitLabel` (default "sheets").
+
+  `thicknessMm` was named for "basis points/tenths" in an earlier draft, which conflated two
+  different units. Basis points are a rate unit and belong to tax and discount rates; a physical
+  thickness in tenths of a millimetre is not a rate. The field name now says which it is.
 
 ### Module M2 — Inventory & Godowns (`verity.plywood.stock_ledger`, `verity.plywood.godown_rack`)
 - **GodownRack**: `locationId FK` (Location primitive), `rackLabel String`.
-- **StockLedger**: `productId FK`, `locationId FK`, `rackId FK?`, `kind` (`purchase_inward | sales_outward | transfer_in | transfer_out | adjust_in | adjust_out | returned_stock`), `qtyUnits Int`, `unitCostPaise Int` (valuation source), `refEntityKey String?`, `refEntityId Uuid?`, `reason String?`, `byUserId FK`. **Append-only.**
+- **StockLedger**: `productId FK`, `locationId FK`, `rackId FK?`, `kind`
+  (`purchase_inward | sales_outward | transfer_in | transfer_out | adjust_in | adjust_out |
+  returned_stock`), `qtyUnits Int`, `unitCostPaise Int` (valuation source), `salesOrderId FK?`,
+  `purchaseOrderId FK?`, `shipmentId FK?`, `reason String?`, `byUserId FK`.
+  **Append-only, enforced by trigger.**
+
+  The typed nullable references replace an earlier `refEntityKey` + `refEntityId` pair. A polymorphic
+  pair carries no foreign key, so nothing stops a row pointing at an order that no longer exists.
+  Typed columns give the same expressiveness with real referential integrity, and a check constraint
+  enforces that at most one is set.
 
 ### Module M3 — Purchase & Supplier Management (`verity.plywood.supplier`, `verity.plywood.purchase_order`, `verity.plywood.supplier_pricing`)
 - **Supplier**: `displayName`, `gstin String?`, `phone String?`, `email String?`, `outstandingBalancePaise Int`.
-- **PurchaseOrder**: `supplierId FK`, `state` (`draft | pending | active | completed | cancelled`), `items Json` (`[{productId, name, qtyOrdered, qtyReceived, unitCostPaise}]`), `totalCostPaise Int`.
+- **PurchaseOrder**: `supplierId FK`, `state` (`draft | pending | active | completed | cancelled`),
+  `totalCostPaise Int`.
+- **PurchaseOrderLine**: `purchaseOrderId FK`, `productId FK`, `productNameSnapshot String`,
+  `hsnCodeSnapshot String`, `qtyOrdered Int`, `qtyReceived Int @default(0)`, `unitCostPaise Int`.
+  A table, **not** a `Json` column: `qtyOrdered` versus `qtyReceived` per line is exactly what a
+  partial receipt turns on, and "what is still owed on PO-4471" must be answerable without loading
+  every purchase order. `Json` here would also fail the over-genericity conformance check, which
+  permits it only at declared extension points.
 - **SupplierPricing**: `supplierId FK`, `productId FK`, `negotiatedCostPaise Int`.
 
 ### Module M4 — Sales & Customer Management (`verity.plywood.customer`, `verity.plywood.sales_order`, `verity.plywood.customer_pricing`)
 - **Customer**: `displayName`, `gstin String?`, `phone String?`, `creditLimitPaise Int`, `outstandingBalancePaise Int`.
-- **SalesOrder**: `customerId FK`, `state` (`draft | pending_credit | approved | active | completed | cancelled`), `items Json` (`[{productId, name, qtyOrdered, qtyShipped, unitPricePaise}]`), `totalPricePaise Int`.
+- **SalesOrder**: `customerId FK`, `state`
+  (`draft | pending_credit | approved | active | completed | cancelled`), `totalPricePaise Int`.
+- **SalesOrderLine**: `salesOrderId FK`, `productId FK`, `productNameSnapshot String`,
+  `hsnCodeSnapshot String`, `qtyOrdered Int`, `qtyShipped Int @default(0)`, `unitPricePaise Int`.
+  A table for the same reasons as `PurchaseOrderLine`, and it snapshots name, HSN and price so a
+  later catalogue edit never rewrites a completed order.
 - **CustomerPricing**: `customerId FK`, `productId FK`, `customPricePaise Int`.
 
 ### Module M5 — Logistics & Shipment Tracking (`verity.plywood.transporter`, `verity.plywood.shipment`)
@@ -183,8 +222,8 @@ Tracks: Supplier/Godown → Transport → Godown/Customer.
   - `sourceLocationId FK` (Location primitive),
   - `destLocationId FK?` (inter-godown transfer location),
   - `destCustomerId FK?` (customer sales order location),
-  - `refEntityKey String` (`sales_order | purchase_order`),
-  - `refEntityId Uuid`,
+  - `salesOrderId FK?` / `purchaseOrderId FK?` — typed, with a check constraint that **exactly one**
+    is set (a shipment always moves goods for one order or the other),
   - `freightChargePaise Int @default(0)`,
   - `freightPayer` (`tenant | customer | supplier`),
   - `lrEvidenceId FK?` (Evidence primitive link to scan),
@@ -194,7 +233,13 @@ Tracks: Supplier/Godown → Transport → Godown/Customer.
   - `deliveredAt DateTime?`.
 
 ### Module M6 — Finance & Accounts (`verity.plywood.finance_ledger`, `verity.plywood.invoice`, `verity.plywood.payment_entry`)
-- **Invoice**: `customerId FK?`, `supplierId FK?`, `refEntityKey String` (`sales_order | purchase_order`), `refEntityId Uuid`, `cgstPaise Int`, `sgstPaise Int`, `igstPaise Int`, `taxablePaise Int`, `totalPaise Int`, `paymentStatus` (`unpaid | partial | paid`), `outstandingPaise Int`.
+- **Invoice**: `customerId FK?`, `supplierId FK?`, `salesOrderId FK?`, `purchaseOrderId FK?` (typed,
+  check-constrained to exactly one), `invoiceNumber String`, `seriesKey String`,
+  `financialYear String`, `placeOfSupplyStateCode String`, `cgstPaise Int`, `sgstPaise Int`,
+  `igstPaise Int`, `taxablePaise Int`, `totalPaise Int`, `paymentStatus`
+  (`unpaid | partial | paid`), `outstandingPaise Int`.
+  Numbering, series and place of supply are listed here because **P2** and **P4** in
+  `implementation/plywood-gap-analysis.md` decide their behaviour; the columns exist either way.
 - **PaymentEntry**: `invoiceId FK`, `partyType` (`customer | supplier`), `partyId Uuid`, `method` (`bank | upi | cash`), `amountPaise Int`, `reference String?` (UTR/UPI TxId), `paymentDate DateTime`.
 - **FinanceLedger**: `partyType` (`customer | supplier`), `partyId Uuid`, `entryType` (`debit | credit`), `amountPaise Int`, `invoiceId FK?`, `paymentEntryId FK?`, `runningBalancePaise Int`, `createdAt DateTime`. **Append-only.**
 
@@ -265,6 +310,25 @@ stateDiagram-v2
 ---
 
 ## 9. Open gaps/decision points
+
+### 9.1 Decisions that gate the build
+
+`implementation/plywood-gap-analysis.md` §4 puts six decisions to the product owner. They are listed
+here so this document is not read as though it settles them:
+
+| | Decision | Gates |
+|---|---|---|
+| **P1** | Stock costing method — weighted average / FIFO / last cost | Stage 2 valuation, and every margin figure |
+| **P2** | Invoice numbering — gapless counter row / sequence / number-at-settlement | Stage 6 |
+| **P3** | Where a party's balance lives — derived from the ledger / running balance / cached on the party | Stage 6, and the duplicate `outstandingBalancePaise` fields in §6 M3 and M4 |
+| **P4** | Place of supply — derive from state codes / ask / configure a default | Stage 6 tax |
+| **P5** | Reserved stock — reservation table / pseudo-godown / none in v1 | Stage 2 |
+| **P6** | Transporter access — records only / transporter portal | Stage 5, and an ADR if a portal |
+
+Stage 1 (catalogue, brand, godown racks) is gated by none of them and is the only stage that may
+begin before they are answered.
+
+### 9.2 E-Way Bill & GST portal automation
 
 > [!WARNING]
 > **E-Way Bill & GST Portal Automation**

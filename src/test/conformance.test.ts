@@ -167,6 +167,12 @@ describe("conformance: capability contracts (Phase E)", () => {
     // floor and a bill need no other capability, and declaring one it does not
     // use would make the graph a wish rather than a fact.
     dinein: [],
+    // The plywood trader, the second real client. Depends on Location because a
+    // godown IS a Location (ADR-004) — the capability adds only the rack inside
+    // it. That is the first time a client capability has reused a shared one,
+    // and the dependency is declared here and in the install migration so the
+    // database refuses the activation if Location is not active.
+    plywood: ["location"],
   };
 
   const capabilityDirs = readdirSync(join(ROOT, "src/server/capabilities")).filter((entry) =>

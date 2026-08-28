@@ -91,15 +91,20 @@ model Tenant {
   // Capability: dine-in. Back-relations only — Prisma requires the opposite
   // side of every relation, so a capability's tables show up here whether or not
   // the platform cares about them. Nothing on this side is platform behaviour.
-  menuCategories          MenuCategory[]
-  menuItems               MenuItem[]
-  menuVariants            MenuItemVariant[]
-  diningZones             DiningZone[]
-  diningTables            DiningTable[]
-  diningOrders            DiningOrder[]
-  orderLines              OrderLine[]
-  bills                   Bill[]
-  payments                Payment[]
+  menuCategories MenuCategory[]
+  menuItems      MenuItem[]
+  menuVariants   MenuItemVariant[]
+  diningZones    DiningZone[]
+  diningTables   DiningTable[]
+  diningOrders   DiningOrder[]
+  orderLines     OrderLine[]
+  bills          Bill[]
+  payments       Payment[]
+
+  // Capability: plywood trading. Back-relations only, as above.
+  plywoodBrands   PlywoodBrand[]
+  plywoodProducts PlywoodProduct[]
+  godownRacks     GodownRack[]
 
   @@map("tenant")
 }
@@ -1049,6 +1054,7 @@ model Location {
   geofences    Geofence[]
   assignments  LocationAssignment[]
   assets       Asset[]
+  godownRacks  GodownRack[]
 
   @@unique([tenantId, id], name: "location_tenant_scoped_id")
   @@index([tenantId, organizationId])
@@ -1994,4 +2000,101 @@ model Payment {
   @@unique([tenantId, id], name: "payment_tenant_scoped_id")
   @@index([tenantId, billId])
   @@map("payment")
+}
+
+// ===========================================================================
+// CAPABILITY: Plywood trading — `verity.capability.plywood`
+//
+// Built for a plywood, laminate, MDF and board trading business (plywood.md).
+// Stage 1 of the sequence in implementation/plywood-gap-analysis.md §6: the
+// catalogue and the floor — the things every later stage references.
+//
+// Godowns are `Location` records, not a new primitive. A rack is a position
+// inside one, which is a genuinely new fact and therefore a capability-owned
+// table.
+// ===========================================================================
+
+/// A manufacturer whose boards this business trades — Century, Greenply, Merino.
+model PlywoodBrand {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  name         String
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products PlywoodProduct[]
+
+  @@unique([tenantId, name])
+  @@unique([tenantId, id], name: "plywood_brand_tenant_scoped_id")
+  @@map("plywood_brand")
+}
+
+/// A specific board this business buys and sells: a brand, a grade, and a size.
+///
+/// Dimensions are integers in fixed units rather than decimals, for the same
+/// reason money is stored in paise — 18.0 mm and 8 ft x 4 ft are exact facts and
+/// a float would make them approximately exact.
+model PlywoodProduct {
+  id                String   @id @default(uuid()) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  brandId           String   @map("brand_id") @db.Uuid
+  name              String
+  /// HSN code. Legally required on a GST tax invoice; stored as issued by the
+  /// client, validated for shape only. The platform does not own a tax code
+  /// table and does not invent one.
+  hsnCode           String   @map("hsn_code")
+  /// Tenths of a millimetre. 180 is 18.0 mm. Not basis points: a thickness is
+  /// not a rate, and the two units are kept apart deliberately.
+  thicknessTenthMm  Int      @map("thickness_tenth_mm")
+  widthMm           Int      @map("width_mm")
+  heightMm          Int      @map("height_mm")
+  /// BWR, MR, Marine. A free string: grades are the client's vocabulary and an
+  /// enum here would need a platform migration the first time a supplier
+  /// invents one.
+  grade             String
+  sheetWeightGrams  Int?     @map("sheet_weight_grams")
+  /// Below this on-hand quantity the low-stock sweep raises a notification.
+  reorderLevelUnits Int      @default(0) @map("reorder_level_units")
+  unitLabel         String   @default("sheets") @map("unit_label")
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  version           Int      @default(1)
+  customFields      Json     @default("{}") @map("custom_fields")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  brand  PlywoodBrand @relation(fields: [tenantId, brandId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, id], name: "plywood_product_tenant_scoped_id")
+  @@index([tenantId, brandId, name])
+  @@index([tenantId, active])
+  @@map("plywood_product")
+}
+
+/// A rack, bay or stack position inside a godown.
+///
+/// The godown itself is a `Location` (ADR-004). This table records only the
+/// subdivision inside it, which no existing primitive carries.
+model GodownRack {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  locationId   String   @map("location_id") @db.Uuid
+  rackLabel    String   @map("rack_label")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([tenantId, locationId, rackLabel])
+  @@unique([tenantId, id], name: "godown_rack_tenant_scoped_id")
+  @@index([tenantId, locationId])
+  @@map("godown_rack")
 }
