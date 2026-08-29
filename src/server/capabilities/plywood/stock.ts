@@ -175,8 +175,32 @@ export async function assertTradeable(
   if (!product.active) {
     throw new ValidationError("E_VALIDATION: that board has been withdrawn from the catalogue");
   }
+  if (product.type === "SERVICE") {
+    // A service (sawing, estimating, a rental) has no physical stock. Every
+    // direct movement command (receive/issue/transfer/adjust/damage/return)
+    // funnels through this one precondition, so this is the single place
+    // that refuses all six for a service product.
+    throw new ValidationError("E_VALIDATION: this is a service — it has no stock to move");
+  }
   const godown = await tx.location.findUnique({ where: { id: locationId } });
   if (!godown) throw new ValidationError("E_VALIDATION: godown not found in this tenant");
+}
+
+/**
+ * Which of these products are services — batched once per command rather
+ * than once per order line, so an order fulfillment loop over N lines does
+ * not turn into N extra queries just to answer "does this one hold stock?".
+ */
+export async function serviceProductIds(
+  tx: TenantScopedClient,
+  productIds: string[],
+): Promise<Set<string>> {
+  if (productIds.length === 0) return new Set();
+  const rows = await tx.plywoodProduct.findMany({
+    where: { id: { in: productIds }, type: "SERVICE" },
+    select: { id: true },
+  });
+  return new Set(rows.map((r) => r.id));
 }
 
 /* -------------------------------- commands -------------------------------- */
@@ -471,7 +495,8 @@ export const lowStock: QueryDefinition<
     // business, and a board short in Okhla but plentiful in Noida is a transfer,
     // not a purchase order.
     const products = await ctx.tx.plywoodProduct.findMany({
-      where: { active: true, reorderLevelUnits: { gt: 0 } },
+      // A service has no reorder level worth sweeping — it never holds stock.
+      where: { active: true, reorderLevelUnits: { gt: 0 }, type: "PHYSICAL" },
       include: { brand: { select: { name: true } }, balances: true },
     });
 

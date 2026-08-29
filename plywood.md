@@ -16,6 +16,10 @@ A plywood, laminate, MDF, and board trading management system covering:
 
 1. **Inventory Management (Core)**
    - Plywood/laminate/MDF/board product master (Brand, Thickness, Size/dimensions, Grade, Sheet/unit count).
+   - **Raw Timber & Sawn Wood**: Sized planks, structural timber (Teak, Marandi, Sal, Kapoor, Rosewood) priced and tracked by Volume (CFT - Cubic Feet) or Length (RFT - Running Feet).
+   - **Engineered Wood & Boards**: Commercial Plywood (MR), Marine Plywood (BWR/BWP), Core Boards (HDHMR, Boilo, MDF, Particle boards), Blockboards, and Flush doors.
+   - **Decorative Surfacing**: Laminates/Sunmica, Acrylic sheets, Natural veneers, Wall Louvers, and Charcoal fluted panels.
+   - **Interior Hardware & Fittings**: Modular kitchen hardware (drawer slides, hinges, baskets), door handles, locks, and hinges.
    - Stock by warehouse/godown.
    - Stock inward/outward and stock transfers.
    - Damaged/returned stock and physical stock adjustment.
@@ -25,7 +29,7 @@ A plywood, laminate, MDF, and board trading management system covering:
    - Purchase orders, purchase invoices, and goods received.
    - Pending purchases, supplier outstanding, and supplier ledger / purchase history.
 3. **Sales & Customer Management**
-   - Customer/dealer/contractor master.
+   - Customer/dealer/contractor master (Serving retail consumers, decorators, and commercial contractors).
    - Quotations and sales orders.
    - Price lists, customer-specific pricing, and credit limits.
    - Outstanding payments, sales history, and returns.
@@ -51,9 +55,13 @@ A plywood, laminate, MDF, and board trading management system covering:
    - Multiple godowns with rack/location tracking.
    - Stock by godown and inter-godown transfer.
    - Receiving, dispatch, stock count, damaged stock, and reserved stock.
-8. **Dashboard**
+8. **Dashboard & Services**
    - Owner dashboard: Today's Sales | Today's Purchases | Stock Value | Receivables | Payables | Pending Deliveries | In-Transit Material | Low Stock.
-   - Drill-down capabilities for all metrics.
+   - **Commercial Sawmill & Construction Services**: 
+     - *Custom Sized Wood Saws*: Precision cutting timber logs into custom sections based on blueprints.
+     - *Door Frame Customisation*: Manufacturing wholesale chaukhats to architectural dimensions.
+     - *Shuttering Timber Rentals*: Leased commercial plywood and logs (ballies) for temporary concrete slabs.
+     - *Material Estimations*: On-site calculations for required timber volumes.
 
 ### Derived operational requirements (made explicit so scope is testable)
 - **Paise-granular arithmetic**: All pricing, invoice totals, payments, and ledger balances are stored in integer minor units (paise) to prevent float representation drift.
@@ -63,8 +71,15 @@ A plywood, laminate, MDF, and board trading management system covering:
   DELETE**, following the pattern `activity`, `security_audit_event` and `domain_event` already use.
   A ledger that is append-only only because no code writes an UPDATE stays append-only exactly until
   someone writes one.
-- **Transporter Handoffs & LR (Lorries Receipt)**: Shipping transitions require a document/number reference (LR No.) and a transit state machine (In Transit -> Delivered) to satisfy tracking queries.
+- **Transporter Handoffs & LR (Lorries Receipt)**: Transit transitions require a document reference (LR No.) and a state machine to satisfy tracking queries.
 - **Tax Breakdown Preservation**: Invoices snapshot CGST, SGST, IGST rates and values at execution. Catalogue edits never retrospectively alter tax or price totals on completed bills.
+
+### Required Verity Platform & Schema Upgrades
+To fully support Shri Ganesh Timber's expanded catalog, the following architectural upgrades are required in Verity's backend:
+1.  **Product UOM (Unit of Measure) Extension**: Add a `uom` (Unit of Measure) enum/string field to the product catalog model to handle `CFT` (Cubic Feet) and `RFT` (Running Feet) volume-based pricing and stock calculations, alongside the default `sheets` or `pcs` units.
+2.  **Optional Dimensions for Non-Sheet Items**: Currently, the Postgres schema enforces `thicknessTenthMm`, `widthMm`, and `heightMm` as strictly positive non-null integers (`plywood_product_dimensions_positive`). This must be relaxed to allow nullable dimensions for hardware items and services.
+3.  **Product Type Distinction (`PHYSICAL` vs `SERVICE`)**: Introduce a `type` field on products. Services (like sawing and estimating) must bypass stock balance lookups (`stock_balance` records) and movement ledgers.
+4.  **Rental Contract Ledger**: To support shuttering plywood and log leasing services, a rental contract entity must be added to track items in possession of contractors and handle rental deposit/return balances.
 
 ### Explicitly not requested and therefore out of scope for v1
 - Live GPS telemetry / maps (location tracking is manual status update by logistics coordinators).

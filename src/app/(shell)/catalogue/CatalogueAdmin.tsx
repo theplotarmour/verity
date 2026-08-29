@@ -2,9 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, EmptyState, ErrorState, Field, Input, Panel } from "@/components/ui/primitives";
+import { Button, EmptyState, ErrorState, Field, Input, Panel, Select } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
+
+type ProductType = "PHYSICAL" | "SERVICE";
 
 type Brand = {
   brandId: string;
@@ -14,13 +16,14 @@ type Brand = {
     id: string;
     name: string;
     hsnCode: string;
-    thicknessTenthMm: number;
-    widthMm: number;
-    heightMm: number;
+    thicknessTenthMm: number | null;
+    widthMm: number | null;
+    heightMm: number | null;
     grade: string;
     unitLabel: string;
     reorderLevelUnits: number;
     active: boolean;
+    type: ProductType;
   }>;
 };
 
@@ -28,15 +31,16 @@ type Brand = {
  * "18.0 mm" — one decimal, always, so the column reads as a column.
  *
  * The store thinks in tenths of a millimetre because a thickness is exact; the
- * screen thinks in what is painted on the edge of the board.
+ * screen thinks in what is painted on the edge of the board. `null` is a
+ * service or a hardware item with no sheet thickness at all, not a zero.
  */
-function thickness(tenthMm: number): string {
-  return `${(tenthMm / 10).toFixed(1)} mm`;
+function thickness(tenthMm: number | null): string {
+  return tenthMm == null ? "—" : `${(tenthMm / 10).toFixed(1)} mm`;
 }
 
 /** "2440 × 1220" — the size a trader says out loud, in the order they say it. */
-function sheetSize(widthMm: number, heightMm: number): string {
-  return `${widthMm} × ${heightMm}`;
+function sheetSize(widthMm: number | null, heightMm: number | null): string {
+  return widthMm == null || heightMm == null ? "—" : `${widthMm} × ${heightMm}`;
 }
 
 /**
@@ -164,7 +168,10 @@ export function CatalogueAdmin({ catalogue }: { catalogue: Brand[] }) {
               {addingTo === brand.brandId && (
                 <form
                   className="mb-4 flex flex-wrap items-end gap-3 rounded-lg bg-glass-2 p-3"
-                  action={(formData) =>
+                  action={(formData) => {
+                    const thicknessRaw = String(formData.get("thickness") ?? "").trim();
+                    const widthRaw = String(formData.get("width") ?? "").trim();
+                    const heightRaw = String(formData.get("height") ?? "").trim();
                     run(
                       "verity.plywood.create_product",
                       {
@@ -172,18 +179,23 @@ export function CatalogueAdmin({ catalogue }: { catalogue: Brand[] }) {
                         name: String(formData.get("name") ?? ""),
                         hsnCode: String(formData.get("hsn") ?? ""),
                         grade: String(formData.get("grade") ?? ""),
+                        type: String(formData.get("type") ?? "PHYSICAL"),
+                        unitLabel: String(formData.get("unitLabel") ?? "sheets"),
                         // Millimetres in, tenths out — the same reason prices
-                        // are entered in rupees and stored in paise.
-                        thicknessTenthMm: Math.round(
-                          Number(formData.get("thickness") ?? 0) * 10,
-                        ),
-                        widthMm: Number(formData.get("width") ?? 0),
-                        heightMm: Number(formData.get("height") ?? 0),
+                        // are entered in rupees and stored in paise. Absent
+                        // for a service or an item with no sheet size —
+                        // sending 0 would fail the database's own
+                        // strictly-positive-when-not-null check.
+                        ...(thicknessRaw
+                          ? { thicknessTenthMm: Math.round(Number(thicknessRaw) * 10) }
+                          : {}),
+                        ...(widthRaw ? { widthMm: Number(widthRaw) } : {}),
+                        ...(heightRaw ? { heightMm: Number(heightRaw) } : {}),
                         reorderLevelUnits: Number(formData.get("reorder") ?? 0),
                       },
                       () => setAddingTo(null),
-                    )
-                  }
+                    );
+                  }}
                 >
                   <div className="min-w-[200px] flex-1">
                     <Field label="Board" htmlFor={`name-${brand.brandId}`} required>
@@ -202,10 +214,29 @@ export function CatalogueAdmin({ catalogue }: { catalogue: Brand[] }) {
                     </Field>
                   </div>
                   <div className="w-[130px]">
+                    <Field label="Type" htmlFor={`type-${brand.brandId}`}>
+                      <Select id={`type-${brand.brandId}`} name="type" defaultValue="PHYSICAL">
+                        <option value="PHYSICAL">Physical</option>
+                        <option value="SERVICE">Service</option>
+                      </Select>
+                    </Field>
+                  </div>
+                  <div className="w-[110px]">
+                    <Field label="Unit" htmlFor={`unit-${brand.brandId}`}>
+                      <Select id={`unit-${brand.brandId}`} name="unitLabel" defaultValue="sheets">
+                        <option value="sheets">Sheets</option>
+                        <option value="pcs">Pcs</option>
+                        <option value="pairs">Pairs</option>
+                        <option value="CFT">CFT</option>
+                        <option value="RFT">RFT</option>
+                      </Select>
+                    </Field>
+                  </div>
+                  <div className="w-[130px]">
                     <Field
                       label="Thickness (mm)"
                       htmlFor={`thickness-${brand.brandId}`}
-                      required
+                      hint="Leave blank for a service"
                     >
                       <Input
                         id={`thickness-${brand.brandId}`}
@@ -213,31 +244,28 @@ export function CatalogueAdmin({ catalogue }: { catalogue: Brand[] }) {
                         type="number"
                         step="0.1"
                         min="0.1"
-                        required
                         placeholder="18"
                       />
                     </Field>
                   </div>
                   <div className="w-[120px]">
-                    <Field label="Width (mm)" htmlFor={`width-${brand.brandId}`} required>
+                    <Field label="Width (mm)" htmlFor={`width-${brand.brandId}`}>
                       <Input
                         id={`width-${brand.brandId}`}
                         name="width"
                         type="number"
                         min="1"
-                        required
                         placeholder="2440"
                       />
                     </Field>
                   </div>
                   <div className="w-[120px]">
-                    <Field label="Height (mm)" htmlFor={`height-${brand.brandId}`} required>
+                    <Field label="Height (mm)" htmlFor={`height-${brand.brandId}`}>
                       <Input
                         id={`height-${brand.brandId}`}
                         name="height"
                         type="number"
                         min="1"
-                        required
                         placeholder="1220"
                       />
                     </Field>
@@ -289,7 +317,7 @@ export function CatalogueAdmin({ catalogue }: { catalogue: Brand[] }) {
                   <caption className="sr-only">{brand.brandName} boards</caption>
                   <thead>
                     <tr>
-                      {["Board", "Grade", "Thickness", "Sheet (mm)", "HSN", "Reorder", "State", ""].map(
+                      {["Board", "Type", "Grade", "Thickness", "Sheet (mm)", "HSN", "Reorder", "State", ""].map(
                         (heading, index) => (
                           <th
                             key={heading || index}
@@ -309,6 +337,9 @@ export function CatalogueAdmin({ catalogue }: { catalogue: Brand[] }) {
                       <tr key={product.id}>
                         <td className="border-b border-line px-3 py-2 text-[14px] text-text">
                           {product.name}
+                        </td>
+                        <td className="border-b border-line px-3 py-2 text-[13px] text-text-secondary">
+                          {product.type === "SERVICE" ? "Service" : "Physical"}
                         </td>
                         <td className="border-b border-line px-3 py-2 text-[13px] text-text-secondary">
                           {product.grade}
@@ -458,8 +489,9 @@ function EditProduct({
         Save
       </Button>
       <p className="m-0 w-full text-[12px] text-text-tertiary">
-        {thickness(product.thicknessTenthMm)} · {sheetSize(product.widthMm, product.heightMm)} mm —
-        a size cannot be changed. Withdraw this board and add the right one.
+        {product.type === "SERVICE"
+          ? "A service — no size to change."
+          : `${thickness(product.thicknessTenthMm)} · ${sheetSize(product.widthMm, product.heightMm)} mm — a size cannot be changed. Withdraw this board and add the right one.`}
       </p>
     </form>
   );

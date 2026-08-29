@@ -163,18 +163,30 @@ export const setBrandActive: CommandDefinition<
 
 /* ================================ products ================================ */
 
+/**
+ * PHYSICAL holds stock; SERVICE (sawing, estimating, rentals) never does —
+ * see `stock.ts`'s `assertTradeable` and the reservation/dispatch/receive
+ * loops in `trading.ts`. A TS union validated by `PRODUCT_TYPES` below, the
+ * same shape as `MovementKind` in `stock.ts` — not a Postgres enum, kept
+ * consistent with this capability's other closed-set fields (`grade`, order
+ * `state`, movement `kind`), all plain strings.
+ */
+export const PRODUCT_TYPES = ["PHYSICAL", "SERVICE"] as const;
+export type ProductType = (typeof PRODUCT_TYPES)[number];
+
 export const createProduct: CommandDefinition<
   {
     brandId: string;
     name: string;
     hsnCode: string;
-    thicknessTenthMm: number;
-    widthMm: number;
-    heightMm: number;
+    thicknessTenthMm?: number;
+    widthMm?: number;
+    heightMm?: number;
     grade: string;
     sheetWeightGrams?: number;
     reorderLevelUnits?: number;
     unitLabel?: string;
+    type?: ProductType;
   },
   { id: string }
 > = {
@@ -187,13 +199,17 @@ export const createProduct: CommandDefinition<
     hsnCode: HSN_CODE,
     // Tenths of a millimetre: 180 is 18.0 mm. Integers because a board's
     // thickness is an exact fact, and a float would make it approximately so.
-    thicknessTenthMm: z.number().int().positive(),
-    widthMm: z.number().int().positive(),
-    heightMm: z.number().int().positive(),
+    // Optional: a SERVICE product or most hardware items have no sheet
+    // dimensions at all — the database's own check constraint allows NULL
+    // but still refuses zero or negative when a value is given.
+    thicknessTenthMm: z.number().int().positive().optional(),
+    widthMm: z.number().int().positive().optional(),
+    heightMm: z.number().int().positive().optional(),
     grade: z.string().min(1).max(60),
     sheetWeightGrams: z.number().int().positive().optional(),
     reorderLevelUnits: z.number().int().min(0).optional(),
     unitLabel: z.string().min(1).max(30).optional(),
+    type: z.enum(PRODUCT_TYPES).optional(),
   }),
   preconditions: async (ctx, input) => {
     const brand = await ctx.tx.plywoodBrand.findUnique({ where: { id: input.brandId } });
@@ -209,13 +225,14 @@ export const createProduct: CommandDefinition<
         brandId: input.brandId,
         name: input.name,
         hsnCode: input.hsnCode,
-        thicknessTenthMm: input.thicknessTenthMm,
-        widthMm: input.widthMm,
-        heightMm: input.heightMm,
+        thicknessTenthMm: input.thicknessTenthMm ?? null,
+        widthMm: input.widthMm ?? null,
+        heightMm: input.heightMm ?? null,
         grade: input.grade,
         sheetWeightGrams: input.sheetWeightGrams ?? null,
         reorderLevelUnits: input.reorderLevelUnits ?? 0,
         unitLabel: input.unitLabel ?? "sheets",
+        type: input.type ?? "PHYSICAL",
       },
     });
     return {
@@ -409,13 +426,14 @@ export const listCatalogue: QueryDefinition<
       id: string;
       name: string;
       hsnCode: string;
-      thicknessTenthMm: number;
-      widthMm: number;
-      heightMm: number;
+      thicknessTenthMm: number | null;
+      widthMm: number | null;
+      heightMm: number | null;
       grade: string;
       unitLabel: string;
       reorderLevelUnits: number;
       active: boolean;
+      type: ProductType;
     }>;
   }>
 > = {
@@ -455,6 +473,7 @@ export const listCatalogue: QueryDefinition<
         unitLabel: product.unitLabel,
         reorderLevelUnits: product.reorderLevelUnits,
         active: product.active,
+        type: product.type as ProductType,
       })),
     }));
   },

@@ -177,10 +177,13 @@
   --blur-glass-strong: 30px;
 
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  /* Container Slide (Verity_Motion_Architecture.md §2) — context panels,
-     dialog overlays, bottom sheets. Distinct from --ease-out's micro-interaction
-     curve because a large panel's momentum reads differently than a button. */
-  --ease-slide: cubic-bezier(0.32, 0.94, 0.6, 1);
+  /* Container Slide, Out-Expo (Verity_Motion_Architecture.md §2) — context
+     panels, dialog overlays, bottom sheets, 500ms entrance. Distinct from
+     --ease-out's micro-interaction curve because a large panel's momentum
+     reads differently than a button. Kept in sync by hand with the
+     duplicated bezier array in ContextPanel.tsx (framer-motion's `ease`
+     doesn't accept a CSS var() reference). */
+  --ease-slide: cubic-bezier(0.19, 1, 0.22, 1);
 
   --font-sans: var(--font-inter), ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, "SF Mono", Menlo, monospace;

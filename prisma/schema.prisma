@@ -2075,14 +2075,22 @@ model PlywoodProduct {
   hsnCode           String   @map("hsn_code")
   /// Tenths of a millimetre. 180 is 18.0 mm. Not basis points: a thickness is
   /// not a rate, and the two units are kept apart deliberately.
-  thicknessTenthMm  Int      @map("thickness_tenth_mm")
-  widthMm           Int      @map("width_mm")
-  heightMm          Int      @map("height_mm")
+  /// Nullable: a SERVICE product (sawing, estimating) and most hardware items
+  /// have no sheet dimensions at all. `plywood_product_dimensions_positive`
+  /// allows NULL but still refuses zero or negative when a value is given.
+  thicknessTenthMm  Int?     @map("thickness_tenth_mm")
+  widthMm           Int?     @map("width_mm")
+  heightMm          Int?     @map("height_mm")
   /// BWR, MR, Marine. A free string: grades are the client's vocabulary and an
   /// enum here would need a platform migration the first time a supplier
   /// invents one.
   grade             String
   sheetWeightGrams  Int?     @map("sheet_weight_grams")
+  /// PHYSICAL or SERVICE. A plain string with the same reasoning as `grade`
+  /// and `kind`/`state` elsewhere in this capability — validated at the
+  /// command layer (`ProductType` TS union in index.ts), not a Postgres enum,
+  /// consistent with every other closed-set field in this file.
+  type              String   @default("PHYSICAL")
   /// Below this on-hand quantity the low-stock sweep raises a notification.
   reorderLevelUnits Int      @default(0) @map("reorder_level_units")
   unitLabel         String   @default("sheets") @map("unit_label")

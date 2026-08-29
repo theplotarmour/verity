@@ -68,8 +68,9 @@ export function ContextPanel({
   // Matches --ease-slide / an ease-in variant in globals.css. framer-motion's
   // `ease` accepts a bezier point array, not a CSS var() reference, so the
   // values are duplicated here — keep them in sync with globals.css by hand.
-  const slideIn = [0.32, 0.94, 0.6, 1] as const;
-  const slideOut = [0.5, 0, 0.75, 0] as const;
+  // Out-Expo, 500ms entrance (Verity_Motion_Architecture.md §2, drawers/modals).
+  const slideIn = [0.19, 1, 0.22, 1] as const;
+  const slideOut = [0.7, 0, 0.84, 0] as const;
 
   return (
     <AnimatePresence>
@@ -97,7 +98,7 @@ export function ContextPanel({
             transition={
               reducedMotion
                 ? { duration: 0 }
-                : { duration: open ? 0.25 : 0.2, ease: open ? slideIn : slideOut }
+                : { duration: open ? 0.5 : 0.35, ease: open ? slideIn : slideOut }
             }
           >
             <div className="flex items-center justify-between gap-3">

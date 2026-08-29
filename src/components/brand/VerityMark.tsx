@@ -78,7 +78,6 @@ export function VeritySymbol({ size = 20, className }: { size?: number; classNam
  * surrounding text and needs no light/dark variant files.
  */
 export function VerityWordmark({ size = 20, className }: { size?: number; className?: string }) {
-  const url = "url(/brand/verity-wordmark.png)";
   return (
     <span
       className={className}
@@ -86,17 +85,17 @@ export function VerityWordmark({ size = 20, className }: { size?: number; classN
       style={{
         display: "block",
         flex: "none",
-        width: size * WORDMARK_RATIO,
-        height: size,
-        backgroundColor: "currentColor",
-        WebkitMaskImage: url,
-        maskImage: url,
-        WebkitMaskSize: "100% 100%",
-        maskSize: "100% 100%",
-        WebkitMaskRepeat: "no-repeat",
-        maskRepeat: "no-repeat",
+        fontFamily: "var(--font-inter), sans-serif",
+        fontSize: `${size * 0.95}px`,
+        fontWeight: 300,
+        letterSpacing: "-0.04em",
+        lineHeight: 1,
+        color: "currentColor",
+        userSelect: "none",
       }}
-    />
+    >
+      verity
+    </span>
   );
 }
 

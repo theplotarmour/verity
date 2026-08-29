@@ -59,7 +59,10 @@ export default async function SalesPage() {
         boards={catalogue.flatMap((brand) =>
           brand.products.map((product) => ({
             id: product.id,
-            label: `${brand.brandName} · ${product.name} · ${(product.thicknessTenthMm / 10).toFixed(1)} mm`,
+            label:
+              product.thicknessTenthMm == null
+                ? `${brand.brandName} · ${product.name}`
+                : `${brand.brandName} · ${product.name} · ${(product.thicknessTenthMm / 10).toFixed(1)} mm`,
           })),
         )}
       />

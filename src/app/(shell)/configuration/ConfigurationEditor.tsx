@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Badge, Button, ErrorState, Field, Input, Panel } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
@@ -61,6 +62,7 @@ export function ConfigurationEditor({ parameters }: { parameters: Parameter[] })
 
   const [activeGroup, setActiveGroup] = useState<string | null>(groups[0]?.[0] ?? null);
   const active = groups.find(([label]) => label === activeGroup) ?? groups[0];
+  const reducedMotion = useReducedMotion();
 
   function write(key: string, value: string | null, after?: () => void) {
     setFailure(null);
@@ -164,13 +166,26 @@ export function ConfigurationEditor({ parameters }: { parameters: Parameter[] })
 
           {active && (
             <div className="min-w-0 flex-1">
-              <Panel title={active[0]}>
-                <div className="flex flex-col gap-3">
-                  {active[1].map((parameter) => (
-                    <ConfigRow key={parameter.key} parameter={parameter} pending={pending} onWrite={write} />
-                  ))}
-                </div>
-              </Panel>
+              {/* Tab-switch fade — Verity_Motion_Architecture.md §2/§4: a clean,
+                  subtle opacity transition over 200ms, keyed on the active
+                  group so switching tabs re-triggers it rather than reusing
+                  the previous group's mounted instance. */}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={active[0]}
+                  initial={reducedMotion ? undefined : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: reducedMotion ? 0 : 0.2 }}
+                >
+                  <Panel title={active[0]}>
+                    <div className="flex flex-col gap-3">
+                      {active[1].map((parameter) => (
+                        <ConfigRow key={parameter.key} parameter={parameter} pending={pending} onWrite={write} />
+                      ))}
+                    </div>
+                  </Panel>
+                </motion.div>
+              </AnimatePresence>
             </div>
           )}
         </div>

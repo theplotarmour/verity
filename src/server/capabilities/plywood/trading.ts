@@ -13,7 +13,7 @@ import {
   ENTITY_SUPPLIER,
   ENTITY_SUPPLIER_PRICE,
 } from "./keys";
-import { applyMovement } from "./stock";
+import { applyMovement, serviceProductIds } from "./stock";
 
 /**
  * PLYWOOD STAGES 3 AND 4 — trading partners and orders.
@@ -396,6 +396,11 @@ export const receiveGoods: CommandDefinition<
       throw new ValidationError("E_VALIDATION: that order is closed");
     }
 
+    const services = await serviceProductIds(
+      ctx.tx,
+      input.lines.map((line) => line.productId),
+    );
+
     for (const received of input.lines) {
       const line = order.lines.find((candidate) => candidate.productId === received.productId);
       if (!line) {
@@ -416,9 +421,11 @@ export const receiveGoods: CommandDefinition<
         data: { qtyReceived: { increment: received.qtyReceived } },
       });
 
-      // The receipt IS the stock movement. Goods received and stock on hand are
-      // one fact, and writing them in one transaction is what stops a delivery
-      // from existing on paper but not in the godown.
+      // The receipt IS the stock movement — except for a service line, which
+      // has no godown to land in. The order progress above is still real and
+      // recorded; only the stock side of it is skipped.
+      if (services.has(received.productId)) continue;
+
       await applyMovement(ctx.tx, ctx.actor, {
         productId: received.productId,
         locationId: order.locationId,
@@ -724,8 +731,21 @@ export const reserveForOrder: CommandDefinition<
       throw new ValidationError("E_VALIDATION: this order already holds stock");
     }
 
+    const services = await serviceProductIds(
+      ctx.tx,
+      order.lines.map((line) => line.productId),
+    );
+
     const reserved: Array<{ productId: string; qtyUnits: number }> = [];
     for (const line of order.lines) {
+      // A service line has nothing to hold — `availableUnits` would always
+      // read 0 for it (no stock_balance row exists), refusing every order
+      // that includes one. Skip straight to counting it reserved.
+      if (services.has(line.productId)) {
+        reserved.push({ productId: line.productId, qtyUnits: line.qtyOrdered });
+        continue;
+      }
+
       const { availableUnits: free } = await availableUnits(
         ctx.tx,
         line.productId,
@@ -786,18 +806,27 @@ export const dispatchOrder: CommandDefinition<
       throw new ValidationError("E_VALIDATION: hold stock for this order before dispatching it");
     }
 
+    const services = await serviceProductIds(
+      ctx.tx,
+      order.lines.map((line) => line.productId),
+    );
+
     for (const line of order.lines) {
       const outstanding = line.qtyOrdered - line.qtyShipped;
       if (outstanding <= 0) continue;
 
       // Release the hold and move the stock in the same transaction. Doing them
-      // apart is how a reservation outlives the goods it was holding.
-      await applyMovement(ctx.tx, ctx.actor, {
-        productId: line.productId,
-        locationId: order.locationId,
-        kind: "sales_outward",
-        qtyUnits: outstanding,
-      });
+      // apart is how a reservation outlives the goods it was holding. A
+      // service line was never reserved (see reserveForOrder) and has
+      // nothing to move — only its shipped quantity is real.
+      if (!services.has(line.productId)) {
+        await applyMovement(ctx.tx, ctx.actor, {
+          productId: line.productId,
+          locationId: order.locationId,
+          kind: "sales_outward",
+          qtyUnits: outstanding,
+        });
+      }
       await ctx.tx.plywoodSalesOrderLine.update({
         where: { id: line.id },
         data: { qtyShipped: line.qtyOrdered },
