@@ -337,9 +337,9 @@ export function DataTable({
                   <tr
                     key={key}
                     data-selected={selected.has(key) || undefined}
-                    className="border-b border-line transition-colors last:border-b-0 hover:bg-surface-sunken data-selected:bg-accent-subtle"
+                    className="border-b border-line transition-colors last:border-b-0 hover:bg-surface-sunken data-selected:bg-accent-subtle data-selected:shadow-[inset_3px_0_0_0_var(--color-accent)]"
                   >
-                    <td className="w-10 py-4 pl-1 pr-2 align-middle">
+                    <td className="w-10 py-2.5 pl-1 pr-2 align-middle">
                       <input
                         type="checkbox"
                         checked={selected.has(key)}
@@ -352,7 +352,7 @@ export function DataTable({
                       <td
                         key={c.key}
                         className={
-                          "px-4 py-4 align-middle " + (c.numeric ? "tabular text-right" : "")
+                          "px-4 py-2.5 align-middle " + (c.numeric ? "tabular text-right" : "")
                         }
                       >
                         <Cell column={c} row={row} lead={i === 0} />

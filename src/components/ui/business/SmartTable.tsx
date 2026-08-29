@@ -193,7 +193,7 @@ export function SmartTable({
                       <td
                         key={cell.id}
                         className={
-                          "px-4 py-4 align-middle " +
+                          "px-4 py-2.5 align-middle " +
                           (columns.find((c) => c.key === cell.column.id)?.numeric
                             ? "tabular text-right"
                             : "")
