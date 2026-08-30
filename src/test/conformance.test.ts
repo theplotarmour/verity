@@ -334,7 +334,9 @@ describe("conformance: over-genericity (Phase G)", () => {
     // capability logic, so it belongs here rather than in a capability.
     // 26: authProvider.ts (Task 28) — the neutral Principal/AuthProvider
     // contract; auth.ts is its Supabase implementation, same reasoning.
-    expect(platformModules.length).toBeLessThanOrEqual(26);
+    // 27: job.ts (Task 29) — the neutral background-job contract; not
+    // capability logic, so it belongs here rather than in a capability.
+    expect(platformModules.length).toBeLessThanOrEqual(27);
   });
 });
 
