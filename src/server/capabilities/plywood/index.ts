@@ -2,6 +2,7 @@ import { z } from "zod";
 import { registerContribution } from "@/server/platform/contribution";
 import { registerCommand, ValidationError, type CommandDefinition } from "@/server/platform/command";
 import { registerBusinessIdentity } from "./business";
+import { registerTax } from "./tax";
 import { goodsReceiptDetail, purchaseMatch, raiseInvoiceNote } from "./finance";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import { diffFields, recordActivity } from "@/server/platform/audit";
@@ -100,6 +101,7 @@ import {
 
 export * from "./keys";
 export * from "./business";
+export * from "./tax";
 export * from "./stock";
 export * from "./trading";
 export * from "./finance";
@@ -715,6 +717,7 @@ export function registerPlywoodCapability(): void {
   });
 
   registerBusinessIdentity();
+  registerTax();
   registerCommand(createBrand);
   registerCommand(setBrandActive);
   registerCommand(createProduct);

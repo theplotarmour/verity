@@ -60,6 +60,7 @@ import {
   registerPlywoodCapability,
   reserveForOrder,
   setBusinessProfile,
+  setTaxRule,
   submitPurchaseOrder,
 } from "@/server/capabilities/plywood";
 
@@ -314,6 +315,14 @@ describeDb("plywood business identity (slice 2)", () => {
     expect(settings.gstin).toBe("07AAACN1234K1Z5");
     expect(settings.invoiceSeriesPrefix).toBe("NK/");
     expect(settings.outstanding).toEqual([]);
+
+    // Slice 6: a rate is a dated rule under this registration, not a global
+    // configuration key. Plywood is 18%, collected as 9 + 9 within the state.
+    await executeCommand(owner, setTaxRule, {
+      hsnCode: "4412",
+      rateBp: 1800,
+      authority: "Notification 1/2017 Schedule III",
+    });
   });
 
   it("refuses a malformed GSTIN", async () => {

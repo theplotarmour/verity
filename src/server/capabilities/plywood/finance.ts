@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { sellerIdentity } from "./business";
+import { resolveTaxRate } from "./tax";
 import { ValidationError, type CommandDefinition } from "@/server/platform/command";
 import { type QueryDefinition } from "@/server/platform/query";
 import { resolveConfig } from "@/server/platform/capability";
@@ -280,14 +281,60 @@ export const raiseSalesInvoice: CommandDefinition<
     // retrospectively change how an old invoice was taxed.
     const placeOfSupplyStateCode = order.customer.stateCode;
 
-    const [rawCgst, rawSgst, rawIgst] = await Promise.all([
-      resolveConfig<unknown>(ctx.tx, CONFIG_CGST_RATE_BP),
-      resolveConfig<unknown>(ctx.tx, CONFIG_SGST_RATE_BP),
-      resolveConfig<unknown>(ctx.tx, CONFIG_IGST_RATE_BP),
-    ]);
-    const cgstRateBp = configNumber(rawCgst, CONFIG_CGST_RATE_BP);
-    const sgstRateBp = configNumber(rawSgst, CONFIG_SGST_RATE_BP);
-    const igstRateBp = configNumber(rawIgst, CONFIG_IGST_RATE_BP);
+    // The day of supply. Declared before the rate lookup because the rate is
+    // resolved AS AT this instant — the whole point of an effective-dated rule.
+    const issuedAt = new Date();
+
+    // THE RATE COMES FROM AN EFFECTIVE-DATED RULE (slice 6, P0-07).
+    //
+    // Resolved for the HSN on the line, under this registration, on the day of
+    // supply. The three global configuration keys remain as a fallback for a
+    // tenant that has not yet set any rules, and only as that: a business that
+    // has completed tax setup never reads them, and the fallback is removed
+    // when the last such tenant is migrated.
+    //
+    // ONE RATE PER INVOICE, DELIBERATELY
+    // The invoice model carries one set of rates. A mixed-rate invoice — 18%
+    // boards and 12% hardware on one document — needs line-level tax, which is
+    // a schema change and its own task. Until then an invoice whose lines
+    // resolve to DIFFERENT rates is refused rather than silently taxed at the
+    // first one, because the second behaviour is wrong in a way nobody sees.
+    let cgstRateBp: number | undefined;
+    let sgstRateBp: number | undefined;
+    let igstRateBp: number | undefined;
+
+    const registration = await ctx.tx.plywoodGstRegistration.findFirst({ where: { active: true } });
+    if (registration) {
+      const rates = new Set<string>();
+      for (const line of order.lines) {
+        const rate = await resolveTaxRate(ctx.tx, {
+          registrationId: registration.id,
+          hsnCode: line.hsnCodeSnapshot,
+          on: issuedAt,
+        });
+        rates.add(`${rate.cgstRateBp}:${rate.sgstRateBp}`);
+        cgstRateBp = rate.cgstRateBp;
+        sgstRateBp = rate.sgstRateBp;
+        // Interstate is the two halves expressed once, so it is derived rather
+        // than stored twice and cannot drift from them.
+        igstRateBp = rate.cgstRateBp + rate.sgstRateBp;
+      }
+      if (rates.size > 1) {
+        throw new ValidationError(
+          "E_VALIDATION: this order's lines attract different tax rates, and an invoice " +
+            "carries one rate. Split it into one order per rate.",
+        );
+      }
+    } else {
+      const [rawCgst, rawSgst, rawIgst] = await Promise.all([
+        resolveConfig<unknown>(ctx.tx, CONFIG_CGST_RATE_BP),
+        resolveConfig<unknown>(ctx.tx, CONFIG_SGST_RATE_BP),
+        resolveConfig<unknown>(ctx.tx, CONFIG_IGST_RATE_BP),
+      ]);
+      cgstRateBp = configNumber(rawCgst, CONFIG_CGST_RATE_BP);
+      sgstRateBp = configNumber(rawSgst, CONFIG_SGST_RATE_BP);
+      igstRateBp = configNumber(rawIgst, CONFIG_IGST_RATE_BP);
+    }
 
     const taxablePaise = order.lines.reduce(
       // ISSUED, not ordered (audit P0-03, slice 4). Invoicing the ordered
@@ -306,7 +353,6 @@ export const raiseSalesInvoice: CommandDefinition<
       igstRateBp: igstRateBp ?? 0,
     });
 
-    const issuedAt = new Date();
     const financialYear = financialYearOf(issuedAt);
     const numbering = await nextInvoiceNumber(
       ctx.tx,

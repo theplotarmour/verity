@@ -117,6 +117,7 @@ model Tenant {
   plywoodSalesOrderLines    PlywoodSalesOrderLine[]
   plywoodStockReservations  PlywoodStockReservation[]
   plywoodInvoiceSeries      PlywoodInvoiceSeries[]
+  plywoodTaxRules           PlywoodTaxRule[]
   plywoodInvoiceNotes       PlywoodInvoiceNote[]
   plywoodGoodsIssues        PlywoodGoodsIssue[]
   plywoodGoodsIssueLines    PlywoodGoodsIssueLine[]
@@ -2733,6 +2734,7 @@ model PlywoodGstRegistration {
   @@unique([tenantId, id], name: "plywood_gst_registration_tenant_scoped_id")
   @@index([tenantId, active])
   @@map("plywood_gst_registration")
+  taxRules PlywoodTaxRule[]
 }
 
 // ---------------------------------------------------------------------------
@@ -2894,6 +2896,55 @@ model PlywoodPayment {
 /// A balance is the sum of these (P3). There is no cached total anywhere, and no
 /// running balance on the row: both would be a second source of truth that can
 /// disagree with the first.
+/// The tax that applies to an HSN code, under one registration, from a date.
+///
+/// Authority: taskplans/45_plywood_workflow_program.md §4.4 and §D-03;
+/// PLYWOOD_TARGET_WORKFLOW_GAP_AUDIT.md P0-07.
+///
+/// WHAT THIS REPLACES
+/// Three global configuration keys holding CGST, SGST and IGST rates for the
+/// whole business. Two things were wrong with that and both are the same shape:
+/// a plywood sheet and a hardware fitting do not carry the same rate, and a
+/// rate that changes by notification in November must not restate an invoice
+/// raised in October.
+///
+/// Effective-dated and keyed by registration, so "the rate on the day of
+/// supply, for that HSN, under that registration" is a lookup rather than an
+/// assumption.
+model PlywoodTaxRule {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+
+  registrationId String @map("registration_id") @db.Uuid
+
+  /// 4, 6 or 8 digits. Matched most-specific-first, so an 8-digit rule for one
+  /// board beats the 4-digit rule for its chapter.
+  hsnCode String @map("hsn_code")
+
+  /// Basis points. 9% is 900. A percentage stored as a float is a rounding
+  /// error waiting for a filing.
+  cgstRateBp Int @default(0) @map("cgst_rate_bp")
+  sgstRateBp Int @default(0) @map("sgst_rate_bp")
+  igstRateBp Int @default(0) @map("igst_rate_bp")
+
+  effectiveFrom DateTime  @map("effective_from")
+  /// Null means "still in force". A superseding rule closes the one before it.
+  effectiveTo   DateTime? @map("effective_to")
+
+  /// The notification or circular this rate came from. An auditor asks.
+  authority String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String   @map("created_by") @db.Uuid
+
+  tenant       Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  registration PlywoodGstRegistration @relation(fields: [tenantId, registrationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, id], name: "plywood_tax_rule_tenant_scoped_id")
+  @@index([tenantId, registrationId, hsnCode, effectiveFrom])
+  @@map("plywood_tax_rule")
+}
+
 /// A credit or debit note against a posted invoice.
 ///
 /// Authority: taskplans/45_plywood_workflow_program.md §5 (invoice state

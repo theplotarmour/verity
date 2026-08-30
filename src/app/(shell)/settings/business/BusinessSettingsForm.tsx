@@ -137,6 +137,44 @@ export function BusinessSettingsForm({ settings }: { settings: Settings }) {
         </form>
       </Panel>
 
+      {settings.gstin && (
+        <Panel title="Tax rates">
+          <p className="mt-0 mb-3 text-[14px] text-text-secondary">
+            A rate applies to an HSN code from a date. Setting a new one supersedes
+            the previous rate rather than replacing it, so an invoice raised last
+            month keeps the rate it was raised under.
+          </p>
+          <form
+            className="flex flex-wrap items-end gap-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const data = new FormData(event.currentTarget);
+              submit("verity.plywood.set_tax_rule", {
+                hsnCode: String(data.get("taxHsnCode") ?? "").trim(),
+                // Entered as a percentage, stored as basis points. 18 becomes
+                // 1800; a percentage stored as a float is a rounding error
+                // waiting for a filing.
+                rateBp: Math.round(Number(data.get("ratePercent")) * 100),
+                authority: String(data.get("authority") ?? "").trim() || undefined,
+              });
+            }}
+          >
+            <Field htmlFor="taxHsnCode" label="HSN code" hint="4, 6 or 8 digits.">
+              <Input id="taxHsnCode" name="taxHsnCode" required placeholder="4412" maxLength={8} />
+            </Field>
+            <Field htmlFor="ratePercent" label="Rate %" hint="18 means 9% CGST + 9% SGST, or 18% IGST.">
+              <Input id="ratePercent" name="ratePercent" type="number" min="0" max="100" step="0.01" required />
+            </Field>
+            <Field htmlFor="authority" label="Authority" hint="The notification an auditor will ask for.">
+              <Input id="authority" name="authority" placeholder="Notification 1/2017" />
+            </Field>
+            <Button type="submit" disabled={pending}>
+              Set rate
+            </Button>
+          </form>
+        </Panel>
+      )}
+
       <Panel title="Tax registration">
         {settings.gstin ? (
           <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-[15px]">
