@@ -101,6 +101,13 @@ describe("docker-compose.yml", () => {
     expect(databaseUrlLine).not.toMatch(/postgres:\$\{POSTGRES_SUPERUSER_PASSWORD/);
   });
 
+  it("web's healthcheck targets /api/ready, not /api/health, using node rather than curl/wget", () => {
+    // Debian "slim" images (the Dockerfile's base) do not ship curl or wget.
+    expect(compose).toMatch(/\/api\/ready/);
+    expect(compose).not.toMatch(/\/api\/health['"]/);
+    expect(compose).not.toMatch(/"curl"|"wget"/);
+  });
+
   it("does not run migrations as part of `up`", () => {
     expect(compose).not.toMatch(/migrate deploy/);
   });

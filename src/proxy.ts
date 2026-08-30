@@ -70,5 +70,15 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  // Task 32: /api/health and /api/ready are infrastructure probes — no
+  // authentication, no session, called by Docker/orchestrator tooling that
+  // has no cookie jar. Routing them through this proxy would add an
+  // unbounded Supabase network call ahead of every liveness/readiness
+  // check, which is exactly what a liveness probe's own contract forbids
+  // ("no external service calls," "deterministic"). Excluding them here
+  // does not skip any authorization — this proxy never performed any; see
+  // its own doc comment above.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|api/health|api/ready|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 };

@@ -87,6 +87,34 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
       SUPABASE_MEDIA_BUCKET: ${SUPABASE_MEDIA_BUCKET:-}
       CRON_SECRET: ${CRON_SECRET:-}
+    healthcheck:
+      # Task 32: /api/ready, not /api/health — a healthcheck exists to catch
+      # exactly the case /api/health deliberately does not (a reachable
+      # process whose database is down), so pointing this at /api/health
+      # would defeat the reason a readiness endpoint exists at all.
+      #
+      # `node`, not `curl`/`wget`: the Dockerfile's runner stage is
+      # `node:20-bookworm-slim`, and the Debian "slim" variants do not ship
+      # curl or wget by default (confirmed by Debian's own package
+      # composition, not assumed — Task 30's Dockerfile installs neither,
+      # and none of this repo's dependencies pull either in). `node` is
+      # unconditionally present — it is the base image's whole purpose — and
+      # Node 20's built-in global `fetch` (stable, unflagged since Node 18)
+      # needs no new dependency. This could not be run against the actual
+      # image in this session (no Docker daemon); the tool-availability
+      # reasoning is documented, not assumed silently — see the taskplan's
+      # "Docker verification limitation."
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/api/ready').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
 volumes:
   verity-db-data:
