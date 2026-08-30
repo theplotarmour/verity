@@ -21,6 +21,11 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   let response = NextResponse.next({ request });
 
   try {
+    // Deliberately NOT `runtimeConfig` (src/server/platform/config.ts): that
+    // module validates and throws on import, which is exactly wrong for this
+    // boundary — a throw here must stay inside this try/catch and degrade,
+    // never reject the module graph before proxy() even runs. proxy.test.ts's
+    // "auth client cannot be constructed" case exercises precisely this.
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

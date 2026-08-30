@@ -5,6 +5,7 @@ import { prisma } from "@/server/platform/db";
 import { withTenant } from "@/server/platform/tenancy";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { installAdministration } from "@/server/platform/administration";
+import { readCronSecret } from "@/server/platform/config";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +54,7 @@ function secretMatches(provided: string, expected: string): boolean {
 }
 
 async function dispatch(request: Request): Promise<NextResponse> {
-  const expected = process.env.CRON_SECRET;
+  const expected = readCronSecret();
   if (!expected) {
     // Refuse rather than run unauthenticated. A scheduler endpoint with no
     // secret is a way to make the platform do work on demand from outside, and

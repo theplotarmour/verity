@@ -330,7 +330,9 @@ describe("conformance: over-genericity (Phase G)", () => {
     // platform layer is how capability logic ends up there. If this fails the
     // question to ask is whether the new module belongs in a capability.
     const platformModules = sourceFiles(join(ROOT, "src/server/platform"));
-    expect(platformModules.length).toBeLessThanOrEqual(24);
+    // 25: config.ts (Task 26) — a deployment-configuration boundary, not
+    // capability logic, so it belongs here rather than in a capability.
+    expect(platformModules.length).toBeLessThanOrEqual(25);
   });
 });
 

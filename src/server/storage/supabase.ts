@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { registerStorageDriver, type StorageDriver } from "@/server/platform/files";
+import { runtimeConfig } from "@/server/platform/config";
 
 /**
  * The storage binding.
@@ -29,8 +30,6 @@ import { registerStorageDriver, type StorageDriver } from "@/server/platform/fil
  * `readUrlFor` is called; this driver only mints a short-lived URL for a key it
  * is handed. Keeping that separation is why the platform holds the record.
  */
-
-const SERVICE_ROLE_KEY = "SUPABASE_SERVICE_ROLE_KEY";
 
 let client: SupabaseClient | null = null;
 let installed = false;
@@ -111,9 +110,9 @@ export function supabaseStorageDriver(input: {
 export function installStorage(): void {
   if (installed) return;
 
-  const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env[SERVICE_ROLE_KEY];
-  const bucket = process.env.SUPABASE_MEDIA_BUCKET;
+  const url = runtimeConfig.storage.supabaseUrl;
+  const serviceRoleKey = runtimeConfig.storage.serviceRoleKey;
+  const bucket = runtimeConfig.storage.bucket;
 
   if (!url || !serviceRoleKey || !bucket) return;
 

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { SignJWT, jwtVerify } from "jose";
 import { prisma } from "./db";
+import { runtimeConfig } from "./config";
 import type { ActorContext } from "./command";
 
 /**
@@ -44,16 +45,14 @@ const ACTIVE_MEMBERSHIP_COOKIE = "verity_active_membership";
  * being honoured.
  */
 function signingKey(): Uint8Array {
-  const secret = process.env.SUPABASE_JWT_SECRET ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!secret) throw new Error("No signing secret available for session cookies");
-  return new TextEncoder().encode(secret);
+  return new TextEncoder().encode(runtimeConfig.auth.jwtSecret);
 }
 
 export async function createSupabaseServerClient() {
   const store = await cookies();
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    runtimeConfig.auth.supabaseUrl,
+    runtimeConfig.auth.supabaseAnonKey,
     {
       cookies: {
         getAll: () => store.getAll(),
@@ -90,7 +89,7 @@ export async function setActiveMembership(membershipId: string): Promise<void> {
   store.set(ACTIVE_MEMBERSHIP_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: runtimeConfig.nodeEnv === "production",
     path: "/",
   });
 }

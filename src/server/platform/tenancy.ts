@@ -1,4 +1,5 @@
 import { prisma } from "./db";
+import { runtimeConfig } from "./config";
 import type { PrismaClient } from "@prisma/client";
 
 /**
@@ -49,10 +50,10 @@ export type TenantScopedClient = Omit<
  * throughput for headroom. It is env-tunable because the right value depends on
  * database latency, which is a deployment property rather than a platform one.
  */
-const TRANSACTION_TIMEOUT_MS = Number(process.env.VERITY_TX_TIMEOUT_MS ?? 15_000);
+const TRANSACTION_TIMEOUT_MS = runtimeConfig.database.txTimeoutMs;
 
 /** How long to wait for a free pooled connection before giving up. */
-const TRANSACTION_MAX_WAIT_MS = Number(process.env.VERITY_TX_MAX_WAIT_MS ?? 5_000);
+const TRANSACTION_MAX_WAIT_MS = runtimeConfig.database.txMaxWaitMs;
 
 /**
  * One-shot RLS guard for the runtime connection.
