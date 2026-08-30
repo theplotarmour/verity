@@ -1,9 +1,16 @@
 import "server-only";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
-import { SignJWT, jwtVerify } from "jose";
+import { SignJWT, createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
 import { prisma } from "./db";
 import { runtimeConfig } from "./config";
+import {
+  OidcConfigurationError,
+  type OidcSettings,
+  bearerToken,
+  discoverJwksUri,
+  verifyIdToken,
+} from "./oidc";
 import type { AuthProvider, Principal } from "./authProvider";
 import type { ActorContext } from "./command";
 
@@ -70,10 +77,21 @@ function signingKey(): Uint8Array {
  * should require a code change here, not a rewrite of `AuthProvider`.
  */
 export async function createSupabaseServerClient() {
+  const { supabaseUrl, supabaseAnonKey } = runtimeConfig.auth;
+  if (!supabaseUrl || !supabaseAnonKey) {
+    // Reachable only on an OIDC deployment, where no Supabase project exists.
+    // Naming that is more useful than constructing a client against undefined
+    // and failing later inside the SDK.
+    throw new Error(
+      "E_AUTH_PROVIDER: Supabase is not configured on this deployment " +
+        `(VERITY_AUTH_PROVIDER=${runtimeConfig.auth.provider})`,
+    );
+  }
+
   const store = await cookies();
   return createServerClient(
-    runtimeConfig.auth.supabaseUrl,
-    runtimeConfig.auth.supabaseAnonKey,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll: () => store.getAll(),
@@ -108,7 +126,105 @@ class SupabaseAuthProvider implements AuthProvider {
   }
 }
 
-const authProvider: AuthProvider = new SupabaseAuthProvider();
+/**
+ * The OIDC cookie name. Holds the identity provider's signed id token.
+ *
+ * It is verified on every request exactly as a bearer header is: nothing
+ * trusts the cookie's presence, only its verified content. It is therefore
+ * not a session of ours — it is the provider's assertion, carried.
+ */
+const OIDC_TOKEN_COOKIE = "verity_oidc_id_token";
+
+/**
+ * An external OpenID Connect identity provider as an `AuthProvider`
+ * (Task 36, taskplans/36_enterprise_identity_oidc.md).
+ *
+ * The counterpart to `SupabaseAuthProvider` above. All the verification rules
+ * live in `platform/oidc.ts`, which is pure and testable without a live IdP;
+ * this class is only the request-shaped half — where the token is read from,
+ * and how the key set is fetched and cached.
+ *
+ * THE MAPPING IS THE BOUNDARY, AGAIN
+ * `verifyIdToken` returns `Principal`. Every other claim the enterprise IdP
+ * cares to send — groups, roles, tenant hints, employee numbers — stops here.
+ * In particular a tenant claim would be ignored even if present: PLA-TEN-006
+ * derives the tenant from a verified membership, and an identity provider is
+ * exactly the party that would otherwise be tempted to assert one.
+ *
+ * UNKNOWN USERS
+ * A verified principal whose `id` matches no `User.authUserId` produces zero
+ * memberships in `listMemberships()`, therefore no actor. Verity never
+ * auto-provisions from a token: that would let anyone in the provider's realm
+ * create identity inside a tenant, and `provisionIdentity()` (ADR-007) is the
+ * only creation path. This fails closed by construction, not by a check that
+ * could be forgotten.
+ */
+class OidcAuthProvider implements AuthProvider {
+  readonly name = "oidc";
+  /** Resolved once per process; `createRemoteJWKSet` caches and rotates keys. */
+  private keys: JWTVerifyGetKey | null = null;
+
+  constructor(private readonly settings: OidcSettings) {}
+
+  private async keySet(): Promise<JWTVerifyGetKey> {
+    if (this.keys) return this.keys;
+    const uri = this.settings.jwksUri ?? (await discoverJwksUri(this.settings.issuer));
+    this.keys = createRemoteJWKSet(new URL(uri));
+    return this.keys;
+  }
+
+  /** Bearer header first (machines and APIs), then the browser session cookie. */
+  private async readToken(): Promise<string | null> {
+    const header = bearerToken((await headers()).get("authorization"));
+    if (header) return header;
+    return (await cookies()).get(OIDC_TOKEN_COOKIE)?.value ?? null;
+  }
+
+  async getPrincipal(): Promise<Principal | null> {
+    const token = await this.readToken();
+    if (!token) return null;
+
+    try {
+      return await verifyIdToken(token, this.settings, await this.keySet());
+    } catch (error) {
+      // A rejected token is an unauthenticated request, not a server error: the
+      // caller gets the same "no principal" a missing token gets, so a probe
+      // cannot tell a bad signature from an absent one. A configuration fault
+      // is different — that is the operator's problem and must be visible.
+      if (error instanceof OidcConfigurationError) throw error;
+      return null;
+    }
+  }
+}
+
+/**
+ * The active provider, selected once from validated configuration.
+ *
+ * One provider per deployment, never null, never switched mid-process — the
+ * property `authProvider.ts` insisted on. What Task 36 changed is that the
+ * choice is a deployment fact rather than a compile-time one; see
+ * `config.ts`'s `auth.provider`.
+ */
+function selectAuthProvider(): AuthProvider {
+  if (runtimeConfig.auth.provider === "oidc") {
+    const oidc = runtimeConfig.auth.oidc;
+    if (!oidc) {
+      // Unreachable through `runtimeConfig` (the schema refuses this
+      // combination at boot); kept so the invariant is enforced here too
+      // rather than assumed from a distance.
+      throw new OidcConfigurationError("VERITY_AUTH_PROVIDER=oidc with no OIDC settings");
+    }
+    return new OidcAuthProvider(oidc);
+  }
+  return new SupabaseAuthProvider();
+}
+
+const authProvider: AuthProvider = selectAuthProvider();
+
+/** The name of the active provider. Diagnostics only — never an authorization input. */
+export function activeAuthProviderName(): string {
+  return authProvider.name;
+}
 
 /** The authenticated principal for the current request, or null. */
 export async function getAuthUser(): Promise<Principal | null> {

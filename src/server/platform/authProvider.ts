@@ -15,15 +15,20 @@
  * it possible to write a second `AuthProvider` (an OIDC one, say) without
  * touching `ActorContext`, `resolveActor()`, authorization, or any capability.
  *
- * No registry: today there is exactly one provider, chosen at compile time
- * (`SupabaseAuthProvider` in `auth.ts`), not switched at runtime — unlike
- * storage, where "no backend configured" is a real, valid deployment state.
- * Authentication is not optional the same way, so a pluggable registry with
- * a possibly-null active provider would model a state that cannot occur.
- * Swapping providers is a code change (implement `AuthProvider`, change the
- * one call site that constructs the active one), not a configuration one —
- * which is exactly the architectural compatibility this task asks for, not
- * immediate runtime provider selection.
+ * No registry: there is exactly one *active* provider per deployment, and it
+ * is never null — unlike storage, where "no backend configured" is a real,
+ * valid deployment state. Authentication is not optional the same way, so a
+ * pluggable registry with a possibly-null active provider would model a state
+ * that cannot occur.
+ *
+ * Task 36 (taskplans/36_enterprise_identity_oidc.md) added a second provider,
+ * `OidcAuthProvider`, and moved the choice between them from compile time to
+ * `runtimeConfig.auth.provider` — because an enterprise installing Verity
+ * behind its own identity provider cannot be asked to recompile. That is
+ * provider *selection*, not a plugin system: the set of providers is closed
+ * and lives in this repository, one is selected once at process start from
+ * validated configuration, and this contract did not have to widen by a
+ * single field to accommodate the second one.
  */
 
 export type Principal = {

@@ -336,7 +336,11 @@ describe("conformance: over-genericity (Phase G)", () => {
     // contract; auth.ts is its Supabase implementation, same reasoning.
     // 27: job.ts (Task 29) — the neutral background-job contract; not
     // capability logic, so it belongs here rather than in a capability.
-    expect(platformModules.length).toBeLessThanOrEqual(27);
+    // 28: oidc.ts (Task 36) — pure OIDC token verification and claim
+    // normalization. It is the identity boundary, which is platform by
+    // definition: no capability may decide who the actor is. Kept separate
+    // from auth.ts so the rules are provable without Next or a live provider.
+    expect(platformModules.length).toBeLessThanOrEqual(28);
   });
 });
 

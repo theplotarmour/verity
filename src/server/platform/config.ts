@@ -48,13 +48,73 @@ const configSchema = z.object({
     txMaxWaitMs: z.coerce.number().positive().default(5_000),
   }),
 
-  auth: z.object({
-    supabaseUrl: z.string().min(1, "NEXT_PUBLIC_SUPABASE_URL is required"),
-    supabaseAnonKey: z.string().min(1, "NEXT_PUBLIC_SUPABASE_ANON_KEY is required"),
-    /** Falls back to the anon key when unset — the exact fallback auth.ts
-     *  already performed inline; centralized here so it happens once. */
-    jwtSecret: z.string().min(1),
-  }),
+  auth: z
+    .object({
+      /**
+       * Which authentication provider this deployment runs (Task 36).
+       *
+       * `authProvider.ts` argued against a runtime registry when there was one
+       * provider. Both halves of that argument still hold — there is still
+       * exactly one *active* provider per deployment and it is still never
+       * null — but the choice is now a deployment fact rather than a
+       * compile-time one, because an enterprise installing Verity behind its
+       * own IdP cannot be asked to recompile. The set of providers is closed
+       * and lives in this repository; this is provider selection, not a plugin
+       * system.
+       */
+      provider: z.enum(["supabase", "oidc"]).default("supabase"),
+
+      /** Required when `provider` is `supabase`; absent on an OIDC deployment. */
+      supabaseUrl: z.string().optional(),
+      supabaseAnonKey: z.string().optional(),
+
+      /**
+       * Signs the active-membership cookie (`auth.ts`). Sourced from
+       * SUPABASE_JWT_SECRET, else VERITY_SESSION_SECRET, else the anon key —
+       * the last being the fallback auth.ts already performed inline. An
+       * OIDC-only deployment has no anon key, so one of the first two must be
+       * set there, and an empty string reaches the `min(1)` below rather than
+       * silently signing with nothing.
+       */
+      jwtSecret: z.string().min(1, "SUPABASE_JWT_SECRET or VERITY_SESSION_SECRET is required"),
+
+      /** Required when `provider` is `oidc`. See platform/oidc.ts. */
+      oidc: z
+        .object({
+          issuer: z.string().min(1),
+          clientId: z.string().min(1),
+          /** Defaults to the client id at the point of verification. */
+          audience: z.string().optional(),
+          /** Discovered from the issuer when unset. */
+          jwksUri: z.string().optional(),
+          principalClaim: z.string().min(1).default("sub"),
+          emailClaim: z.string().min(1).default("email"),
+          clockToleranceSeconds: z.coerce.number().nonnegative().default(60),
+        })
+        .optional(),
+    })
+    .superRefine((auth, ctx) => {
+      // Per-provider validation rather than one union of required variables:
+      // an OIDC deployment must boot with no Supabase project in existence,
+      // and a Supabase deployment must not be asked for an issuer. Requiring
+      // both would make the boundary a fiction.
+      if (auth.provider === "supabase") {
+        if (!auth.supabaseUrl) {
+          ctx.addIssue({ code: "custom", message: "NEXT_PUBLIC_SUPABASE_URL is required" });
+        }
+        if (!auth.supabaseAnonKey) {
+          ctx.addIssue({ code: "custom", message: "NEXT_PUBLIC_SUPABASE_ANON_KEY is required" });
+        }
+      }
+
+      if (auth.provider === "oidc" && !auth.oidc) {
+        ctx.addIssue({
+          code: "custom",
+          message:
+            "VERITY_OIDC_ISSUER and VERITY_OIDC_CLIENT_ID are required when VERITY_AUTH_PROVIDER=oidc",
+        });
+      }
+    }),
 
   storage: z.object({
     /** Supabase Storage is optional: a deployment that never touches a file
@@ -78,9 +138,28 @@ function loadConfig(): RuntimeConfig {
       txMaxWaitMs: process.env.VERITY_TX_MAX_WAIT_MS,
     },
     auth: {
+      provider: process.env.VERITY_AUTH_PROVIDER,
       supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
       supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-      jwtSecret: process.env.SUPABASE_JWT_SECRET ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      jwtSecret:
+        process.env.SUPABASE_JWT_SECRET ??
+        process.env.VERITY_SESSION_SECRET ??
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+        "",
+      // Passed as undefined rather than a half-filled object when the issuer is
+      // absent, so `provider=oidc` with nothing configured reports the missing
+      // variables by name instead of failing on a nested field.
+      oidc: process.env.VERITY_OIDC_ISSUER
+        ? {
+            issuer: process.env.VERITY_OIDC_ISSUER,
+            clientId: process.env.VERITY_OIDC_CLIENT_ID,
+            audience: process.env.VERITY_OIDC_AUDIENCE,
+            jwksUri: process.env.VERITY_OIDC_JWKS_URI,
+            principalClaim: process.env.VERITY_OIDC_PRINCIPAL_CLAIM,
+            emailClaim: process.env.VERITY_OIDC_EMAIL_CLAIM,
+            clockToleranceSeconds: process.env.VERITY_OIDC_CLOCK_TOLERANCE_SECONDS,
+          }
+        : undefined,
     },
     storage: {
       supabaseUrl: process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL,
