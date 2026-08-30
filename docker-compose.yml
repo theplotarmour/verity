@@ -1,0 +1,92 @@
+# Verity — minimal reference deployment (Task 30).
+#
+# Two services: the application and PostgreSQL. Nothing else — Task 27
+# already isolated storage behind a provider-neutral boundary (Supabase
+# Storage remains the bound provider; this Compose file does not add MinIO
+# or any other backend), Task 28 did the same for auth (Supabase Auth
+# remains active; no Keycloak here), and Task 29 explicitly concluded no
+# queue/worker infrastructure is justified by current requirements. Adding
+# any of them here would be exactly the "researched, so adopt it" mistake
+# those tasks' own briefs warned against.
+#
+# `docker compose up` starts Verity and a local Postgres. It does NOT run
+# migrations (see taskplans/30_containerized_runtime.md's "Database /
+# migration model") — that stays an explicit, operator-run step, deferred to
+# Task 31 for a real bootstrap design.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      # The initdb superuser — used ONLY for migrations and role bootstrap,
+      # never by the running application. Change POSTGRES_PASSWORD for
+      # anything beyond a local reference deployment.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:-postgres}
+      POSTGRES_DB: verity
+      # Consumed by deploy/db/init/01-create-app-role.sh on first startup
+      # (init scripts run once, against an empty data volume) to create the
+      # runtime role. MUST be NOSUPERUSER NOBYPASSRLS — see CLAUDE.md and
+      # src/server/platform/tenancy.ts's assertRlsEnforceable(): a
+      # superuser/bypassrls connection silently defeats every RLS policy
+      # while every test still passes, which is exactly the failure mode
+      # this project has already been burned by once (Supabase's own
+      # default `postgres` role has rolbypassrls = true).
+      VERITY_APP_PASSWORD: ${VERITY_APP_PASSWORD:-verity_app_dev_password}
+    volumes:
+      - verity-db-data:/var/lib/postgresql/data
+      - ./deploy/db/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      # Bound to localhost only — "do not expose PostgreSQL publicly by
+      # default." Omit this mapping entirely for anything beyond local
+      # development; the `web` service reaches `db` over the compose
+      # network regardless.
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d verity"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      args:
+        # Real values required — see Dockerfile's own comment on why these
+        # two, and only these two, are build-time. Compose does not read
+        # your shell env into build args automatically; export them or set
+        # them in a `.env` file next to this compose file (Compose's own
+        # `.env`, not the application's — see the taskplan for the
+        # distinction) before running `docker compose build`.
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      # Runtime configuration (Task 26's RuntimeConfig) — read fresh by the
+      # server process, never baked into the image. `verity_app`, not
+      # `postgres`: the running application must never hold a
+      # superuser/bypassrls connection (see the `db` service's comment).
+      # Port 5432, not a pooler — this reference deployment has no pooler;
+      # `withTenant`'s session-pinned interactive transaction works
+      # directly against Postgres here.
+      DATABASE_URL: postgresql://verity_app:${VERITY_APP_PASSWORD:-verity_app_dev_password}@db:5432/verity
+      DIRECT_URL: postgresql://postgres:${POSTGRES_SUPERUSER_PASSWORD:-postgres}@db:5432/verity
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      # Everything below is genuinely optional — see .env.example. Storage
+      # (Task 27) and the scheduled-work trigger both refuse cleanly with no
+      # value rather than needing one to boot.
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_MEDIA_BUCKET: ${SUPABASE_MEDIA_BUCKET:-}
+      CRON_SECRET: ${CRON_SECRET:-}
+
+volumes:
+  verity-db-data:

@@ -1,0 +1,5 @@
+# Scripts that run inside a Linux container must not be checked out with
+# CRLF line endings (Task 30) — a CRLF shebang line breaks with
+# "/bin/sh^M: bad interpreter". Scoped narrowly to the files that actually
+# execute inside a container; not a repo-wide line-ending policy change.
+*.sh text eol=lf

@@ -1,0 +1,22 @@
+# Never send real credentials into the build context.
+.env
+.env.local
+.env*.local
+.vercel
+
+node_modules
+.next
+.git
+
+# Test/dev-only, not needed to build or run the image.
+taskplans
+docs
+*.md
+temporary screenshots
+e2e
+playwright-report
+test-results
+coverage
+
+npm-debug.log*
+.DS_Store

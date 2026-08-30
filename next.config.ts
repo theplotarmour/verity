@@ -4,6 +4,19 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   turbopack: {},
+  // Task 30 (containerized runtime): a standalone server.js plus a traced,
+  // minimal node_modules subset — the officially documented shape for
+  // running Next.js outside Vercel without copying the full node_modules
+  // tree into the runtime image.
+  output: 'standalone',
+  // Prisma's generated client ships a native query-engine binary that Next's
+  // dependency tracer does not always follow (it is loaded dynamically, not
+  // `require()`d statically) — without this, `.next/standalone` builds but
+  // throws "Cannot find module '.prisma/client/...'" at runtime. This is the
+  // documented fix, not a workaround specific to this repo.
+  outputFileTracingIncludes: {
+    '*': ['node_modules/.prisma/client/**/*'],
+  },
   images: {
     remotePatterns: [
       {

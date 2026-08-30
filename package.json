@@ -19,7 +19,11 @@
     "db:migrate": "prisma migrate dev",
     "deploy:preview": "vercel deploy --yes",
     "env:pull:preview": "vercel env pull .vercel/env.preview.local --environment=preview --yes",
-    "build:analyze": "ANALYZE=true next build --webpack"
+    "build:analyze": "ANALYZE=true next build --webpack",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f web"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1079.0",
