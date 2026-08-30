@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 import { SignJWT, jwtVerify } from "jose";
 import { prisma } from "./db";
 import { runtimeConfig } from "./config";
+import type { AuthProvider, Principal } from "./authProvider";
 import type { ActorContext } from "./command";
 
 /**
@@ -23,6 +24,15 @@ import type { ActorContext } from "./command";
  * to be only through a verified Supabase session, and may never tell us which
  * tenant it wants. The tenant is derived from the membership, and the membership
  * is verified against the database on every resolution.
+ *
+ * PROVIDER BOUNDARY (Task 28, taskplans/28_auth_provider_abstraction.md)
+ * This file IS the Supabase adapter — the counterpart to
+ * `server/storage/supabase.ts` for Task 27's storage boundary. `getAuthUser()`
+ * returns `Principal` (`authProvider.ts`), never Supabase's `User` type,
+ * so `resolveActor()`, `ActorContext`, `operator.ts`, and every layout that
+ * reads `authUser.email` already depend only on the neutral contract. A
+ * future `OIDCAuthProvider` implementing the same `AuthProvider` interface
+ * needs no change downstream of `getAuthUser()`.
  */
 
 const ACTIVE_MEMBERSHIP_COOKIE = "verity_active_membership";
@@ -48,6 +58,17 @@ function signingKey(): Uint8Array {
   return new TextEncoder().encode(runtimeConfig.auth.jwtSecret);
 }
 
+/**
+ * Constructs a Supabase SSR client bound to the current request's cookies.
+ *
+ * Exported for `signInWithPassword`/`signOut` (`server/actions/platform.ts`),
+ * which are genuinely Supabase-specific operations — a future OIDC provider
+ * authenticates by redirect, not a password grant, so there is no shared
+ * "credential sign-in" method on `AuthProvider` for those to implement
+ * against. They stay explicit Supabase glue, not part of the neutral
+ * contract, exactly as `authProvider.ts`'s own comment says a provider swap
+ * should require a code change here, not a rewrite of `AuthProvider`.
+ */
 export async function createSupabaseServerClient() {
   const store = await cookies();
   return createServerClient(
@@ -69,13 +90,29 @@ export async function createSupabaseServerClient() {
   );
 }
 
-/** The authenticated Supabase user, or null. */
-export async function getAuthUser() {
-  const supabase = await createSupabaseServerClient();
-  // getUser() re-validates with the auth server; getSession() trusts the cookie.
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) return null;
-  return data.user;
+/**
+ * The active `AuthProvider`. Supabase Auth today; see `authProvider.ts` for
+ * why this is a fixed singleton rather than a runtime-selected registry.
+ */
+class SupabaseAuthProvider implements AuthProvider {
+  readonly name = "supabase";
+
+  async getPrincipal(): Promise<Principal | null> {
+    const supabase = await createSupabaseServerClient();
+    // getUser() re-validates with the auth server; getSession() trusts the cookie.
+    const { data, error } = await supabase.auth.getUser();
+    if (error || !data.user) return null;
+    // The mapping IS the boundary: everything Supabase's User carries beyond
+    // an id and an email (aud, app_metadata, user_metadata, ...) stops here.
+    return { id: data.user.id, email: data.user.email ?? null };
+  }
+}
+
+const authProvider: AuthProvider = new SupabaseAuthProvider();
+
+/** The authenticated principal for the current request, or null. */
+export async function getAuthUser(): Promise<Principal | null> {
+  return authProvider.getPrincipal();
 }
 
 export async function setActiveMembership(membershipId: string): Promise<void> {

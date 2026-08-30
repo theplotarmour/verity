@@ -332,7 +332,9 @@ describe("conformance: over-genericity (Phase G)", () => {
     const platformModules = sourceFiles(join(ROOT, "src/server/platform"));
     // 25: config.ts (Task 26) — a deployment-configuration boundary, not
     // capability logic, so it belongs here rather than in a capability.
-    expect(platformModules.length).toBeLessThanOrEqual(25);
+    // 26: authProvider.ts (Task 28) — the neutral Principal/AuthProvider
+    // contract; auth.ts is its Supabase implementation, same reasoning.
+    expect(platformModules.length).toBeLessThanOrEqual(26);
   });
 });
 
