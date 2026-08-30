@@ -3,6 +3,7 @@ import { registerContribution } from "@/server/platform/contribution";
 import { registerCommand, ValidationError, type CommandDefinition } from "@/server/platform/command";
 import { registerBusinessIdentity } from "./business";
 import { registerTax } from "./tax";
+import { registerPeriods } from "./period";
 import { goodsReceiptDetail, purchaseMatch, raiseInvoiceNote } from "./finance";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import { diffFields, recordActivity } from "@/server/platform/audit";
@@ -10,6 +11,7 @@ import { notify } from "@/server/platform/notification";
 import { withTenant, type TenantScopedClient } from "@/server/platform/tenancy";
 import {
   ENTITY_BRAND,
+  ENTITY_ACCOUNTING_PERIOD,
   ENTITY_BUSINESS_PROFILE,
   ENTITY_GODOWN_RACK,
   ENTITY_PRODUCT,
@@ -102,6 +104,7 @@ import {
 export * from "./keys";
 export * from "./business";
 export * from "./tax";
+export * from "./period";
 export * from "./stock";
 export * from "./trading";
 export * from "./finance";
@@ -617,6 +620,28 @@ export function registerPlywoodCapability(): void {
         shells: ["platform"],
       },
 
+      {
+        href: "/tax/close",
+        label: "Tax & Compliance",
+        group: "Money",
+        order: 44,
+        icon: "audit",
+        requiresEntity: ENTITY_ACCOUNTING_PERIOD,
+        requiresVerb: "Read",
+        shells: ["platform"],
+      },
+
+      /* ---- INSIGHTS ---- */
+      {
+        href: "/reports",
+        label: "Reports",
+        group: "Insights",
+        order: 50,
+        icon: "audit",
+        requiresEntity: ENTITY_INVOICE,
+        shells: ["platform"],
+      },
+
       /* ---- ADMINISTRATION ---- */
       {
         href: "/settings/business",
@@ -718,6 +743,7 @@ export function registerPlywoodCapability(): void {
 
   registerBusinessIdentity();
   registerTax();
+  registerPeriods();
   registerCommand(createBrand);
   registerCommand(setBrandActive);
   registerCommand(createProduct);

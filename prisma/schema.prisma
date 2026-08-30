@@ -117,6 +117,7 @@ model Tenant {
   plywoodSalesOrderLines    PlywoodSalesOrderLine[]
   plywoodStockReservations  PlywoodStockReservation[]
   plywoodInvoiceSeries      PlywoodInvoiceSeries[]
+  plywoodAccountingPeriods  PlywoodAccountingPeriod[]
   plywoodTaxRules           PlywoodTaxRule[]
   plywoodInvoiceNotes       PlywoodInvoiceNote[]
   plywoodGoodsIssues        PlywoodGoodsIssue[]
@@ -2896,6 +2897,49 @@ model PlywoodPayment {
 /// A balance is the sum of these (P3). There is no cached total anywhere, and no
 /// running balance on the row: both would be a second source of truth that can
 /// disagree with the first.
+/// An accounting period, and whether it is still open to posting.
+///
+/// Authority: taskplans/45_plywood_workflow_program.md §5, §8;
+/// PLYWOOD_TARGET_WORKFLOW_GAP_AUDIT.md P0-08; specification §76, §77.
+///
+/// Without this, backdated stock, invoices, payments and corrections can alter
+/// a month that has already been reviewed, reported and filed — and nothing
+/// records that they did. A close is the moment a business says "this is what
+/// happened", and it is only meaningful if the answer stops changing.
+model PlywoodAccountingPeriod {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+
+  /// "2026-08". A calendar month: the GST return period, which is what the
+  /// close is actually for.
+  periodKey String @map("period_key")
+
+  /// Inclusive start, exclusive end. Stored rather than derived from the key
+  /// so a query is a comparison instead of string arithmetic.
+  startsAt DateTime @map("starts_at")
+  endsAt   DateTime @map("ends_at")
+
+  /// `open` | `closed`. A period is created open on first posting into it.
+  state String @default("open")
+
+  closedAt   DateTime? @map("closed_at")
+  closedBy   String?   @map("closed_by") @db.Uuid
+  /// Why it was reopened, and by whom. Required by the command: reopening a
+  /// filed period without a stated reason is the audit finding.
+  reopenedAt     DateTime? @map("reopened_at")
+  reopenedBy     String?   @map("reopened_by") @db.Uuid
+  reopenedReason String?   @map("reopened_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, periodKey])
+  @@unique([tenantId, id], name: "plywood_accounting_period_tenant_scoped_id")
+  @@index([tenantId, state])
+  @@map("plywood_accounting_period")
+}
+
 /// The tax that applies to an HSN code, under one registration, from a date.
 ///
 /// Authority: taskplans/45_plywood_workflow_program.md §4.4 and §D-03;

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { sellerIdentity } from "./business";
 import { resolveTaxRate } from "./tax";
+import { assertPeriodOpen } from "./period";
 import { ValidationError, type CommandDefinition } from "@/server/platform/command";
 import { type QueryDefinition } from "@/server/platform/query";
 import { resolveConfig } from "@/server/platform/capability";
@@ -285,6 +286,9 @@ export const raiseSalesInvoice: CommandDefinition<
     // resolved AS AT this instant — the whole point of an effective-dated rule.
     const issuedAt = new Date();
 
+    // Slice 7 (P0-08): nothing is posted into a period that has been reported.
+    await assertPeriodOpen(ctx.tx, issuedAt);
+
     // THE RATE COMES FROM AN EFFECTIVE-DATED RULE (slice 6, P0-07).
     //
     // Resolved for the HSN on the line, under this registration, on the day of
@@ -489,6 +493,7 @@ export const raisePurchaseInvoice: CommandDefinition<
       (await resolveConfig<string>(ctx.tx, CONFIG_TENANT_STATE_CODE)) ?? "00";
 
     const issuedAt = new Date();
+    await assertPeriodOpen(ctx.tx, issuedAt);
     const financialYear = financialYearOf(issuedAt);
     const numbering = await nextInvoiceNumber(
       ctx.tx,
@@ -1265,6 +1270,7 @@ export const raiseInvoiceNote: CommandDefinition<
     const totalPaise = input.taxablePaise + cgstPaise + sgstPaise + igstPaise;
 
     const issuedAt = new Date();
+    await assertPeriodOpen(ctx.tx, issuedAt);
     const financialYear = financialYearOf(issuedAt);
     const seriesKey = input.noteType === "credit" ? "CN" : "DN";
     const numbering = await nextDocumentNumber(ctx.tx, ctx.actor.tenantId, seriesKey, financialYear);

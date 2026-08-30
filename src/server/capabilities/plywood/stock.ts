@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { reachableGodownIds } from "./scope";
+import { assertPeriodOpen } from "./period";
 import { ValidationError, type CommandDefinition } from "@/server/platform/command";
 import { type QueryDefinition } from "@/server/platform/query";
 import { diffFields, recordActivity } from "@/server/platform/audit";
@@ -90,6 +91,11 @@ export async function applyMovement(
     source?: { type: string; id: string; number?: string | null } | null;
   },
 ): Promise<{ ledgerId: string; unitCostPaise: number; onHandUnits: number }> {
+  // Slice 7 (P0-08). Every stock movement is a dated fact and a closed period
+  // must not gain one — a backdated receipt after a close changes an inventory
+  // valuation that has already been reported.
+  await assertPeriodOpen(tx, new Date());
+
   const inward = (INWARD_KINDS as readonly string[]).includes(movement.kind);
   const delta = inward ? movement.qtyUnits : -movement.qtyUnits;
 

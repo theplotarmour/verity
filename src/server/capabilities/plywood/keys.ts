@@ -50,6 +50,9 @@ export const ENTITY_RESERVATION = "verity.plywood.reservation";
 export const ENTITY_BUSINESS_PROFILE = "verity.plywood.business_profile";
 export const ENTITY_GST_REGISTRATION = "verity.plywood.gst_registration";
 
+/* Slice 7 — the accounting period and its posting lock. */
+export const ENTITY_ACCOUNTING_PERIOD = "verity.plywood.accounting_period";
+
 /* Stage 6 — finance. */
 export const ENTITY_INVOICE = "verity.plywood.invoice";
 export const ENTITY_PAYMENT = "verity.plywood.payment";
