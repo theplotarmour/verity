@@ -1,0 +1,169 @@
+# Verity — Enterprise Deployment Package (Task 42).
+#
+# Authority: taskplans/42_deployment_hardening.md.
+#
+# The difference between this file and the repository-root docker-compose.yml
+# is that this one is written to be handed to a customer. The root file is a
+# developer convenience and defaults its passwords; this one refuses to start
+# without real ones, publishes no database port, pins the database session
+# timezone, bounds its logs, and drops every capability it does not need.
+#
+# Usage is always through deploy/scripts/*.sh, which set the project name and
+# the env file consistently. Running `docker compose` here by hand will work,
+# but the scripts are what the runbooks document.
+
+name: verity
+
+x-hardening: &hardening
+  # A container that cannot gain privileges it was not started with. Cheap,
+  # unconditional, and it closes the whole setuid-escalation class.
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  restart: unless-stopped
+  # Bounded, or a long-running deployment fills its disk with JSON and the
+  # first symptom is the database refusing to write.
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  db:
+    <<: *hardening
+    image: postgres:16-alpine
+    # Postgres needs to chown its data directory and bind a port below the
+    # container's own restrictions; these two are the minimum it actually uses.
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+      - FOWNER
+    environment:
+      POSTGRES_USER: postgres
+      # No default. The root compose file defaults this to "postgres", which is
+      # a developer convenience and a catastrophe if it reaches a customer's
+      # server unchanged. `${VAR:?message}` fails the command with that message
+      # rather than starting something insecure.
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?set POSTGRES_SUPERUSER_PASSWORD in the env file (deploy/scripts/install.sh generates one)}
+      POSTGRES_DB: ${POSTGRES_DB:-verity}
+      VERITY_APP_PASSWORD: ${VERITY_APP_PASSWORD:?set VERITY_APP_PASSWORD in the env file (deploy/scripts/install.sh generates one)}
+      # THE FINDING FROM TASK 36, PINNED.
+      #
+      # Three availability tests fail against a PostgreSQL whose session
+      # timezone is not UTC. They passed on a UTC hosted database and failed on
+      # a locally provisioned IST cluster. `temporal.ts` says instants are UTC;
+      # nothing had ever told the database. A customer installing on an IST or
+      # PST host would get subtly wrong availability and SLA behaviour with
+      # every test in their CI still green.
+      TZ: UTC
+      PGTZ: UTC
+    command:
+      - postgres
+      - -c
+      - timezone=UTC
+      # Log a statement that takes longer than a second. Not a profiler — the
+      # cheapest possible answer to "the application feels slow".
+      - -c
+      - log_min_duration_statement=1000
+    volumes:
+      - verity-db-data:/var/lib/postgresql/data
+      - ../db/init:/docker-entrypoint-initdb.d:ro
+    # NO PORTS. The database is reachable only over the compose network. An
+    # operator who wants psql forwards a port deliberately, for as long as they
+    # need it:  docker compose exec db psql -U postgres verity
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${POSTGRES_DB:-verity}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  web:
+    <<: *hardening
+    image: ${VERITY_IMAGE:-verity:local}
+    build:
+      context: ../..
+      args:
+        # Inlined into the browser bundle by `next build` — there is no runtime
+        # for them. Neither is a secret; the anon key is protected by RLS, not
+        # by secrecy. Empty on an OIDC-only deployment.
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # The only published port. Put a TLS-terminating reverse proxy in front
+      # of it: this image speaks HTTP, and terminating TLS inside the
+      # application would put certificate rotation on the deployment's critical
+      # path for no gain.
+      - "${VERITY_BIND_ADDRESS:-127.0.0.1}:${VERITY_PORT:-3000}:3000"
+    environment:
+      # Runtime configuration (Task 26). verity_app, never postgres: the
+      # application must never hold a BYPASSRLS connection, or INV-001 is
+      # unenforced while every policy still exists and every test still passes.
+      DATABASE_URL: postgresql://verity_app:${VERITY_APP_PASSWORD}@db:5432/${POSTGRES_DB:-verity}
+      DIRECT_URL: postgresql://postgres:${POSTGRES_SUPERUSER_PASSWORD}@db:5432/${POSTGRES_DB:-verity}
+      TZ: UTC
+
+      # Identity (Task 36). supabase | oidc.
+      VERITY_AUTH_PROVIDER: ${VERITY_AUTH_PROVIDER:-supabase}
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
+      VERITY_SESSION_SECRET: ${VERITY_SESSION_SECRET:-}
+      VERITY_OIDC_ISSUER: ${VERITY_OIDC_ISSUER:-}
+      VERITY_OIDC_CLIENT_ID: ${VERITY_OIDC_CLIENT_ID:-}
+      VERITY_OIDC_AUDIENCE: ${VERITY_OIDC_AUDIENCE:-}
+      VERITY_OIDC_JWKS_URI: ${VERITY_OIDC_JWKS_URI:-}
+      VERITY_OIDC_PRINCIPAL_CLAIM: ${VERITY_OIDC_PRINCIPAL_CLAIM:-}
+      VERITY_OIDC_EMAIL_CLAIM: ${VERITY_OIDC_EMAIL_CLAIM:-}
+
+      # Storage (Task 41). supabase | s3. The S3 variables reach AWS, MinIO,
+      # Ceph, Wasabi or SeaweedFS's S3 gateway without a code change.
+      VERITY_STORAGE_DRIVER: ${VERITY_STORAGE_DRIVER:-supabase}
+      VERITY_S3_BUCKET: ${VERITY_S3_BUCKET:-}
+      VERITY_S3_REGION: ${VERITY_S3_REGION:-}
+      VERITY_S3_ENDPOINT: ${VERITY_S3_ENDPOINT:-}
+      VERITY_S3_ACCESS_KEY_ID: ${VERITY_S3_ACCESS_KEY_ID:-}
+      VERITY_S3_SECRET_ACCESS_KEY: ${VERITY_S3_SECRET_ACCESS_KEY:-}
+      VERITY_S3_FORCE_PATH_STYLE: ${VERITY_S3_FORCE_PATH_STYLE:-}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_MEDIA_BUCKET: ${SUPABASE_MEDIA_BUCKET:-}
+
+      # Observability (Task 40). Build identity is what answers "which
+      # deployment is affected"; two deployments of one version are common.
+      VERITY_SERVICE_NAME: ${VERITY_SERVICE_NAME:-verity}
+      VERITY_VERSION: ${VERITY_VERSION:-0.0.0-dev}
+      VERITY_COMMIT: ${VERITY_COMMIT:-}
+      VERITY_ENVIRONMENT: ${VERITY_ENVIRONMENT:-production}
+
+      # Scheduler (ADR-015) and the metrics endpoint's gate (Task 40). Unset
+      # means nothing runs on a schedule and /api/metrics returns 503 rather
+      # than opening up.
+      CRON_SECRET: ${CRON_SECRET:-}
+    healthcheck:
+      # /api/ready, not /api/health. A healthcheck exists to catch exactly the
+      # case /api/health deliberately does not — a reachable process whose
+      # database is gone.
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # Long enough to drain an in-flight request, short enough that a stuck
+    # process does not hold a deploy open. Next's standalone server registers
+    # its own SIGTERM handler and closes the HTTP server gracefully.
+    stop_grace_period: 30s
+
+volumes:
+  verity-db-data:

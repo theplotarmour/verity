@@ -74,3 +74,8 @@ tmp-010-envsync.mts
 tmp-010-run.mts
 tmp-010-smoke.mjs
 tmp-010-inspect.mts
+
+# Deployment package: generated credentials and dumps (Task 42).
+# The example template is committed; the filled-in file never is.
+deploy/config/verity.env
+deploy/backups/
