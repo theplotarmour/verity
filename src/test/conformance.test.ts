@@ -347,7 +347,11 @@ describe("conformance: over-genericity (Phase G)", () => {
     // exchanges with external systems. Platform because the *shape* of an
     // exchange (tenant, correlation, attempt policy, inbound trust) is a
     // platform rule; the transport lives in src/server/integrations/.
-    expect(platformModules.length).toBeLessThanOrEqual(30);
+    // 31: observability.ts (Task 40) — logging, metrics, errors and the
+    // ambient request context. Platform because correlation and redaction are
+    // platform rules; the destination (stdout, a collector, an APM) is a
+    // deployment decision and no vendor is bound here.
+    expect(platformModules.length).toBeLessThanOrEqual(31);
   });
 });
 

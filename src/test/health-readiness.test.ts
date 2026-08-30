@@ -62,7 +62,14 @@ describe("GET /api/ready — readiness", () => {
 
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({ status: "ready", checks: { db: "ok" } });
+    // Task 40 added build identity and the probe's own duration to this
+    // response: "which deployment is affected" and "is the database getting
+    // slower" are the questions an operator asks next, and readiness is the
+    // one probe already running on a schedule against the database.
+    expect(body).toMatchObject({ status: "ready", checks: { db: "ok" } });
+    expect(typeof body.durationMs).toBe("number");
+    expect(typeof body.version).toBe("string");
+    expect(typeof body.environment).toBe("string");
   });
 
   it("returns 503 with status not_ready when the database probe rejects", async () => {

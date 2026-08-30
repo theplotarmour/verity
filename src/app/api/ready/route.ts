@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/server/platform/db";
+import { buildIdentity, observeDuration } from "@/server/platform/observability";
 
 /**
  * Readiness — "this instance can serve traffic because its required
@@ -67,13 +68,34 @@ async function probeDatabase(): Promise<void> {
 }
 
 export async function GET() {
+  const startedAt = Date.now();
   try {
     await probeDatabase();
-    return NextResponse.json({ status: "ready", checks: { db: "ok" } });
+    const durationMs = Date.now() - startedAt;
+    // Recorded as an ordinary dependency measurement (Task 40): readiness is
+    // the one probe that runs on a schedule against the database, so it is
+    // also the cheapest continuous answer to "is the database getting slower".
+    observeDuration("dependency_duration_ms", durationMs, {
+      dependency: "database",
+      operation: "ready_probe",
+      outcome: "ok",
+    });
+    return NextResponse.json({
+      status: "ready",
+      checks: { db: "ok" },
+      durationMs,
+      ...buildIdentity(),
+    });
   } catch (error) {
+    const durationMs = Date.now() - startedAt;
+    observeDuration("dependency_duration_ms", durationMs, {
+      dependency: "database",
+      operation: "ready_probe",
+      outcome: "error",
+    });
     const detail = sanitize(error instanceof Error ? error.message : String(error));
     return NextResponse.json(
-      { status: "not_ready", checks: { db: "error", detail } },
+      { status: "not_ready", checks: { db: "error", detail }, durationMs, ...buildIdentity() },
       { status: 503 },
     );
   }

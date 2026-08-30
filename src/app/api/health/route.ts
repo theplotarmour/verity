@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { version } from "../../../../package.json";
+import { buildIdentity } from "@/server/platform/observability";
 
 /**
  * Liveness — "the process is alive and responding."
@@ -14,10 +14,14 @@ import { version } from "../../../../package.json";
  * conflating the two is exactly what turns a database blip into every
  * container being killed and restarted by an orchestrator that read the
  * wrong signal.
+ *
+ * Task 40 added build identity to the response. An operator asking "which
+ * deployment is affected" is asking a liveness-shaped question, and answering
+ * it here costs nothing: it is still a constant read, still no I/O.
  */
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  return NextResponse.json({ status: "ok", version });
+  return NextResponse.json({ status: "ok", ...buildIdentity() });
 }

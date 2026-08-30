@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { PermissionVerb } from "@prisma/client";
 import { enforcePolicy, type PolicyChannel } from "./policy";
+import { withRequestContext } from "./observability";
 import { capabilityForEntity, requireCapabilityActive } from "./capability";
 import { CustomFieldValidationError } from "./entity";
 import { withTenant, type TenantScopedClient } from "./tenancy";
@@ -173,7 +174,15 @@ export async function executeCommand<TInput, TResult>(
   // "what else happened in the request that changed this?" answerable.
   const correlationId = randomUUID();
 
-  const { result, events } = await withTenant(actor.tenantId, async (tx) => {
+  const { result, events } = await withRequestContext(
+    {
+      correlationId,
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      route: def.key,
+      channel,
+    },
+    () => withTenant(actor.tenantId, async (tx) => {
     const ctx: CommandContext = { actor, tx, correlationId, channel };
 
     await runHooks(def.key, "before_validate", ctx, rawInput);
@@ -233,8 +242,9 @@ export async function executeCommand<TInput, TResult>(
       });
     }
 
-    return { result: outcome.result, events: outcome.events ?? [], ctx };
-  });
+      return { result: outcome.result, events: outcome.events ?? [], ctx };
+    }),
+  );
 
   // after_save runs post-commit (PLA-EXT-004). A failure here cannot roll back a
   // committed transaction, so it is not wrapped in one — surfacing the error is
