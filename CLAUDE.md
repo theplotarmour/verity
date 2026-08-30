@@ -64,28 +64,27 @@ for one client must be reusable by the next.
 
 ## Authority order
 
-```
-Explicit Verity Decision / ADR  ->  Verity Bible (verity-bible/)
-    ->  Master Platform Specification (verity-spec/)
-    ->  Implementation Handoff (implementation/)
-    ->  Reference evidence  ->  Legacy VEDA code (lowest, forensic only)
-```
+All development and technical implementations must conform strictly to the V2 Active Authority baseline. Canonical V2 documents are currently maintained as single-file master documents under `taskplans/`. Do not assume a directory-based corpus exists.
+
+### 1. Active Canonical Documents
+*   **V2-ADRs**: [taskplans/17A_verity_architecture_decisions.md](file:///d:/Code/verity/taskplans/17A_verity_architecture_decisions.md) (V2-ADR-* series, why we chose it)
+*   **Verity Bible v2**: [taskplans/19_verity_bible_v2.md](file:///d:/Code/verity/taskplans/19_verity_bible_v2.md) (Product/architectural constitution)
+*   **Verity Spec v2**: [taskplans/20_verity_spec_v2.md](file:///d:/Code/verity/taskplans/20_verity_spec_v2.md) (Technical specification)
+*   **Combined Enterprise PRD**: [taskplans/18_combined_verity_prd.md](file:///d:/Code/verity/taskplans/18_combined_verity_prd.md) (Active product requirements)
+*   **Spec Consistency Audit**: [taskplans/22_spec_consistency_audit.md](file:///d:/Code/verity/taskplans/22_spec_consistency_audit.md) (Active verification gates)
+*   **Implementation Roadmap v2**: [taskplans/21_implementation_roadmap_v2.md](file:///d:/Code/verity/taskplans/21_implementation_roadmap_v2.md) (Sequenced milestone target roadmap)
+
+### 2. Historical Reference Documents
+*   `verity-bible/` and `verity-spec/` (Legacy v1, maintained for historical context only; DO NOT use for new architecture decisions)
+*   Legacy `ADR-001` through `ADR-016` (Historical only; do not confuse with V2-ADR-* namespace)
+
+### 3. Active Execution Documents
+*   Task plans under `taskplans/` describing active engineering workstreams (e.g. `taskplans/23_portable_runtime_v2.md`, `taskplans/27_storage_abstraction.md`).
 
 Conflict resolution: **Safety > Truth > Coherence > Usefulness > Simplicity > Flexibility > Polish**.
 
-Read before implementing: `implementation/00-build-charter/`, then
-`implementation/02-foundation-build-order/`, then the relevant `verity-spec/` section.
-Read `verity-spec/17_decisions/adr/` only for the subsystem you are touching.
-
-**Research evidence, not implementation authority** — do not read as normal context:
-`odoo-prd/`, and the Odoo / Frappe / Temporal / n8n / Keycloak / Cal.com reference material
-under `verity-bible/reference/`. Consult only for explicit provenance investigation, and say
-so when you do.
-
 Every concrete technology choice must cite its authority using one of:
-`Authority: Bible V[N], [section]` | `Authority: Bible Synthesis, ADOPTED/ADAPTED` |
-`Authority: Spec [REQ-ID]` | `Authority: DEC-[N]` | `Authority: EXISTING INFRASTRUCTURE` |
-`Authority: IMPLEMENTATION DECISION REQUIRED`.
+`Authority: V2-ADR-[N]` | `Authority: Bible V2 [section]` | `Authority: Spec V2 [REQ-ID]` | `Authority: EXISTING INFRASTRUCTURE` | `Authority: IMPLEMENTATION DECISION REQUIRED`.
 
 ## Experience System — approved visual direction (ADR-011)
 
