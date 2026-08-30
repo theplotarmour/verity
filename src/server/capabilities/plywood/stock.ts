@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { reachableGodownIds } from "./scope";
 import { ValidationError, type CommandDefinition } from "@/server/platform/command";
 import { type QueryDefinition } from "@/server/platform/query";
 import { diffFields, recordActivity } from "@/server/platform/audit";
@@ -440,9 +441,17 @@ export const stockOnHand: QueryDefinition<
     productId: z.string().uuid().optional(),
   }),
   handler: async (ctx, input) => {
+    // Layer 2 (P0-01). Without this a godown-scoped role reads every godown's
+    // stock, and the number it reads is the business's whole inventory.
+    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_STOCK_BALANCE);
     const balances = await ctx.tx.stockBalance.findMany({
       where: {
-        ...(input.locationId ? { locationId: input.locationId } : {}),
+        // An explicit locationId is intersected with the reachable set rather
+        // than replacing it, so asking for another branch's godown by id
+        // returns nothing instead of returning its stock.
+        locationId: input.locationId
+          ? { in: reachable.filter((id) => id === input.locationId) }
+          : { in: reachable },
         ...(input.productId ? { productId: input.productId } : {}),
       },
       include: {
@@ -496,10 +505,16 @@ export const lowStock: QueryDefinition<
     // Across every godown, not per godown: the buying decision is made for the
     // business, and a board short in Okhla but plentiful in Noida is a transfer,
     // not a purchase order.
+    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_STOCK_BALANCE);
     const products = await ctx.tx.plywoodProduct.findMany({
       // A service has no reorder level worth sweeping — it never holds stock.
       where: { active: true, reorderLevelUnits: { gt: 0 }, type: "PHYSICAL" },
-      include: { brand: { select: { name: true } }, balances: true },
+      include: {
+        brand: { select: { name: true } },
+        // Only the godowns this actor can see. A branch manager's reorder
+        // decision is about the stock they can actually sell.
+        balances: { where: { locationId: { in: reachable } } },
+      },
     });
 
     // Reserved stock is spoken for. Comparing on-hand against the reorder
@@ -511,7 +526,7 @@ export const lowStock: QueryDefinition<
     //   low_stock = available < reorder_level
     const held = await ctx.tx.plywoodStockReservation.groupBy({
       by: ["productId"],
-      where: { releasedAt: null },
+      where: { releasedAt: null, locationId: { in: reachable } },
       _sum: { qtyUnits: true },
     });
     const reservedByProduct = new Map(

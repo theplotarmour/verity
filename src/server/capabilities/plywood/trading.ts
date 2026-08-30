@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { assertGodownInScope, reachableGodownIds } from "./scope";
 import { ValidationError, type CommandDefinition } from "@/server/platform/command";
 import { type QueryDefinition } from "@/server/platform/query";
 import { diffFields, recordActivity } from "@/server/platform/audit";
@@ -302,6 +303,16 @@ export const createPurchaseOrder: CommandDefinition<
     const totalCostPaise = priced.reduce(
       (sum, line) => sum + line.qtyOrdered * line.unitCostPaise,
       0,
+    );
+
+    // Layer 2 on the write path (P0-01). Holding Create on purchase orders is
+    // not permission to order stock into somebody else's godown.
+    await assertGodownInScope(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_PURCHASE_ORDER,
+      "Create",
+      input.locationId,
     );
 
     const order = await ctx.tx.plywoodPurchaseOrder.create({
@@ -694,6 +705,16 @@ export const createSalesOrder: CommandDefinition<
     // screen (MET-ACT-003). A limit enforced only in the interface is enforced
     // until the first person who uses a different one.
     const overLimit = exposure + totalPricePaise > customer.creditLimitPaise;
+
+    // Layer 2 on the write path (P0-01): the same rule for selling out of a
+    // godown as for buying into one.
+    await assertGodownInScope(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_SALES_ORDER,
+      "Create",
+      input.locationId,
+    );
 
     const order = await ctx.tx.plywoodSalesOrder.create({
       data: {
@@ -1230,13 +1251,26 @@ export const openOrders: QueryDefinition<
   entity: ENTITY_SALES_ORDER,
   input: z.object({}),
   handler: async (ctx) => {
+    // Layer 2 (P0-01). Both lists are anchored to a godown, so both are
+    // filtered by the godowns this actor reaches. Each is scoped against its
+    // OWN entity: reading sales orders must not be what lets someone read
+    // purchase orders, even on a screen that shows them side by side.
+    const forPurchases = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_PURCHASE_ORDER);
+    const forSales = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_SALES_ORDER);
+
     const purchases = await ctx.tx.plywoodPurchaseOrder.findMany({
-      where: { state: { in: ["draft", "submitted", "receiving"] } },
+      where: {
+        state: { in: ["draft", "submitted", "receiving"] },
+        locationId: { in: forPurchases },
+      },
       include: { lines: true, supplier: { select: { displayName: true } } },
       orderBy: { createdAt: "desc" },
     });
     const sales = await ctx.tx.plywoodSalesOrder.findMany({
-      where: { state: { in: ["draft", "pending_credit", "approved", "dispatching"] } },
+      where: {
+        state: { in: ["draft", "pending_credit", "approved", "dispatching"] },
+        locationId: { in: forSales },
+      },
       include: { customer: { select: { displayName: true } } },
       orderBy: { createdAt: "desc" },
     });

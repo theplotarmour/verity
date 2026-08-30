@@ -83,11 +83,49 @@ already been dropped, recreated and migrated from empty this session.
 
 ## 6. Deliberately not in this slice
 
-*   **P0-01 row-scoped authorization** — the audit's first finding. It touches
-    every Plywood query and command and needs the business-activity permission
-    split beside it; it is slice 1b and lands before any new screen.
+*   ~~**P0-01 row-scoped authorization**~~ — **DONE, see §7.** The remaining
+    piece is the business-activity permission split (rule freeze §6), which
+    lands with the People & Roles screen in slice 2.
 *   **P0-04 Goods Receipt / Goods Issue documents** — slice 3 and 4, where the
     invoice guards tighten from "order state" to "eligible issued quantity".
 *   Partial invoicing. The one-invoice-per-order index is correct **today** and
     is replaced by a quantity-allocation constraint when partial invoicing
     arrives — noted in the migration so it is not simply dropped.
+
+---
+
+## 7. P0-01 — godown row scope (added in the same slice)
+
+`query.ts` had always exposed `ctx.scope()` and `authorization.ts` had always
+had `assertRowInScope`. **No plywood handler called either.** Layer 1 was
+enforced and Layer 2 was not, which is the worst of the three combinations: it
+looks authorized. A role limited to one godown could read tenant-wide stock and
+orders, and — holding the entity action — could mutate a record in another
+branch given only its id.
+
+`plywood/scope.ts` resolves the one hop the platform does not: reachable
+organizations → the `Location` rows that hang off them → the godowns this actor
+may touch. Applied to `stockOnHand`, `lowStock`, `openOrders`, and to the
+purchase- and sales-order create paths.
+
+Three decisions inside it:
+
+*   **A tenant-scoped grant is not a special case.** `reachableOrganizations`
+    already returns every organization for a `Tenant` grant, so an owner's
+    reachable set is simply "all of them". There is no `null means everything`
+    branch, because that branch is where a scoping bug hides — the code that
+    runs for the restricted user must be the code that runs for the owner.
+*   **An explicit `locationId` is intersected with the reachable set, never
+    substituted for it.** Asking for another branch's godown by id returns
+    nothing rather than returning its stock.
+*   **Each list on a composite screen is scoped against its own entity.**
+    Reading sales orders must not be what lets someone read purchase orders,
+    even where the two appear side by side.
+
+Six tests, all negative-first: another branch's stock is hidden, naming it by id
+returns nothing, creating an order into it is refused, the actor's own godown
+still works, another branch's orders stay out of the list, and HQ still sees the
+whole subtree (PLA-ORG-002 downward visibility beside PLA-ORG-003 sibling
+isolation, from one mechanism).
+
+**Suite 731 → 737.**

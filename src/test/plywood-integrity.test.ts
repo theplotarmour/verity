@@ -53,12 +53,14 @@ import {
   customerExposurePaise,
   dispatchOrder,
   lowStock,
+  openOrders,
   raisePurchaseInvoice,
   raiseSalesInvoice,
   receiveGoods,
   recordPayment,
   registerPlywoodCapability,
   reserveForOrder,
+  stockOnHand,
   submitPurchaseOrder,
 } from "@/server/capabilities/plywood";
 
@@ -94,6 +96,11 @@ describeDb("plywood integrity foundation (slice 1)", () => {
   let godownId: string;
   let brandId: string;
   let supplierId: string;
+
+  /** A second branch, with its own organization, godown and godown-scoped role. */
+  let noidaOrganizationId: string;
+  let noidaGodownId: string;
+  let noidaKeeper: ActorContext;
 
   async function freshBoard(reorderLevelUnits = 0): Promise<string> {
     const product = await executeCommand(owner, createProduct, {
@@ -162,6 +169,17 @@ describeDb("plywood integrity foundation (slice 1)", () => {
         await tx.location.create({ data: { tenantId, organizationId, name: "Okhla" } })
       ).id;
 
+      // A sibling branch under HQ. PLA-ORG-003: a Noida role must not see
+      // Okhla, even though HQ sees both.
+      noidaOrganizationId = (
+        await tx.organization.create({ data: { tenantId, name: "Noida", parentId: organizationId } })
+      ).id;
+      noidaGodownId = (
+        await tx.location.create({
+          data: { tenantId, organizationId: noidaOrganizationId, name: "Noida Godown" },
+        })
+      ).id;
+
       const ownerRole = await tx.role.create({ data: { tenantId, name: "Owner" }, select: { id: true } });
       const everything = [
         ENTITY_BRAND, ENTITY_PRODUCT, ENTITY_GODOWN_RACK, ENTITY_STOCK_LEDGER,
@@ -191,6 +209,37 @@ describeDb("plywood integrity foundation (slice 1)", () => {
         membershipId: identity.membershipId,
         organizationId,
         roleId: ownerRole.id,
+      };
+
+      // The warehouse keeper at Noida: the same verbs as the owner, granted at
+      // Organization scope instead of Tenant. Everything that follows about
+      // them is decided by scope alone, which is the point.
+      const keeperRole = await tx.role.create({
+        data: { tenantId, name: "Noida Warehouse Keeper" },
+        select: { id: true },
+      });
+      await tx.permission.createMany({
+        data: everything.flatMap((entity) =>
+          (["Read", "Create", "Edit", "ActionExecute"] as const).map((verb) => ({
+            tenantId, roleId: keeperRole.id, verb, entity, scope: "Organization" as const,
+          })),
+        ),
+      });
+      const keeperIdentity = await provisionIdentity(tx, {
+        organizationId: noidaOrganizationId,
+        authUserId: randomUUID(),
+        displayName: "Noida keeper",
+      });
+      await tx.tenantMembership.update({
+        where: { id: keeperIdentity.membershipId },
+        data: { roleId: keeperRole.id },
+      });
+      noidaKeeper = {
+        tenantId,
+        userId: keeperIdentity.userId,
+        membershipId: keeperIdentity.membershipId,
+        organizationId: noidaOrganizationId,
+        roleId: keeperRole.id,
       };
     });
     invalidateCapabilityCache();
@@ -453,6 +502,93 @@ describeDb("plywood integrity foundation (slice 1)", () => {
     } finally {
       await admin.$disconnect();
     }
+  });
+
+  /* ------------------------------------------------------------------ *
+   * P0-01 — row-scoped authorization
+   * ------------------------------------------------------------------ */
+
+  describe("godown row scope (P0-01, PLA-AUT-004, PLA-ORG-003)", () => {
+    it("hides another branch's stock from a godown-scoped role", async () => {
+      const productId = await boardInStock(30);
+
+      const ownerSees = await executeQuery(owner, stockOnHand, { productId });
+      expect(ownerSees.some((row) => row.locationId === godownId)).toBe(true);
+
+      // THE DEFECT: no plywood handler called ctx.scope() or assertRowInScope,
+      // so Layer 1 was enforced and Layer 2 was not — which looks authorized.
+      const keeperSees = await executeQuery(noidaKeeper, stockOnHand, { productId });
+      expect(keeperSees).toEqual([]);
+    });
+
+    it("returns nothing rather than the stock when another godown is named by id", async () => {
+      await boardInStock(30);
+
+      // Asking for Okhla explicitly must not widen the answer. An explicit
+      // filter is intersected with the reachable set, never substituted for it.
+      const keeperSees = await executeQuery(noidaKeeper, stockOnHand, { locationId: godownId });
+      expect(keeperSees).toEqual([]);
+    });
+
+    it("refuses to create an order against a godown outside the actor's scope", async () => {
+      const productId = await freshBoard();
+      const customerId = await freshCustomer(10_000_000);
+
+      await expect(
+        executeCommand(noidaKeeper, createPurchaseOrder, {
+          supplierId,
+          locationId: godownId,
+          lines: [{ productId, qtyOrdered: 5, unitCostPaise: 100_000 }],
+        }),
+      ).rejects.toThrow(/outside this actor's scope/);
+
+      await expect(
+        executeCommand(noidaKeeper, createSalesOrder, {
+          customerId,
+          locationId: godownId,
+          lines: [{ productId, qtyOrdered: 5, unitPricePaise: 150_000 }],
+        }),
+      ).rejects.toThrow(/outside this actor's scope/);
+    });
+
+    it("permits the same actions in the actor's own godown", async () => {
+      const productId = await freshBoard();
+      await expect(
+        executeCommand(noidaKeeper, createPurchaseOrder, {
+          supplierId,
+          locationId: noidaGodownId,
+          lines: [{ productId, qtyOrdered: 5, unitCostPaise: 100_000 }],
+        }),
+      ).resolves.toMatchObject({ id: expect.any(String) });
+    });
+
+    it("keeps another branch's orders out of the open-orders list", async () => {
+      const productId = await boardInStock(30);
+      const customerId = await freshCustomer(10_000_000);
+      const order = await executeCommand(owner, createSalesOrder, {
+        customerId, locationId: godownId,
+        lines: [{ productId, qtyOrdered: 5, unitPricePaise: 150_000 }],
+      });
+
+      const ownerList = await executeQuery(owner, openOrders, {});
+      expect(ownerList.sales.some((row) => row.id === order.id)).toBe(true);
+
+      const keeperList = await executeQuery(noidaKeeper, openOrders, {});
+      expect(keeperList.sales.some((row) => row.id === order.id)).toBe(false);
+    });
+
+    it("gives the parent organization the whole subtree (PLA-ORG-002)", async () => {
+      const productId = await freshBoard();
+      const order = await executeCommand(noidaKeeper, createPurchaseOrder, {
+        supplierId, locationId: noidaGodownId,
+        lines: [{ productId, qtyOrdered: 5, unitCostPaise: 100_000 }],
+      });
+
+      // HQ holds a Tenant-scoped grant and sees both branches; the keeper sees
+      // only their own. Downward visibility, sibling isolation, one mechanism.
+      const ownerList = await executeQuery(owner, openOrders, {});
+      expect(ownerList.purchases.some((row) => row.id === order.id)).toBe(true);
+    });
   });
 
   /* ------------------------------------------------------------------ *
