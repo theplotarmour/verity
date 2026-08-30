@@ -236,6 +236,20 @@ export const raiseSalesInvoice: CommandDefinition<
       );
     }
 
+    // Checked AFTER the state guard: an order awaiting credit approval has
+    // also issued nothing, and "approve the credit" is the useful thing to
+    // tell someone. The more specific refusal goes first.
+    // Nothing has left the yard: there is nothing to bill for. Slice 4
+    // completes P0-03 — the invoice follows the Goods Issue, not the order.
+    const issuedTotal = order.lines.reduce((sum, line) => sum + line.qtyShipped, 0);
+    if (issuedTotal === 0) {
+      throw new ValidationError(
+        "E_VALIDATION: nothing has been issued against this order, so there is " +
+          "nothing to invoice. Issue the goods first.",
+      );
+    }
+
+
     // The seller's identity comes from the GST registration (P0-09), not from
     // a configuration key. The key remains as a transitional fallback for
     // tenants provisioned before slice 2; it is removed when the effective-dated
@@ -276,7 +290,11 @@ export const raiseSalesInvoice: CommandDefinition<
     const igstRateBp = configNumber(rawIgst, CONFIG_IGST_RATE_BP);
 
     const taxablePaise = order.lines.reduce(
-      (sum, line) => sum + line.qtyOrdered * line.unitPricePaise,
+      // ISSUED, not ordered (audit P0-03, slice 4). Invoicing the ordered
+      // quantity bills a customer for boards still sitting in the godown —
+      // and on a partial issue it bills them for goods they have not been
+      // given, which is the version of this defect that reaches a customer.
+      (sum, line) => sum + line.qtyShipped * line.unitPricePaise,
       0,
     );
     const tax = computeInvoiceTax({
@@ -332,9 +350,9 @@ export const raiseSalesInvoice: CommandDefinition<
         productId: line.productId,
         productNameSnapshot: line.productNameSnapshot,
         hsnCodeSnapshot: line.hsnCodeSnapshot,
-        qtyUnits: line.qtyOrdered,
+        qtyUnits: line.qtyShipped,
         unitPricePaise: line.unitPricePaise,
-        lineTotalPaise: line.qtyOrdered * line.unitPricePaise,
+        lineTotalPaise: line.qtyShipped * line.unitPricePaise,
       })),
     });
 

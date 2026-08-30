@@ -372,6 +372,15 @@ describeDb("plywood integrity foundation (slice 1)", () => {
         orderId: order.id,
         reason: "Owner approved a temporary extension",
       });
+
+      // Slice 4 added the second half of P0-03: approval alone is not enough,
+      // because an invoice bills for goods that have actually left the yard.
+      await expect(
+        executeCommand(owner, raiseSalesInvoice, { salesOrderId: order.id }),
+      ).rejects.toThrow(/nothing has been issued/);
+
+      await executeCommand(owner, reserveForOrder, { orderId: order.id });
+      await executeCommand(owner, dispatchOrder, { orderId: order.id });
       await expect(
         executeCommand(owner, raiseSalesInvoice, { salesOrderId: order.id }),
       ).resolves.toMatchObject({ totalPaise: expect.any(Number) });

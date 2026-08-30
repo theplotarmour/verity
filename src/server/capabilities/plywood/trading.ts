@@ -1006,69 +1006,221 @@ export const reserveForOrder: CommandDefinition<
   },
 };
 
+/**
+ * Material physically leaves the godown.
+ *
+ * Authority: taskplans/45_plywood_workflow_program.md §5;
+ * PLYWOOD_TARGET_WORKFLOW_GAP_AUDIT.md P0-04; specification §45–§47.
+ *
+ * WHAT THIS REPLACES
+ * `dispatchOrder` moved every remaining line at once, released every hold and
+ * completed the order in one step. Three things followed from that: a partial
+ * issue was impossible, nothing recorded who handed the material over, and an
+ * invoice could be raised for the quantity ORDERED rather than the quantity
+ * that actually left the yard.
+ *
+ * The old key is kept — `verity.plywood.dispatch_order` — because it is what
+ * the existing screens and journeys call, and a rename is a migration of every
+ * caller for no behavioural gain. The vocabulary in the result and the events
+ * is the specification's.
+ *
+ * PARTIAL BY DEFAULT
+ * `lines` is optional. Omitted, it issues everything outstanding, which is what
+ * the old command did and what most orders need. Given, it issues exactly what
+ * is named — and the order stays open until the balance follows.
+ */
 export const dispatchOrder: CommandDefinition<
-  { orderId: string },
-  { id: string; shippedLines: number }
+  {
+    orderId: string;
+    rackId?: string;
+    collectedBy?: string;
+    notes?: string;
+    /** Omit to issue everything outstanding. */
+    lines?: Array<{ productId: string; qtyIssued: number }>;
+  },
+  {
+    id: string;
+    state: string;
+    issueId: string;
+    issueNumber: string;
+    issuedLines: number;
+  }
 > = {
   key: "verity.plywood.dispatch_order",
   entity: ENTITY_SALES_ORDER,
   verb: "ActionExecute",
-  input: z.object({ orderId: z.string().uuid() }),
+  input: z.object({
+    orderId: z.string().uuid(),
+    rackId: z.string().uuid().optional(),
+    collectedBy: z.string().max(120).optional(),
+    notes: z.string().max(500).optional(),
+    lines: z
+      .array(z.object({ productId: z.string().uuid(), qtyIssued: z.number().int().positive() }))
+      .min(1)
+      .optional(),
+  }),
   handler: async (ctx, input) => {
     const order = await ctx.tx.plywoodSalesOrder.findUniqueOrThrow({
       where: { id: input.orderId },
       include: { lines: true, reservations: { where: { releasedAt: null } } },
     });
     if (order.state !== "dispatching") {
-      throw new ValidationError("E_VALIDATION: hold stock for this order before dispatching it");
+      throw new ValidationError("E_VALIDATION: hold stock for this order before issuing it");
     }
+
+    await assertGodownInScope(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_SALES_ORDER,
+      "ActionExecute",
+      order.locationId,
+    );
 
     const services = await serviceProductIds(
       ctx.tx,
       order.lines.map((line) => line.productId),
     );
 
-    for (const line of order.lines) {
-      const outstanding = line.qtyOrdered - line.qtyShipped;
-      if (outstanding <= 0) continue;
+    // What to issue: exactly what was asked for, or everything outstanding.
+    const requested =
+      input.lines ??
+      order.lines
+        .filter((line) => line.qtyOrdered > line.qtyShipped)
+        .map((line) => ({ productId: line.productId, qtyIssued: line.qtyOrdered - line.qtyShipped }));
 
-      // Release the hold and move the stock in the same transaction. Doing them
-      // apart is how a reservation outlives the goods it was holding. A
-      // service line was never reserved (see reserveForOrder) and has
-      // nothing to move — only its shipped quantity is real.
+    if (requested.length === 0) {
+      throw new ValidationError("E_VALIDATION: this order has nothing left to issue");
+    }
+
+    const issuedAt = new Date();
+    const financialYear = financialYearOf(issuedAt);
+    const numbering = await nextDocumentNumber(ctx.tx, ctx.actor.tenantId, "GI", financialYear);
+
+    const issue = await ctx.tx.plywoodGoodsIssue.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        salesOrderId: order.id,
+        locationId: order.locationId,
+        issueNumber: numbering.invoiceNumber,
+        financialYear,
+        issuedAt,
+        issuedBy: ctx.actor.userId,
+        collectedBy: input.collectedBy ?? null,
+        notes: input.notes ?? null,
+      },
+    });
+
+    for (const line of requested) {
+      const orderLine = order.lines.find((candidate) => candidate.productId === line.productId);
+      if (!orderLine) {
+        throw new ValidationError("E_VALIDATION: that board is not on this order");
+      }
+      const outstanding = orderLine.qtyOrdered - orderLine.qtyShipped;
+      if (line.qtyIssued > outstanding) {
+        // Refused rather than clamped, for the same reason an over-receipt is:
+        // issuing more than was ordered makes "still to go" negative and every
+        // fulfilment report inherits it.
+        throw new ValidationError(
+          `E_VALIDATION: ${orderLine.productNameSnapshot} has ${outstanding} left to issue, cannot issue ${line.qtyIssued}`,
+        );
+      }
+
+      // A service line was never reserved and has nothing to move; only its
+      // issued quantity is real.
+      let unitCostPaise = 0;
       if (!services.has(line.productId)) {
-        await applyMovement(ctx.tx, ctx.actor, {
+        const movement = await applyMovement(ctx.tx, ctx.actor, {
           productId: line.productId,
           locationId: order.locationId,
+          rackId: input.rackId ?? null,
           kind: "sales_outward",
-          qtyUnits: outstanding,
+          qtyUnits: line.qtyIssued,
+          source: { type: "goods_issue", id: issue.id, number: issue.issueNumber },
         });
+        unitCostPaise = movement.unitCostPaise;
       }
+
+      await ctx.tx.plywoodGoodsIssueLine.create({
+        data: {
+          tenantId: ctx.actor.tenantId,
+          issueId: issue.id,
+          salesOrderLineId: orderLine.id,
+          productId: line.productId,
+          productNameSnapshot: orderLine.productNameSnapshot,
+          rackId: input.rackId ?? null,
+          qtyIssued: line.qtyIssued,
+          unitCostPaise,
+        },
+      });
+
       await ctx.tx.plywoodSalesOrderLine.update({
-        where: { id: line.id },
-        data: { qtyShipped: line.qtyOrdered },
+        where: { id: orderLine.id },
+        data: { qtyShipped: { increment: line.qtyIssued } },
       });
     }
 
-    await ctx.tx.plywoodStockReservation.updateMany({
-      where: { salesOrderId: order.id, releasedAt: null },
-      data: { releasedAt: new Date(), releaseReason: "Dispatched" },
+    // Release only what was issued. Releasing every hold on a partial issue —
+    // which is what the old command did, because it always issued everything —
+    // would free stock the customer is still owed, and the next order would
+    // quietly take it.
+    const after = await ctx.tx.plywoodSalesOrderLine.findMany({
+      where: { salesOrderId: order.id },
     });
+    const fulfilled = after.every((line) => line.qtyShipped >= line.qtyOrdered);
 
-    await transition(ctx, {
-      entityKey: ENTITY_SALES_ORDER,
-      entityId: order.id,
-      fromKey: order.state,
-      toKey: "completed",
-    });
-    await ctx.tx.plywoodSalesOrder.update({
-      where: { id: order.id },
-      data: { state: "completed", version: { increment: 1 } },
-    });
+    for (const line of requested) {
+      const held = await ctx.tx.plywoodStockReservation.findFirst({
+        where: { salesOrderId: order.id, productId: line.productId, releasedAt: null },
+      });
+      if (!held) continue;
+
+      const remaining = held.qtyUnits - line.qtyIssued;
+      if (remaining > 0) {
+        // The hold shrinks by what left. Reservations are immutable only once
+        // released; a live hold is a running quantity.
+        await ctx.tx.plywoodStockReservation.update({
+          where: { id: held.id },
+          data: { qtyUnits: remaining },
+        });
+      } else {
+        await ctx.tx.plywoodStockReservation.update({
+          where: { id: held.id },
+          data: { releasedAt: issuedAt, releaseReason: `Issued on ${issue.issueNumber}` },
+        });
+      }
+    }
+
+    const target = fulfilled ? "completed" : "dispatching";
+    if (order.state !== target) {
+      await transition(ctx, {
+        entityKey: ENTITY_SALES_ORDER,
+        entityId: order.id,
+        fromKey: order.state,
+        toKey: target,
+      });
+      await ctx.tx.plywoodSalesOrder.update({
+        where: { id: order.id },
+        data: { state: target, version: { increment: 1 } },
+      });
+    }
 
     return {
-      result: { id: order.id, shippedLines: order.lines.length },
-      events: [{ name: "verity.plywood.sales_order_dispatched", entityId: order.id }],
+      result: {
+        id: order.id,
+        state: target,
+        issueId: issue.id,
+        issueNumber: issue.issueNumber,
+        issuedLines: requested.length,
+      },
+      events: [
+        {
+          name: fulfilled
+            ? "verity.plywood.sales_order_fulfilled"
+            : "verity.plywood.goods_partially_issued",
+          entityId: order.id,
+          payload: { issueNumber: issue.issueNumber },
+        },
+      ],
     };
   },
 };

@@ -117,6 +117,8 @@ model Tenant {
   plywoodSalesOrderLines    PlywoodSalesOrderLine[]
   plywoodStockReservations  PlywoodStockReservation[]
   plywoodInvoiceSeries      PlywoodInvoiceSeries[]
+  plywoodGoodsIssues        PlywoodGoodsIssue[]
+  plywoodGoodsIssueLines    PlywoodGoodsIssueLine[]
   plywoodGoodsReceipts      PlywoodGoodsReceipt[]
   plywoodGoodsReceiptLines  PlywoodGoodsReceiptLine[]
   plywoodBusinessProfile    PlywoodBusinessProfile?
@@ -1100,6 +1102,7 @@ model Location {
   @@index([tenantId, organizationId])
   @@map("location")
   plywoodGoodsReceipts     PlywoodGoodsReceipt[]
+  plywoodGoodsIssues       PlywoodGoodsIssue[]
 }
 
 /// A spatial policy attached to a Location (ADR-004: "Geofences are policies,
@@ -2131,6 +2134,7 @@ model PlywoodProduct {
   @@index([tenantId, active])
   @@map("plywood_product")
   goodsReceiptLines PlywoodGoodsReceiptLine[]
+  goodsIssueLines  PlywoodGoodsIssueLine[]
 }
 
 /// A rack, bay or stack position inside a godown.
@@ -2157,6 +2161,7 @@ model GodownRack {
   @@index([tenantId, locationId])
   @@map("godown_rack")
   plywoodGoodsReceiptLines PlywoodGoodsReceiptLine[]
+  plywoodGoodsIssueLines   PlywoodGoodsIssueLine[]
 }
 
 // ---------------------------------------------------------------------------
@@ -2431,6 +2436,7 @@ model PlywoodSalesOrder {
   @@unique([tenantId, id], name: "plywood_sales_order_tenant_scoped_id")
   @@index([tenantId, state])
   @@map("plywood_sales_order")
+  goodsIssues      PlywoodGoodsIssue[]
 }
 
 /// One board on a sales order.
@@ -2452,6 +2458,7 @@ model PlywoodSalesOrderLine {
   @@unique([tenantId, id], name: "plywood_sales_order_line_tenant_scoped_id")
   @@unique([tenantId, salesOrderId, productId])
   @@map("plywood_sales_order_line")
+  issueLines       PlywoodGoodsIssueLine[]
 }
 
 /// Stock held for an order but not yet moved — P5.
@@ -2578,6 +2585,74 @@ model PlywoodGoodsReceiptLine {
   @@unique([tenantId, id], name: "plywood_goods_receipt_line_tenant_scoped_id")
   @@index([tenantId, receiptId])
   @@map("plywood_goods_receipt_line")
+}
+
+/// Goods physically left the godown. Immutable once posted.
+///
+/// Authority: taskplans/45_plywood_workflow_program.md §5;
+/// PLYWOOD_TARGET_WORKFLOW_GAP_AUDIT.md P0-04.
+///
+/// The counterpart to a Goods Receipt, and the ONLY door out of a godown now
+/// that Logistics is gone. Dispatch used to be a state change that moved every
+/// remaining line at once, released every hold and completed the order; a
+/// partial issue was impossible and nothing recorded who handed the material
+/// over.
+model PlywoodGoodsIssue {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+
+  salesOrderId String @map("sales_order_id") @db.Uuid
+  locationId   String @map("location_id") @db.Uuid
+
+  /// "GI/26-27/0001". Gapless for the same reason a receipt's number is.
+  issueNumber   String @map("issue_number")
+  financialYear String @map("financial_year")
+
+  issuedAt DateTime @default(now()) @map("issued_at")
+  issuedBy String   @map("issued_by") @db.Uuid
+  /// Who took the material away. A name written on a gate pass, not a party.
+  collectedBy String? @map("collected_by")
+  notes       String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant     Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  salesOrder PlywoodSalesOrder       @relation(fields: [tenantId, salesOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  location   Location                @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  lines      PlywoodGoodsIssueLine[]
+
+  @@unique([tenantId, issueNumber])
+  @@unique([tenantId, id], name: "plywood_goods_issue_tenant_scoped_id")
+  @@index([tenantId, salesOrderId])
+  @@index([tenantId, issuedAt])
+  @@map("plywood_goods_issue")
+}
+
+model PlywoodGoodsIssueLine {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  issueId  String @map("issue_id") @db.Uuid
+
+  salesOrderLineId    String  @map("sales_order_line_id") @db.Uuid
+  productId           String  @map("product_id") @db.Uuid
+  productNameSnapshot String  @map("product_name_snapshot")
+  rackId              String? @map("rack_id") @db.Uuid
+
+  qtyIssued Int @map("qty_issued")
+  /// The weighted average standing when the material left. Snapshotted so a
+  /// past sale's margin is a stored fact rather than a figure later purchases
+  /// would move.
+  unitCostPaise Int @map("unit_cost_paise")
+
+  tenant    Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  issue     PlywoodGoodsIssue     @relation(fields: [tenantId, issueId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  orderLine PlywoodSalesOrderLine @relation(fields: [tenantId, salesOrderLineId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  product   PlywoodProduct        @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  rack      GodownRack?           @relation(fields: [tenantId, rackId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, id], name: "plywood_goods_issue_line_tenant_scoped_id")
+  @@index([tenantId, issueId])
+  @@map("plywood_goods_issue_line")
 }
 
 // ---------------------------------------------------------------------------

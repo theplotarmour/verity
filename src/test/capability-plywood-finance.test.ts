@@ -241,6 +241,16 @@ describeDb("capability: Plywood trading — finance", () => {
   });
 
   /** An approved order for `qty` sheets at `unitPricePaise`, ready to invoice. */
+  /**
+   * An order that has been approved AND issued.
+   *
+   * Slice 4 bound the invoice to the quantity that actually left the yard
+   * (audit P0-03), so a fixture that only approves an order can no longer be
+   * invoiced — correctly. `qtyShipped` is set here directly rather than by
+   * running the issue command, because these tests are about invoicing and
+   * numbering, and the issue path has its own coverage in
+   * `plywood-sales-chain.test.ts`.
+   */
   async function approvedOrder(
     customerId: string,
     qtyOrdered = 10,
@@ -264,6 +274,7 @@ describeDb("capability: Plywood trading — finance", () => {
           productNameSnapshot: "Sainik 710",
           hsnCodeSnapshot: "44121000",
           qtyOrdered,
+          qtyShipped: qtyOrdered,
           unitPricePaise,
         },
       });
