@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { PermissionVerb } from "@prisma/client";
-import { authorize } from "./authorization";
+import { enforcePolicy } from "./policy";
 import { capabilityForEntity, requireCapabilityActive } from "./capability";
 import { CustomFieldValidationError } from "./entity";
 import { withTenant, type TenantScopedClient } from "./tenancy";
@@ -169,7 +169,18 @@ export async function executeCommand<TInput, TResult>(
     if (capability) await requireCapabilityActive(tx, actor.tenantId, capability);
 
     // 2b. MET-ACT-002 — throws ForbiddenError, so a missing branch cannot permit.
-    await authorize(tx, actor.roleId, def.verb, def.entity);
+    //
+    // Routed through the policy decision point (Task 37) rather than calling
+    // Layer 1 directly. The check is identical — `enforcePolicy` composes the
+    // same `authorization.ts` rules — but there is now one place that answers
+    // "may this actor do this", so a server action, an API route and a Phase 9
+    // agent cannot each grow their own habit. `channel: "api"` is recorded on
+    // the decision and read by nothing in the evaluation.
+    await enforcePolicy(tx, actor, {
+      verb: def.verb,
+      entity: def.entity,
+      channel: "api",
+    });
 
     // 3. MET-ACT-003
     await def.preconditions?.(ctx, input);

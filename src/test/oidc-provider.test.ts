@@ -173,7 +173,9 @@ describe("claim normalization (P6)", () => {
   it("refuses a token carrying no usable subject claim", () => {
     expect(() => normalizePrincipal({ email: "a@b.test" }, SETTINGS)).toThrow(OidcClaimError);
     expect(() => normalizePrincipal({ sub: "   " }, SETTINGS)).toThrow(/E_OIDC_CLAIMS/);
-    expect(() => normalizePrincipal({ sub: 12345 }, SETTINGS)).toThrow(/E_OIDC_CLAIMS/);
+    // `sub` is typed as a string in JWTPayload, but a provider can send
+    // anything and the runtime check is the one that matters.
+    expect(() => normalizePrincipal({ sub: 12345 } as never, SETTINGS)).toThrow(/E_OIDC_CLAIMS/);
   });
 
   it("carries no claim beyond id and email into the Principal (P10)", async () => {

@@ -340,7 +340,10 @@ describe("conformance: over-genericity (Phase G)", () => {
     // normalization. It is the identity boundary, which is platform by
     // definition: no capability may decide who the actor is. Kept separate
     // from auth.ts so the rules are provable without Next or a live provider.
-    expect(platformModules.length).toBeLessThanOrEqual(28);
+    // 29: policy.ts (Task 37) — the authorization decision point. It adds no
+    // rules; it composes authorization.ts into one answer so that a command, a
+    // query, an API route and a Phase 9 agent cannot each grow their own habit.
+    expect(platformModules.length).toBeLessThanOrEqual(29);
   });
 });
 
