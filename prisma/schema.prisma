@@ -465,6 +465,13 @@ model DomainEvent {
   /// Actor at the time of the fact; null for platform-initiated events.
   actorUserId String?   @map("actor_user_id") @db.Uuid
   payload     Json      @default("{}")
+  /// Groups everything produced by one command execution (Task 38). Written by
+  /// `executeCommand`; null only for a fact recorded outside a command.
+  correlationId String? @map("correlation_id") @db.Uuid
+  /// Which kind of actor produced it: human, api, job, agent. Text, not an
+  /// enum — the set will grow (Phase 9 distinguishes kinds of agent) and an
+  /// enum change is a migration against an append-only table.
+  source        String? @map("source")
   occurredAt  DateTime  @default(now()) @map("occurred_at")
   /// Set by the dispatcher once delivered; null means pending.
   deliveredAt DateTime? @map("delivered_at")
@@ -597,12 +604,18 @@ model Activity {
   newValue     String?  @map("new_value")
   /// The command responsible, so a change traces back to the action.
   commandKey   String?  @map("command_key")
+  /// Groups every row written by one command execution (Task 38), across the
+  /// activity, domain_event and security_audit_event streams.
+  correlationId String? @map("correlation_id") @db.Uuid
+  /// human | api | job | agent — the channel the mutation arrived through.
+  source        String? @map("source")
   occurredAt   DateTime @default(now()) @map("occurred_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, entityKey, entityId])
   @@index([tenantId, occurredAt])
+  @@index([tenantId, correlationId])
   @@map("activity")
 }
 
@@ -640,6 +653,8 @@ model SecurityAuditEvent {
   /// Recorded as text: it is evidence, not a queryable address type.
   ipAddress   String?           @map("ip_address")
   payload     Json              @default("{}")
+  /// Ties a security event to the request that caused it (Task 38).
+  correlationId String?         @map("correlation_id") @db.Uuid
   occurredAt  DateTime          @default(now()) @map("occurred_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)

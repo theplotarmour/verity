@@ -1,6 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { PermissionVerb } from "@prisma/client";
-import { enforcePolicy } from "./policy";
+import { enforcePolicy, type PolicyChannel } from "./policy";
 import { capabilityForEntity, requireCapabilityActive } from "./capability";
 import { CustomFieldValidationError } from "./entity";
 import { withTenant, type TenantScopedClient } from "./tenancy";
@@ -58,6 +59,20 @@ export class ValidationError extends Error {
 export type CommandContext = {
   actor: ActorContext;
   tx: TenantScopedClient;
+  /**
+   * Groups everything one command execution writes — activity rows, domain
+   * events, security events — into a single reconstructable request (Task 38).
+   *
+   * Required, not optional. A correlation identifier that can be silently
+   * absent is exactly the gap Task 38 exists to close, and the type is the
+   * only place that can enforce its presence.
+   */
+  correlationId: string;
+  /**
+   * Which channel the command arrived through. Recorded on every audit row;
+   * read by no authorization decision (Task 37, `policy.ts`).
+   */
+  channel: PolicyChannel;
 };
 
 export type CommandDefinition<TInput, TResult> = {
@@ -146,9 +161,20 @@ export async function executeCommand<TInput, TResult>(
   actor: ActorContext,
   def: CommandDefinition<TInput, TResult>,
   rawInput: unknown,
+  /**
+   * The channel this command arrived through. Recorded on every audit row it
+   * produces (Task 38) and read by no authorization decision (Task 37).
+   * Defaults to `api`, which is what a server action or route handler is.
+   */
+  channel: PolicyChannel = "api",
 ): Promise<TResult> {
+  // One identifier for the whole execution, minted before any write. Every
+  // audit row, event and security event below carries it, which is what makes
+  // "what else happened in the request that changed this?" answerable.
+  const correlationId = randomUUID();
+
   const { result, events } = await withTenant(actor.tenantId, async (tx) => {
-    const ctx: CommandContext = { actor, tx };
+    const ctx: CommandContext = { actor, tx, correlationId, channel };
 
     await runHooks(def.key, "before_validate", ctx, rawInput);
 
@@ -179,7 +205,7 @@ export async function executeCommand<TInput, TResult>(
     await enforcePolicy(tx, actor, {
       verb: def.verb,
       entity: def.entity,
-      channel: "api",
+      channel,
     });
 
     // 3. MET-ACT-003
@@ -200,6 +226,8 @@ export async function executeCommand<TInput, TResult>(
           entityId: event.entityId ?? null,
           commandKey: def.key,
           actorUserId: actor.userId,
+          correlationId,
+          source: channel,
           payload: (event.payload ?? {}) as never,
         },
       });
@@ -212,7 +240,7 @@ export async function executeCommand<TInput, TResult>(
   // committed transaction, so it is not wrapped in one — surfacing the error is
   // honest, pretending it was atomic would not be.
   await withTenant(actor.tenantId, async (tx) => {
-    await runHooks(def.key, "after_save", { actor, tx }, { result, events });
+    await runHooks(def.key, "after_save", { actor, tx, correlationId, channel }, { result, events });
   });
 
   return result;

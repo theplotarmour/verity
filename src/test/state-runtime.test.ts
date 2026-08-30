@@ -38,7 +38,12 @@ describeDb("state runtime", () => {
   const tenantB = randomUUID();
   const subjectId = randomUUID();
   let actor: ActorContext;
-  const ctxFor = (tx: CommandContext["tx"]): CommandContext => ({ actor, tx });
+  const ctxFor = (tx: CommandContext["tx"]): CommandContext => ({
+    actor,
+    tx,
+    correlationId: randomUUID(),
+    channel: "api",
+  });
 
   beforeAll(async () => {
     await assertRlsEnforceable();

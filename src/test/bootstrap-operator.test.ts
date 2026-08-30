@@ -75,14 +75,25 @@ describeDb("bootstrapOperator()", () => {
     await admin.$disconnect();
   });
 
-  it("grants operator authority to a known identity, using the existing platform tenant", async () => {
+  it("grants operator authority to a known identity, reusing the one platform tenant", async () => {
     const result = await bootstrapOperator(admin, testEmail);
     platformTenantId = result.tenantId;
 
-    // This project's database already has a platform tenant (see the file
-    // header) — this call must find it, not create a second one.
-    expect(result.platformTenantCreated).toBe(false);
+    // Found while proving Task 38 on a freshly migrated database: this
+    // assertion used to be `platformTenantCreated === false`, which encoded
+    // the *hosted* project's existing state as a requirement. On a genuinely
+    // empty deployment — the state Task 43 accepts from — the first bootstrap
+    // legitimately creates the platform tenant, so the test failed on the run
+    // that mattered most and passed on every run afterwards.
+    //
+    // The real property is not "it never creates one"; it is "there is exactly
+    // one, and a second call finds it". That holds on both an established
+    // database and a fresh one, and it is what the next assertion checks.
     expect(result.membershipOutcome).toBe("created");
+
+    const platformTenants = await admin.tenant.findMany({ where: { isPlatform: true } });
+    expect(platformTenants).toHaveLength(1);
+    expect(platformTenants[0]!.id).toBe(platformTenantId);
 
     const membership = await admin.tenantMembership.findFirst({
       where: { tenantId: platformTenantId, userId: testUserId },

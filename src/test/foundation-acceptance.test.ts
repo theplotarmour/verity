@@ -272,7 +272,7 @@ describeDb("foundation acceptance: an unforeseen capability", () => {
   it("moves through a lifecycle the platform has never seen", async () => {
     const out = await withTenant(tenantA, (tx) =>
       transition(
-        { actor, tx },
+        { actor, tx, correlationId: randomUUID(), channel: "api" },
         { entityKey: ENTITY, entityId: flightId, fromKey: "planned", toKey: "in_flight" },
       ),
     );
@@ -283,7 +283,7 @@ describeDb("foundation acceptance: an unforeseen capability", () => {
     await expect(
       withTenant(tenantA, (tx) =>
         transition(
-          { actor, tx },
+          { actor, tx, correlationId: randomUUID(), channel: "api" },
           { entityKey: ENTITY, entityId: flightId, fromKey: "planned", toKey: "report_filed" },
         ),
       ),
@@ -299,7 +299,7 @@ describeDb("foundation acceptance: an unforeseen capability", () => {
   it("writes field-level history to the shared audit stream", async () => {
     await withTenant(tenantA, (tx) =>
       recordActivity(
-        { actor, tx },
+        { actor, tx, correlationId: randomUUID(), channel: "api" },
         {
           entityKey: ENTITY,
           entityId: flightId,
