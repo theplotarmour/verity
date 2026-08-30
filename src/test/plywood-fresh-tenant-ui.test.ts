@@ -65,7 +65,6 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
   let customerId: string;
   let purchaseOrderId: string;
   let salesOrderId: string;
-  let shipmentId: string;
   let invoiceId: string;
 
   /** What `runCommand(key, input)` does, minus the Next.js revalidation. */
@@ -386,37 +385,11 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
 
   /* ------------------------------- 8. logistics ----------------------------- */
 
-  it("8 — raises a shipment, assigns a carrier and confirms delivery", async () => {
-    const transporter = await ui<{ id: string }>("verity.plywood.create_transporter", {
-      name: "Delhi Roadways",
-      phone: "9810000000",
-    });
-
-    const shipment = await ui<{ id: string }>("verity.plywood.create_shipment", {
-      sourceLocationId: godownId,
-      salesOrderId,
-      destCustomerId: customerId,
-      freightChargePaise: paise(3500),
-      freightPayer: "customer",
-    });
-    shipmentId = shipment.id;
-
-    await ui("verity.plywood.assign_carrier", {
-      shipmentId,
-      transporterId: transporter.id,
-      lrNumber: "LR-55120",
-    });
-    await ui("verity.plywood.dispatch_shipment", { shipmentId });
-
-    const [tracked] = await read<Array<{ state: string; destination: string }>>(
-      "verity.plywood.track_material",
-      { search: "LR-55120" },
-    );
-    expect(tracked!.state).toBe("in_transit");
-    expect(tracked!.destination).toBe("Sharma Timber Mart");
-
-    await ui("verity.plywood.confirm_delivery", { shipmentId, receivedBy: "Sharma at the yard" });
-  });
+  // Step 8 was "raises a shipment, assigns a carrier and confirms delivery".
+  // Removed with the Logistics module in slice 2 (taskplans/45 §D-01): material
+  // leaves a godown through a Goods Issue and through nothing else. The Goods
+  // Issue document that replaces dispatch arrives in slice 4, and this journey
+  // gains a step for it then.
 
   /* ------------------------- 9. invoice, bill, payment ---------------------- */
 
@@ -479,12 +452,10 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
     const console_ = await read<{
       receivablesPaise: number;
       payablesPaise: number;
-      inTransitShipments: number;
       lowStockBoards: number;
     }>("verity.plywood.owner_console", {});
     expect(console_.receivablesPaise).toBe(0);
     expect(console_.payablesPaise).toBe(200 * paise(920));
-    expect(console_.inTransitShipments).toBe(0);
 
     const margin = await read<{ marginPaise: number; costingMethod: string }>(
       "verity.plywood.margin_report",
@@ -550,7 +521,11 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
         ),
       ),
     ];
-    expect(commandKeys.length).toBeGreaterThan(30);
+    // Was "> 30" when the capability still carried five logistics commands.
+    // Slice 2 removed them; the floor moves with the module rather than the
+    // assertion being deleted, so the check still catches a capability that
+    // quietly loses its commands.
+    expect(commandKeys.length).toBeGreaterThanOrEqual(30);
 
     const ui_ = files(join(process.cwd(), "src/app"))
       .map((file) => readFileSync(file, "utf8"))

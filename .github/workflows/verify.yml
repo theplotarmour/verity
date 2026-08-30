@@ -1,0 +1,93 @@
+name: verify
+
+# The reproducibility gate, run on a machine nobody owns.
+#
+# Until now this repository had no CI at all, so every "all green" claim rested
+# on one developer's laptop — which is also why a Windows-only build failure
+# could not be confirmed or dismissed. This is the smallest workflow that makes
+# the gate reproducible; it is deliberately not a deployment pipeline.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    services:
+      # The suite refuses to run without a database: every DB test throws rather
+      # than skips when CI is set (see `if (process.env.CI) throw` in the test
+      # files). That is deliberate — a skipped isolation test proves nothing, and
+      # CI must never be the place where tenancy silently stops being verified.
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: verity
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Two roles, exactly as production separates them.
+      #   DIRECT_URL  — privileged, migrations only
+      #   DATABASE_URL — the runtime role, NOSUPERUSER NOBYPASSRLS
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/verity
+      DATABASE_URL: postgresql://verity_app:verity_app@localhost:5432/verity
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The runtime role must NOT be able to bypass RLS. Creating it as a
+      # superuser here would make `assertRlsEnforceable` pass vacuously and every
+      # isolation assertion below it meaningless — the exact failure mode the
+      # guard exists to catch.
+      - name: Create the non-bypassing runtime role
+        run: |
+          psql "$DIRECT_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE verity_app LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD 'verity_app';
+          GRANT USAGE ON SCHEMA public TO verity_app;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public
+            GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO verity_app;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public
+            GRANT USAGE, SELECT ON SEQUENCES TO verity_app;
+          SQL
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+
+      # Migrations create the `verity` schema and its functions, so these grants
+      # cannot be issued before `migrate deploy`.
+      - name: Grant the runtime role what the migrations created
+        run: |
+          psql "$DIRECT_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          GRANT USAGE ON SCHEMA verity TO verity_app;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO verity_app;
+          GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO verity_app;
+          GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA verity TO verity_app;
+          REVOKE ALL ON TABLE public._prisma_migrations FROM verity_app;
+          SQL
+
+      - name: Prove the runtime role cannot bypass RLS
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tAc \
+            "SELECT rolname||' super='||rolsuper||' bypassrls='||rolbypassrls
+               FROM pg_roles WHERE rolname = current_user" | tee /tmp/role.txt
+          grep -q 'super=f bypassrls=f' /tmp/role.txt
+
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build

@@ -92,7 +92,28 @@ export default async function ShellLayout({ children }: { children: ReactNode })
     icon: isIconName(c.icon) ? c.icon : undefined,
   });
 
+  /**
+   * The sidebar, in the order a business reads it.
+   *
+   * Authority: taskplans/45_plywood_workflow_program.md §8. The client's own
+   * words — Trade, Inventory, Money, Insights — before the platform's own
+   * "Platform" and "Capabilities", which are implementation vocabulary. A
+   * client seeing "Capabilities" is the foundation leaking into the product.
+   *
+   * `Platform` and `Capabilities` remain for tenants running other capabilities
+   * and for the platform tenant itself; they simply sort last and vanish when
+   * empty. Nothing here is plywood-specific: a capability picks a group and the
+   * shell renders it in this order.
+   */
+  const BUSINESS_GROUPS = ["Overview", "Trade", "Inventory", "Money", "Insights"] as const;
+
+  const businessAreas: NavArea[] = BUSINESS_GROUPS.map((group) => ({
+    group,
+    items: contributed.filter((c) => c.group === group).map(toItem),
+  }));
+
   const areas: NavArea[] = [
+    ...businessAreas,
     {
       group: "Platform",
       items: [

@@ -62,13 +62,13 @@ export function configKeyInfo(key: string): ConfigKeyInfo {
 /**
  * Business-language labels for the `ActionExecute` verb — the one verb the
  * checkbox matrix's View/Manage/Delete columns cannot express, because it
- * gates commands like "dispatch this shipment" or "approve this sales
+ * gates commands like "issue these goods" or "approve this sales
  * order's credit hold" rather than a CRUD operation.
  *
  * `authorize()` checks the exact (verb, entity) pair — a role either holds
  * `ActionExecute` on an entity or it does not, with no finer grain (Bible
  * PLA-AUT-003: verbs are closed, entity is the only axis). Several distinct
- * commands often share one entity's `ActionExecute` grant (e.g. a shipment's
+ * commands often share one entity's `ActionExecute` grant (e.g. an order's
  * covers assign-carrier, dispatch, confirm-delivery AND report-lost), so a
  * label here is necessarily a composite of everything that one checkbox
  * actually unlocks — never a single command's name standing in for the whole
@@ -80,7 +80,6 @@ export function configKeyInfo(key: string): ConfigKeyInfo {
  * for a command that may not even exist would be worse than an empty cell.
  */
 const ACTION_EXECUTE_LABELS: Record<string, string> = {
-  "verity.plywood.shipment": "Assign carriers, dispatch & confirm delivery",
   "verity.plywood.customer": "Set customer credit limits",
   "verity.plywood.purchase_order": "Submit, receive goods & cancel purchase orders",
   "verity.plywood.sales_order": "Approve credit, dispatch & cancel sales orders",

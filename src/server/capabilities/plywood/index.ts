@@ -1,19 +1,20 @@
 import { z } from "zod";
 import { registerContribution } from "@/server/platform/contribution";
 import { registerCommand, ValidationError, type CommandDefinition } from "@/server/platform/command";
+import { registerBusinessIdentity } from "./business";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import { diffFields, recordActivity } from "@/server/platform/audit";
 import { notify } from "@/server/platform/notification";
 import { withTenant, type TenantScopedClient } from "@/server/platform/tenancy";
 import {
   ENTITY_BRAND,
+  ENTITY_BUSINESS_PROFILE,
   ENTITY_GODOWN_RACK,
   ENTITY_PRODUCT,
   ENTITY_STOCK_BALANCE,
   ENTITY_STOCK_LEDGER,
   ENTITY_PURCHASE_ORDER,
   ENTITY_SALES_ORDER,
-  ENTITY_SHIPMENT,
   ENTITY_INVOICE,
   ENTITY_LEDGER_ENTRY,
   HSN_CODE,
@@ -53,16 +54,6 @@ import {
   submitPurchaseOrder,
 } from "./trading";
 import {
-  assignCarrier,
-  confirmDelivery,
-  createShipment,
-  createTransporter,
-  dispatchShipment,
-  listTransporters,
-  reportShipmentLost,
-  trackMaterial,
-} from "./logistics";
-import {
   invoiceDetail,
   listInvoices,
   outstandingReceivables,
@@ -86,7 +77,9 @@ import {
  *   1 — catalogue and godown racks (this file)
  *   2 — the stock ledger and weighted average cost (`stock.ts`)
  *   3, 4 — suppliers, customers, purchase and sales orders (`trading.ts`)
- * Logistics, finance, the dashboard and the service-chain fixture follow.
+ * Finance, the dashboard and the service-chain fixture follow. Logistics was
+ * removed in slice 2: stock leaves a godown through a Goods Issue and nothing
+ * else, or the stock ledger cannot be proven.
  *
  * This file holds the catalogue and the capability's registration; each later
  * stage is its own module so the capability can grow without one file becoming
@@ -105,9 +98,9 @@ import {
  */
 
 export * from "./keys";
+export * from "./business";
 export * from "./stock";
 export * from "./trading";
-export * from "./logistics";
 export * from "./finance";
 
 /* ================================= brands ================================= */
@@ -528,59 +521,85 @@ export function registerPlywoodCapability(): void {
   registerContribution({
     capabilityId: PLYWOOD_CAPABILITY,
     navigation: [
+      // The client's navigation, in the business's own words.
+      //
+      // Authority: taskplans/45_plywood_workflow_program.md §8. Groups are the
+      // five the specification names — TRADE, INVENTORY, MONEY, INSIGHTS,
+      // ADMINISTRATION — not the platform's own "Capabilities" and
+      // "Administration", which are implementation vocabulary. A client seeing
+      // "Capabilities" is the foundation leaking into the product.
+      //
+      // Order is dense within a group and leaves gaps between them, so the
+      // slices still to come (Suppliers, Customers, Tax & Compliance, People &
+      // Roles, Business Settings) drop in without renumbering everything.
+      {
+        href: "/overview",
+        label: "Overview",
+        group: "Overview",
+        order: 10,
+        icon: "workspace",
+        requiresEntity: ENTITY_INVOICE,
+        shells: ["platform"],
+      },
+
+      /* ---- TRADE ---- */
       {
         href: "/catalogue",
         label: "Catalogue",
-        group: "Administration",
-        order: 30,
-        icon: "evidence",
+        group: "Trade",
+        order: 20,
+        icon: "catalogue",
         requiresEntity: ENTITY_PRODUCT,
         shells: ["platform"],
       },
       {
-        href: "/stock",
-        label: "Stock",
-        group: "Capabilities",
-        order: 29,
-        icon: "workspace",
-        requiresEntity: ENTITY_STOCK_BALANCE,
-        shells: ["platform", "operations"],
-      },
-      {
         href: "/purchases",
         label: "Purchases",
-        group: "Capabilities",
-        order: 27,
-        icon: "approvals",
+        group: "Trade",
+        order: 22,
+        icon: "purchases",
         requiresEntity: ENTITY_PURCHASE_ORDER,
         shells: ["platform", "operations"],
       },
       {
         href: "/sales",
         label: "Sales",
-        group: "Capabilities",
-        order: 28,
-        icon: "workspace",
+        group: "Trade",
+        order: 24,
+        icon: "sales",
         requiresEntity: ENTITY_SALES_ORDER,
         shells: ["platform", "operations"],
       },
+
+      /* ---- INVENTORY ---- */
       {
-        href: "/overview",
-        // "Overview" collided with the shell's own hard-coded "/" nav item —
-        // both read "Overview" in the sidebar, indistinguishable. This one is
-        // Plywood's business dashboard specifically.
-        label: "Business Overview",
-        group: "Capabilities",
-        order: 24,
-        icon: "workspace",
-        requiresEntity: ENTITY_INVOICE,
+        href: "/stock",
+        label: "Stock",
+        group: "Inventory",
+        order: 30,
+        icon: "stock",
+        requiresEntity: ENTITY_STOCK_BALANCE,
+        shells: ["platform", "operations"],
+      },
+      {
+        href: "/godowns",
+        label: "Godowns",
+        group: "Inventory",
+        order: 32,
+        icon: "locations",
+        // Gated on CREATE rather than READ: rack layout is set up by whoever
+        // shapes the godown, not by everyone who reads stock off it.
+        requiresEntity: ENTITY_GODOWN_RACK,
+        requiresVerb: "Create",
         shells: ["platform"],
       },
+
+      /* ---- MONEY ---- */
       {
         href: "/finance",
         label: "Finance",
-        group: "Capabilities",
-        order: 25,
+        group: "Money",
+        order: 40,
         icon: "audit",
         requiresEntity: ENTITY_INVOICE,
         shells: ["platform"],
@@ -588,31 +607,25 @@ export function registerPlywoodCapability(): void {
       {
         href: "/ledgers",
         label: "Ledgers",
-        group: "Capabilities",
-        order: 24.5,
+        group: "Money",
+        order: 42,
         icon: "audit",
         requiresEntity: ENTITY_LEDGER_ENTRY,
         shells: ["platform"],
       },
+
+      /* ---- ADMINISTRATION ---- */
       {
-        href: "/logistics",
-        label: "Logistics",
-        group: "Capabilities",
-        order: 26,
-        icon: "scheduling",
-        requiresEntity: ENTITY_SHIPMENT,
-        shells: ["platform", "operations"],
-      },
-      {
-        href: "/godowns",
-        label: "Godowns",
+        href: "/settings/business",
+        label: "Business Settings",
         group: "Administration",
-        order: 31,
-        icon: "locations",
-        // Gated on CREATE rather than READ: rack layout is set up by whoever
-        // shapes the godown, not by everyone who reads stock off it.
-        requiresEntity: ENTITY_GODOWN_RACK,
-        requiresVerb: "Create",
+        order: 60,
+        icon: "configuration",
+        // Edit, not Read: this is where the business's legal identity is set,
+        // and everyone who can read an invoice can already see it printed on
+        // one. The people who may change it are a much smaller set.
+        requiresEntity: ENTITY_BUSINESS_PROFILE,
+        requiresVerb: "Edit",
         shells: ["platform"],
       },
     ],
@@ -700,6 +713,7 @@ export function registerPlywoodCapability(): void {
     ],
   });
 
+  registerBusinessIdentity();
   registerCommand(createBrand);
   registerCommand(setBrandActive);
   registerCommand(createProduct);
@@ -727,12 +741,6 @@ export function registerPlywoodCapability(): void {
   registerCommand(reserveForOrder);
   registerCommand(dispatchOrder);
   registerCommand(cancelSalesOrder);
-  registerCommand(createTransporter);
-  registerCommand(createShipment);
-  registerCommand(assignCarrier);
-  registerCommand(dispatchShipment);
-  registerCommand(confirmDelivery);
-  registerCommand(reportShipmentLost);
   registerCommand(raiseSalesInvoice);
   registerCommand(raisePurchaseInvoice);
   registerCommand(recordPayment);
@@ -748,8 +756,6 @@ export function registerPlywoodCapability(): void {
   registerQuery(salesOrderDetail);
   registerQuery(openOrders);
   registerQuery(stockAvailability);
-  registerQuery(listTransporters);
-  registerQuery(trackMaterial);
   registerQuery(listInvoices);
   registerQuery(invoiceDetail);
   registerQuery(outstandingReceivables);

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sellerIdentity } from "./business";
 import { ValidationError, type CommandDefinition } from "@/server/platform/command";
 import { type QueryDefinition } from "@/server/platform/query";
 import { resolveConfig } from "@/server/platform/capability";
@@ -218,17 +219,35 @@ export const raiseSalesInvoice: CommandDefinition<
       );
     }
 
-    const supplyStateCode = String(
-      (await resolveConfig<unknown>(ctx.tx, CONFIG_TENANT_STATE_CODE)) ?? "",
-    ).trim();
+    // The seller's identity comes from the GST registration (P0-09), not from
+    // a configuration key. The key remains as a transitional fallback for
+    // tenants provisioned before slice 2; it is removed when the effective-dated
+    // tax rules land in slice 6, and until then a deployment that has completed
+    // onboarding never reads it.
+    const seller = await sellerIdentity(ctx.tx);
+    const supplyStateCode =
+      seller.stateCode ??
+      String((await resolveConfig<unknown>(ctx.tx, CONFIG_TENANT_STATE_CODE)) ?? "").trim();
     if (!supplyStateCode) {
       throw new ValidationError(
-        "E_VALIDATION: this business has no state code configured, so tax cannot be decided",
+        "E_VALIDATION: this business has no GST registration, so tax cannot be decided. " +
+          "Add one under Business Settings.",
+      );
+    }
+
+    // A missing customer state must NOT fall back to the business's own
+    // (rule freeze §4.4). Doing so silently labels an interstate supply as
+    // intrastate, which charges the wrong tax and files the wrong return —
+    // and it fails in the direction that looks correct on screen.
+    if (!order.customer.stateCode) {
+      throw new ValidationError(
+        `E_VALIDATION: ${order.customer.displayName} has no state code, so the place of supply ` +
+          "cannot be determined and the invoice would be taxed as if it were local",
       );
     }
     // Snapshotted onto the invoice: a customer who later moves state must not
     // retrospectively change how an old invoice was taxed.
-    const placeOfSupplyStateCode = order.customer.stateCode ?? supplyStateCode;
+    const placeOfSupplyStateCode = order.customer.stateCode;
 
     const [rawCgst, rawSgst, rawIgst] = await Promise.all([
       resolveConfig<unknown>(ctx.tx, CONFIG_CGST_RATE_BP),
@@ -272,6 +291,11 @@ export const raiseSalesInvoice: CommandDefinition<
         financialYear,
         supplyStateCode,
         placeOfSupplyStateCode,
+        // The seller's own identity, frozen with the document (P0-09). A
+        // business that renames itself or re-registers must not restate an
+        // invoice it has already given to a customer and reported.
+        sellerLegalNameSnapshot: seller.legalName,
+        sellerGstinSnapshot: seller.gstin,
         cgstRateBp: tax.interState ? 0 : (cgstRateBp ?? 0),
         sgstRateBp: tax.interState ? 0 : (sgstRateBp ?? 0),
         igstRateBp: tax.interState ? (igstRateBp ?? 0) : 0,
@@ -780,8 +804,7 @@ export const ownerConsole: QueryDefinition<
     stockValuePaise: number;
     receivablesPaise: number;
     payablesPaise: number;
-    pendingDeliveries: number;
-    inTransitShipments: number;
+    awaitingGoodsIssue: number;
     lowStockBoards: number;
   }
 > = {
@@ -814,13 +837,17 @@ export const ownerConsole: QueryDefinition<
           AS payables,
         (SELECT count(*) FROM plywood_sales_order
           WHERE state IN ('approved', 'dispatching'))::bigint
-          AS pending_deliveries,
-        (SELECT count(*) FROM plywood_shipment WHERE state = 'in_transit')::bigint
-          AS in_transit,
+          AS awaiting_goods_issue,
+        -- Available, not on hand (rule freeze §4.2). Counting on-hand reports
+        -- plenty while every sheet is already reserved, and the buyer finds
+        -- out at goods issue, which is too late to buy anything.
         (SELECT count(*) FROM plywood_product p
           WHERE p.active AND p.reorder_level_units > 0
             AND COALESCE((SELECT SUM(b.qty_units) FROM stock_balance b
-                           WHERE b.product_id = p.id), 0) <= p.reorder_level_units)::bigint
+                           WHERE b.product_id = p.id), 0)
+              - COALESCE((SELECT SUM(r.qty_units) FROM plywood_stock_reservation r
+                           WHERE r.product_id = p.id AND r.released_at IS NULL), 0)
+              < p.reorder_level_units)::bigint
           AS low_stock`;
 
     const row = rows[0] ?? {};
@@ -831,8 +858,7 @@ export const ownerConsole: QueryDefinition<
       stockValuePaise: n("stock_value"),
       receivablesPaise: n("receivables"),
       payablesPaise: n("payables"),
-      pendingDeliveries: n("pending_deliveries"),
-      inTransitShipments: n("in_transit"),
+      awaitingGoodsIssue: n("awaiting_goods_issue"),
       lowStockBoards: n("low_stock"),
     };
   },

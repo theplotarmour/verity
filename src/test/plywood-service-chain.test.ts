@@ -28,19 +28,14 @@ import {
   CONFIG_SGST_RATE_BP,
   CONFIG_TENANT_STATE_CODE,
   PLYWOOD_CAPABILITY,
-  assignCarrier,
-  confirmDelivery,
   createBrand,
   createCustomer,
   createProduct,
   createPurchaseOrder,
   createSalesOrder,
-  createShipment,
   createSupplier,
-  createTransporter,
   defineGodownRack,
   dispatchOrder,
-  dispatchShipment,
   marginReport,
   ownerConsole,
   partyLedger,
@@ -52,7 +47,6 @@ import {
   stockAvailability,
   stockOnHand,
   submitPurchaseOrder,
-  trackMaterial,
   transferStock,
 } from "@/server/capabilities/plywood";
 
@@ -91,14 +85,12 @@ describeDb("plywood: the whole chain, from purchase to payment", () => {
   let productId: string;
   let supplierId: string;
   let customerId: string;
-  let transporterId: string;
   let vehicleAssetId: string;
 
   // Carried between steps, because each step's output is the next step's input —
   // which is the point of a chain test.
   let purchaseOrderId: string;
   let salesOrderId: string;
-  let shipmentId: string;
   let invoiceId: string;
   let invoiceTotalPaise: number;
 
@@ -237,9 +229,6 @@ describeDb("plywood: the whole chain, from purchase to payment", () => {
         creditLimitPaise: 50_000_000,
       })
     ).id;
-    transporterId = (
-      await executeCommand(owner, createTransporter, { name: "Delhi Roadways" })
-    ).id;
 
     expect(productId).toBeTruthy();
     expect(rackId).toBeTruthy();
@@ -333,39 +322,13 @@ describeDb("plywood: the whole chain, from purchase to payment", () => {
     expect(availability.find((row) => row.productId === productId)!.reservedUnits).toBe(0);
   });
 
-  /* ------------------------------ 6. transport ------------------------------ */
-
-  it("6 — puts it on a lorry and answers where it is", async () => {
-    shipmentId = (
-      await executeCommand(owner, createShipment, {
-        sourceLocationId: okhlaId,
-        destCustomerId: customerId,
-        salesOrderId,
-        freightChargePaise: 350_000,
-        freightPayer: "customer",
-      })
-    ).id;
-    await executeCommand(owner, assignCarrier, {
-      shipmentId,
-      transporterId,
-      vehicleAssetId,
-      lrNumber: "LR-55120",
-    });
-    await executeCommand(owner, dispatchShipment, { shipmentId });
-
-    const [tracked] = await executeQuery(owner, trackMaterial, { search: "LR-55120" });
-    expect(tracked!.state).toBe("in_transit");
-    expect(tracked!.destination).toBe("Sharma Timber Mart");
-    expect(tracked!.vehicleReference).toBe("DL-1AB-4471");
-    expect(tracked!.orderReference).toBe("SO-8891");
-
-    await executeCommand(owner, confirmDelivery, {
-      shipmentId,
-      receivedBy: "Sharma at the yard",
-    });
-    const [delivered] = await executeQuery(owner, trackMaterial, { search: "LR-55120" });
-    expect(delivered!.state).toBe("delivered");
-  });
+  /* ---------------------- 6. transport: REMOVED (slice 2) ------------------- */
+  //
+  // The Logistics module is gone (taskplans/45 §D-01). Material leaves a godown
+  // through a Goods Issue and through nothing else, so there is no shipment to
+  // create, no carrier to assign and nothing to track. The chain now runs
+  // reservation -> dispatch -> invoice, and the Goods Issue document that
+  // replaces `dispatchOrder` arrives in slice 4.
 
   /* ------------------------------- 7. invoice ------------------------------- */
 
@@ -420,8 +383,7 @@ describeDb("plywood: the whole chain, from purchase to payment", () => {
     const console_ = await executeQuery(owner, ownerConsole, {});
     expect(console_.todaysSalesPaise).toBe(invoiceTotalPaise);
     expect(console_.receivablesPaise).toBe(0);
-    expect(console_.inTransitShipments).toBe(0);
-    expect(console_.pendingDeliveries).toBe(0);
+    expect(console_.awaitingGoodsIssue).toBe(0);
     // 140 sheets left across two godowns, at the price they were bought for.
     expect(console_.stockValuePaise).toBe((BOUGHT - SOLD) * COST_PER_SHEET);
   });
@@ -453,7 +415,6 @@ describeDb("plywood: the whole chain, from purchase to payment", () => {
         UNION ALL SELECT 'stock_ledger_entry', count(*)::bigint FROM stock_ledger_entry WHERE tenant_id = ${tenantId}::uuid
         UNION ALL SELECT 'stock_balance', count(*)::bigint FROM stock_balance WHERE tenant_id = ${tenantId}::uuid
         UNION ALL SELECT 'plywood_sales_order', count(*)::bigint FROM plywood_sales_order WHERE tenant_id = ${tenantId}::uuid
-        UNION ALL SELECT 'plywood_shipment', count(*)::bigint FROM plywood_shipment WHERE tenant_id = ${tenantId}::uuid
         UNION ALL SELECT 'plywood_invoice', count(*)::bigint FROM plywood_invoice WHERE tenant_id = ${tenantId}::uuid
         UNION ALL SELECT 'plywood_ledger_entry', count(*)::bigint FROM plywood_ledger_entry WHERE tenant_id = ${tenantId}::uuid`;
       expect(survivors.map((row) => ({ ...row, rows: Number(row.rows) }))).toEqual(

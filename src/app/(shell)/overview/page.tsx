@@ -104,16 +104,10 @@ export default async function OverviewPage() {
             hint="Owed by us"
           />
           <Stat
-            label="Pending deliveries"
-            value={String(console_.pendingDeliveries)}
+            label="Awaiting goods issue"
+            value={String(console_.awaitingGoodsIssue)}
             href="/sales"
-            hint="Approved, not yet dispatched"
-          />
-          <Stat
-            label="In transit"
-            value={String(console_.inTransitShipments)}
-            href="/logistics"
-            hint="On the road now"
+            hint="Approved, not yet issued"
           />
         </StatRow>
       </div>

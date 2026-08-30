@@ -116,9 +116,9 @@ model Tenant {
   plywoodSalesOrders        PlywoodSalesOrder[]
   plywoodSalesOrderLines    PlywoodSalesOrderLine[]
   plywoodStockReservations  PlywoodStockReservation[]
-  plywoodTransporters       PlywoodTransporter[]
-  plywoodShipments          PlywoodShipment[]
   plywoodInvoiceSeries      PlywoodInvoiceSeries[]
+  plywoodBusinessProfile    PlywoodBusinessProfile?
+  plywoodGstRegistrations   PlywoodGstRegistration[]
   plywoodInvoices           PlywoodInvoice[]
   plywoodInvoiceLines       PlywoodInvoiceLine[]
   plywoodPayments           PlywoodPayment[]
@@ -1093,8 +1093,6 @@ model Location {
   plywoodPurchaseOrders    PlywoodPurchaseOrder[]
   plywoodSalesOrders       PlywoodSalesOrder[]
   plywoodStockReservations PlywoodStockReservation[]
-  plywoodShipmentsFrom     PlywoodShipment[]         @relation("plywood_shipment_source")
-  plywoodShipmentsTo       PlywoodShipment[]         @relation("plywood_shipment_destination")
 
   @@unique([tenantId, id], name: "location_tenant_scoped_id")
   @@index([tenantId, organizationId])
@@ -1175,7 +1173,6 @@ model Asset {
   tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   location         Location?         @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   resources        Resource[]
-  plywoodShipments PlywoodShipment[]
 
   @@unique([tenantId, id], name: "asset_tenant_scoped_id")
   @@unique([tenantId, reference])
@@ -2305,7 +2302,6 @@ model PlywoodCustomer {
   tenant               Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   pricing              PlywoodCustomerPrice[]
   orders               PlywoodSalesOrder[]
-  plywoodShipments     PlywoodShipment[]
   plywoodInvoices      PlywoodInvoice[]
   plywoodLedgerEntries PlywoodLedgerEntry[]
 
@@ -2353,7 +2349,6 @@ model PlywoodPurchaseOrder {
   supplier         PlywoodSupplier            @relation(fields: [tenantId, supplierId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   location         Location                   @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   lines            PlywoodPurchaseOrderLine[]
-  plywoodShipments PlywoodShipment[]
   plywoodInvoices  PlywoodInvoice[]
 
   @@unique([tenantId, id], name: "plywood_purchase_order_tenant_scoped_id")
@@ -2407,7 +2402,6 @@ model PlywoodSalesOrder {
   location         Location                  @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   lines            PlywoodSalesOrderLine[]
   reservations     PlywoodStockReservation[]
-  plywoodShipments PlywoodShipment[]
   plywoodInvoices  PlywoodInvoice[]
 
   @@unique([tenantId, id], name: "plywood_sales_order_tenant_scoped_id")
@@ -2480,77 +2474,91 @@ model PlywoodStockReservation {
 // ---------------------------------------------------------------------------
 
 /// A carrier. A record, not a user (P6) — no transporter signs in.
-model PlywoodTransporter {
-  id           String   @id @default(uuid()) @db.Uuid
-  tenantId     String   @map("tenant_id") @db.Uuid
-  name         String
-  phone        String?
-  email        String?
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-  version      Int      @default(1)
-  customFields Json     @default("{}") @map("custom_fields")
+// Plywood stage 5 was logistics: transporters, shipments, lorry receipts and
+// delivery confirmation. Removed in slice 2 (taskplans/45 §D-01).
+//
+// The specification the client agreed has no Logistics module, and keeping one
+// would leave two doors out of a godown — a shipment and a goods issue — which
+// is precisely what makes a stock ledger unprovable (audit P0-04). Material now
+// leaves through a Goods Issue document and through nothing else.
 
-  tenant    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  shipments PlywoodShipment[]
+// ---------------------------------------------------------------------------
+// Plywood — business identity (slice 2)
+//
+// Authority: taskplans/45_plywood_workflow_program.md §D-03 and §4.4;
+// PLYWOOD_TARGET_WORKFLOW_GAP_AUDIT.md P0-09.
+//
+// Legally required document identity used to live nowhere. The invoice page
+// read the live tenant name and a raw configuration key holding a state code,
+// which means two things that must never be true of a tax document: the
+// business's own legal identity was not recorded anywhere as data, and an
+// invoice raised last year would silently change if the business renamed
+// itself this year.
+// ---------------------------------------------------------------------------
 
-  @@unique([tenantId, id], name: "plywood_transporter_tenant_scoped_id")
-  @@index([tenantId, name])
-  @@map("plywood_transporter")
+/// Who this business legally is. One per tenant.
+model PlywoodBusinessProfile {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @unique @map("tenant_id") @db.Uuid
+
+  /// The name on the tax document. Distinct from `Tenant.name`, which is a
+  /// label an operator typed and may change for convenience.
+  legalName String  @map("legal_name")
+  /// What the business is called on the sign outside, when it differs.
+  tradeName String? @map("trade_name")
+  pan       String? @db.VarChar(10)
+
+  registeredAddress String? @map("registered_address")
+
+  /// April in India. Stored rather than assumed, because the invoice series and
+  /// every period boundary derive from it.
+  financialYearStartMonth Int    @default(4) @map("financial_year_start_month")
+  currencyCode            String @default("INR") @map("currency_code")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, id], name: "plywood_business_profile_tenant_scoped_id")
+  @@map("plywood_business_profile")
 }
 
-/// Material in motion: out of a godown to a customer, or in from a supplier.
-model PlywoodShipment {
-  id             String  @id @default(uuid()) @db.Uuid
-  tenantId       String  @map("tenant_id") @db.Uuid
-  transporterId  String? @map("transporter_id") @db.Uuid
-  /// The vehicle, as an `Asset`. The first real reuse of that capability.
-  vehicleAssetId String? @map("vehicle_asset_id") @db.Uuid
-  /// Lorry receipt number — the reference a transporter answers to on the phone.
-  lrNumber       String? @map("lr_number")
+/// A GST registration. One today (§D-03); the shape allows more without redesign.
+///
+/// Tax rules, invoice series and returns are keyed by REGISTRATION, not by
+/// tenant, from this first migration. Adding a second state later is then data
+/// rather than a schema change — which is the whole reason to model it this way
+/// while deliberately supporting only one.
+model PlywoodGstRegistration {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
 
-  /// Where it left from. A godown for an outbound shipment; for an inbound one
-  /// it is the destination godown and the origin is the supplier, who is not a
-  /// Location.
-  sourceLocationId String  @map("source_location_id") @db.Uuid
-  /// Exactly one destination: another godown, or a customer.
-  destLocationId   String? @map("dest_location_id") @db.Uuid
-  destCustomerId   String? @map("dest_customer_id") @db.Uuid
+  /// 15 characters: 2 state + 10 PAN + 1 entity + 1 'Z' + 1 checksum.
+  gstin     String @db.VarChar(15)
+  /// The state this registration is held in. Decides CGST+SGST against IGST.
+  stateCode String @map("state_code") @db.VarChar(2)
+  /// regular | composition. Changes which returns are due.
+  registrationType String @default("regular") @map("registration_type")
 
-  /// Typed, check-constrained to exactly one. Not a polymorphic key and id pair:
-  /// that carries no foreign key, so nothing stops a shipment pointing at an
-  /// order that no longer exists.
-  salesOrderId    String? @map("sales_order_id") @db.Uuid
-  purchaseOrderId String? @map("purchase_order_id") @db.Uuid
+  /// "NK/26-27/". The series every invoice raised under this registration uses.
+  invoiceSeriesPrefix String @map("invoice_series_prefix")
 
-  freightChargePaise Int    @default(0) @map("freight_charge_paise")
-  /// Who bears the freight. It changes the margin on the sale, so it is a
-  /// recorded fact rather than an assumption made at reporting time.
-  freightPayer       String @default("tenant") @map("freight_payer")
+  effectiveFrom DateTime  @default(now()) @map("effective_from")
+  effectiveTo   DateTime? @map("effective_to")
+  active        Boolean   @default(true)
 
-  state        String    @default("draft")
-  dispatchedAt DateTime? @map("dispatched_at")
-  deliveredAt  DateTime? @map("delivered_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
 
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-  version      Int      @default(1)
-  customFields Json     @default("{}") @map("custom_fields")
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  tenant        Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  transporter   PlywoodTransporter?   @relation(fields: [tenantId, transporterId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  vehicle       Asset?                @relation(fields: [tenantId, vehicleAssetId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  source        Location              @relation("plywood_shipment_source", fields: [tenantId, sourceLocationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  destination   Location?             @relation("plywood_shipment_destination", fields: [tenantId, destLocationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  destCustomer  PlywoodCustomer?      @relation(fields: [tenantId, destCustomerId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  salesOrder    PlywoodSalesOrder?    @relation(fields: [tenantId, salesOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  purchaseOrder PlywoodPurchaseOrder? @relation(fields: [tenantId, purchaseOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-
-  @@unique([tenantId, id], name: "plywood_shipment_tenant_scoped_id")
-  @@index([tenantId, state])
-  @@index([tenantId, lrNumber])
-  @@map("plywood_shipment")
+  @@unique([tenantId, gstin])
+  @@unique([tenantId, id], name: "plywood_gst_registration_tenant_scoped_id")
+  @@index([tenantId, active])
+  @@map("plywood_gst_registration")
 }
 
 // ---------------------------------------------------------------------------
@@ -2618,6 +2626,13 @@ model PlywoodInvoice {
   /// state must not retrospectively change how an old invoice was taxed.
   placeOfSupplyStateCode String @map("place_of_supply_state_code")
   supplyStateCode        String @map("supply_state_code")
+
+  /// The seller's own identity, as it stood when the document was raised
+  /// (P0-09). Snapshotted for the same reason the party's state code is: a
+  /// business that renames itself, or re-registers, must not restate an
+  /// invoice it has already given to a customer and reported to the portal.
+  sellerLegalNameSnapshot String? @map("seller_legal_name_snapshot")
+  sellerGstinSnapshot     String? @map("seller_gstin_snapshot")
 
   /// Basis points, snapshotted with the invoice. 2.5% is 250. A rate change next
   /// quarter must not restate a filed invoice.

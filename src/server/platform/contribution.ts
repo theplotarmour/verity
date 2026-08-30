@@ -24,7 +24,29 @@ import { withTenant, type TenantScopedClient } from "./tenancy";
  */
 
 /** Where in the shell a contribution appears. */
-export type NavigationGroup = "Platform" | "Capabilities" | "Administration";
+/**
+ * The heading a navigation entry sits under.
+ *
+ * `Platform`, `Capabilities` and `Administration` are the platform's own
+ * vocabulary and remain for platform surfaces. The business groups were added
+ * in the plywood workflow programme (taskplans/45 §8): a client should read
+ * their own words in the sidebar, and "Capabilities" is an implementation
+ * concept leaking into the product.
+ *
+ * A closed union rather than a free string, deliberately — the sidebar has to
+ * render these in a deliberate order, and an open set means the next
+ * capability invents a sixth heading nobody designed a position for.
+ */
+export type NavigationGroup =
+  | "Platform"
+  | "Capabilities"
+  | "Administration"
+  // Business groups, in the order the sidebar renders them.
+  | "Overview"
+  | "Trade"
+  | "Inventory"
+  | "Money"
+  | "Insights";
 
 /**
  * Which shell a surface belongs to.

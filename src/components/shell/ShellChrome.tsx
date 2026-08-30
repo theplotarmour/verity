@@ -73,19 +73,36 @@ export function ShellChrome({
   /**
    * The navigation list.
    *
-   * Areas are rendered as one continuous list with no group headings, as the
-   * mockup does. The grouping still exists in the data and still orders the
-   * items; it simply is not drawn, because nine items do not need three
-   * headings to be scannable.
+   * Group headings are DRAWN, not merely announced to a screen reader.
+   *
+   * They were `sr-only` because nine items did not need three headings to be
+   * scannable, and that was true of nine items. The plywood workflow brings
+   * fifteen across five business areas — Trade, Inventory, Money, Insights,
+   * Administration (taskplans/45 §8) — and an unlabelled list of fifteen is
+   * exactly the failure the grouping existed to prevent. A sighted user was
+   * being given strictly less structure than a screen-reader user, which is a
+   * strange way round.
+   *
+   * A single-item group still gets no heading: a heading over one link is
+   * noise, and "Overview" sits alone at the top.
    */
   function navList() {
     return (
       <nav aria-label="Platform" className="flex flex-col gap-1">
         {areas.map((area) => (
           <ul key={area.group} className="m-0 flex list-none flex-col gap-1 p-0">
-            <li className="sr-only" aria-hidden="true">
-              {area.group}
-            </li>
+            {area.items.length > 1 ? (
+              <li
+                aria-hidden="true"
+                className="px-3.5 pt-4 pb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-text-tertiary"
+              >
+                {area.group}
+              </li>
+            ) : (
+              <li className="sr-only" aria-hidden="true">
+                {area.group}
+              </li>
+            )}
             {area.items.map((item) => {
               const current = isCurrent(item.href);
               return (

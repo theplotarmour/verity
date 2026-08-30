@@ -41,9 +41,14 @@ export const ENTITY_SALES_ORDER = "verity.plywood.sales_order";
 export const ENTITY_SALES_ORDER_LINE = "verity.plywood.sales_order_line";
 export const ENTITY_RESERVATION = "verity.plywood.reservation";
 
-/* Stage 5 — logistics. */
-export const ENTITY_TRANSPORTER = "verity.plywood.transporter";
-export const ENTITY_SHIPMENT = "verity.plywood.shipment";
+/* Stage 5 was logistics. Removed in slice 2 (taskplans/45 §D-01): material
+ * leaves a godown through a Goods Issue document and through nothing else.
+ * Two doors out of a godown make the stock ledger unprovable, which is the
+ * audit's P0-04. */
+
+/* Slice 2 — the business's own legal identity and tax registration. */
+export const ENTITY_BUSINESS_PROFILE = "verity.plywood.business_profile";
+export const ENTITY_GST_REGISTRATION = "verity.plywood.gst_registration";
 
 /* Stage 6 — finance. */
 export const ENTITY_INVOICE = "verity.plywood.invoice";
