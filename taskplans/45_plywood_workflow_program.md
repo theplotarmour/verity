@@ -1,6 +1,6 @@
 # Task 45 — Plywood Target Workflow: Program Control & Rule Freeze
 
-**Status: ACTIVE**
+**Status: SLICES 1–7 DELIVERED (2026-08-31)**
 **Opened: 2026-08-31**
 **Inputs:** `PLYWOOD_TARGET_WORKFLOW_GAP_AUDIT.md` (30 Aug 2026), the target
 workflow specification supplied 31 Aug 2026.
@@ -322,16 +322,16 @@ foundation leaking into the product.
 
 ## 9. Slice plan
 
-| Slice | Task | Delivers |
-|---|---|---|
-| 0 | 45 | This document |
-| 1 | 46 | **Integrity foundation** — row scope, immutability, concurrency, idempotency, business activities, tenant-timezone dates |
-| 2 | 47 | **Business identity** — BusinessProfile, GstRegistration, financial year, document series, onboarding, People & Roles, navigation, Logistics removal |
-| 3 | 48 | **Purchase chain** — supplier detail, effective pricing, PO lifecycle, Goods Receipt document, source-linked stock ledger, supplier invoice, three-way match, payables, expected ITC |
-| 4 | 49 | **Sales chain** — customer detail, corrected exposure, credit approval, partial reservation, Goods Issue, invoice from issued quantity, collections |
-| 5 | 50 | **Returns & corrections** — customer return, damage, adjustment, credit and debit notes |
-| 6 | 51 | **Tax** — tax rules, tax lines, ITC, exceptions, GSTR-1, GSTR-3B |
-| 7 | 52 | **Close, reports, audit, notifications** |
+| Slice | Task | Delivers | |
+|---|---|---|---|
+| 0 | 45 | This document | ✅ |
+| 1 | 46 | **Integrity foundation** — row scope, immutability, concurrency, idempotency, business activities, tenant-timezone dates | ✅ |
+| 2 | 47 | **Business identity** — BusinessProfile, GstRegistration, financial year, document series, onboarding, People & Roles, navigation, Logistics removal | ✅ |
+| 3 | 48 | **Purchase chain** — supplier detail, effective pricing, PO lifecycle, Goods Receipt document, source-linked stock ledger, supplier invoice, three-way match, payables, expected ITC | ✅ |
+| 4 | 49 | **Sales chain** — customer detail, corrected exposure, credit approval, partial reservation, Goods Issue, invoice from issued quantity, collections | ✅ |
+| 5 | 50 | **Returns & corrections** — customer return, damage, adjustment, credit and debit notes | ✅ |
+| 6 | 51 | **Tax** — tax rules, tax lines, ITC, exceptions, GSTR-1, GSTR-3B | ✅ |
+| 7 | 52 | **Close, reports, audit, notifications** | ✅ |
 
 Commit per task. Each slice ships with its own acceptance tests, in the layers
 the audit's §8 requires: pure rule, database invariant, concurrency, chain,
@@ -368,3 +368,43 @@ role, and reconciliation.
 [ ] Logistics absent from schema, server, navigation and tests
 [ ] Every target example in the specification exists as a passing acceptance test
 ```
+
+---
+
+## 12. Delivery record (2026-08-31)
+
+| Slice | Task | Closed |
+|---|---|---|
+| 1 | 46 | P0-01, P0-02, P0-03 (part), P0-05 (part), P0-06 |
+| 2 | 47 | P0-09, P0-10 (part) |
+| 3 | 48 | P0-04 (receipts) |
+| 4 | 49 | P0-04 (issues), P0-03 (rest) |
+| 5 | 50 | P0-05 (rest) |
+| 6 | 51 | P0-07 |
+| 7 | 52 | P0-08, P0-10 (rest) |
+
+**All ten release-blocking findings in the audit are closed.**
+
+Suite: **521 → 785**, all passing, `tsc` clean, every migration applied to a
+dropped-and-recreated database.
+
+### What is built and what is not
+
+Built and proven: row-scoped authorization, a correct credit-exposure formula,
+invoice eligibility bound to physical goods movement, immutable posted
+documents with a correction path, concurrency protection, business and tax
+identity as master data, Goods Receipt and Goods Issue documents,
+source-linked stock movements, three-way match, partial receipt and partial
+issue, returns tied to their issue, credit and debit notes, effective-dated tax
+rules, a GSTR-1 working, an accounting period lock, and reports that answer
+this business's questions.
+
+Not built, and named in each slice's plan: most detail routes and Related
+sections, effective-dated party pricing, purchase-invoice tax lines and ITC,
+GSTR-3B and portal reconciliation, the business-activity role editor, the
+guided onboarding flow, notifications beyond low stock, and the human-readable
+operational audit.
+
+The foundations the audit said to build first are in. The screens that sit on
+them are the next programme, and they can now be built without the defects
+underneath.
