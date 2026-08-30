@@ -343,7 +343,11 @@ describe("conformance: over-genericity (Phase G)", () => {
     // 29: policy.ts (Task 37) — the authorization decision point. It adds no
     // rules; it composes authorization.ts into one answer so that a command, a
     // query, an API route and a Phase 9 agent cannot each grow their own habit.
-    expect(platformModules.length).toBeLessThanOrEqual(29);
+    // 30: integration.ts (Task 39) — the ports-and-adapters contract for
+    // exchanges with external systems. Platform because the *shape* of an
+    // exchange (tenant, correlation, attempt policy, inbound trust) is a
+    // platform rule; the transport lives in src/server/integrations/.
+    expect(platformModules.length).toBeLessThanOrEqual(30);
   });
 });
 
