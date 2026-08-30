@@ -484,6 +484,8 @@ export const lowStock: QueryDefinition<
     brandName: string;
     unitLabel: string;
     onHandUnits: number;
+    reservedUnits: number;
+    availableUnits: number;
     reorderLevelUnits: number;
   }>
 > = {
@@ -500,17 +502,39 @@ export const lowStock: QueryDefinition<
       include: { brand: { select: { name: true } }, balances: true },
     });
 
+    // Reserved stock is spoken for. Comparing on-hand against the reorder
+    // level — which is what this did — reports plenty while every sheet is
+    // already promised to a customer, and the buyer finds out at goods issue.
+    //
+    // Authority: taskplans/45_plywood_workflow_program.md §4.2:
+    //   available = on_hand - reserved
+    //   low_stock = available < reorder_level
+    const held = await ctx.tx.plywoodStockReservation.groupBy({
+      by: ["productId"],
+      where: { releasedAt: null },
+      _sum: { qtyUnits: true },
+    });
+    const reservedByProduct = new Map(
+      held.map((row) => [row.productId, row._sum.qtyUnits ?? 0]),
+    );
+
     return products
-      .map((product) => ({
-        productId: product.id,
-        productName: product.name,
-        brandName: product.brand.name,
-        unitLabel: product.unitLabel,
-        onHandUnits: product.balances.reduce((sum, balance) => sum + balance.qtyUnits, 0),
-        reorderLevelUnits: product.reorderLevelUnits,
-      }))
-      .filter((row) => row.onHandUnits <= row.reorderLevelUnits)
-      .sort((a, b) => a.onHandUnits - b.onHandUnits);
+      .map((product) => {
+        const onHandUnits = product.balances.reduce((sum, balance) => sum + balance.qtyUnits, 0);
+        const reservedUnits = reservedByProduct.get(product.id) ?? 0;
+        return {
+          productId: product.id,
+          productName: product.name,
+          brandName: product.brand.name,
+          unitLabel: product.unitLabel,
+          onHandUnits,
+          reservedUnits,
+          availableUnits: onHandUnits - reservedUnits,
+          reorderLevelUnits: product.reorderLevelUnits,
+        };
+      })
+      .filter((row) => row.availableUnits < row.reorderLevelUnits)
+      .sort((a, b) => a.availableUnits - b.availableUnits);
   },
 };
 

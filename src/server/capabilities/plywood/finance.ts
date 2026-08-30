@@ -14,6 +14,29 @@ import {
 } from "./keys";
 
 /**
+ * The order states a financial document may be raised against.
+ *
+ * Authority: taskplans/45_plywood_workflow_program.md §5 (state machines) and
+ * PLYWOOD_TARGET_WORKFLOW_GAP_AUDIT.md P0-03.
+ *
+ * Allow-lists, not deny-lists. When the Goods Issue and Goods Receipt
+ * documents arrive, these sets tighten further — an invoice will be limited to
+ * the quantity actually issued or received, rather than the quantity ordered —
+ * and the sets are where that change belongs.
+ */
+const INVOICEABLE_SALES_ORDER_STATES = new Set([
+  "approved",
+  "dispatching",
+  "completed",
+]);
+
+const INVOICEABLE_PURCHASE_ORDER_STATES = new Set([
+  "submitted",
+  "partially_received",
+  "completed",
+]);
+
+/**
  * PLYWOOD STAGE 6 — finance.
  *
  * Requirement source: plywood.md §1.4 and §1.5. Three decisions from
@@ -182,8 +205,17 @@ export const raiseSalesInvoice: CommandDefinition<
     if (existing) {
       throw new ValidationError("E_VALIDATION: this order has already been invoiced");
     }
-    if (order.state === "draft" || order.state === "cancelled") {
-      throw new ValidationError("E_VALIDATION: only an approved order can be invoiced");
+    // Audit P0-03. The previous guard rejected only `draft` and `cancelled`,
+    // which let an order sitting in `pending_credit` be invoiced — a financial
+    // document raised against credit the business had explicitly refused to
+    // grant. Stated as an allow-list rather than a deny-list: a state added
+    // later is then refused until somebody decides it should be invoiceable,
+    // which is the safe direction to be wrong in.
+    if (!INVOICEABLE_SALES_ORDER_STATES.has(order.state)) {
+      throw new ValidationError(
+        `E_VALIDATION: a sales order in ${order.state} cannot be invoiced; ` +
+          "credit must be approved first",
+      );
     }
 
     const supplyStateCode = String(
@@ -316,6 +348,16 @@ export const raisePurchaseInvoice: CommandDefinition<
     });
     if (existing) {
       throw new ValidationError("E_VALIDATION: this purchase order has already been invoiced");
+    }
+
+    // Audit P0-03, the purchasing half: there was no state guard at all, so a
+    // supplier invoice could be recorded against a draft or cancelled purchase
+    // order — a payable for goods nobody had ordered.
+    if (!INVOICEABLE_PURCHASE_ORDER_STATES.has(order.state)) {
+      throw new ValidationError(
+        `E_VALIDATION: a purchase order in ${order.state} cannot be invoiced; ` +
+          "it must be submitted first",
+      );
     }
 
     const supplyStateCode =

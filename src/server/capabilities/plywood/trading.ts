@@ -517,16 +517,105 @@ export const cancelPurchaseOrder: CommandDefinition<
  * rather than introducing a second notion of "owed" beside it — which is the
  * mistake P3 exists to prevent.
  */
+/**
+ * What this customer currently owes us, plus what we have committed to supply
+ * them and not yet billed.
+ *
+ * Authority: taskplans/45_plywood_workflow_program.md §4.1 — the single
+ * canonical formula. Any second definition of exposure anywhere in this
+ * capability is a defect.
+ *
+ * ```text
+ * exposure = unallocated_receivables + approved_uninvoiced_commitments
+ * ```
+ *
+ * THE DEFECT THIS REPLACES (audit P0-02)
+ * The previous implementation summed open orders and nothing else, and
+ * dispatch moved an order to `completed`. So the moment goods left the
+ * godown the customer's exposure fell to zero — while they still owed the
+ * whole invoice. The next order then passed a credit check it should have
+ * failed. Exposure fell precisely when the business's risk was highest.
+ *
+ * The three properties that must hold, and why each term is shaped as it is:
+ *
+ *   1. Issuing goods must not reduce exposure. It does not: the commitment
+ *      converts into a receivable when the invoice is raised, and the
+ *      receivable clears only when a payment is allocated against it.
+ *   2. Nothing is counted twice. An order that has been invoiced contributes
+ *      through its receivable; subtracting the invoiced value from the
+ *      commitment is what stops it also contributing as a commitment.
+ *   3. A draft order is not a commitment. Only an order the business has
+ *      actually approved constrains further credit.
+ *
+ * Advances reduce exposure only once allocated. A disputed invoice is NOT
+ * excluded — a dispute is not a payment.
+ */
 export async function customerExposurePaise(
   tx: TenantScopedClient,
   customerId: string,
 ): Promise<number> {
-  const open = await tx.plywoodSalesOrder.findMany({
-    where: { customerId, state: { notIn: ["cancelled", "completed"] } },
-    select: { totalPricePaise: true },
+  // Term 1 — unallocated receivables. Gross of tax: the customer owes the
+  // total on the document, not its taxable value.
+  const invoices = await tx.plywoodInvoice.findMany({
+    where: { customerId },
+    select: { totalPaise: true, payments: { select: { amountPaise: true } } },
   });
-  return open.reduce((sum, order) => sum + order.totalPricePaise, 0);
+
+  const receivables = invoices.reduce((sum, invoice) => {
+    const paid = invoice.payments.reduce((p, payment) => p + payment.amountPaise, 0);
+    // Clamped at zero per invoice, not in aggregate: an overpayment on one
+    // invoice is money on account, and letting it mask a different unpaid
+    // invoice would understate exposure.
+    return sum + Math.max(0, invoice.totalPaise - paid);
+  }, 0);
+
+  // Term 2 — approved but not yet invoiced. `COMMITTED_ORDER_STATES` is the
+  // set of states in which the business has promised to supply; a draft has
+  // promised nothing and a cancelled order has withdrawn the promise.
+  const orders = await tx.plywoodSalesOrder.findMany({
+    where: { customerId, state: { in: [...COMMITTED_ORDER_STATES] } },
+    select: { id: true, totalPricePaise: true },
+  });
+
+  // `PlywoodSalesOrder` carries no back-relation to its invoices, so the
+  // invoiced value is fetched once for the whole set rather than per order.
+  const invoicedByOrder = new Map<string, number>();
+  if (orders.length > 0) {
+    const raised = await tx.plywoodInvoice.findMany({
+      where: { salesOrderId: { in: orders.map((order) => order.id) } },
+      select: { salesOrderId: true, totalPaise: true },
+    });
+    for (const invoice of raised) {
+      if (!invoice.salesOrderId) continue;
+      invoicedByOrder.set(
+        invoice.salesOrderId,
+        (invoicedByOrder.get(invoice.salesOrderId) ?? 0) + invoice.totalPaise,
+      );
+    }
+  }
+
+  const commitments = orders.reduce((sum, order) => {
+    const invoiced = invoicedByOrder.get(order.id) ?? 0;
+    return sum + Math.max(0, order.totalPricePaise - invoiced);
+  }, 0);
+
+  return receivables + commitments;
 }
+
+/**
+ * Order states in which the business has committed to supply.
+ *
+ * `draft` is excluded (nothing promised) and so is `cancelled` (promise
+ * withdrawn). `completed` IS included: a completed order whose invoice is
+ * unpaid still represents money owed, and it is the subtraction of the
+ * invoiced amount — not the order's state — that prevents double counting.
+ */
+export const COMMITTED_ORDER_STATES = [
+  "pending_credit",
+  "approved",
+  "dispatching",
+  "completed",
+] as const;
 
 export const createSalesOrder: CommandDefinition<
   {
@@ -696,11 +785,46 @@ export const approveCredit: CommandDefinition<
  * on the definition; two implementations of "available" is how a business ends up
  * promising the same forty sheets twice.
  */
+/**
+ * Serializes concurrent reservation of the same product in the same godown.
+ *
+ * Authority: audit P0-06. Availability was read without a lock, so two
+ * requests could both see 40 available and both reserve 40 — overselling stock
+ * that physically exists once.
+ *
+ * A transaction-scoped advisory lock rather than `SELECT ... FOR UPDATE`,
+ * because the row that would be locked is the `stock_balance`, and for a
+ * product that has never moved in this godown **there is no such row** — the
+ * very case where two concurrent first reservations race. An advisory key
+ * exists whether or not the row does.
+ *
+ * Released automatically at commit or rollback; nothing can leak a lock.
+ */
+async function lockAvailability(
+  tx: TenantScopedClient,
+  productId: string,
+  locationId: string,
+): Promise<void> {
+  // `$executeRaw`, not `$queryRaw`: pg_advisory_xact_lock returns void and the
+  // client cannot deserialize a void column.
+  await tx.$executeRaw`
+    SELECT pg_advisory_xact_lock(
+      hashtextextended(${`${productId}:${locationId}`}, 0)
+    )`;
+}
+
 export async function availableUnits(
   tx: TenantScopedClient,
   productId: string,
   locationId: string,
+  /**
+   * Take the lock first. Required by any caller that is about to *consume*
+   * what it reads; a read for display does not need it and should not pay for
+   * it.
+   */
+  options: { forUpdate?: boolean } = {},
 ): Promise<{ onHandUnits: number; reservedUnits: number; availableUnits: number }> {
+  if (options.forUpdate) await lockAvailability(tx, productId, locationId);
   const balance = await tx.stockBalance.findFirst({ where: { productId, locationId } });
   const held = await tx.plywoodStockReservation.aggregate({
     where: { productId, locationId, releasedAt: null },
@@ -746,10 +870,13 @@ export const reserveForOrder: CommandDefinition<
         continue;
       }
 
+      // forUpdate: this read decides a write. Without the lock two orders can
+      // both reserve the last sheet (audit P0-06).
       const { availableUnits: free } = await availableUnits(
         ctx.tx,
         line.productId,
         order.locationId,
+        { forUpdate: true },
       );
       if (free < line.qtyOrdered) {
         // The whole hold fails rather than reserving what it can. A partial

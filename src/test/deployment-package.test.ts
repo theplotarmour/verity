@@ -108,6 +108,12 @@ describe("no default or example secret can reach a deployment (AC-02, AC-10)", (
     };
     walk(DEPLOY);
 
+    // The generated env file is the operator's own credentials and is
+    // gitignored — scanning it would fail on a correctly configured machine
+    // and pass on one that has never been deployed, which is backwards. What
+    // matters is that it cannot be committed, asserted separately below.
+    const generated = join(DEPLOY, "config", "verity.env");
+
     // Shapes that are unambiguously real: a JWT, an AWS key id, a Supabase
     // service-role key, a postgres URL with an embedded password that is not
     // an obvious placeholder or a compose variable.
@@ -118,11 +124,18 @@ describe("no default or example secret can reach a deployment (AC-02, AC-10)", (
     ];
 
     for (const file of files) {
+      if (file === generated) continue;
       const source = readFileSync(file, "utf8");
       for (const pattern of suspicious) {
         expect(source, `${file} contains something that looks like a real secret`).not.toMatch(pattern);
       }
     }
+  });
+
+  it("keeps the generated env file out of version control", () => {
+    const ignore = read(".gitignore");
+    expect(ignore).toMatch(/^deploy\/config\/verity\.env$/m);
+    expect(ignore).toMatch(/^deploy\/backups\/$/m);
   });
 
   it("creates the env file privately rather than fixing its mode afterwards", () => {
