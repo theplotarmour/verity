@@ -401,30 +401,107 @@ export const recordDamagedStock: CommandDefinition<
   },
 };
 
+/**
+ * Material comes back from a customer.
+ *
+ * Authority: taskplans/45_plywood_workflow_program.md §4.5; specification §66.
+ *
+ * TIED TO THE ISSUE IT CAME BACK FROM (slice 5)
+ * `goodsIssueId` is optional in the type and expected in practice. Given, the
+ * return is capped at what that issue actually sent, valued at the cost that
+ * left on it, and linked so a reader can follow the board out of the gate and
+ * back in again. Without it a "return" is an unexplained inward movement that
+ * happens to be labelled one — and returns are exactly where an inventory
+ * fraud hides, because nobody questions stock arriving.
+ *
+ * MONEY DOES NOT MOVE HERE
+ * A return puts boards back on the rack. It does not refund anybody. If money
+ * has to come back it is a credit note — a separate, numbered, reportable
+ * document — and pretending one implies the other is how stock and money stop
+ * agreeing.
+ */
 export const recordReturnedStock: CommandDefinition<
-  { productId: string; locationId: string; rackId?: string; qtyUnits: number; reason: string },
+  {
+    productId: string;
+    locationId: string;
+    rackId?: string;
+    qtyUnits: number;
+    reason: string;
+    goodsIssueId?: string;
+  },
   { ledgerId: string; onHandUnits: number }
 > = {
   key: "verity.plywood.record_returned_stock",
   entity: ENTITY_STOCK_LEDGER,
   verb: "ActionExecute",
-  input: z.object({ ...movementInput, reason: z.string().min(3).max(400) }),
+  input: z.object({
+    ...movementInput,
+    reason: z.string().min(3).max(400),
+    goodsIssueId: z.string().uuid().optional(),
+  }),
   preconditions: async (ctx, input) => assertTradeable(ctx.tx, input.productId, input.locationId),
   handler: async (ctx, input) => {
-    const balance = await ctx.tx.stockBalance.findFirst({
-      where: { productId: input.productId, locationId: input.locationId },
-    });
-    const moved = await applyMovement(ctx.tx, ctx.actor, {
-      ...input,
-      kind: "returned_stock",
+    let unitCostPaise: number | undefined;
+    let source: { type: string; id: string; number?: string | null } | undefined;
+
+    if (input.goodsIssueId) {
+      const issue = await ctx.tx.plywoodGoodsIssue.findUniqueOrThrow({
+        where: { id: input.goodsIssueId },
+        include: { lines: true },
+      });
+      const line = issue.lines.find((candidate) => candidate.productId === input.productId);
+      if (!line) {
+        throw new ValidationError(
+          "E_VALIDATION: that board was not issued on this goods issue",
+        );
+      }
+
+      // A customer cannot return more than they were given. Without the cap,
+      // a return is a way to create stock out of nothing.
+      const alreadyReturned = await ctx.tx.stockLedgerEntry.aggregate({
+        where: { kind: "returned_stock", sourceType: "goods_issue", sourceId: issue.id, productId: input.productId },
+        _sum: { qtyDeltaUnits: true },
+      });
+      const returnable = line.qtyIssued - (alreadyReturned._sum.qtyDeltaUnits ?? 0);
+      if (input.qtyUnits > returnable) {
+        throw new ValidationError(
+          `E_VALIDATION: ${line.productNameSnapshot} had ${line.qtyIssued} issued on ${issue.issueNumber} ` +
+            `and ${returnable} can still come back, not ${input.qtyUnits}`,
+        );
+      }
+
+      // Valued at what left on that issue, not at today's average. The board
+      // that comes back is the board that went out.
+      unitCostPaise = line.unitCostPaise;
+      source = { type: "goods_issue", id: issue.id, number: issue.issueNumber };
+    } else {
+      const balance = await ctx.tx.stockBalance.findFirst({
+        where: { productId: input.productId, locationId: input.locationId },
+      });
       // Returned goods re-enter at what the godown carries them at, not at what
       // they were sold for. A return is not a purchase.
-      unitCostPaise: balance?.avgUnitCostPaise ?? 0,
+      unitCostPaise = balance?.avgUnitCostPaise ?? 0;
+    }
+
+    const moved = await applyMovement(ctx.tx, ctx.actor, {
+      productId: input.productId,
+      locationId: input.locationId,
+      rackId: input.rackId ?? null,
+      qtyUnits: input.qtyUnits,
+      kind: "returned_stock",
+      unitCostPaise,
       reason: input.reason,
+      source,
     });
     return {
       result: { ledgerId: moved.ledgerId, onHandUnits: moved.onHandUnits },
-      events: [{ name: "verity.plywood.stock_returned", entityId: moved.ledgerId }],
+      events: [
+        {
+          name: "verity.plywood.stock_returned",
+          entityId: moved.ledgerId,
+          payload: source ? { goodsIssueNumber: source.number } : {},
+        },
+      ],
     };
   },
 };

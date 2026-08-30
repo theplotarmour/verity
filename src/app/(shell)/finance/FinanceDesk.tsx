@@ -75,6 +75,7 @@ export function FinanceDesk({
   const [raising, setRaising] = useState(false);
   const [raisingPurchase, setRaisingPurchase] = useState(false);
   const [paying, setPaying] = useState<string | null>(null);
+  const [crediting, setCrediting] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const totals = useMemo(() => {
@@ -362,7 +363,7 @@ export function FinanceDesk({
                   >
                     {invoice.outstandingPaise === 0 ? "Paid" : rupees(invoice.outstandingPaise)}
                   </td>
-                  <td className="border-b border-line px-3 py-2 text-right">
+                  <td className="flex justify-end gap-2 border-b border-line px-3 py-2 text-right">
                     {invoice.outstandingPaise > 0 && (
                       <Button
                         size="sm"
@@ -372,6 +373,21 @@ export function FinanceDesk({
                         {paying === invoice.id ? "Close" : "Record payment"}
                       </Button>
                     )}
+                    {/*
+                      A posted invoice cannot be edited (slice 1), so the only
+                      way to correct one is a note. Offered beside the payment
+                      rather than hidden on a detail page, because the moment
+                      somebody notices an invoice is wrong is the moment they
+                      are looking at this list.
+                    */}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={pending}
+                      onClick={() => setCrediting(crediting === invoice.id ? null : invoice.id)}
+                    >
+                      {crediting === invoice.id ? "Close" : "Credit note"}
+                    </Button>
                   </td>
                 </tr>
               ))}
@@ -385,6 +401,16 @@ export function FinanceDesk({
             pending={pending}
             onSubmit={(input) =>
               run("verity.plywood.record_payment", input, () => setPaying(null))
+            }
+          />
+        )}
+
+        {crediting && (
+          <NoteForm
+            invoice={invoices.find((invoice) => invoice.id === crediting)!}
+            pending={pending}
+            onSubmit={(input) =>
+              run("verity.plywood.raise_invoice_note", input, () => setCrediting(null))
             }
           />
         )}
@@ -464,6 +490,58 @@ function PaymentForm({
         refused — an overpayment is an advance or a refund, and absorbing it here would leave money
         the ledger cannot explain.
       </p>
+    </form>
+  );
+}
+
+/**
+ * A credit or debit note against a posted invoice.
+ *
+ * The taxable amount is asked for, never the total: the tax follows the
+ * invoice's own rates, and letting somebody type a total would let the two
+ * disagree on a document that has to be filed.
+ *
+ * The reason is required by the command and by the database. A note nobody can
+ * explain is the one a tax officer asks about.
+ */
+function NoteForm({
+  invoice,
+  pending,
+  onSubmit,
+}: {
+  invoice: { id: string; invoiceNumber: string; outstandingPaise: number };
+  pending: boolean;
+  onSubmit: (input: Record<string, unknown>) => void;
+}) {
+  return (
+    <form
+      className="mt-3 flex flex-wrap items-end gap-3 border-t border-line pt-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        onSubmit({
+          invoiceId: invoice.id,
+          noteType: String(data.get("noteType") ?? "credit"),
+          taxablePaise: Math.round(Number(data.get("taxableRupees")) * 100),
+          reason: String(data.get("reason") ?? "").trim(),
+        });
+      }}
+    >
+      <Field htmlFor="noteType" label="Note">
+        <Select id="noteType" name="noteType" defaultValue="credit">
+          <option value="credit">Credit note — reduces what they owe</option>
+          <option value="debit">Debit note — increases what they owe</option>
+        </Select>
+      </Field>
+      <Field htmlFor="taxableRupees" label="Taxable amount" hint="Tax follows the invoice's own rates.">
+        <Input id="taxableRupees" name="taxableRupees" type="number" min="1" step="0.01" required />
+      </Field>
+      <Field htmlFor="reason" label="Reason">
+        <Input id="reason" name="reason" required minLength={3} placeholder="Short-supplied 4 sheets" />
+      </Field>
+      <Button type="submit" disabled={pending}>
+        Raise against {invoice.invoiceNumber}
+      </Button>
     </form>
   );
 }

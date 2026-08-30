@@ -117,6 +117,7 @@ model Tenant {
   plywoodSalesOrderLines    PlywoodSalesOrderLine[]
   plywoodStockReservations  PlywoodStockReservation[]
   plywoodInvoiceSeries      PlywoodInvoiceSeries[]
+  plywoodInvoiceNotes       PlywoodInvoiceNote[]
   plywoodGoodsIssues        PlywoodGoodsIssue[]
   plywoodGoodsIssueLines    PlywoodGoodsIssueLine[]
   plywoodGoodsReceipts      PlywoodGoodsReceipt[]
@@ -2839,6 +2840,7 @@ model PlywoodInvoice {
   @@unique([tenantId, id], name: "plywood_invoice_tenant_scoped_id")
   @@index([tenantId, issuedAt])
   @@map("plywood_invoice")
+  notes         PlywoodInvoiceNote[]
 }
 
 /// One line on an invoice, snapshotted whole.
@@ -2892,6 +2894,59 @@ model PlywoodPayment {
 /// A balance is the sum of these (P3). There is no cached total anywhere, and no
 /// running balance on the row: both would be a second source of truth that can
 /// disagree with the first.
+/// A credit or debit note against a posted invoice.
+///
+/// Authority: taskplans/45_plywood_workflow_program.md §5 (invoice state
+/// machine) and §4.5; specification §67;
+/// PLYWOOD_TARGET_WORKFLOW_GAP_AUDIT.md P0-05.
+///
+/// A posted invoice is immutable — the trigger refuses UPDATE for every role.
+/// That is only a workable rule if there is a way to correct one, and this is
+/// it. A note does not amend the invoice; it is a second document that points
+/// at it, and both stand in the record afterwards. The original invoice is
+/// what the customer holds and what was reported; the note is what changed.
+model PlywoodInvoiceNote {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+
+  invoiceId String @map("invoice_id") @db.Uuid
+
+  /// `credit` reduces what the party owes; `debit` increases it. Named from
+  /// this business's point of view, matching PlywoodLedgerEntry.
+  noteType String @map("note_type")
+
+  /// "CN/26-27/0001". Gapless within its own series, like every other
+  /// document a tax authority may ask to see.
+  noteNumber    String @map("note_number")
+  financialYear String @map("financial_year")
+
+  /// Split like an invoice, because a note carries tax and a note without a
+  /// tax split cannot be reported.
+  taxablePaise Int @map("taxable_paise")
+  cgstPaise    Int @default(0) @map("cgst_paise")
+  sgstPaise    Int @default(0) @map("sgst_paise")
+  igstPaise    Int @default(0) @map("igst_paise")
+  totalPaise   Int @map("total_paise")
+
+  /// Why. Not optional: a note with no reason is the entry nobody can explain,
+  /// and a tax officer asking about one is asking exactly this.
+  reason String
+
+  issuedAt DateTime @default(now()) @map("issued_at")
+  issuedBy String   @map("issued_by") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoice PlywoodInvoice @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, noteNumber])
+  @@unique([tenantId, id], name: "plywood_invoice_note_tenant_scoped_id")
+  @@index([tenantId, invoiceId])
+  @@index([tenantId, issuedAt])
+  @@map("plywood_invoice_note")
+}
+
 model PlywoodLedgerEntry {
   id       String @id @default(uuid()) @db.Uuid
   tenantId String @map("tenant_id") @db.Uuid

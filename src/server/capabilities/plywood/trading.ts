@@ -638,15 +638,29 @@ export async function customerExposurePaise(
   // total on the document, not its taxable value.
   const invoices = await tx.plywoodInvoice.findMany({
     where: { customerId },
-    select: { totalPaise: true, payments: { select: { amountPaise: true } } },
+    select: {
+      totalPaise: true,
+      payments: { select: { amountPaise: true } },
+      // Slice 5 fills in the term slice 1 left at zero: a credit note reduces
+      // what the customer owes, and an exposure that ignores it holds credit
+      // against money the business has already agreed it will not collect.
+      notes: { select: { noteType: true, totalPaise: true } },
+    },
   });
 
   const receivables = invoices.reduce((sum, invoice) => {
     const paid = invoice.payments.reduce((p, payment) => p + payment.amountPaise, 0);
+    const credited = invoice.notes
+      .filter((note) => note.noteType === "credit")
+      .reduce((c, note) => c + note.totalPaise, 0);
+    const debited = invoice.notes
+      .filter((note) => note.noteType === "debit")
+      .reduce((d, note) => d + note.totalPaise, 0);
+
     // Clamped at zero per invoice, not in aggregate: an overpayment on one
     // invoice is money on account, and letting it mask a different unpaid
     // invoice would understate exposure.
-    return sum + Math.max(0, invoice.totalPaise - paid);
+    return sum + Math.max(0, invoice.totalPaise + debited - paid - credited);
   }, 0);
 
   // Term 2 — approved but not yet invoiced. `COMMITTED_ORDER_STATES` is the

@@ -1144,3 +1144,131 @@ export const goodsReceiptDetail: QueryDefinition<
     };
   },
 };
+
+/* =========================== credit / debit notes ========================= */
+
+/**
+ * Corrects a posted invoice, without touching it.
+ *
+ * Authority: specification §67; taskplans/45_plywood_workflow_program.md §5;
+ * PLYWOOD_TARGET_WORKFLOW_GAP_AUDIT.md P0-05.
+ *
+ * Slice 1 made a posted invoice immutable for every role including a
+ * privileged one. That rule is only workable because this exists: a second
+ * document that points at the invoice rather than an amendment to it. Both
+ * stand afterwards — the invoice is what the customer holds and what was
+ * reported; the note is what changed.
+ *
+ * TAX IS COPIED, NOT RECOMPUTED
+ * The note carries the invoice's own rates. Recomputing from today's
+ * configuration would mean a rate change between the sale and the correction
+ * silently produces a note that does not reconcile to the document it corrects
+ * — and the difference would appear in a return with nothing to explain it.
+ *
+ * MONEY, NOT STOCK
+ * A credit note does not put boards back in the godown. Returned material is a
+ * separate physical event with its own movement (§4.5), and pretending one
+ * implies the other is how stock and money stop agreeing.
+ */
+export const raiseInvoiceNote: CommandDefinition<
+  {
+    invoiceId: string;
+    noteType: "credit" | "debit";
+    taxablePaise: number;
+    reason: string;
+  },
+  { id: string; noteNumber: string; totalPaise: number }
+> = {
+  key: "verity.plywood.raise_invoice_note",
+  entity: ENTITY_INVOICE,
+  verb: "Create",
+  input: z.object({
+    invoiceId: z.string().uuid(),
+    noteType: z.enum(["credit", "debit"]),
+    taxablePaise: z.number().int().positive(),
+    // A note with no reason is the entry nobody can explain, and a tax officer
+    // asking about one is asking exactly this.
+    reason: z.string().min(3).max(400),
+  }),
+  handler: async (ctx, input) => {
+    const invoice = await ctx.tx.plywoodInvoice.findUniqueOrThrow({
+      where: { id: input.invoiceId },
+      include: { notes: true },
+    });
+
+    // A credit note cannot exceed what is left on the invoice after earlier
+    // ones. Crediting more than was ever charged is a refund, which is a
+    // payment out, not a correction to a sale.
+    if (input.noteType === "credit") {
+      const alreadyCredited = invoice.notes
+        .filter((note) => note.noteType === "credit")
+        .reduce((sum, note) => sum + note.taxablePaise, 0);
+      const creditable = invoice.taxablePaise - alreadyCredited;
+      if (input.taxablePaise > creditable) {
+        throw new ValidationError(
+          `E_VALIDATION: only ${creditable / 100} rupees of this invoice remain creditable ` +
+            `(${invoice.taxablePaise / 100} invoiced, ${alreadyCredited / 100} already credited)`,
+        );
+      }
+    }
+
+    // The invoice's own rates, not today's.
+    const cgstPaise = Math.round((input.taxablePaise * invoice.cgstRateBp) / 10_000);
+    const sgstPaise = Math.round((input.taxablePaise * invoice.sgstRateBp) / 10_000);
+    const igstPaise = Math.round((input.taxablePaise * invoice.igstRateBp) / 10_000);
+    const totalPaise = input.taxablePaise + cgstPaise + sgstPaise + igstPaise;
+
+    const issuedAt = new Date();
+    const financialYear = financialYearOf(issuedAt);
+    const seriesKey = input.noteType === "credit" ? "CN" : "DN";
+    const numbering = await nextDocumentNumber(ctx.tx, ctx.actor.tenantId, seriesKey, financialYear);
+
+    const note = await ctx.tx.plywoodInvoiceNote.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        invoiceId: invoice.id,
+        noteType: input.noteType,
+        noteNumber: numbering.invoiceNumber,
+        financialYear,
+        taxablePaise: input.taxablePaise,
+        cgstPaise,
+        sgstPaise,
+        igstPaise,
+        totalPaise,
+        reason: input.reason,
+        issuedAt,
+        issuedBy: ctx.actor.userId,
+      },
+    });
+
+    // The party ledger moves the opposite way to the invoice it corrects. A
+    // customer credit note reduces what they owe; a supplier one reduces what
+    // this business owes.
+    await ctx.tx.plywoodLedgerEntry.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        customerId: invoice.customerId,
+        supplierId: invoice.supplierId,
+        entryType: input.noteType === "credit" ? "credit" : "debit",
+        amountPaise: totalPaise,
+        invoiceId: invoice.id,
+        narration: `${note.noteNumber} against ${invoice.invoiceNumber}: ${input.reason}`,
+        occurredAt: issuedAt,
+      },
+    });
+
+    return {
+      result: { id: note.id, noteNumber: note.noteNumber, totalPaise },
+      events: [
+        {
+          name:
+            input.noteType === "credit"
+              ? "verity.plywood.credit_note_raised"
+              : "verity.plywood.debit_note_raised",
+          entityId: note.id,
+          payload: { invoiceNumber: invoice.invoiceNumber, totalPaise },
+        },
+      ],
+    };
+  },
+};
