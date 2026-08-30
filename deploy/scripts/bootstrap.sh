@@ -19,5 +19,5 @@ if [ -z "${EMAIL}" ]; then
 fi
 
 log "granting operator authority to ${EMAIL}"
-compose run --rm --entrypoint "" -e VERITY_OPERATOR_EMAIL="${EMAIL}" web \
+compose --profile tools run --rm --entrypoint "" -e VERITY_OPERATOR_EMAIL="${EMAIL}" tools \
   npx tsx prisma/bootstrap-operator.ts "${EMAIL}"

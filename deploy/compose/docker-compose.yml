@@ -165,5 +165,38 @@ services:
     # its own SIGTERM handler and closes the HTTP server gracefully.
     stop_grace_period: 30s
 
+  # The operator toolchain. Never runs as a service — `docker compose run` only.
+  # See the Dockerfile's `tools` stage for why the runtime image cannot do this.
+  tools:
+    <<: *hardening
+    profiles: ["tools"]
+    restart: "no"
+    image: ${VERITY_TOOLS_IMAGE:-verity-tools:local}
+    build:
+      context: ../..
+      target: tools
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://verity_app:${VERITY_APP_PASSWORD}@db:5432/${POSTGRES_DB:-verity}
+      DIRECT_URL: postgresql://postgres:${POSTGRES_SUPERUSER_PASSWORD}@db:5432/${POSTGRES_DB:-verity}
+      TZ: UTC
+      VERITY_AUTH_PROVIDER: ${VERITY_AUTH_PROVIDER:-supabase}
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+      VERITY_SESSION_SECRET: ${VERITY_SESSION_SECRET:-}
+      VERITY_OIDC_ISSUER: ${VERITY_OIDC_ISSUER:-}
+      VERITY_OIDC_CLIENT_ID: ${VERITY_OIDC_CLIENT_ID:-}
+      # Storage, so an operator (and Task 43's acceptance) can exercise the
+      # object store through the same driver the application uses.
+      VERITY_STORAGE_DRIVER: ${VERITY_STORAGE_DRIVER:-supabase}
+      VERITY_S3_BUCKET: ${VERITY_S3_BUCKET:-}
+      VERITY_S3_REGION: ${VERITY_S3_REGION:-}
+      VERITY_S3_ENDPOINT: ${VERITY_S3_ENDPOINT:-}
+      VERITY_S3_ACCESS_KEY_ID: ${VERITY_S3_ACCESS_KEY_ID:-}
+      VERITY_S3_SECRET_ACCESS_KEY: ${VERITY_S3_SECRET_ACCESS_KEY:-}
+      VERITY_S3_FORCE_PATH_STYLE: ${VERITY_S3_FORCE_PATH_STYLE:-}
+
 volumes:
   verity-db-data:

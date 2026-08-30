@@ -57,9 +57,15 @@ describe("Dockerfile", () => {
   });
 
   it("does not run prisma migrate as part of the image's own startup command", () => {
-    const cmdLine = dockerfile.match(/^CMD .+$/m)?.[0] ?? "";
-    expect(cmdLine).not.toMatch(/migrate/);
-    expect(cmdLine).toBe('CMD ["node", "server.js"]');
+    // Every CMD in the file, not the first one: Task 43 added a `tools` stage
+    // whose CMD precedes the runner's. None of them may run a migration —
+    // baking one into container start makes every restart a potential schema
+    // change — and the last one, which is the runtime image's, must be the
+    // standalone server.
+    const cmdLines = [...dockerfile.matchAll(/^CMD .+$/gm)].map((m) => m[0]);
+    expect(cmdLines.length).toBeGreaterThan(0);
+    for (const line of cmdLines) expect(line).not.toMatch(/migrate/);
+    expect(cmdLines.at(-1)).toBe('CMD ["node", "server.js"]');
   });
 
   it("takes NEXT_PUBLIC_* as build args, but never a raw secret name as one", () => {

@@ -22,6 +22,7 @@ const SNAPSHOT_KEYS = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "NEXT_PUBLIC_SUPABASE_ANON_KEY",
   "SUPABASE_JWT_SECRET",
+  "VERITY_SESSION_SECRET",
   "SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
   "SUPABASE_MEDIA_BUCKET",
@@ -144,5 +145,43 @@ describe("runtime configuration boundary", () => {
     expect(readCronSecret()).toBeUndefined();
     process.env.CRON_SECRET = "rotated-secret";
     expect(readCronSecret()).toBe("rotated-secret");
+  });
+});
+
+describe("blank environment variables mean 'not configured' (Task 43)", () => {
+  /**
+   * Found by running the container, not by reasoning about it.
+   *
+   * Docker Compose renders `${FOO:-}` for an unset optional variable as an
+   * empty string. `??` only falls through on null/undefined, so an empty
+   * SUPABASE_JWT_SECRET used to win the coalescing chain and the deployment
+   * failed with E_CONFIG_INVALID — while every test here passed, because a
+   * test that *deletes* a variable produces `undefined` and never reproduces
+   * the shape a container actually gets.
+   */
+  it("falls through a blank value to the next source in the chain", async () => {
+    Object.assign(process.env, REQUIRED_ENV);
+    process.env.SUPABASE_JWT_SECRET = "";
+    process.env.VERITY_SESSION_SECRET = "a-real-session-secret";
+
+    const { runtimeConfig } = await importConfig();
+    expect(runtimeConfig.auth.jwtSecret).toBe("a-real-session-secret");
+  });
+
+  it("treats a blank optional value as absent rather than as configuration", async () => {
+    Object.assign(process.env, REQUIRED_ENV);
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "";
+    process.env.SUPABASE_MEDIA_BUCKET = "   ";
+
+    const { runtimeConfig } = await importConfig();
+    expect(runtimeConfig.storage.serviceRoleKey).toBeUndefined();
+    expect(runtimeConfig.storage.bucket).toBeUndefined();
+  });
+
+  it("still refuses a required variable that is present but blank", async () => {
+    Object.assign(process.env, REQUIRED_ENV);
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "";
+
+    await expect(importConfig()).rejects.toThrow(/NEXT_PUBLIC_SUPABASE_URL is required/);
   });
 });

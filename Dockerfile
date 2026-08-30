@@ -34,8 +34,30 @@ COPY . .
 # secrecy — see .env.example's own comment on it).
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
-ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
-ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
+# Placeholders when unset, for the same reason DATABASE_URL has one below:
+# `next build` imports every route module to collect page data, and
+# `config.ts` validates the Supabase variables at import time when the auth
+# provider is `supabase` (its default). An OIDC-only deployment (Task 36) has
+# no Supabase project at all, and without these defaults its image could not be
+# built — the boundary would be real in the code and fictional in the package.
+#
+# Harmless: these are inlined into the browser bundle, and a deployment that
+# actually uses Supabase must pass the real values as build args, exactly as
+# before. An unusable placeholder fails loudly at sign-in rather than silently
+# authenticating against something.
+ENV NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-https://build-placeholder.invalid}
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY:-build-placeholder-anon-key}
+# Same reasoning, one layer deeper: `config.ts` also requires a cookie-signing
+# secret, which on a Supabase deployment falls back to the anon key and on an
+# OIDC one must be set explicitly. `next build` needs *a* value to import the
+# module; the deployment needs a real one.
+#
+# This cannot leak into the runtime image: `runner` starts from `base`, not
+# from `builder`, so no ENV set here survives into the image that serves
+# traffic. The running container is given the real value by compose, and a
+# deployment with none is refused by `deploy/security/preflight.sh` before it
+# ever starts.
+ENV VERITY_SESSION_SECRET=${VERITY_SESSION_SECRET:-build-placeholder-session-secret-not-used-at-runtime}
 
 # DATABASE_URL is NOT inlined anywhere — it is read from `process.env` only
 # when the running server actually needs it. But `src/server/platform/config.ts`
@@ -56,6 +78,37 @@ ENV DIRECT_URL="postgresql://build:build@localhost:5432/build_placeholder"
 ENV NODE_ENV=production
 
 RUN npm run build
+
+# ---------------------------------------------------------------------------
+# The operator toolchain (Task 43).
+#
+# WHY THIS STAGE EXISTS — found empirically, not designed in advance.
+#
+# The `runner` stage below contains only `.next/standalone`: the traced subset
+# of node_modules, the server entrypoint and static assets. That is correct for
+# a runtime image and it is precisely why `npx prisma migrate deploy` cannot run
+# in it — the Prisma CLI is a devDependency, `prisma/migrations/` is not copied,
+# and `npx` in an offline container cannot fetch either.
+#
+# Task 42's migrate.sh and bootstrap.sh were written against `web`, and the
+# containerized acceptance run is what surfaced it. The fix is a separate stage
+# with the full dependency tree and the schema, used by those two scripts and by
+# nothing that serves traffic: the runtime image stays minimal, and the
+# migration path stops depending on a container that was deliberately stripped.
+FROM base AS tools
+WORKDIR /app
+ENV NODE_ENV=development
+COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json ./
+COPY prisma ./prisma
+COPY tsconfig.json ./
+COPY src/server ./src/server
+# Generated against this image's own platform, so the engine matches.
+RUN npx prisma generate
+# Migrations are run by an operator through deploy/scripts/migrate.sh. This
+# image has no CMD that would run one on start: baking migration into container
+# start makes every restart a potential schema change (Task 30's decision).
+CMD ["node", "--version"]
 
 # ---------------------------------------------------------------------------
 FROM base AS runner

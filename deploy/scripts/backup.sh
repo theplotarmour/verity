@@ -22,12 +22,16 @@ compose exec -T db pg_dump -U postgres -d "${DB}" -Fc > "${TARGET}.partial"
 mv "${TARGET}.partial" "${TARGET}"
 chmod 600 "${TARGET}"
 
+# Verified INSIDE the container, always.
+#
+# Found in Task 43: the host's pg_restore is whatever the operator happens to
+# have installed, and an older one cannot read a newer server's archive —
+# `unsupported version (1.15) in file header` from a v14 client against a v16
+# dump. That failure says nothing about the backup and everything about the
+# host, and it would have taught an operator to distrust a good backup. The
+# container's client is the server's own version by construction.
 log "verifying the dump is readable"
-if command -v pg_restore >/dev/null 2>&1; then
-  pg_restore --list "${TARGET}" >/dev/null
-else
-  compose exec -T db sh -c 'cat > /tmp/verify.dump && pg_restore --list /tmp/verify.dump >/dev/null && rm -f /tmp/verify.dump' < "${TARGET}"
-fi
+compose exec -T db sh -c 'cat > /tmp/verify.dump && pg_restore --list /tmp/verify.dump >/dev/null && rm -f /tmp/verify.dump' < "${TARGET}"
 
 SIZE="$(wc -c < "${TARGET}" | tr -d ' ')"
 [ "${SIZE}" -gt 1024 ] || die "backup is only ${SIZE} bytes — refusing to report success"

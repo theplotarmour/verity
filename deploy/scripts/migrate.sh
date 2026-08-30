@@ -22,6 +22,6 @@ for _ in $(seq 1 60); do
 done
 
 log "applying migrations"
-compose run --rm --entrypoint "" web npx prisma migrate deploy
+compose --profile tools run --rm --entrypoint "" tools npx prisma migrate deploy
 
 log "migrations applied"

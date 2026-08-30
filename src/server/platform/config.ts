@@ -160,57 +160,80 @@ const configSchema = z.object({
 
 export type RuntimeConfig = z.infer<typeof configSchema>;
 
+/**
+ * An environment variable's value, or `undefined` when it is absent *or blank*.
+ *
+ * FOUND IN TASK 43, BY RUNNING THE CONTAINER (taskplans/43_docker_acceptance_rerun.md).
+ *
+ * Docker Compose renders `${FOO:-}` for an unset optional variable as an
+ * **empty string**, not as an absent one. `a ?? b` only falls through on
+ * `null`/`undefined`, so `process.env.SUPABASE_JWT_SECRET ?? VERITY_SESSION_SECRET`
+ * kept the empty string and the deployment failed validation with
+ * `E_CONFIG_INVALID` — while every unit test passed, because a test that
+ * deletes a variable produces `undefined` and never reproduces the shape a
+ * container actually gets.
+ *
+ * A blank variable means "not configured". Normalising it here, once, is the
+ * only place that belief has to be encoded.
+ */
+function env(name: string): string | undefined {
+  const value = process.env[name];
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 function loadConfig(): RuntimeConfig {
   const result = configSchema.safeParse({
-    nodeEnv: process.env.NODE_ENV,
+    nodeEnv: env("NODE_ENV"),
     database: {
-      url: process.env.DATABASE_URL,
-      directUrl: process.env.DIRECT_URL,
-      txTimeoutMs: process.env.VERITY_TX_TIMEOUT_MS,
-      txMaxWaitMs: process.env.VERITY_TX_MAX_WAIT_MS,
+      url: env("DATABASE_URL"),
+      directUrl: env("DIRECT_URL"),
+      txTimeoutMs: env("VERITY_TX_TIMEOUT_MS"),
+      txMaxWaitMs: env("VERITY_TX_MAX_WAIT_MS"),
     },
     auth: {
-      provider: process.env.VERITY_AUTH_PROVIDER,
-      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
-      supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      provider: env("VERITY_AUTH_PROVIDER"),
+      supabaseUrl: env("NEXT_PUBLIC_SUPABASE_URL"),
+      supabaseAnonKey: env("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
       jwtSecret:
-        process.env.SUPABASE_JWT_SECRET ??
-        process.env.VERITY_SESSION_SECRET ??
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+        env("SUPABASE_JWT_SECRET") ??
+        env("VERITY_SESSION_SECRET") ??
+        env("NEXT_PUBLIC_SUPABASE_ANON_KEY") ??
         "",
       // Passed as undefined rather than a half-filled object when the issuer is
       // absent, so `provider=oidc` with nothing configured reports the missing
       // variables by name instead of failing on a nested field.
-      oidc: process.env.VERITY_OIDC_ISSUER
+      oidc: env("VERITY_OIDC_ISSUER")
         ? {
-            issuer: process.env.VERITY_OIDC_ISSUER,
-            clientId: process.env.VERITY_OIDC_CLIENT_ID,
-            audience: process.env.VERITY_OIDC_AUDIENCE,
-            jwksUri: process.env.VERITY_OIDC_JWKS_URI,
-            principalClaim: process.env.VERITY_OIDC_PRINCIPAL_CLAIM,
-            emailClaim: process.env.VERITY_OIDC_EMAIL_CLAIM,
-            clockToleranceSeconds: process.env.VERITY_OIDC_CLOCK_TOLERANCE_SECONDS,
+            issuer: env("VERITY_OIDC_ISSUER"),
+            clientId: env("VERITY_OIDC_CLIENT_ID"),
+            audience: env("VERITY_OIDC_AUDIENCE"),
+            jwksUri: env("VERITY_OIDC_JWKS_URI"),
+            principalClaim: env("VERITY_OIDC_PRINCIPAL_CLAIM"),
+            emailClaim: env("VERITY_OIDC_EMAIL_CLAIM"),
+            clockToleranceSeconds: env("VERITY_OIDC_CLOCK_TOLERANCE_SECONDS"),
           }
         : undefined,
     },
     storage: {
-      driver: process.env.VERITY_STORAGE_DRIVER,
+      driver: env("VERITY_STORAGE_DRIVER"),
       // Passed as undefined rather than a half-filled object when the bucket is
       // absent, so an incomplete configuration binds nothing instead of failing
       // deep inside the SDK on first use.
-      s3: process.env.VERITY_S3_BUCKET
+      s3: env("VERITY_S3_BUCKET")
         ? {
-            bucket: process.env.VERITY_S3_BUCKET,
-            region: process.env.VERITY_S3_REGION,
-            endpoint: process.env.VERITY_S3_ENDPOINT,
-            accessKeyId: process.env.VERITY_S3_ACCESS_KEY_ID,
-            secretAccessKey: process.env.VERITY_S3_SECRET_ACCESS_KEY,
-            forcePathStyle: process.env.VERITY_S3_FORCE_PATH_STYLE,
+            bucket: env("VERITY_S3_BUCKET"),
+            region: env("VERITY_S3_REGION"),
+            endpoint: env("VERITY_S3_ENDPOINT"),
+            accessKeyId: env("VERITY_S3_ACCESS_KEY_ID"),
+            secretAccessKey: env("VERITY_S3_SECRET_ACCESS_KEY"),
+            forcePathStyle: env("VERITY_S3_FORCE_PATH_STYLE"),
           }
         : undefined,
-      supabaseUrl: process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL,
-      serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-      bucket: process.env.SUPABASE_MEDIA_BUCKET,
+      supabaseUrl: env("SUPABASE_URL") ?? env("NEXT_PUBLIC_SUPABASE_URL"),
+      serviceRoleKey: env("SUPABASE_SERVICE_ROLE_KEY"),
+      bucket: env("SUPABASE_MEDIA_BUCKET"),
     },
   });
 
