@@ -2,6 +2,7 @@ import { z } from "zod";
 import { registerContribution } from "@/server/platform/contribution";
 import { registerCommand, ValidationError, type CommandDefinition } from "@/server/platform/command";
 import { registerBusinessIdentity } from "./business";
+import { goodsReceiptDetail, purchaseMatch } from "./finance";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import { diffFields, recordActivity } from "@/server/platform/audit";
 import { notify } from "@/server/platform/notification";
@@ -750,6 +751,8 @@ export function registerPlywoodCapability(): void {
   registerQuery(stockOnHand);
   registerQuery(lowStock);
   registerQuery(productMovements);
+  registerQuery(purchaseMatch);
+  registerQuery(goodsReceiptDetail);
   registerQuery(listSuppliers);
   registerQuery(listCustomers);
   registerQuery(purchaseOrderDetail);

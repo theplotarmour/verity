@@ -117,6 +117,8 @@ model Tenant {
   plywoodSalesOrderLines    PlywoodSalesOrderLine[]
   plywoodStockReservations  PlywoodStockReservation[]
   plywoodInvoiceSeries      PlywoodInvoiceSeries[]
+  plywoodGoodsReceipts      PlywoodGoodsReceipt[]
+  plywoodGoodsReceiptLines  PlywoodGoodsReceiptLine[]
   plywoodBusinessProfile    PlywoodBusinessProfile?
   plywoodGstRegistrations   PlywoodGstRegistration[]
   plywoodInvoices           PlywoodInvoice[]
@@ -1097,6 +1099,7 @@ model Location {
   @@unique([tenantId, id], name: "location_tenant_scoped_id")
   @@index([tenantId, organizationId])
   @@map("location")
+  plywoodGoodsReceipts     PlywoodGoodsReceipt[]
 }
 
 /// A spatial policy attached to a Location (ADR-004: "Geofences are policies,
@@ -2127,6 +2130,7 @@ model PlywoodProduct {
   @@index([tenantId, brandId, name])
   @@index([tenantId, active])
   @@map("plywood_product")
+  goodsReceiptLines PlywoodGoodsReceiptLine[]
 }
 
 /// A rack, bay or stack position inside a godown.
@@ -2152,6 +2156,7 @@ model GodownRack {
   @@unique([tenantId, id], name: "godown_rack_tenant_scoped_id")
   @@index([tenantId, locationId])
   @@map("godown_rack")
+  plywoodGoodsReceiptLines PlywoodGoodsReceiptLine[]
 }
 
 // ---------------------------------------------------------------------------
@@ -2186,6 +2191,22 @@ model StockLedgerEntry {
   /// Mandatory for an adjustment. A stock count that moved 40 sheets without a
   /// reason is the entry nobody can explain six months later.
   reason        String?
+
+  /// WHAT CAUSED THIS MOVEMENT (audit P0-04, slice 3).
+  ///
+  /// `goods_receipt`, `goods_issue`, `adjustment`, `damage`, `customer_return`,
+  /// `transfer`. Together with `sourceId` it is what lets a reader open a
+  /// quantity and see the business event behind it — the specification's §13,
+  /// the movement ledger that explains why a number is what it is.
+  ///
+  /// Nullable because movements recorded before slice 3 genuinely have no
+  /// source document. Backfilling a plausible one would be inventing evidence.
+  sourceType    String?  @map("source_type")
+  sourceId      String?  @map("source_id") @db.Uuid
+  /// The human document number, denormalised so the ledger reads without a
+  /// join and still reads after the document is archived.
+  sourceNumber  String?  @map("source_number")
+
   byUserId      String   @map("by_user_id") @db.Uuid
   occurredAt    DateTime @default(now()) @map("occurred_at")
 
@@ -2196,6 +2217,7 @@ model StockLedgerEntry {
 
   @@index([tenantId, productId, locationId, occurredAt])
   @@index([tenantId, occurredAt])
+  @@index([tenantId, sourceType, sourceId])
   @@map("stock_ledger_entry")
 }
 
@@ -2354,6 +2376,7 @@ model PlywoodPurchaseOrder {
   @@unique([tenantId, id], name: "plywood_purchase_order_tenant_scoped_id")
   @@index([tenantId, state])
   @@map("plywood_purchase_order")
+  goodsReceipts    PlywoodGoodsReceipt[]
 }
 
 /// One board on a purchase order.
@@ -2380,6 +2403,7 @@ model PlywoodPurchaseOrderLine {
   @@unique([tenantId, id], name: "plywood_purchase_order_line_tenant_scoped_id")
   @@unique([tenantId, purchaseOrderId, productId])
   @@map("plywood_purchase_order_line")
+  receiptLines     PlywoodGoodsReceiptLine[]
 }
 
 /// An order taken from a customer.
@@ -2481,6 +2505,80 @@ model PlywoodStockReservation {
 // would leave two doors out of a godown — a shipment and a goods issue — which
 // is precisely what makes a stock ledger unprovable (audit P0-04). Material now
 // leaves through a Goods Issue document and through nothing else.
+
+// ---------------------------------------------------------------------------
+// Plywood — goods movement documents (slice 3)
+//
+// Authority: taskplans/45_plywood_workflow_program.md §5;
+// PLYWOOD_TARGET_WORKFLOW_GAP_AUDIT.md P0-04.
+//
+// Receipt used to be a field on a purchase order line that an action
+// incremented, plus a stock movement with nothing pointing back at it. Nobody
+// could open a receipt, prove who handled a line, print it, match it to a
+// supplier invoice, or partially reverse it — and "enter once and propagate"
+// cannot be audited when the propagation leaves no document behind.
+// ---------------------------------------------------------------------------
+
+/// Goods physically arrived. Immutable once posted.
+model PlywoodGoodsReceipt {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+
+  purchaseOrderId String @map("purchase_order_id") @db.Uuid
+  locationId      String @map("location_id") @db.Uuid
+
+  /// "GRN/26-27/0001". Gapless within a financial year, for the same reason an
+  /// invoice number is: a receipt is the document a supplier dispute turns on.
+  receiptNumber String @map("receipt_number")
+  financialYear String @map("financial_year")
+
+  /// The supplier's own delivery note, as written on the paper that came with
+  /// the lorry. Their reference, recorded as given.
+  supplierChallanNumber String? @map("supplier_challan_number")
+
+  receivedAt  DateTime @default(now()) @map("received_at")
+  receivedBy  String   @map("received_by") @db.Uuid
+  notes       String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant        Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchaseOrder PlywoodPurchaseOrder     @relation(fields: [tenantId, purchaseOrderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  location      Location                 @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  lines         PlywoodGoodsReceiptLine[]
+
+  @@unique([tenantId, receiptNumber])
+  @@unique([tenantId, id], name: "plywood_goods_receipt_tenant_scoped_id")
+  @@index([tenantId, purchaseOrderId])
+  @@index([tenantId, receivedAt])
+  @@map("plywood_goods_receipt")
+}
+
+model PlywoodGoodsReceiptLine {
+  id        String @id @default(uuid()) @db.Uuid
+  tenantId  String @map("tenant_id") @db.Uuid
+  receiptId String @map("receipt_id") @db.Uuid
+
+  purchaseOrderLineId String @map("purchase_order_line_id") @db.Uuid
+  productId           String @map("product_id") @db.Uuid
+  productNameSnapshot String @map("product_name_snapshot")
+  rackId              String? @map("rack_id") @db.Uuid
+
+  qtyReceived Int @map("qty_received")
+  /// The cost this receipt landed at, snapshotted. The order's price can be
+  /// renegotiated later; what this stock cost cannot change afterwards.
+  unitCostPaise Int @map("unit_cost_paise")
+
+  tenant    Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  receipt   PlywoodGoodsReceipt      @relation(fields: [tenantId, receiptId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  orderLine PlywoodPurchaseOrderLine @relation(fields: [tenantId, purchaseOrderLineId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  product   PlywoodProduct           @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  rack      GodownRack?              @relation(fields: [tenantId, rackId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, id], name: "plywood_goods_receipt_line_tenant_scoped_id")
+  @@index([tenantId, receiptId])
+  @@map("plywood_goods_receipt_line")
+}
 
 // ---------------------------------------------------------------------------
 // Plywood — business identity (slice 2)

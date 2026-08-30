@@ -79,6 +79,15 @@ export async function applyMovement(
     /** Required for an inward movement; ignored on the way out. */
     unitCostPaise?: number;
     reason?: string | null;
+    /**
+     * The business document that caused this movement (audit P0-04).
+     *
+     * Optional on the type, required in practice by everything that has a
+     * document to point at. It stays optional because a physical stock count
+     * genuinely has no source document — it IS the source — and forcing a
+     * synthetic one would put a fiction in the ledger to satisfy a type.
+     */
+    source?: { type: string; id: string; number?: string | null } | null;
   },
 ): Promise<{ ledgerId: string; unitCostPaise: number; onHandUnits: number }> {
   const inward = (INWARD_KINDS as readonly string[]).includes(movement.kind);
@@ -134,6 +143,9 @@ export async function applyMovement(
       qtyDeltaUnits: delta,
       unitCostPaise: appliedCost,
       reason: movement.reason ?? null,
+      sourceType: movement.source?.type ?? null,
+      sourceId: movement.source?.id ?? null,
+      sourceNumber: movement.source?.number ?? null,
       byUserId: actor.userId,
     },
   });

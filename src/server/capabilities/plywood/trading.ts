@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { financialYearOf, nextDocumentNumber } from "./finance";
 import { assertGodownInScope, reachableGodownIds } from "./scope";
 import { ValidationError, type CommandDefinition } from "@/server/platform/command";
 import { type QueryDefinition } from "@/server/platform/query";
@@ -379,9 +380,11 @@ export const receiveGoods: CommandDefinition<
   {
     orderId: string;
     rackId?: string;
+    supplierChallanNumber?: string;
+    notes?: string;
     lines: Array<{ productId: string; qtyReceived: number }>;
   },
-  { id: string; state: string }
+  { id: string; state: string; receiptId: string; receiptNumber: string }
 > = {
   key: "verity.plywood.receive_goods",
   entity: ENTITY_PURCHASE_ORDER,
@@ -389,6 +392,9 @@ export const receiveGoods: CommandDefinition<
   input: z.object({
     orderId: z.string().uuid(),
     rackId: z.string().uuid().optional(),
+    /** The supplier's own delivery note, as written on the paper. */
+    supplierChallanNumber: z.string().max(60).optional(),
+    notes: z.string().max(500).optional(),
     lines: z
       .array(
         z.object({ productId: z.string().uuid(), qtyReceived: z.number().int().positive() }),
@@ -407,10 +413,45 @@ export const receiveGoods: CommandDefinition<
       throw new ValidationError("E_VALIDATION: that order is closed");
     }
 
+    // Layer 2 on the write path: receiving into a godown is an action against
+    // that godown, not merely against the order.
+    await assertGodownInScope(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_PURCHASE_ORDER,
+      "ActionExecute",
+      order.locationId,
+    );
+
     const services = await serviceProductIds(
       ctx.tx,
       input.lines.map((line) => line.productId),
     );
+
+    // THE RECEIPT IS A DOCUMENT (audit P0-04, slice 3).
+    //
+    // It used to be an incremented field plus a stock movement pointing at
+    // nothing. A receipt nobody can open, print, or match against a supplier
+    // invoice is not a receipt; it is a side effect. Numbered gaplessly through
+    // the same allocator invoices use, because a receipt is what a supplier
+    // dispute turns on.
+    const receivedAt = new Date();
+    const financialYear = financialYearOf(receivedAt);
+    const numbering = await nextDocumentNumber(ctx.tx, ctx.actor.tenantId, "GRN", financialYear);
+
+    const receipt = await ctx.tx.plywoodGoodsReceipt.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        purchaseOrderId: order.id,
+        locationId: order.locationId,
+        receiptNumber: numbering.invoiceNumber,
+        financialYear,
+        supplierChallanNumber: input.supplierChallanNumber ?? null,
+        receivedAt,
+        receivedBy: ctx.actor.userId,
+        notes: input.notes ?? null,
+      },
+    });
 
     for (const received of input.lines) {
       const line = order.lines.find((candidate) => candidate.productId === received.productId);
@@ -444,8 +485,30 @@ export const receiveGoods: CommandDefinition<
         kind: "purchase_inward",
         qtyUnits: received.qtyReceived,
         unitCostPaise: line.unitCostPaise,
+        // The movement now says what caused it. This is what makes the
+        // specification's §13 possible: open a quantity, see the receipt.
+        source: { type: "goods_receipt", id: receipt.id, number: receipt.receiptNumber },
       });
     }
+
+    // Written after the movements so a refused over-receipt leaves no line
+    // behind. The whole handler is one transaction, so this is about reading
+    // order rather than durability.
+    await ctx.tx.plywoodGoodsReceiptLine.createMany({
+      data: input.lines.map((received) => {
+        const line = order.lines.find((candidate) => candidate.productId === received.productId)!;
+        return {
+          tenantId: ctx.actor.tenantId,
+          receiptId: receipt.id,
+          purchaseOrderLineId: line.id,
+          productId: received.productId,
+          productNameSnapshot: line.productNameSnapshot,
+          rackId: input.rackId ?? null,
+          qtyReceived: received.qtyReceived,
+          unitCostPaise: line.unitCostPaise,
+        };
+      }),
+    });
 
     const after = await ctx.tx.plywoodPurchaseOrderLine.findMany({
       where: { purchaseOrderId: order.id },
@@ -469,7 +532,12 @@ export const receiveGoods: CommandDefinition<
     }
 
     return {
-      result: { id: order.id, state: target },
+      result: {
+        id: order.id,
+        state: target,
+        receiptId: receipt.id,
+        receiptNumber: receipt.receiptNumber,
+      },
       events: [
         ...stateEvents,
         {
@@ -477,6 +545,7 @@ export const receiveGoods: CommandDefinition<
             ? "verity.plywood.purchase_order_completed"
             : "verity.plywood.goods_partially_received",
           entityId: order.id,
+          payload: { receiptNumber: receipt.receiptNumber },
         },
       ],
     };

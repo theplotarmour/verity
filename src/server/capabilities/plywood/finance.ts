@@ -12,6 +12,7 @@ import {
   ENTITY_INVOICE,
   ENTITY_LEDGER_ENTRY,
   ENTITY_PAYMENT,
+  ENTITY_PURCHASE_ORDER,
 } from "./keys";
 
 /**
@@ -33,7 +34,12 @@ const INVOICEABLE_SALES_ORDER_STATES = new Set([
 
 const INVOICEABLE_PURCHASE_ORDER_STATES = new Set([
   "submitted",
-  "partially_received",
+  // The implementation's name for Part Received. The rule freeze's state
+  // machine (§5) calls it "Part Received"; renaming the stored value is a
+  // migration on live orders and belongs to the slice that unifies the
+  // vocabulary, not to a guard that would silently stop matching if it
+  // guessed the new name early.
+  "receiving",
   "completed",
 ]);
 
@@ -141,7 +147,7 @@ export function computeInvoiceTax(input: {
  * rollback returns the number instead of burning it. The cost is that invoice
  * creation serialises per series; at this business's volume that is nothing.
  */
-async function nextInvoiceNumber(
+export async function nextDocumentNumber(
   tx: TenantScopedClient,
   tenantId: string,
   seriesKey: string,
@@ -180,6 +186,17 @@ async function nextInvoiceNumber(
     invoiceNumber: `${seriesKey}/${financialYear}/${String(sequenceNumber).padStart(4, "0")}`,
   };
 }
+
+/**
+ * Kept under its old name for the invoicing path, which is the only caller
+ * that needs the series id back.
+ *
+ * The allocator itself is shared with Goods Receipt numbering (slice 3): a
+ * receipt is a document a supplier dispute turns on, so it is numbered
+ * gaplessly for the same reason an invoice is, and two implementations of
+ * "allocate the next number" is how one of them ends up with gaps.
+ */
+const nextInvoiceNumber = nextDocumentNumber;
 
 /* ================================ invoicing =============================== */
 
@@ -381,6 +398,22 @@ export const raisePurchaseInvoice: CommandDefinition<
       throw new ValidationError(
         `E_VALIDATION: a purchase order in ${order.state} cannot be invoiced; ` +
           "it must be submitted first",
+      );
+    }
+
+    // Slice 3 tightens P0-03 on the purchasing side: an invoice is a claim for
+    // goods, so there must be goods. A supplier invoice arriving before the
+    // lorry is a real situation and a real problem — recording it as a payable
+    // against nothing received is how a business pays for a delivery it never
+    // got. A quantity or price DIFFERENCE is not refused here; that is a
+    // conversation, and `purchaseMatch` names it.
+    const receiptCount = await ctx.tx.plywoodGoodsReceipt.count({
+      where: { purchaseOrderId: order.id },
+    });
+    if (receiptCount === 0) {
+      throw new ValidationError(
+        "E_VALIDATION: nothing has been received against this purchase order, " +
+          "so there is nothing to invoice. Record the goods receipt first.",
       );
     }
 
@@ -912,6 +945,184 @@ export const marginReport: QueryDefinition<
       costOfGoodsSoldPaise,
       marginPaise,
       marginBp: revenuePaise === 0 ? 0 : Math.round((marginPaise / revenuePaise) * 10_000),
+    };
+  },
+};
+
+/* ============================ three-way match ============================= */
+
+/**
+ * Purchase order ↔ goods receipt ↔ supplier invoice.
+ *
+ * Authority: specification §29; taskplans/45_plywood_workflow_program.md §9
+ * slice 3; PLYWOOD_TARGET_WORKFLOW_GAP_AUDIT.md P0-04 and §4.6.
+ *
+ * The accountant's question is never "what did we order?" — it is "does what
+ * they billed agree with what we ordered and what actually arrived?". Three
+ * numbers per line, and the differences named.
+ *
+ * IT REPORTS, IT DOES NOT REFUSE
+ * A quantity or price difference is a conversation with the supplier, not an
+ * error. Blocking the invoice would leave the business unable to record a
+ * document it has physically received, which is how invoices end up in a
+ * drawer instead of in the system. What is refused is invoicing an order that
+ * has received *nothing* — there is no conversation to have about that.
+ */
+export const purchaseMatch: QueryDefinition<
+  { purchaseOrderId: string },
+  {
+    purchaseOrderId: string;
+    supplierName: string;
+    state: string;
+    orderedTotalPaise: number;
+    receivedTotalPaise: number;
+    invoicedTotalPaise: number;
+    receipts: Array<{ id: string; receiptNumber: string; receivedAt: Date; lineCount: number }>;
+    lines: Array<{
+      productId: string;
+      productName: string;
+      qtyOrdered: number;
+      qtyReceived: number;
+      unitCostPaise: number;
+      /** Ordered minus received. Positive means still owed to us. */
+      qtyOutstanding: number;
+    }>;
+    exceptions: string[];
+  }
+> = {
+  key: "verity.plywood.purchase_match",
+  entity: ENTITY_PURCHASE_ORDER,
+  input: z.object({ purchaseOrderId: z.string().uuid() }),
+  handler: async (ctx, input) => {
+    const order = await ctx.tx.plywoodPurchaseOrder.findUniqueOrThrow({
+      where: { id: input.purchaseOrderId },
+      include: { lines: true, supplier: { select: { displayName: true } } },
+    });
+
+    const receipts = await ctx.tx.plywoodGoodsReceipt.findMany({
+      where: { purchaseOrderId: order.id },
+      include: { lines: { select: { id: true } } },
+      orderBy: { receivedAt: "asc" },
+    });
+
+    const invoices = await ctx.tx.plywoodInvoice.findMany({
+      where: { purchaseOrderId: order.id },
+      select: { totalPaise: true },
+    });
+
+    const orderedTotalPaise = order.lines.reduce(
+      (sum, line) => sum + line.qtyOrdered * line.unitCostPaise,
+      0,
+    );
+    const receivedTotalPaise = order.lines.reduce(
+      (sum, line) => sum + line.qtyReceived * line.unitCostPaise,
+      0,
+    );
+    const invoicedTotalPaise = invoices.reduce((sum, invoice) => sum + invoice.totalPaise, 0);
+
+    // Named in the words an accountant would use, not as codes. Each one is
+    // something a person has to go and do.
+    const exceptions: string[] = [];
+    const shortLines = order.lines.filter((line) => line.qtyReceived < line.qtyOrdered);
+    if (shortLines.length > 0) {
+      exceptions.push(
+        `${shortLines.length} line(s) not fully received: ` +
+          shortLines
+            .map((l) => `${l.productNameSnapshot} ${l.qtyReceived}/${l.qtyOrdered}`)
+            .join(", "),
+      );
+    }
+    if (invoicedTotalPaise > 0 && invoicedTotalPaise !== receivedTotalPaise) {
+      const difference = invoicedTotalPaise - receivedTotalPaise;
+      exceptions.push(
+        `Invoiced ${difference > 0 ? "more" : "less"} than received by ` +
+          `${Math.abs(difference) / 100} rupees`,
+      );
+    }
+    if (receipts.length === 0) {
+      exceptions.push("Nothing has been received against this order yet");
+    }
+
+    return {
+      purchaseOrderId: order.id,
+      supplierName: order.supplier.displayName,
+      state: order.state,
+      orderedTotalPaise,
+      receivedTotalPaise,
+      invoicedTotalPaise,
+      receipts: receipts.map((receipt) => ({
+        id: receipt.id,
+        receiptNumber: receipt.receiptNumber,
+        receivedAt: receipt.receivedAt,
+        lineCount: receipt.lines.length,
+      })),
+      lines: order.lines.map((line) => ({
+        productId: line.productId,
+        productName: line.productNameSnapshot,
+        qtyOrdered: line.qtyOrdered,
+        qtyReceived: line.qtyReceived,
+        unitCostPaise: line.unitCostPaise,
+        qtyOutstanding: line.qtyOrdered - line.qtyReceived,
+      })),
+      exceptions,
+    };
+  },
+};
+
+/** One receipt, in full — the document a supplier dispute turns on. */
+export const goodsReceiptDetail: QueryDefinition<
+  { receiptId: string },
+  {
+    id: string;
+    receiptNumber: string;
+    receivedAt: Date;
+    supplierChallanNumber: string | null;
+    notes: string | null;
+    purchaseOrderId: string;
+    supplierName: string;
+    locationName: string;
+    lines: Array<{
+      productId: string;
+      productName: string;
+      qtyReceived: number;
+      unitCostPaise: number;
+      lineValuePaise: number;
+    }>;
+    totalValuePaise: number;
+  }
+> = {
+  key: "verity.plywood.goods_receipt_detail",
+  entity: ENTITY_PURCHASE_ORDER,
+  input: z.object({ receiptId: z.string().uuid() }),
+  handler: async (ctx, input) => {
+    const receipt = await ctx.tx.plywoodGoodsReceipt.findUniqueOrThrow({
+      where: { id: input.receiptId },
+      include: {
+        lines: true,
+        location: { select: { name: true } },
+        purchaseOrder: { include: { supplier: { select: { displayName: true } } } },
+      },
+    });
+
+    const lines = receipt.lines.map((line) => ({
+      productId: line.productId,
+      productName: line.productNameSnapshot,
+      qtyReceived: line.qtyReceived,
+      unitCostPaise: line.unitCostPaise,
+      lineValuePaise: line.qtyReceived * line.unitCostPaise,
+    }));
+
+    return {
+      id: receipt.id,
+      receiptNumber: receipt.receiptNumber,
+      receivedAt: receipt.receivedAt,
+      supplierChallanNumber: receipt.supplierChallanNumber,
+      notes: receipt.notes,
+      purchaseOrderId: receipt.purchaseOrderId,
+      supplierName: receipt.purchaseOrder.supplier.displayName,
+      locationName: receipt.location.name,
+      lines,
+      totalValuePaise: lines.reduce((sum, line) => sum + line.lineValuePaise, 0),
     };
   },
 };
