@@ -11,7 +11,7 @@ import {
   storageDriver,
   storageKeyFor,
 } from "@/server/platform/files";
-import { installStorage } from "@/server/storage/supabase";
+import { installStorage } from "@/server/storage";
 
 /**
  * The storage binding.

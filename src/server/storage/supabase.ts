@@ -32,7 +32,6 @@ import { runtimeConfig } from "@/server/platform/config";
  */
 
 let client: SupabaseClient | null = null;
-let installed = false;
 
 function serviceClient(url: string, key: string): SupabaseClient {
   client ??= createClient(url, key, {
@@ -99,23 +98,9 @@ export function supabaseStorageDriver(input: {
 }
 
 /**
- * Binds a storage backend if this deployment has one configured.
- *
- * Silent when the variables are absent, and deliberately so: a deployment
- * without storage is a valid deployment. `files.ts` already refuses with
- * `E_STORAGE_UNAVAILABLE` at the point of use, which names the actual problem —
- * failing at boot instead would take down sign-in over a feature nobody on that
- * deployment had reached for yet.
+ * Provider selection moved to `src/server/storage/index.ts` in Task 41, when a
+ * second driver arrived. This file is now purely the Supabase adapter: it knows
+ * how to talk to Supabase Storage and nothing about whether this deployment
+ * uses it. Keeping the selector here would have meant one adapter deciding
+ * whether another adapter runs.
  */
-export function installStorage(): void {
-  if (installed) return;
-
-  const url = runtimeConfig.storage.supabaseUrl;
-  const serviceRoleKey = runtimeConfig.storage.serviceRoleKey;
-  const bucket = runtimeConfig.storage.bucket;
-
-  if (!url || !serviceRoleKey || !bucket) return;
-
-  installed = true;
-  registerStorageDriver(supabaseStorageDriver({ url, serviceRoleKey, bucket }));
-}

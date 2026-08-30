@@ -76,7 +76,7 @@ describe("installStorage(): conditional registration", () => {
     for (const key of Object.keys(STORAGE_ENV)) process.env[key] = "";
     mockSupabaseClient({});
 
-    const { installStorage } = await import("@/server/storage/supabase");
+    const { installStorage } = await import("@/server/storage");
     const { storageDriver } = await import("@/server/platform/files");
 
     installStorage();
@@ -90,7 +90,7 @@ describe("installStorage(): conditional registration", () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = "";
     mockSupabaseClient({});
 
-    const { installStorage } = await import("@/server/storage/supabase");
+    const { installStorage } = await import("@/server/storage");
     const { storageDriver } = await import("@/server/platform/files");
 
     installStorage();
@@ -101,7 +101,7 @@ describe("installStorage(): conditional registration", () => {
     Object.assign(process.env, REQUIRED_ENV, STORAGE_ENV);
     mockSupabaseClient({});
 
-    const { installStorage } = await import("@/server/storage/supabase");
+    const { installStorage } = await import("@/server/storage");
     const { storageDriver } = await import("@/server/platform/files");
 
     installStorage();
@@ -114,7 +114,7 @@ describe("installStorage(): conditional registration", () => {
     Object.assign(process.env, REQUIRED_ENV, STORAGE_ENV);
     mockSupabaseClient({});
 
-    const { installStorage } = await import("@/server/storage/supabase");
+    const { installStorage } = await import("@/server/storage");
 
     installStorage();
     installStorage();

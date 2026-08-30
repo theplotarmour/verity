@@ -117,12 +117,44 @@ const configSchema = z.object({
     }),
 
   storage: z.object({
-    /** Supabase Storage is optional: a deployment that never touches a file
-     *  is valid (files.ts refuses at point of use, not at boot). `SUPABASE_URL`
-     *  overrides the public URL for storage specifically, when set. */
+    /**
+     * Which object store this deployment uses (Task 41).
+     *
+     * Selected once at install from validated configuration, exactly as
+     * `auth.provider` is. Unset or incompletely configured means *no driver*,
+     * which is a valid deployment state: `files.ts` refuses at the point of
+     * use rather than at boot, so a deployment that never touches a file runs
+     * and sign-in is not taken down by a feature nobody reached for.
+     */
+    driver: z.enum(["supabase", "s3"]).default("supabase"),
+
+    /** Supabase Storage. `SUPABASE_URL` overrides the public URL when set. */
     supabaseUrl: z.string().optional(),
     serviceRoleKey: z.string().optional(),
     bucket: z.string().optional(),
+
+    /**
+     * Any S3-compatible server: AWS, MinIO, SeaweedFS's S3 gateway, Ceph RGW,
+     * Wasabi, Backblaze B2. One adapter, different configuration — a driver
+     * written against one vendor's extensions would make the next deployment
+     * a fork.
+     */
+    s3: z
+      .object({
+        bucket: z.string().min(1),
+        region: z.string().min(1).default("us-east-1"),
+        /** Omit for AWS; required for every self-hosted server. */
+        endpoint: z.string().optional(),
+        accessKeyId: z.string().min(1),
+        secretAccessKey: z.string().min(1),
+        /**
+         * Defaults to true when an endpoint is set, because a self-hosted
+         * server is almost always path-style, and the failure mode of getting
+         * this wrong (`SignatureDoesNotMatch`) reads exactly like a bad key.
+         */
+        forcePathStyle: z.coerce.boolean().optional(),
+      })
+      .optional(),
   }),
 });
 
@@ -162,6 +194,20 @@ function loadConfig(): RuntimeConfig {
         : undefined,
     },
     storage: {
+      driver: process.env.VERITY_STORAGE_DRIVER,
+      // Passed as undefined rather than a half-filled object when the bucket is
+      // absent, so an incomplete configuration binds nothing instead of failing
+      // deep inside the SDK on first use.
+      s3: process.env.VERITY_S3_BUCKET
+        ? {
+            bucket: process.env.VERITY_S3_BUCKET,
+            region: process.env.VERITY_S3_REGION,
+            endpoint: process.env.VERITY_S3_ENDPOINT,
+            accessKeyId: process.env.VERITY_S3_ACCESS_KEY_ID,
+            secretAccessKey: process.env.VERITY_S3_SECRET_ACCESS_KEY,
+            forcePathStyle: process.env.VERITY_S3_FORCE_PATH_STYLE,
+          }
+        : undefined,
       supabaseUrl: process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL,
       serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
       bucket: process.env.SUPABASE_MEDIA_BUCKET,
