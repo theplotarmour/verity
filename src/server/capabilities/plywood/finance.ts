@@ -10,6 +10,7 @@ import { sellerIdentity } from "./business";
 import { resolveTaxRate } from "./tax";
 import { assertPeriodOpen } from "./period";
 import { reachableGodownIds } from "./scope";
+import { businessZone } from "./clock";
 import { ValidationError, type CommandDefinition } from "@/server/platform/command";
 import { type QueryDefinition } from "@/server/platform/query";
 import { resolveConfig } from "@/server/platform/capability";
@@ -1058,6 +1059,11 @@ export const ownerConsole: QueryDefinition<
     // invoice is not anchored to a godown, and inventing a filter for it would
     // be a scope rule with no basis in the model. The stock figures are, and
     // now say so.
+    // Audit finding U0-3: "today" and "this month" are the BUSINESS's, not
+    // UTC's. Read at 01:55 IST on the 1st, a UTC boundary reports last month's
+    // sales as this month's and yesterday's as today's.
+    const zone = await businessZone(ctx);
+
     const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_STOCK_BALANCE);
     // An empty reachable set means nothing, never everything. Prisma renders an
     // empty `IN ()` as false, which is the correct reading, but the array is
@@ -1068,13 +1074,13 @@ export const ownerConsole: QueryDefinition<
       Record<string, bigint | null>[]
     >`SELECT
         (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
-          WHERE customer_id IS NOT NULL AND issued_at >= date_trunc('month', now()))::bigint
+          WHERE customer_id IS NOT NULL AND issued_at >= date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS sales_this_month,
         (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
-          WHERE customer_id IS NOT NULL AND issued_at >= date_trunc('day', now()))::bigint
+          WHERE customer_id IS NOT NULL AND issued_at >= date_trunc('day', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS todays_sales,
         (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
-          WHERE supplier_id IS NOT NULL AND issued_at >= date_trunc('day', now()))::bigint
+          WHERE supplier_id IS NOT NULL AND issued_at >= date_trunc('day', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS todays_purchases,
         (SELECT count(*) FROM plywood_sales_order
           WHERE state IN ('draft', 'pending_credit', 'approved', 'dispatching'))::bigint
@@ -1135,13 +1141,13 @@ export const ownerConsole: QueryDefinition<
         (SELECT COALESCE(SUM(p.amount_paise), 0) FROM plywood_payment p
            JOIN plywood_invoice i ON i.id = p.invoice_id
           WHERE i.customer_id IS NOT NULL
-            AND p.received_at >= date_trunc('day', now()))::bigint
+            AND p.received_at >= date_trunc('day', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS collections_today,
         (SELECT COALESCE(SUM(cgst_paise + sgst_paise + igst_paise), 0) FROM plywood_invoice
-          WHERE customer_id IS NOT NULL AND issued_at >= date_trunc('month', now()))::bigint
+          WHERE customer_id IS NOT NULL AND issued_at >= date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS output_tax,
         (SELECT COALESCE(SUM(cgst_paise + sgst_paise + igst_paise), 0) FROM plywood_invoice
-          WHERE supplier_id IS NOT NULL AND issued_at >= date_trunc('month', now()))::bigint
+          WHERE supplier_id IS NOT NULL AND issued_at >= date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS eligible_itc,
         -- Available, not on hand (rule freeze §4.2). Counting on-hand reports
         -- plenty while every sheet is already reserved, and the buyer finds

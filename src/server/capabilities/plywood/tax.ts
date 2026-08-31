@@ -2,6 +2,7 @@ import { z } from "zod";
 import { registerCommand, ValidationError, type CommandDefinition } from "@/server/platform/command";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
+import { businessZone, startOfBusinessMonth } from "./clock";
 import { HSN_CODE, ENTITY_GST_REGISTRATION, ENTITY_INVOICE } from "./keys";
 
 /**
@@ -200,7 +201,7 @@ export const taxSummary: QueryDefinition<
     // usually looking at when they open this.
     const from = input.from
       ? new Date(input.from)
-      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      : startOfBusinessMonth(await businessZone(ctx), now);
     const to = input.to ? new Date(input.to) : now;
 
     const invoices = await ctx.tx.plywoodInvoice.findMany({
@@ -320,7 +321,7 @@ export const gstr1Working: QueryDefinition<
     const now = new Date();
     const from = input.from
       ? new Date(input.from)
-      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      : startOfBusinessMonth(await businessZone(ctx), now);
     const to = input.to ? new Date(input.to) : now;
 
     const invoices = await ctx.tx.plywoodInvoice.findMany({
@@ -460,7 +461,7 @@ export const gstr3bWorking: QueryDefinition<
     const now = new Date();
     const from = input.from
       ? new Date(input.from)
-      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      : startOfBusinessMonth(await businessZone(ctx), now);
     const to = input.to ? new Date(input.to) : now;
 
     const invoices = await ctx.tx.plywoodInvoice.findMany({

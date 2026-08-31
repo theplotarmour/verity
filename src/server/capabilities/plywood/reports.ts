@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { reachableGodownIds } from "./scope";
+import { businessZone, startOfBusinessDay } from "./clock";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import { ENTITY_INVOICE, ENTITY_PURCHASE_ORDER, ENTITY_STOCK_BALANCE } from "./keys";
 
@@ -20,8 +21,19 @@ import { ENTITY_INVOICE, ENTITY_PURCHASE_ORDER, ENTITY_STOCK_BALANCE } from "./k
 /** Default reporting window. A month is the period a plywood business thinks in. */
 const DEFAULT_DAYS = 30;
 
-function windowStart(sinceDays: number | undefined): Date {
-  return new Date(Date.now() - (sinceDays ?? DEFAULT_DAYS) * 86_400_000);
+/**
+ * The start of a rolling window, counted back from the start of the business's
+ * TODAY rather than from the current instant (U0-3).
+ *
+ * Counting back from "now" makes a report's window slide through the day, so
+ * the same report run twice in one afternoon covers different periods and its
+ * figures move for no business reason. Anchoring to local midnight makes a
+ * "last 30 days" report stable for the whole day, which is what a person
+ * comparing two runs assumes.
+ */
+function windowStart(zone: string, sinceDays: number | undefined): Date {
+  const today = startOfBusinessDay(zone);
+  return new Date(today.getTime() - (sinceDays ?? DEFAULT_DAYS) * 86_400_000);
 }
 
 /**
@@ -61,7 +73,7 @@ export const salesAnalysis: QueryDefinition<
   entity: ENTITY_INVOICE,
   input: z.object({ sinceDays: z.number().int().min(1).max(3650).optional() }),
   handler: async (ctx, input) => {
-    const from = windowStart(input.sinceDays);
+    const from = windowStart(await businessZone(ctx), input.sinceDays);
     const invoices = await ctx.tx.plywoodInvoice.findMany({
       where: { customerId: { not: null }, issuedAt: { gte: from } },
       include: { lines: true, customer: { select: { id: true, displayName: true } } },
@@ -162,7 +174,7 @@ export const purchaseAnalysis: QueryDefinition<
   entity: ENTITY_PURCHASE_ORDER,
   input: z.object({ sinceDays: z.number().int().min(1).max(3650).optional() }),
   handler: async (ctx, input) => {
-    const from = windowStart(input.sinceDays);
+    const from = windowStart(await businessZone(ctx), input.sinceDays);
     const orders = await ctx.tx.plywoodPurchaseOrder.findMany({
       // Drafts are excluded: a draft is a note to self, not a purchase, and
       // counting one as spend reports money the business has not committed.
@@ -303,7 +315,7 @@ export const inventoryAnalysis: QueryDefinition<
   entity: ENTITY_STOCK_BALANCE,
   input: z.object({ sinceDays: z.number().int().min(1).max(3650).optional() }),
   handler: async (ctx, input) => {
-    const from = windowStart(input.sinceDays);
+    const from = windowStart(await businessZone(ctx), input.sinceDays);
     const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_STOCK_BALANCE);
 
     const [balances, movements] = await Promise.all([

@@ -19,6 +19,10 @@ import { clearScopeResolvers } from "@/server/platform/authorization";
 import { clearTransitionGuards } from "@/server/platform/state";
 import { clearContributions } from "@/server/platform/contribution";
 import { provisionIdentity } from "@/server/platform/identity";
+import { businessPeriodKey, businessPeriodWindow } from "@/server/capabilities/plywood/clock";
+
+/** The zone this test's tenant reckons in; every period assertion uses it. */
+const TENANT_ZONE = "Asia/Kolkata";
 import { ASSET_CAPABILITY } from "@/server/capabilities/asset";
 import { EVIDENCE_CAPABILITY } from "@/server/capabilities/evidence";
 import { LOCATION_CAPABILITY } from "@/server/capabilities/location";
@@ -130,7 +134,7 @@ describeDb("plywood period close (slice 7)", () => {
 
     await withTenant(tenantId, async (tx) => {
       await tx.tenant.create({
-        data: { id: tenantId, name: "Close Test Plywood", timeZone: "Asia/Kolkata" },
+        data: { id: tenantId, name: "Close Test Plywood", timeZone: TENANT_ZONE },
       });
       await activateCapability(tx, tenantId, LOCATION_CAPABILITY);
       await activateCapability(tx, tenantId, ASSET_CAPABILITY);
@@ -292,7 +296,12 @@ describeDb("plywood period close (slice 7)", () => {
 
   describe("a closed period refuses postings (§77, P0-08)", () => {
     it("refuses to close a period that has not finished", async () => {
-      const thisMonth = periodKeyOf(new Date());
+      // Asked in the tenant's own zone, which is what the command uses (U0-3).
+      // `periodKeyOf(new Date())` defaults to UTC, and for five and a half
+      // hours a day that names a DIFFERENT month from the one this business is
+      // in — so the test and the command disagreed about which period "this
+      // month" meant, and this assertion passed or failed by time of day.
+      const thisMonth = businessPeriodKey(TENANT_ZONE, new Date());
       await expect(
         executeCommand(owner, closePeriod, { periodKey: thisMonth }),
       ).rejects.toThrow(/has not finished yet/);
@@ -328,15 +337,17 @@ describeDb("plywood period close (slice 7)", () => {
       // is enforced: `assertPeriodOpen` refuses for the period of the instant.
       const productId = await boardInStock(10);
 
-      const thisMonth = periodKeyOf(new Date());
+      // Same zone the posting guard uses, so the period this test closes is
+      // the period the posting is actually checked against (U0-3).
+      const thisMonth = businessPeriodKey(TENANT_ZONE, new Date());
       await withTenant(tenantId, async (tx) => {
-        const [year, month] = thisMonth.split("-").map(Number);
+        const { startsAt, endsAt } = businessPeriodWindow(TENANT_ZONE, thisMonth);
         await tx.plywoodAccountingPeriod.create({
           data: {
             tenantId,
             periodKey: thisMonth,
-            startsAt: new Date(Date.UTC(year!, month! - 1, 1)),
-            endsAt: new Date(Date.UTC(year!, month!, 1)),
+            startsAt,
+            endsAt,
             state: "closed",
             closedAt: new Date(),
             closedBy: owner.userId,
@@ -384,7 +395,9 @@ describeDb("plywood period close (slice 7)", () => {
       await executeCommand(owner, reserveForOrder, { orderId: order.id });
       await executeCommand(owner, dispatchOrder, { orderId: order.id });
 
-      const thisMonth = periodKeyOf(new Date());
+      // Same zone the posting guard uses, so the period this test closes is
+      // the period the posting is actually checked against (U0-3).
+      const thisMonth = businessPeriodKey(TENANT_ZONE, new Date());
       await withTenant(tenantId, async (tx) => {
         const [year, month] = thisMonth.split("-").map(Number);
         await tx.plywoodAccountingPeriod.create({

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { periodKeyOf } from "./period";
+import { businessPeriodWindow, businessZone } from "./clock";
 import {
   registerCommand,
   ValidationError,
@@ -229,10 +230,13 @@ export const itcReconciliation: QueryDefinition<
   entity: ENTITY_INVOICE,
   input: z.object({ periodKey: PERIOD_KEY.optional() }),
   handler: async (ctx, input) => {
-    const periodKey = input.periodKey ?? periodKeyOf(new Date());
-    const [year, month] = periodKey.split("-").map(Number) as [number, number];
-    const from = new Date(Date.UTC(year, month - 1, 1));
-    const to = new Date(Date.UTC(year, month, 1));
+    // The period, and the window it covers, in the business's own zone (U0-3).
+    // A reconciliation that used UTC boundaries would compare a purchase
+    // register cut one way against a portal file cut the other, and report
+    // differences that are only calendar arithmetic.
+    const zone = await businessZone(ctx);
+    const periodKey = input.periodKey ?? periodKeyOf(new Date(), zone);
+    const { startsAt: from, endsAt: to } = businessPeriodWindow(zone, periodKey);
 
     const [portal, invoices] = await Promise.all([
       ctx.tx.plywoodGstPortalRecord.findMany({ where: { periodKey } }),

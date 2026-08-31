@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { registerCommand, ValidationError, type CommandDefinition } from "@/server/platform/command";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
+import { businessPeriodKey, businessPeriodWindow, businessZone, tenantZone } from "./clock";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
 import { ENTITY_ACCOUNTING_PERIOD } from "./keys";
 
@@ -22,8 +23,11 @@ import { ENTITY_ACCOUNTING_PERIOD } from "./keys";
  */
 
 /** "2026-08" for any instant. */
-export function periodKeyOf(instant: Date): string {
-  return `${instant.getUTCFullYear()}-${String(instant.getUTCMonth() + 1).padStart(2, "0")}`;
+export function periodKeyOf(instant: Date, zone = "UTC"): string {
+  // Audit finding U0-3. The UTC getters this replaced named the previous month
+  // for five and a half hours out of every twenty-four in an IST business, so
+  // an invoice raised at 01:00 IST on the 1st was filed under the month before.
+  return businessPeriodKey(zone, instant);
 }
 
 export class PeriodClosedError extends ValidationError {
@@ -49,7 +53,11 @@ export class PeriodClosedError extends ValidationError {
  * first close is what creates the boundary.
  */
 export async function assertPeriodOpen(tx: TenantScopedClient, on: Date): Promise<void> {
-  const periodKey = periodKeyOf(on);
+  // The period an instant belongs to is decided in the BUSINESS's zone (U0-3).
+  // This is the highest-consequence use of that rule in the capability: it runs
+  // on every document write, so getting it wrong files a real invoice into the
+  // wrong month.
+  const periodKey = periodKeyOf(on, await tenantZone(tx));
   const period = await tx.plywoodAccountingPeriod.findFirst({ where: { periodKey } });
   if (period?.state === "closed") throw new PeriodClosedError(periodKey);
 }
@@ -76,10 +84,10 @@ export const closeChecklist: QueryDefinition<
   entity: ENTITY_ACCOUNTING_PERIOD,
   input: z.object({ periodKey: z.string().regex(/^\d{4}-\d{2}$/).optional() }),
   handler: async (ctx, input) => {
-    const periodKey = input.periodKey ?? periodKeyOf(new Date());
-    const [year, month] = periodKey.split("-").map(Number);
-    const startsAt = new Date(Date.UTC(year!, month! - 1, 1));
-    const endsAt = new Date(Date.UTC(year!, month!, 1));
+    // The period defaults to the month the BUSINESS is in, not UTC's (U0-3).
+    const zone = await businessZone(ctx);
+    const periodKey = input.periodKey ?? periodKeyOf(new Date(), zone);
+    const { startsAt, endsAt } = businessPeriodWindow(zone, periodKey);
 
     const period = await ctx.tx.plywoodAccountingPeriod.findFirst({ where: { periodKey } });
 
@@ -177,8 +185,8 @@ export const closePeriod: CommandDefinition<
   }),
   handler: async (ctx, input) => {
     const [year, month] = input.periodKey.split("-").map(Number);
-    const startsAt = new Date(Date.UTC(year!, month! - 1, 1));
-    const endsAt = new Date(Date.UTC(year!, month!, 1));
+    // The window a period covers is the business's own month (U0-3).
+    const { startsAt, endsAt } = businessPeriodWindow(await businessZone(ctx), input.periodKey);
 
     if (endsAt > new Date()) {
       throw new ValidationError(
