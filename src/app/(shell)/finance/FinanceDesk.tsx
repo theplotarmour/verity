@@ -410,8 +410,12 @@ export function FinanceDesk({
                       </Link>
                     </td>
                     <td className="border-b border-line px-3 py-2 text-[14px] text-text-secondary">
-                      {invoice.partyName}
-                      <span className="ml-2 text-[12px] text-text-tertiary">
+                      {/* The separator is a real space, not only the margin.
+                          CSS contributes nothing to an accessible name, so
+                          `ml-2` alone left a screen reader announcing
+                          "Divyom Sharmapurchase" while the page looked fine. */}
+                      {invoice.partyName}{" "}
+                      <span className="ml-1 text-[12px] text-text-tertiary">
                         {invoice.direction === "sales" ? "sale" : "purchase"}
                       </span>
                     </td>
