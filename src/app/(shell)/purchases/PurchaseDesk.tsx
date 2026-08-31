@@ -13,15 +13,28 @@ import {
   Select,
   StateBadge,
 } from "@/components/ui/primitives";
+import { day, sheets } from "@/components/ui/business/format";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
 type PurchaseOrder = {
   id: string;
+  reference: string | null;
   supplierName: string;
   state: string;
   totalCostPaise: number;
+  orderedUnits: number;
+  receivedUnits: number;
   outstandingUnits: number;
+  raisedAt: Date | string;
+  summary: string;
+  lines: Array<{
+    productId: string;
+    name: string;
+    qtyOrdered: number;
+    qtyReceived: number;
+    qtyOutstanding: number;
+  }>;
 };
 
 type Supplier = {
@@ -110,6 +123,10 @@ export function PurchaseDesk({
       }
     });
   }
+
+  // The order the receive form is for, resolved once rather than passed as an
+  // id the form would have to look up.
+  const receivingOrder = orders.find((order) => order.id === receiving) ?? null;
 
   const canOrder = suppliers.length > 0 && godowns.length > 0 && boards.length > 0;
 
@@ -392,12 +409,12 @@ export function PurchaseDesk({
               <caption className="sr-only">Open purchase orders</caption>
               <thead>
                 <tr>
-                  {["Supplier", "State", "Outstanding", "Order value", ""].map((heading, index) => (
+                  {["Order", "Board", "Status", "Ordered", "Still owed", "Order value", ""].map((heading, index) => (
                     <th
                       key={heading || index}
                       className={
                         "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                        (index <= 1 ? "text-left" : "text-right")
+                        (index <= 2 ? "text-left" : "text-right")
                       }
                     >
                       {heading}
@@ -416,8 +433,17 @@ export function PurchaseDesk({
                         href={`/purchases/${order.id}`}
                         className="text-text no-underline hover:underline"
                       >
-                        {order.supplierName}
+                        {order.reference ?? `Order ${order.id.slice(0, 8)}`}
                       </Link>
+                      <span className="mt-0.5 block text-[12px] text-text-tertiary">
+                        {order.supplierName} · {day(order.raisedAt)}
+                      </span>
+                    </td>
+                    {/* U2-2: what the order is FOR. Without this the desk could
+                        not tell a warehouse user which order they were looking
+                        at, and neither could the receive form. */}
+                    <td className="border-b border-line px-3 py-2 text-[14px] text-text-secondary">
+                      {order.summary}
                     </td>
                     <td className="border-b border-line px-3 py-2">
                       <StateBadge
@@ -425,8 +451,13 @@ export function PurchaseDesk({
                         label={STATE_LABEL[order.state] ?? order.state}
                       />
                     </td>
+                    <td className="tabular border-b border-line px-3 py-2 text-right text-[14px] text-text-secondary">
+                      {sheets(order.orderedUnits)}
+                    </td>
+                    {/* U2-3: a bare number beside a rupee figure reads as money.
+                        These are sheets, and the column says so. */}
                     <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                      {order.outstandingUnits === 0 ? "—" : order.outstandingUnits}
+                      {order.outstandingUnits === 0 ? "—" : sheets(order.outstandingUnits)}
                     </td>
                     <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
                       {rupees(order.totalCostPaise)}
@@ -507,11 +538,11 @@ export function PurchaseDesk({
             </form>
           )}
 
-          {receiving && (
+          {receivingOrder && (
             <ReceiveForm
-              orderId={receiving}
-              boards={boards}
+              order={receivingOrder}
               pending={pending}
+              onClose={() => setReceiving(null)}
               onSubmit={(input) =>
                 run("verity.plywood.receive_goods", input, () => setReceiving(null))
               }
@@ -526,7 +557,7 @@ export function PurchaseDesk({
             <caption className="sr-only">Suppliers</caption>
             <thead>
               <tr>
-                {["Supplier", "GSTIN", "State", "Open orders"].map((heading, index) => (
+                {["Supplier", "GSTIN", "GST state", "Open orders"].map((heading, index) => (
                   <th
                     key={heading}
                     className={
@@ -565,64 +596,104 @@ export function PurchaseDesk({
 }
 
 /**
- * Receiving a delivery.
+ * Receiving a delivery, against one named order.
  *
- * Quantity only — the cost is whatever the order said, because a delivery does
- * not renegotiate a price. A cost field here would let the godown quietly change
- * what the business agreed to pay.
+ * Audit finding U0-4. This form used to offer a dropdown of EVERY board in the
+ * catalogue and a bare quantity, with nothing naming the order it belonged to.
+ * A warehouse user had to remember which board a given order was for, and with
+ * two orders both reading "Part delivered" there was nothing to check against.
+ * The dropdown also listed services, which cannot be received into a godown.
+ *
+ * It now shows the order's own lines and nothing else — each with what was
+ * ordered, what has already arrived, and what is still owed — pre-filled with
+ * the outstanding quantity, which is what arrives in the ordinary case.
  */
 function ReceiveForm({
-  orderId,
-  boards,
+  order,
   pending,
   onSubmit,
+  onClose,
 }: {
-  orderId: string;
-  boards: Array<{ id: string; label: string }>;
+  order: PurchaseOrder;
   pending: boolean;
   onSubmit: (input: unknown) => void;
+  onClose: () => void;
 }) {
+  const [quantities, setQuantities] = useState<Record<string, string>>(() =>
+    Object.fromEntries(order.lines.map((line) => [line.productId, String(line.qtyOutstanding)])),
+  );
+
+  const lines = order.lines
+    .map((line) => ({
+      productId: line.productId,
+      qtyReceived: Number.parseInt(quantities[line.productId] ?? "0", 10),
+    }))
+    // A line receiving nothing is omitted rather than sent as zero: the command
+    // requires a positive quantity, and "none of this arrived" is expressed by
+    // its absence.
+    .filter((line) => Number.isFinite(line.qtyReceived) && line.qtyReceived > 0);
+
   return (
-    <form
-      className="mt-4 flex flex-wrap items-end gap-3 rounded-lg bg-glass-2 p-3"
-      action={(formData) =>
-        onSubmit({
-          orderId,
-          lines: [
-            {
-              productId: String(formData.get("productId") ?? ""),
-              qtyReceived: Number(formData.get("qty") ?? 0),
-            },
-          ],
-        })
-      }
-    >
-      <div className="min-w-[240px] flex-1">
-        <Field label="Board delivered" htmlFor={`receive-board-${orderId}`} required>
-          <Select id={`receive-board-${orderId}`} name="productId" required defaultValue="">
-            <option value="" disabled>
-              Choose a board
-            </option>
-            {boards.map((board) => (
-              <option key={board.id} value={board.id}>
-                {board.label}
-              </option>
+    <div className="mt-4 rounded-lg bg-glass-2 p-4">
+      <div className="mb-3 flex items-baseline justify-between gap-4">
+        <h3 className="m-0 text-[13px] font-medium text-text">
+          Receive against {order.reference ?? `order ${order.id.slice(0, 8)}`}
+          <span className="font-normal text-text-tertiary"> · {order.supplierName}</span>
+        </h3>
+        <Button size="sm" onClick={onClose} disabled={pending}>
+          Close
+        </Button>
+      </div>
+
+      {order.lines.length === 0 ? (
+        <p className="m-0 text-[13px] text-text-secondary">
+          Everything on this order has already been received.
+        </p>
+      ) : (
+        <>
+          <div className="flex flex-col gap-3">
+            {order.lines.map((line) => (
+              <div key={line.productId} className="flex flex-wrap items-end gap-3">
+                <div className="min-w-[240px] flex-1">
+                  <Field
+                    label={line.name}
+                    htmlFor={`receive-${order.id}-${line.productId}`}
+                    hint={`${line.qtyOrdered} ordered · ${line.qtyReceived} received · ${line.qtyOutstanding} still owed`}
+                  >
+                    <Input
+                      id={`receive-${order.id}-${line.productId}`}
+                      type="number"
+                      min={0}
+                      max={line.qtyOutstanding}
+                      value={quantities[line.productId] ?? ""}
+                      onChange={(event) =>
+                        setQuantities((current) => ({
+                          ...current,
+                          [line.productId]: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                </div>
+              </div>
             ))}
-          </Select>
-        </Field>
-      </div>
-      <div className="w-[130px]">
-        <Field label="Quantity" htmlFor={`receive-qty-${orderId}`} required>
-          <Input id={`receive-qty-${orderId}`} name="qty" type="number" min="1" required />
-        </Field>
-      </div>
-      <Button type="submit" variant="primary" disabled={pending}>
-        Receive
-      </Button>
-      <p className="m-0 w-full text-[12px] text-text-tertiary">
-        Costed at what the order agreed. Receiving moves the stock into the godown in the same step,
-        and more than was ordered is refused rather than accepted.
-      </p>
-    </form>
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            <Button
+              variant="primary"
+              disabled={pending || lines.length === 0}
+              onClick={() => onSubmit({ orderId: order.id, lines })}
+            >
+              {pending ? "Recording…" : "Record receipt"}
+            </Button>
+            <p className="m-0 text-[12px] text-text-tertiary">
+              Costed at what the order agreed. Receiving moves the stock into the godown in the same
+              step, and more than was ordered is refused rather than accepted.
+            </p>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
+

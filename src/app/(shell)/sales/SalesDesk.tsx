@@ -13,14 +13,20 @@ import {
   Select,
   StateBadge,
 } from "@/components/ui/primitives";
+import { day, sheets } from "@/components/ui/business/format";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
 type SalesOrder = {
   id: string;
+  reference: string | null;
+  customerId: string;
   customerName: string;
   state: string;
   totalPricePaise: number;
+  orderedUnits: number;
+  raisedAt: Date | string;
+  summary: string;
 };
 
 type Customer = {
@@ -405,7 +411,7 @@ export function SalesDesk({
               <caption className="sr-only">Open sales orders</caption>
               <thead>
                 <tr>
-                  {["Customer", "State", "Order value", ""].map((heading, index) => (
+                  {["Order", "Board", "Status", "Ordered", "Order value", ""].map((heading, index) => (
                     <th
                       key={heading || index}
                       className={
@@ -429,14 +435,30 @@ export function SalesDesk({
                         href={`/sales/${order.id}`}
                         className="text-text no-underline hover:underline"
                       >
-                        {order.customerName}
+                        {order.reference ?? `Order ${order.id.slice(0, 8)}`}
                       </Link>
+                      <span className="mt-0.5 block text-[12px] text-text-tertiary">
+                        <Link
+                          href={`/customers/${order.customerId}`}
+                          className="text-text-tertiary no-underline hover:underline"
+                        >
+                          {order.customerName}
+                        </Link>{" "}
+                        · {day(order.raisedAt)}
+                      </span>
+                    </td>
+                    {/* U2-2: what the order is for. */}
+                    <td className="border-b border-line px-3 py-2 text-[14px] text-text-secondary">
+                      {order.summary}
                     </td>
                     <td className="border-b border-line px-3 py-2">
                       <StateBadge
                         category={STATE_CATEGORY[order.state] ?? "Pending"}
                         label={STATE_LABEL[order.state] ?? order.state}
                       />
+                    </td>
+                    <td className="tabular border-b border-line px-3 py-2 text-right text-[14px] text-text-secondary">
+                      {sheets(order.orderedUnits)}
                     </td>
                     <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
                       {rupees(order.totalPricePaise)}
@@ -462,7 +484,7 @@ export function SalesDesk({
                               run("verity.plywood.reserve_for_order", { orderId: order.id })
                             }
                           >
-                            Hold stock
+                            Reserve stock
                           </Button>
                         )}
                         {order.state === "dispatching" && (
@@ -569,7 +591,7 @@ export function SalesDesk({
             <caption className="sr-only">Customers and credit headroom</caption>
             <thead>
               <tr>
-                {["Customer", "GSTIN", "Limit", "Committed", "Headroom", ""].map(
+                {["Customer", "GSTIN", "Limit", "Exposure", "Headroom", ""].map(
                   (heading, index) => (
                     <th
                       key={heading || index}

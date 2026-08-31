@@ -40,6 +40,38 @@ const GSTIN = z
 /** Two digits. It decides CGST + SGST against IGST (P4). */
 const STATE_CODE = z.string().regex(/^[0-9]{2}$/, "a GST state code is two digits");
 
+
+/**
+ * A readable number for an order, when the user gave it none.
+ *
+ * Audit findings U2-1 and U2-2. Orders had a nullable free-text `reference` and
+ * no document number, so a list identified a row by party name alone and the
+ * detail page fell back to a UUID fragment — "Purchase order 462e7714". Two
+ * orders to the same supplier were indistinguishable, and a warehouse user
+ * receiving against one had nothing to check they had the right one.
+ *
+ * Uses the same gapless counter invoices use, so an order number is as
+ * trustworthy as an invoice number and the two read as one family.
+ *
+ * A REFERENCE THE USER TYPED IS KEPT. Theirs carries meaning ours cannot — a
+ * customer's own PO number, a phone-order note — and overwriting it to impose
+ * our format would destroy the more useful of the two.
+ */
+async function orderNumber(
+  tx: TenantScopedClient,
+  tenantId: string,
+  seriesKey: "PO" | "SO",
+  raisedAt: Date,
+): Promise<string> {
+  const { invoiceNumber } = await nextDocumentNumber(
+    tx,
+    tenantId,
+    seriesKey,
+    financialYearOf(raisedAt),
+  );
+  return invoiceNumber;
+}
+
 /* ================================ suppliers =============================== */
 
 export const createSupplier: CommandDefinition<
@@ -323,7 +355,8 @@ export const createPurchaseOrder: CommandDefinition<
         tenantId: ctx.actor.tenantId,
         supplierId: input.supplierId,
         locationId: input.locationId,
-        reference: input.reference ?? null,
+        reference:
+          input.reference ?? (await orderNumber(ctx.tx, ctx.actor.tenantId, "PO", new Date())),
         totalCostPaise,
       },
     });
@@ -806,7 +839,8 @@ export const createSalesOrder: CommandDefinition<
         tenantId: ctx.actor.tenantId,
         customerId: input.customerId,
         locationId: input.locationId,
-        reference: input.reference ?? null,
+        reference:
+          input.reference ?? (await orderNumber(ctx.tx, ctx.actor.tenantId, "SO", new Date())),
         totalPricePaise,
       },
     });
@@ -1770,16 +1804,36 @@ export const openOrders: QueryDefinition<
   {
     purchases: Array<{
       id: string;
+      /// The order's own number, so two orders to one supplier are distinct.
+      reference: string | null;
       supplierName: string;
       state: string;
       totalCostPaise: number;
+      orderedUnits: number;
+      receivedUnits: number;
       outstandingUnits: number;
+      raisedAt: Date;
+      /// What the order is FOR — the fact the desk was missing entirely.
+      summary: string;
+      /// The lines themselves, so receiving can be scoped to this order.
+      lines: Array<{
+        productId: string;
+        name: string;
+        qtyOrdered: number;
+        qtyReceived: number;
+        qtyOutstanding: number;
+      }>;
     }>;
     sales: Array<{
       id: string;
+      reference: string | null;
+      customerId: string;
       customerName: string;
       state: string;
       totalPricePaise: number;
+      orderedUnits: number;
+      raisedAt: Date;
+      summary: string;
     }>;
   }
 > = {
@@ -1814,26 +1868,61 @@ export const openOrders: QueryDefinition<
         state: { notIn: ["completed", "cancelled"] },
         locationId: { in: forSales },
       },
-      include: { customer: { select: { displayName: true } } },
+      include: { lines: true, customer: { select: { id: true, displayName: true } } },
       orderBy: { createdAt: "desc" },
     });
+
+    /**
+     * What an order is for, in the space a table cell has.
+     *
+     * One board is named in full. More than one names the first and counts the
+     * rest, because "Century MR 19mm +2 more" tells a warehouse user which
+     * order this is, and a truncated list of three tells them nothing while
+     * taking three times the width.
+     */
+    const summarise = (names: string[]): string => {
+      if (names.length === 0) return "No lines";
+      const [first, ...rest] = names;
+      return rest.length === 0 ? first! : `${first} +${rest.length} more`;
+    };
 
     return {
       purchases: purchases.map((order) => ({
         id: order.id,
+        reference: order.reference,
         supplierName: order.supplier.displayName,
         state: order.state,
         totalCostPaise: order.totalCostPaise,
+        orderedUnits: order.lines.reduce((sum, line) => sum + line.qtyOrdered, 0),
+        receivedUnits: order.lines.reduce((sum, line) => sum + line.qtyReceived, 0),
         outstandingUnits: order.lines.reduce(
-          (sum, line) => sum + (line.qtyOrdered - line.qtyReceived),
+          (sum, line) => sum + Math.max(0, line.qtyOrdered - line.qtyReceived),
           0,
         ),
+        raisedAt: order.createdAt,
+        summary: summarise(order.lines.map((line) => line.productNameSnapshot)),
+        // Only lines with something still owed can be received against, so the
+        // receive form is offered exactly the set it may act on (U0-4).
+        lines: order.lines
+          .filter((line) => line.qtyOrdered > line.qtyReceived)
+          .map((line) => ({
+            productId: line.productId,
+            name: line.productNameSnapshot,
+            qtyOrdered: line.qtyOrdered,
+            qtyReceived: line.qtyReceived,
+            qtyOutstanding: line.qtyOrdered - line.qtyReceived,
+          })),
       })),
       sales: sales.map((order) => ({
         id: order.id,
+        reference: order.reference,
+        customerId: order.customer.id,
         customerName: order.customer.displayName,
         state: order.state,
         totalPricePaise: order.totalPricePaise,
+        orderedUnits: order.lines.reduce((sum, line) => sum + line.qtyOrdered, 0),
+        raisedAt: order.createdAt,
+        summary: summarise(order.lines.map((line) => line.productNameSnapshot)),
       })),
     };
   },
