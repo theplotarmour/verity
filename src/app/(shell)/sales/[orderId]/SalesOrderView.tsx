@@ -88,6 +88,25 @@ export function SalesOrderView({
                 Issue goods
               </Button>
             )}
+            {/* §49 — raise the invoice from the order it is for.
+                Prefilled by construction: the command takes only the order id
+                and reads the customer, their GSTIN, the place of supply, the
+                lines and the snapshotted rate off it, so there is nothing to
+                retype. §50's checks — tax identity, HSN, place of supply, rate
+                in force, series, financial year — all run inside the command,
+                which is why this is a button and not a form. A form here would
+                be a second place those rules could drift. */}
+            {order.qtyIssued > 0 && order.invoices.length === 0 && (
+              <Button
+                variant="primary"
+                disabled={pending}
+                onClick={() =>
+                  run("verity.plywood.raise_sales_invoice", { salesOrderId: order.id })
+                }
+              >
+                Raise invoice
+              </Button>
+            )}
             {order.state !== "completed" && order.state !== "cancelled" && (
               // §69 — cancelling after reservation releases the hold; it never
               // reverses stock that has already physically left. The command
@@ -326,7 +345,11 @@ export function SalesOrderView({
                 <EmptyState
                   compact
                   title="Not yet invoiced"
-                  description="Nothing is receivable until an invoice is raised. Raise it from Finance once goods have been issued."
+                  description={
+                    order.qtyIssued > 0
+                      ? "Nothing is receivable until an invoice is raised. Raise it from the button above."
+                      : "Nothing is receivable until an invoice is raised, and nothing can be invoiced until goods have been issued."
+                  }
                 />
               </div>
             ) : (

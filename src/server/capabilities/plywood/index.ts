@@ -5,7 +5,12 @@ import { registerBusinessIdentity } from "./business";
 import { registerTax } from "./tax";
 import { registerBusinessActivities } from "./activities";
 import { registerPeriods } from "./period";
-import { goodsReceiptDetail, purchaseMatch, raiseInvoiceNote } from "./finance";
+import {
+  goodsReceiptDetail,
+  purchaseMatch,
+  purchaseReviewQueue,
+  raiseInvoiceNote,
+} from "./finance";
 import { godownDetail, productDetail, stockLedger } from "./views";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import { diffFields, recordActivity } from "@/server/platform/audit";
@@ -866,6 +871,7 @@ export function registerPlywoodCapability(): void {
   registerQuery(productDetail);
   registerQuery(godownDetail);
   registerQuery(stockLedger);
+  registerQuery(purchaseReviewQueue);
   registerQuery(purchaseOrderDetail);
   registerQuery(salesOrderDetail);
   registerQuery(openOrders);

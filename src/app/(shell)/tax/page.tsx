@@ -106,6 +106,19 @@ export default async function TaxCentrePage() {
               </Row>
               <Row>
                 <div>
+                  <Link href="/tax/purchases" className="text-[14px] text-text no-underline hover:underline">
+                    Purchase review
+                  </Link>
+                  <p className="m-0 mt-0.5 text-[12px] text-text-tertiary">
+                    Order, receipt and supplier invoice, compared
+                  </p>
+                </div>
+                <span className="text-[13px] text-text-tertiary">
+                  {summary.purchaseInvoiceCount} invoice(s)
+                </span>
+              </Row>
+              <Row>
+                <div>
                   <Link href="/tax/gstr-3b" className="text-[14px] text-text no-underline hover:underline">
                     GSTR-3B
                   </Link>

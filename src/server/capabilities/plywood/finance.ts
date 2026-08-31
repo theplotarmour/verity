@@ -1355,6 +1355,110 @@ export const purchaseMatch: QueryDefinition<
 };
 
 /** One receipt, in full — the document a supplier dispute turns on. */
+
+/**
+ * §60 — the accountant's purchase review queue.
+ *
+ * §75 describes the job this replaces: ask the purchase team, collect bills,
+ * compare against the order, compare against stock, key it into accounting
+ * software, check GST, reconcile in Excel. The queue is the first half of that
+ * — every purchase that has goods against it and is waiting on something, with
+ * what it is waiting on named.
+ *
+ * ORDERED BY WHAT IS BLOCKING, not by date. A queue sorted by age tells the
+ * accountant which invoice has been waiting longest; a queue sorted by blocker
+ * tells them what to do next, and they can clear a whole class in one pass.
+ */
+export const purchaseReviewQueue: QueryDefinition<
+  Record<string, never>,
+  Array<{
+    purchaseOrderId: string;
+    reference: string | null;
+    supplierId: string;
+    supplierName: string;
+    state: string;
+    orderedUnits: number;
+    receivedUnits: number;
+    orderedTotalPaise: number;
+    invoicedTotalPaise: number;
+    invoiceId: string | null;
+    invoiceNumber: string | null;
+    /// What this order is waiting on, in the order it must be dealt with.
+    blockers: string[];
+  }>
+> = {
+  key: "verity.plywood.purchase_review_queue",
+  entity: ENTITY_PURCHASE_ORDER,
+  input: z.object({}),
+  handler: async (ctx) => {
+    // Only orders with goods against them. An order nobody has delivered
+    // against is the buyer's problem, not the accountant's, and putting it in
+    // this queue would bury the invoices that genuinely need a decision.
+    const orders = await ctx.tx.plywoodPurchaseOrder.findMany({
+      where: { state: { in: ["receiving", "completed"] } },
+      include: {
+        lines: true,
+        supplier: { select: { id: true, displayName: true } },
+        plywoodInvoices: { orderBy: { issuedAt: "desc" } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const rows = orders.map((order) => {
+      const orderedUnits = order.lines.reduce((sum, line) => sum + line.qtyOrdered, 0);
+      const receivedUnits = order.lines.reduce((sum, line) => sum + line.qtyReceived, 0);
+      const orderedTotalPaise = order.lines.reduce(
+        (sum, line) => sum + line.qtyOrdered * line.unitCostPaise,
+        0,
+      );
+      const invoice = order.plywoodInvoices[0] ?? null;
+      const invoicedTotalPaise = order.plywoodInvoices.reduce(
+        (sum, row) => sum + row.totalPaise,
+        0,
+      );
+
+      const blockers: string[] = [];
+      if (!invoice) {
+        blockers.push("No supplier invoice recorded");
+      } else {
+        if (invoice.cgstPaise + invoice.sgstPaise + invoice.igstPaise === 0) {
+          blockers.push("Invoice has no tax split, so no input credit can be evidenced");
+        }
+        if (invoicedTotalPaise !== orderedTotalPaise) {
+          blockers.push("Invoiced value differs from the order");
+        }
+      }
+      if (receivedUnits !== orderedUnits) {
+        blockers.push("Received quantity differs from the order");
+      }
+      if (order.lines.some((line) => !line.hsnCodeSnapshot)) {
+        blockers.push("A line has no HSN code");
+      }
+
+      return {
+        purchaseOrderId: order.id,
+        reference: order.reference,
+        supplierId: order.supplier.id,
+        supplierName: order.supplier.displayName,
+        state: order.state,
+        orderedUnits,
+        receivedUnits,
+        orderedTotalPaise,
+        invoicedTotalPaise,
+        invoiceId: invoice?.id ?? null,
+        invoiceNumber: invoice?.invoiceNumber ?? null,
+        blockers,
+      };
+    });
+
+    // Blocked first, and among those the most blocked first. A clean row is
+    // still returned, because §60's ideal case — ordered, received, invoice
+    // matched, GST matched — is worth showing as achieved rather than
+    // disappearing and leaving the accountant unsure it was checked.
+    return rows.sort((a, b) => b.blockers.length - a.blockers.length);
+  },
+};
+
 export const goodsReceiptDetail: QueryDefinition<
   { receiptId: string },
   {
