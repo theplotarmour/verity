@@ -1,7 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { EmptyState, Field, Panel, Select, Stat, StatRow } from "@/components/ui/primitives";
+import {
+  EmptyState,
+  Field,
+  Panel,
+  Select,
+  Stat,
+  StatRow,
+} from "@/components/ui/primitives";
 
 type Entry = {
   id: string;
@@ -12,6 +19,19 @@ type Entry = {
   runningBalancePaise: number;
 };
 
+/**
+ * Which way a running balance points, in the reader's own words.
+ *
+ * The ledger stores debits positive and credits negative, which is correct and
+ * is not something a plywood trader should have to know. For a supplier a
+ * purchase invoice is a credit, so the balance goes negative precisely when the
+ * business owes the most — the least intuitive possible reading.
+ */
+function balanceDirection(balancePaise: number, isSupplier: boolean): string {
+  if (isSupplier) return balancePaise < 0 ? "we owe" : "in our favour";
+  return balancePaise > 0 ? "they owe" : "in their favour";
+}
+
 function rupees(paise: number): string {
   return `₹${(paise / 100).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
@@ -21,7 +41,11 @@ function rupees(paise: number): string {
 
 function shortDate(value: Date | string): string {
   const date = typeof value === "string" ? new Date(value) : value;
-  return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "2-digit",
+  });
 }
 
 /**
@@ -67,7 +91,9 @@ export function LedgerView({
                   value={selectedCustomerId ?? ""}
                   onChange={(event) =>
                     router.push(
-                      event.target.value ? `/ledgers?customer=${event.target.value}` : "/ledgers",
+                      event.target.value
+                        ? `/ledgers?customer=${event.target.value}`
+                        : "/ledgers",
                     )
                   }
                 >
@@ -87,7 +113,9 @@ export function LedgerView({
                   value={selectedSupplierId ?? ""}
                   onChange={(event) =>
                     router.push(
-                      event.target.value ? `/ledgers?supplier=${event.target.value}` : "/ledgers",
+                      event.target.value
+                        ? `/ledgers?supplier=${event.target.value}`
+                        : "/ledgers",
                     )
                   }
                 >
@@ -102,8 +130,8 @@ export function LedgerView({
             </div>
           </div>
           <p className="mb-0 mt-3 text-[12px] text-text-tertiary">
-            One party at a time. A ledger of everybody at once is a journal, and answers a different
-            question.
+            One party at a time. A ledger of everybody at once is a journal, and
+            answers a different question.
           </p>
         </Panel>
       </div>
@@ -149,7 +177,9 @@ export function LedgerView({
               />
             ) : (
               <table className="w-full border-collapse">
-                <caption className="sr-only">Ledger entries, oldest first</caption>
+                <caption className="sr-only">
+                  Ledger entries, oldest first
+                </caption>
                 <thead>
                   <tr>
                     {[
@@ -181,13 +211,36 @@ export function LedgerView({
                         {entry.narration ?? "—"}
                       </td>
                       <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                        {entry.entryType === "debit" ? rupees(entry.amountPaise) : "—"}
+                        {entry.entryType === "debit"
+                          ? rupees(entry.amountPaise)
+                          : "—"}
                       </td>
                       <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                        {entry.entryType === "credit" ? rupees(entry.amountPaise) : "—"}
+                        {entry.entryType === "credit"
+                          ? rupees(entry.amountPaise)
+                          : "—"}
                       </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-right text-[14px] text-text">
-                        {rupees(entry.runningBalancePaise)}
+                      {/* A signed figure under business labels is a trap. The
+                          columns say "We paid" and "We owe", and a balance
+                          reading "₹-70,000" beside "We owe ₹70,000" leaves the
+                          reader working out a sign convention nobody told them.
+                          The amount is absolute and a word says which way it
+                          points — the same treatment the summary above already
+                          uses. */}
+                      <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] text-text">
+                        {entry.runningBalancePaise === 0 ? (
+                          "Settled"
+                        ) : (
+                          <>
+                            {rupees(Math.abs(entry.runningBalancePaise))}{" "}
+                            <span className="text-[12px] text-text-tertiary">
+                              {balanceDirection(
+                                entry.runningBalancePaise,
+                                isSupplier,
+                              )}
+                            </span>
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -195,8 +248,9 @@ export function LedgerView({
               </table>
             )}
             <p className="mb-0 mt-3 text-[12px] text-text-tertiary">
-              Append-only, enforced by the database. A correction is a new entry in the opposite
-              direction, never an edit — which is why this column can be trusted.
+              Append-only, enforced by the database. A correction is a new entry
+              in the opposite direction, never an edit — which is why this
+              column can be trusted.
             </p>
           </Panel>
         </>

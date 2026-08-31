@@ -1,0 +1,110 @@
+- generic [active] [ref=f80e1]:
+  - link "Skip to content" [ref=f80e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f80e3]:
+    - complementary [ref=f80e4]:
+      - link "Verity" [ref=f80e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f80e6]:
+          - generic [ref=f80e10]: verity
+          - generic [ref=f80e11]: Verity
+      - navigation "Platform" [ref=f80e13]:
+        - list [ref=f80e14]:
+          - listitem [ref=f80e15]: Overview
+          - listitem [ref=f80e16]:
+            - link "Overview" [ref=f80e17] [cursor=pointer]:
+              - /url: /overview
+        - list [ref=f80e21]:
+          - listitem [ref=f80e22]: Trade
+          - listitem [ref=f80e23]:
+            - link "Catalogue" [ref=f80e24] [cursor=pointer]:
+              - /url: /catalogue
+          - listitem [ref=f80e28]:
+            - link "Suppliers" [ref=f80e29] [cursor=pointer]:
+              - /url: /suppliers
+          - listitem [ref=f80e33]:
+            - link "Purchases" [ref=f80e34] [cursor=pointer]:
+              - /url: /purchases
+          - listitem [ref=f80e38]:
+            - link "Customers" [ref=f80e39] [cursor=pointer]:
+              - /url: /customers
+          - listitem [ref=f80e43]:
+            - link "Sales" [ref=f80e44] [cursor=pointer]:
+              - /url: /sales
+        - list [ref=f80e48]:
+          - listitem [ref=f80e49]: Inventory
+          - listitem [ref=f80e50]:
+            - link "Stock" [ref=f80e51] [cursor=pointer]:
+              - /url: /stock
+          - listitem [ref=f80e55]:
+            - link "Godowns" [ref=f80e56] [cursor=pointer]:
+              - /url: /godowns
+        - list [ref=f80e60]:
+          - listitem [ref=f80e61]: Money
+          - listitem [ref=f80e62]:
+            - link "Finance" [ref=f80e63] [cursor=pointer]:
+              - /url: /finance
+          - listitem [ref=f80e67]:
+            - link "Ledgers" [ref=f80e68] [cursor=pointer]:
+              - /url: /ledgers
+          - listitem [ref=f80e72]:
+            - link "Tax & Compliance" [ref=f80e73] [cursor=pointer]:
+              - /url: /tax
+        - list [ref=f80e77]:
+          - listitem [ref=f80e78]: Insights
+          - listitem [ref=f80e79]:
+            - link "Reports" [ref=f80e80] [cursor=pointer]:
+              - /url: /reports
+        - list [ref=f80e84]:
+          - listitem [ref=f80e85]: Administration
+          - listitem [ref=f80e86]:
+            - link "People & Roles" [ref=f80e87] [cursor=pointer]:
+              - /url: /people
+          - listitem [ref=f80e91]:
+            - link "Audit" [ref=f80e92] [cursor=pointer]:
+              - /url: /audit
+          - listitem [ref=f80e96]:
+            - link "Configuration" [ref=f80e97] [cursor=pointer]:
+              - /url: /configuration
+      - button "naksh Owner Sign out" [ref=f80e103] [cursor=pointer]:
+        - generic [ref=f80e104]: "N"
+        - generic [ref=f80e105]:
+          - generic [ref=f80e106]: naksh
+          - generic [ref=f80e107]: Owner
+        - generic [ref=f80e110]: Sign out
+    - generic [ref=f80e111]:
+      - generic [ref=f80e112]:
+        - generic [ref=f80e113]:
+          - generic [ref=f80e114]: Search this page
+          - searchbox "Search this page" [ref=f80e115]
+        - generic [ref=f80e116]:
+          - generic [ref=f80e120]:
+            - generic [ref=f80e121]: Shri Ganesh HQ
+            - generic [ref=f80e122]: Shri Ganesh Timber Trading Co.
+          - link "Recent activity" [ref=f80e124] [cursor=pointer]:
+            - /url: /audit
+          - generic [ref=f80e128]: "N"
+      - main [ref=f80e129]:
+        - generic [ref=f80e131]:
+          - heading "Ledgers" [level=1] [ref=f80e132]
+          - paragraph [ref=f80e133]: Every movement of money against one party, oldest first. The balance is the sum of these entries — nothing caches it, so nothing can disagree with it.
+        - generic [ref=f80e135]:
+          - heading "Choose a party" [level=2] [ref=f80e137]
+          - generic [ref=f80e138]:
+            - generic [ref=f80e139]:
+              - generic [ref=f80e141]:
+                - generic [ref=f80e142]: Customer
+                - combobox "Customer" [ref=f80e143] [cursor=pointer]:
+                  - option "—" [selected]
+                  - option "Shree Ji Interior Decorators"
+              - generic [ref=f80e145]:
+                - generic [ref=f80e146]: Supplier
+                - combobox "Supplier" [ref=f80e147] [cursor=pointer]:
+                  - option "—" [selected]
+                  - option "Divyom Sharma"
+                  - option "Indo-Burma Timber Exporters"
+            - paragraph [ref=f80e148]: One party at a time. A ledger of everybody at once is a journal, and answers a different question.
+        - generic [ref=f80e151]:
+          - paragraph [ref=f80e155]: No party chosen
+          - paragraph [ref=f80e156]: Pick a customer or a supplier to see every movement of money against them.
+  - button "Open Next.js Dev Tools" [ref=f80e162] [cursor=pointer]
