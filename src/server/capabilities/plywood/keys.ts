@@ -28,7 +28,10 @@ export const ENTITY_STOCK_BALANCE = "verity.plywood.stock_balance";
  */
 export const HSN_CODE = z
   .string()
-  .regex(/^[0-9]{4}([0-9]{2}([0-9]{2})?)?$/, "HSN code must be 4, 6 or 8 digits");
+  .regex(
+    /^[0-9]{4}([0-9]{2}([0-9]{2})?)?$/,
+    "HSN code must be 4, 6 or 8 digits",
+  );
 
 /* Stages 3 and 4 — trading partners and orders. */
 export const ENTITY_SUPPLIER = "verity.plywood.supplier";

@@ -57,8 +57,20 @@ function joinPrereqs(parts: Array<ReactNode | false>): ReactNode | null {
   ));
 }
 
-function PrereqHint({ children, className }: { children: ReactNode; className?: string }) {
-  return <p className={`text-right text-[12px] text-text-tertiary ${className ?? ""}`}>{children}</p>;
+function PrereqHint({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <p
+      className={`text-right text-[12px] text-text-tertiary ${className ?? ""}`}
+    >
+      {children}
+    </p>
+  );
 }
 
 const STATE_LABEL: Record<string, string> = {
@@ -124,7 +136,8 @@ export function SalesDesk({
    */
   // The order the cancel panel is for, so the panel can name it rather than
   // appearing unattached below the table (U1-4).
-  const cancellingOrder = orders.find((order) => order.id === cancelling) ?? null;
+  const cancellingOrder =
+    orders.find((order) => order.id === cancelling) ?? null;
 
   function openPanel(change: () => void) {
     setFailure(null);
@@ -144,16 +157,38 @@ export function SalesDesk({
     });
   }
 
-  const canOrder = customers.length > 0 && godowns.length > 0 && boards.length > 0;
+  const canOrder =
+    customers.length > 0 && godowns.length > 0 && boards.length > 0;
 
   const priceHint = joinPrereqs([
     customers.length === 0 && "a customer",
-    boards.length === 0 && <>a board in <Link href="/catalogue" className="text-accent-ink hover:underline">Catalogue</Link></>,
+    boards.length === 0 && (
+      <>
+        a board in{" "}
+        <Link href="/catalogue" className="text-accent-ink hover:underline">
+          Catalogue
+        </Link>
+      </>
+    ),
   ]);
   const orderHint = joinPrereqs([
     customers.length === 0 && "a customer",
-    godowns.length === 0 && <>a godown in <Link href="/locations" className="text-accent-ink hover:underline">Locations</Link></>,
-    boards.length === 0 && <>a board in <Link href="/catalogue" className="text-accent-ink hover:underline">Catalogue</Link></>,
+    godowns.length === 0 && (
+      <>
+        a godown in{" "}
+        <Link href="/locations" className="text-accent-ink hover:underline">
+          Locations
+        </Link>
+      </>
+    ),
+    boards.length === 0 && (
+      <>
+        a board in{" "}
+        <Link href="/catalogue" className="text-accent-ink hover:underline">
+          Catalogue
+        </Link>
+      </>
+    ),
   ]);
 
   return (
@@ -179,13 +214,23 @@ export function SalesDesk({
         >
           {pricing ? "Cancel" : "Set a price"}
         </Button>
-        <Button variant="primary" disabled={!canOrder} onClick={() => setNewOrder((o) => !o)}>
+        <Button
+          variant="primary"
+          disabled={!canOrder}
+          onClick={() => setNewOrder((o) => !o)}
+        >
           {newOrder ? "Cancel" : "New order"}
         </Button>
       </div>
 
-      {priceHint && <PrereqHint className="mb-1.5">Set a price needs {priceHint}.</PrereqHint>}
-      {orderHint && <PrereqHint className="mb-4">New order needs {orderHint}.</PrereqHint>}
+      {priceHint && (
+        <PrereqHint className="mb-1.5">
+          Set a price needs {priceHint}.
+        </PrereqHint>
+      )}
+      {orderHint && (
+        <PrereqHint className="mb-4">New order needs {orderHint}.</PrereqHint>
+      )}
 
       {pricing && (
         <div className="mb-6">
@@ -198,7 +243,9 @@ export function SalesDesk({
                   {
                     customerId: String(formData.get("customerId") ?? ""),
                     productId: String(formData.get("productId") ?? ""),
-                    customPricePaise: Math.round(Number(formData.get("price") ?? 0) * 100),
+                    customPricePaise: Math.round(
+                      Number(formData.get("price") ?? 0) * 100,
+                    ),
                   },
                   () => setPricing(false),
                 )
@@ -206,7 +253,12 @@ export function SalesDesk({
             >
               <div className="min-w-[200px]">
                 <Field label="Customer" htmlFor="cprice-customer" required>
-                  <Select id="cprice-customer" name="customerId" required defaultValue="">
+                  <Select
+                    id="cprice-customer"
+                    name="customerId"
+                    required
+                    defaultValue=""
+                  >
                     <option value="" disabled>
                       Choose a customer
                     </option>
@@ -220,7 +272,12 @@ export function SalesDesk({
               </div>
               <div className="min-w-[260px] flex-1">
                 <Field label="Board" htmlFor="cprice-board" required>
-                  <Select id="cprice-board" name="productId" required defaultValue="">
+                  <Select
+                    id="cprice-board"
+                    name="productId"
+                    required
+                    defaultValue=""
+                  >
                     <option value="" disabled>
                       Choose a board
                     </option>
@@ -234,15 +291,22 @@ export function SalesDesk({
               </div>
               <div className="w-[170px]">
                 <Field label="Price (₹)" htmlFor="cprice-value" required>
-                  <Input id="cprice-value" name="price" type="number" step="0.01" min="0" required />
+                  <Input
+                    id="cprice-value"
+                    name="price"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                  />
                 </Field>
               </div>
               <Button type="submit" variant="primary" disabled={pending}>
                 Save
               </Button>
               <p className="m-0 w-full text-[12px] text-text-tertiary">
-                Used when an order leaves the price blank. A price already on a placed order does
-                not move — the line snapshotted it.
+                Used when an order leaves the price blank. A price already on a
+                placed order does not move — the line snapshotted it.
               </p>
             </form>
           </Panel>
@@ -259,10 +323,18 @@ export function SalesDesk({
                   "verity.plywood.create_customer",
                   {
                     displayName: String(formData.get("name") ?? ""),
-                    ...(formData.get("gstin") ? { gstin: String(formData.get("gstin")) } : {}),
-                    ...(formData.get("state") ? { stateCode: String(formData.get("state")) } : {}),
-                    ...(formData.get("phone") ? { phone: String(formData.get("phone")) } : {}),
-                    creditLimitPaise: Math.round(Number(formData.get("limit") ?? 0) * 100),
+                    ...(formData.get("gstin")
+                      ? { gstin: String(formData.get("gstin")) }
+                      : {}),
+                    ...(formData.get("state")
+                      ? { stateCode: String(formData.get("state")) }
+                      : {}),
+                    ...(formData.get("phone")
+                      ? { phone: String(formData.get("phone")) }
+                      : {}),
+                    creditLimitPaise: Math.round(
+                      Number(formData.get("limit") ?? 0) * 100,
+                    ),
                   },
                   () => setNewCustomer(false),
                 )
@@ -274,13 +346,26 @@ export function SalesDesk({
                 </Field>
               </div>
               <div className="w-[200px]">
-                <Field label="GSTIN" htmlFor="customer-gstin" hint="15 characters">
+                <Field
+                  label="GSTIN"
+                  htmlFor="customer-gstin"
+                  hint="15 characters"
+                >
                   <Input id="customer-gstin" name="gstin" />
                 </Field>
               </div>
               <div className="w-[120px]">
-                <Field label="State code" htmlFor="customer-state" hint="Two digits">
-                  <Input id="customer-state" name="state" inputMode="numeric" pattern="[0-9]{2}" />
+                <Field
+                  label="State code"
+                  htmlFor="customer-state"
+                  hint="Two digits"
+                >
+                  <Input
+                    id="customer-state"
+                    name="state"
+                    inputMode="numeric"
+                    pattern="[0-9]{2}"
+                  />
                 </Field>
               </div>
               <div className="w-[150px]">
@@ -315,14 +400,19 @@ export function SalesDesk({
       {newOrder && canOrder && (
         <div className="mb-6">
           <NewSalesOrderForm
-            customers={customers.map((c) => ({ id: c.id, displayName: c.displayName }))}
+            customers={customers.map((c) => ({
+              id: c.id,
+              displayName: c.displayName,
+            }))}
             godowns={godowns}
             boards={boards}
             sellable={sellable}
             pending={pending}
             onCancel={() => setNewOrder(false)}
             onSubmit={(input) =>
-              run("verity.plywood.create_sales_order", input, () => setNewOrder(false))
+              run("verity.plywood.create_sales_order", input, () =>
+                setNewOrder(false),
+              )
             }
           />
         </div>
@@ -345,7 +435,14 @@ export function SalesDesk({
               <caption className="sr-only">Open sales orders</caption>
               <thead>
                 <tr>
-                  {["Order", "Board", "Status", "Ordered", "Order value", ""].map((heading, index) => (
+                  {[
+                    "Order",
+                    "Board",
+                    "Status",
+                    "Ordered",
+                    "Order value",
+                    "",
+                  ].map((heading, index) => (
                     <th
                       key={heading || index}
                       className={
@@ -404,10 +501,14 @@ export function SalesDesk({
                             size="sm"
                             disabled={pending}
                             onClick={() =>
-                              setApproving(approving === order.id ? null : order.id)
+                              setApproving(
+                                approving === order.id ? null : order.id,
+                              )
                             }
                           >
-                            {approving === order.id ? "Close" : "Approve credit"}
+                            {approving === order.id
+                              ? "Close"
+                              : "Approve credit"}
                           </Button>
                         )}
                         {order.state === "approved" && (
@@ -415,7 +516,9 @@ export function SalesDesk({
                             size="sm"
                             disabled={pending}
                             onClick={() =>
-                              run("verity.plywood.reserve_for_order", { orderId: order.id })
+                              run("verity.plywood.reserve_for_order", {
+                                orderId: order.id,
+                              })
                             }
                           >
                             Reserve stock
@@ -427,7 +530,9 @@ export function SalesDesk({
                             variant="primary"
                             disabled={pending}
                             onClick={() =>
-                              run("verity.plywood.dispatch_order", { orderId: order.id })
+                              run("verity.plywood.dispatch_order", {
+                                orderId: order.id,
+                              })
                             }
                           >
                             Dispatch
@@ -436,9 +541,17 @@ export function SalesDesk({
                         <Button
                           size="sm"
                           disabled={pending}
-                          onClick={() => openPanel(() => setCancelling(cancelling === order.id ? null : order.id))}
+                          onClick={() =>
+                            openPanel(() =>
+                              setCancelling(
+                                cancelling === order.id ? null : order.id,
+                              ),
+                            )
+                          }
                         >
-                          {cancelling === order.id ? "Keep order" : "Cancel order…"}
+                          {cancelling === order.id
+                            ? "Keep order"
+                            : "Cancel order…"}
                         </Button>
                       </div>
                     </td>
@@ -454,7 +567,10 @@ export function SalesDesk({
               action={(formData) =>
                 run(
                   "verity.plywood.cancel_sales_order",
-                  { orderId: cancelling, reason: String(formData.get("reason") ?? "") },
+                  {
+                    orderId: cancelling,
+                    reason: String(formData.get("reason") ?? ""),
+                  },
                   () => setCancelling(null),
                 )
               }
@@ -479,8 +595,9 @@ export function SalesDesk({
                 Cancel order
               </Button>
               <p className="m-0 w-full text-[12px] text-text-tertiary">
-                Any stock held for this order is released in the same step. Stock held for an order
-                nobody will fulfil is stock that cannot be sold.
+                Any stock held for this order is released in the same step.
+                Stock held for an order nobody will fulfil is stock that cannot
+                be sold.
               </p>
             </form>
           )}
@@ -491,7 +608,10 @@ export function SalesDesk({
               action={(formData) =>
                 run(
                   "verity.plywood.approve_credit",
-                  { orderId: approving, reason: String(formData.get("reason") ?? "") },
+                  {
+                    orderId: approving,
+                    reason: String(formData.get("reason") ?? ""),
+                  },
                   () => setApproving(null),
                 )
               }
@@ -515,8 +635,9 @@ export function SalesDesk({
                 Approve
               </Button>
               <p className="m-0 w-full text-[12px] text-text-tertiary">
-                Recorded against the order. This is the decision someone asks about after a bad
-                debt, so the reason is required rather than optional.
+                Recorded against the order. This is the decision someone asks
+                about after a bad debt, so the reason is required rather than
+                optional.
               </p>
             </form>
           )}
@@ -546,7 +667,8 @@ export function SalesDesk({
             </thead>
             <tbody>
               {customers.map((customer) => {
-                const headroom = customer.creditLimitPaise - customer.exposurePaise;
+                const headroom =
+                  customer.creditLimitPaise - customer.exposurePaise;
                 return (
                   <tr key={customer.id}>
                     <td className="border-b border-line px-3 py-2 text-[14px] text-text">
@@ -556,7 +678,9 @@ export function SalesDesk({
                       {customer.gstin ?? "—"}
                     </td>
                     <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                      {customer.creditLimitPaise === 0 ? "Cash only" : rupees(customer.creditLimitPaise)}
+                      {customer.creditLimitPaise === 0
+                        ? "Cash only"
+                        : rupees(customer.creditLimitPaise)}
                     </td>
                     <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
                       {rupees(customer.exposurePaise)}
@@ -576,7 +700,9 @@ export function SalesDesk({
                         size="sm"
                         disabled={pending}
                         onClick={() =>
-                          setCreditFor(creditFor === customer.id ? null : customer.id)
+                          setCreditFor(
+                            creditFor === customer.id ? null : customer.id,
+                          )
                         }
                       >
                         {creditFor === customer.id ? "Close" : "Credit limit"}
@@ -596,7 +722,9 @@ export function SalesDesk({
                   "verity.plywood.set_credit_limit",
                   {
                     customerId: creditFor,
-                    creditLimitPaise: Math.round(Number(formData.get("limit") ?? 0) * 100),
+                    creditLimitPaise: Math.round(
+                      Number(formData.get("limit") ?? 0) * 100,
+                    ),
                   },
                   () => setCreditFor(null),
                 )
@@ -618,7 +746,8 @@ export function SalesDesk({
                     required
                     autoFocus
                     defaultValue={(
-                      (customers.find((c) => c.id === creditFor)?.creditLimitPaise ?? 0) / 100
+                      (customers.find((c) => c.id === creditFor)
+                        ?.creditLimitPaise ?? 0) / 100
                     ).toFixed(2)}
                   />
                 </Field>
@@ -627,8 +756,9 @@ export function SalesDesk({
                 Save
               </Button>
               <p className="m-0 w-full text-[12px] text-text-tertiary">
-                Who raised whose limit, and from what, is the first question after a bad debt — so
-                the change is recorded against the customer.
+                Who raised whose limit, and from what, is the first question
+                after a bad debt — so the change is recorded against the
+                customer.
               </p>
             </form>
           )}

@@ -27,7 +27,11 @@ import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
 type Order = NonNullable<
-  Awaited<ReturnType<typeof import("@/server/capabilities/plywood").purchaseOrderDetail.handler>>
+  Awaited<
+    ReturnType<
+      typeof import("@/server/capabilities/plywood").purchaseOrderDetail.handler
+    >
+  >
 >;
 
 export function PurchaseOrderView({
@@ -47,7 +51,9 @@ export function PurchaseOrderView({
   // correct it downwards — a short delivery is normal, and retyping the full
   // quantity every time is how the wrong number gets entered.
   const [quantities, setQuantities] = useState<Record<string, string>>(() =>
-    Object.fromEntries(order.lines.map((line) => [line.productId, String(line.qtyOutstanding)])),
+    Object.fromEntries(
+      order.lines.map((line) => [line.productId, String(line.qtyOutstanding)]),
+    ),
   );
   const [rackId, setRackId] = useState("");
   const [challan, setChallan] = useState("");
@@ -77,7 +83,9 @@ export function PurchaseOrderView({
       // A line receiving nothing is omitted rather than sent as zero: the
       // command requires a positive quantity, and "nothing arrived for this
       // board" is expressed by its absence.
-      .filter((line) => Number.isFinite(line.qtyReceived) && line.qtyReceived > 0);
+      .filter(
+        (line) => Number.isFinite(line.qtyReceived) && line.qtyReceived > 0,
+      );
     if (lines.length === 0) {
       setFailure({
         ok: false,
@@ -103,7 +111,10 @@ export function PurchaseOrderView({
   }
 
   const canReceive = order.state === "submitted" || order.state === "receiving";
-  const invoiced = order.invoices.reduce((sum, invoice) => sum + invoice.totalPaise, 0);
+  const invoiced = order.invoices.reduce(
+    (sum, invoice) => sum + invoice.totalPaise,
+    0,
+  );
 
   return (
     <>
@@ -116,13 +127,21 @@ export function PurchaseOrderView({
               <Button
                 variant="primary"
                 disabled={pending}
-                onClick={() => run("verity.plywood.submit_purchase_order", { orderId: order.id })}
+                onClick={() =>
+                  run("verity.plywood.submit_purchase_order", {
+                    orderId: order.id,
+                  })
+                }
               >
                 Submit to supplier
               </Button>
             )}
             {canReceive && !receiving && (
-              <Button variant="primary" disabled={pending} onClick={() => setReceiving(true)}>
+              <Button
+                variant="primary"
+                disabled={pending}
+                onClick={() => setReceiving(true)}
+              >
                 Receive goods
               </Button>
             )}
@@ -158,8 +177,14 @@ export function PurchaseOrderView({
         )}
 
         <StatRow cols={4}>
-          <Stat label="Ordered" value={order.qtyOrdered.toLocaleString("en-IN")} />
-          <Stat label="Received" value={order.qtyReceived.toLocaleString("en-IN")} />
+          <Stat
+            label="Ordered"
+            value={order.qtyOrdered.toLocaleString("en-IN")}
+          />
+          <Stat
+            label="Received"
+            value={order.qtyReceived.toLocaleString("en-IN")}
+          />
           <Stat
             label="Remaining"
             value={order.qtyOutstanding.toLocaleString("en-IN")}
@@ -199,8 +224,16 @@ export function PurchaseOrderView({
               ))}
 
               {racks.length > 0 && (
-                <Field label="Rack" htmlFor="receipt-rack" hint="Where it is being put down">
-                  <Select id="receipt-rack" value={rackId} onChange={(e) => setRackId(e.target.value)}>
+                <Field
+                  label="Rack"
+                  htmlFor="receipt-rack"
+                  hint="Where it is being put down"
+                >
+                  <Select
+                    id="receipt-rack"
+                    value={rackId}
+                    onChange={(e) => setRackId(e.target.value)}
+                  >
                     <option value="">Not recorded</option>
                     {racks.map((rack) => (
                       <option key={rack.id} value={rack.id}>
@@ -224,12 +257,17 @@ export function PurchaseOrderView({
               </Field>
 
               <p className="m-0 text-[12px] text-text-tertiary">
-                Receiving moves the stock in the same step. On-hand rises, incoming falls, and the
-                weighted average cost is recalculated — there is no separate stock entry to make.
+                Receiving moves the stock in the same step. On-hand rises,
+                incoming falls, and the weighted average cost is recalculated —
+                there is no separate stock entry to make.
               </p>
 
               <div className="flex gap-2">
-                <Button variant="primary" disabled={pending} onClick={submitReceipt}>
+                <Button
+                  variant="primary"
+                  disabled={pending}
+                  onClick={submitReceipt}
+                >
                   {pending ? "Recording…" : "Record receipt"}
                 </Button>
                 <Button disabled={pending} onClick={() => setReceiving(false)}>
@@ -260,13 +298,17 @@ export function PurchaseOrderView({
                     <p className="tabular m-0 text-[14px] text-text">
                       {line.qtyReceived} / {line.qtyOrdered}
                     </p>
-                    <p className="m-0 text-[12px] text-text-tertiary">Received</p>
+                    <p className="m-0 text-[12px] text-text-tertiary">
+                      Received
+                    </p>
                   </div>
                   <div className="w-24">
                     <p className="tabular m-0 text-[14px] text-text">
                       {rupees(line.lineTotalPaise)}
                     </p>
-                    <p className="m-0 text-[12px] text-text-tertiary">Line total</p>
+                    <p className="m-0 text-[12px] text-text-tertiary">
+                      Line total
+                    </p>
                   </div>
                 </div>
               </Row>
@@ -278,14 +320,34 @@ export function PurchaseOrderView({
           <Panel flush title="Receipts">
             {order.receipts.length === 0 ? (
               <div className="px-5 py-6">
-                <EmptyState compact title="Nothing received yet" />
+                {/* U1-1: this panel used to say "Nothing received yet" beside a
+                    "Received 250" figure on the same screen — a flat
+                    contradiction, and the reader has no way to tell which half
+                    to believe. Stock recorded against an order before goods
+                    receipts were documented is a real state for imported data;
+                    it is said plainly rather than reported as nothing. */}
+                <EmptyState
+                  compact
+                  title={
+                    order.qtyReceived > 0
+                      ? "No goods receipt documents"
+                      : "Nothing received yet"
+                  }
+                  description={
+                    order.qtyReceived > 0
+                      ? `${order.qtyReceived} sheets are recorded as received against this order, from before goods receipts were documented. Anything received from now on appears here.`
+                      : undefined
+                  }
+                />
               </div>
             ) : (
               <RowList>
                 {order.receipts.map((receipt) => (
                   <Row key={receipt.id}>
                     <div className="min-w-0">
-                      <span className="text-[14px] text-text">{receipt.receiptNumber}</span>
+                      <span className="text-[14px] text-text">
+                        {receipt.receiptNumber}
+                      </span>
                       <p className="m-0 mt-0.5 text-[12px] text-text-tertiary">
                         {day(receipt.receivedAt)}
                       </p>
@@ -323,11 +385,14 @@ export function PurchaseOrderView({
                         {invoice.invoiceNumber}
                       </Link>
                       <p className="m-0 mt-0.5 text-[12px] text-text-tertiary">
-                        {day(invoice.issuedAt)} · {rupees(invoice.paidPaise)} paid
+                        {day(invoice.issuedAt)} · {rupees(invoice.paidPaise)}{" "}
+                        paid
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="tabular m-0 text-[14px] text-text">{rupees(invoice.totalPaise)}</p>
+                      <p className="tabular m-0 text-[14px] text-text">
+                        {rupees(invoice.totalPaise)}
+                      </p>
                       <p className="m-0 text-[12px] text-text-tertiary">
                         {rupees(invoice.balancePaise)} outstanding
                       </p>
@@ -345,20 +410,39 @@ export function PurchaseOrderView({
           <Panel title="Three-way match">
             <DefinitionList
               items={[
-                { term: "Ordered", value: `${sheets(order.qtyOrdered)} · ${rupees(order.totalCostPaise)}` },
+                {
+                  term: "Ordered",
+                  value: `${sheets(order.qtyOrdered)} · ${rupees(order.totalCostPaise)}`,
+                },
                 { term: "Received", value: sheets(order.qtyReceived) },
                 { term: "Invoiced", value: rupees(invoiced) },
                 {
                   term: "Quantity difference",
                   value:
-                    order.qtyOutstanding === 0 ? "Matched" : `${order.qtyOutstanding} short`,
+                    order.qtyOutstanding === 0
+                      ? "Matched"
+                      : `${order.qtyOutstanding} short`,
                 },
                 {
+                  // U1-2: an order 50 sheets short is invoiced 50 sheets less,
+                  // and reporting that as a bare "Value difference ₹20,000"
+                  // sends an accountant to chase a supplier who did nothing
+                  // wrong. What matters is the RESIDUAL — the part the short
+                  // delivery does not explain.
                   term: "Value difference",
-                  value:
-                    invoiced === order.totalCostPaise
-                      ? "Matched"
-                      : rupees(Math.abs(invoiced - order.totalCostPaise)),
+                  value: (() => {
+                    const expected = order.lines.reduce(
+                      (sum, line) =>
+                        sum + line.qtyReceived * line.unitCostPaise,
+                      0,
+                    );
+                    const residual = invoiced - expected;
+                    if (invoiced === order.totalCostPaise) return "Matched";
+                    if (residual === 0) {
+                      return `Matched, allowing for ${order.qtyOutstanding} sheets not delivered`;
+                    }
+                    return `${rupees(Math.abs(residual))} ${residual > 0 ? "over" : "under"} what was received`;
+                  })(),
                 },
               ]}
             />
@@ -369,10 +453,22 @@ export function PurchaseOrderView({
 
         <Related
           links={[
-            { href: `/suppliers/${order.supplierId}`, label: "Supplier", note: order.supplierName },
-            { href: `/godowns/${order.locationId}`, label: "Godown", note: order.locationName },
+            {
+              href: `/suppliers/${order.supplierId}`,
+              label: "Supplier",
+              note: order.supplierName,
+            },
+            {
+              href: `/godowns/${order.locationId}`,
+              label: "Godown",
+              note: order.locationName,
+            },
             { href: "/purchases", label: "All purchases" },
-            { href: "/finance", label: "Finance", note: `${order.invoices.length} invoice(s)` },
+            {
+              href: "/finance",
+              label: "Finance",
+              note: `${order.invoices.length} invoice(s)`,
+            },
           ]}
         />
       </div>

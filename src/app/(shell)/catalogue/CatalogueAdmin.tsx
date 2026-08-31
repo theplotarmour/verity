@@ -153,7 +153,7 @@ export function CatalogueAdmin({ catalogue }: { catalogue: Brand[] }) {
                       })
                     }
                   >
-                    {brand.brandActive ? "Stop trading" : "Trade again"}
+                    {brand.brandActive ? "Withdraw brand" : "Trade again"}
                   </Button>
                   <Button
                     size="sm"
@@ -396,7 +396,7 @@ export function CatalogueAdmin({ catalogue }: { catalogue: Brand[] }) {
                                 })
                               }
                             >
-                              {product.active ? "Withdraw" : "Trade again"}
+                              {product.active ? "Withdraw board" : "Trade again"}
                             </Button>
                           </div>
                         </td>

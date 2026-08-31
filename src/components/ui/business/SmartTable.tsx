@@ -57,7 +57,11 @@ export function SmartTable({
     if (!query.trim()) return rows;
     const needle = query.toLowerCase();
     return rows.filter((row) =>
-      columns.some((c) => String(row[c.key] ?? "").toLowerCase().includes(needle)),
+      columns.some((c) =>
+        String(row[c.key] ?? "")
+          .toLowerCase()
+          .includes(needle),
+      ),
     );
   }, [rows, columns, query]);
 
@@ -68,7 +72,9 @@ export function SmartTable({
         accessorKey: c.key,
         header: c.header,
         enableSorting: c.sortable !== false,
-        cell: ({ row }) => <Cell column={c} row={row.original} lead={i === 0} />,
+        cell: ({ row }) => (
+          <Cell column={c} row={row.original} lead={i === 0} />
+        ),
       })),
     [columns],
   );
@@ -143,19 +149,32 @@ export function SmartTable({
                       const sorted = header.column.getIsSorted();
                       const label = (
                         <>
-                          {flexRender(header.column.columnDef.header, header.getContext())}
+                          {flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )}
                           <span aria-hidden="true" className="ml-1">
-                            {sorted === "asc" ? "↑" : sorted === "desc" ? "↓" : ""}
+                            {sorted === "asc"
+                              ? "↑"
+                              : sorted === "desc"
+                                ? "↓"
+                                : ""}
                           </span>
                         </>
                       );
-                      const numeric = columns.find((c) => c.key === header.column.id)?.numeric;
+                      const numeric = columns.find(
+                        (c) => c.key === header.column.id,
+                      )?.numeric;
                       return (
                         <th
                           key={header.id}
                           scope="col"
                           aria-sort={
-                            sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : undefined
+                            sorted === "asc"
+                              ? "ascending"
+                              : sorted === "desc"
+                                ? "descending"
+                                : undefined
                           }
                           className={
                             "whitespace-nowrap px-4 pb-3 text-[13px] font-normal text-text-tertiary " +
@@ -183,7 +202,9 @@ export function SmartTable({
                 {shown.map((row) => (
                   <tr
                     key={row.id}
-                    onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                    onClick={
+                      onRowClick ? () => onRowClick(row.original) : undefined
+                    }
                     className={
                       "border-b border-line transition-colors last:border-b-0 hover:bg-surface-sunken " +
                       (onRowClick ? "cursor-pointer" : "")
@@ -194,12 +215,16 @@ export function SmartTable({
                         key={cell.id}
                         className={
                           "px-4 py-2.5 align-middle " +
-                          (columns.find((c) => c.key === cell.column.id)?.numeric
+                          (columns.find((c) => c.key === cell.column.id)
+                            ?.numeric
                             ? "tabular text-right"
                             : "")
                         }
                       >
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
                       </td>
                     ))}
                   </tr>
@@ -215,17 +240,32 @@ export function SmartTable({
               return (
                 <li
                   key={row.id}
-                  onClick={onRowClick ? () => onRowClick(row.original) : undefined}
-                  className={"flex flex-col gap-2 py-4 " + (onRowClick ? "cursor-pointer" : "")}
+                  onClick={
+                    onRowClick ? () => onRowClick(row.original) : undefined
+                  }
+                  className={
+                    "flex flex-col gap-2 py-4 " +
+                    (onRowClick ? "cursor-pointer" : "")
+                  }
                 >
                   <div className="text-[15px]">
                     <Cell column={lead!} row={row.original} lead />
                   </div>
                   <div className="flex flex-col gap-1">
                     {rest.map((c) => (
-                      <div key={c.key} className="flex items-baseline justify-between gap-4">
-                        <span className="shrink-0 text-[12px] text-text-tertiary">{c.header}</span>
-                        <span className={"min-w-0 text-right text-[13px] " + (c.numeric ? "tabular" : "")}>
+                      <div
+                        key={c.key}
+                        className="flex items-baseline justify-between gap-4"
+                      >
+                        <span className="shrink-0 text-[12px] text-text-tertiary">
+                          {c.header}
+                        </span>
+                        <span
+                          className={
+                            "min-w-0 text-right text-[13px] " +
+                            (c.numeric ? "tabular" : "")
+                          }
+                        >
                           <Cell column={c} row={row.original} lead={false} />
                         </span>
                       </div>
@@ -237,12 +277,18 @@ export function SmartTable({
           </ul>
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
-            <p className="m-0 text-[13px] text-text-tertiary" aria-live="polite">
+            <p
+              className="m-0 text-[13px] text-text-tertiary"
+              aria-live="polite"
+            >
               {`Showing ${current * PAGE_SIZE + 1} to ${current * PAGE_SIZE + shown.length} of ${filtered.length} ${filtered.length === 1 ? "record" : "records"}`}
             </p>
 
             {pageCount > 1 && (
-              <nav aria-label={`${caption} pages`} className="flex items-center gap-1.5">
+              <nav
+                aria-label={`${caption} pages`}
+                className="flex items-center gap-1.5"
+              >
                 <button
                   type="button"
                   onClick={() => table.previousPage()}
@@ -255,7 +301,10 @@ export function SmartTable({
 
                 {pageNumbers(current, pageCount).map((n, i) =>
                   n === null ? (
-                    <span key={`gap-${i}`} className="px-1 text-[13px] text-text-tertiary">
+                    <span
+                      key={`gap-${i}`}
+                      className="px-1 text-[13px] text-text-tertiary"
+                    >
                       …
                     </span>
                   ) : (

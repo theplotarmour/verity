@@ -1,7 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Button, Field, Input, Panel, Select } from "@/components/ui/primitives";
+import {
+  Button,
+  Field,
+  Input,
+  Panel,
+  Select,
+} from "@/components/ui/primitives";
 import { rupees, sheets } from "@/components/ui/business/format";
 
 /**
@@ -84,7 +90,8 @@ export function NewSalesOrderForm({
   const agreedPrice = useMemo(() => {
     const map = new Map<string, number>();
     for (const row of sellable) {
-      if (row.agreedPricePaise !== null) map.set(row.productId, row.agreedPricePaise / 100);
+      if (row.agreedPricePaise !== null)
+        map.set(row.productId, row.agreedPricePaise / 100);
     }
     return map;
   }, [sellable]);
@@ -109,13 +116,16 @@ export function NewSalesOrderForm({
   const total = lines.reduce((sum, line) => {
     const qty = Number.parseFloat(line.qty);
     const price = Number.parseFloat(line.price);
-    return sum + (Number.isFinite(qty) && Number.isFinite(price) ? qty * price : 0);
+    return (
+      sum + (Number.isFinite(qty) && Number.isFinite(price) ? qty * price : 0)
+    );
   }, 0);
 
   const complete = lines.filter(
     (line) => line.productId !== "" && Number.parseInt(line.qty, 10) > 0,
   );
-  const canSubmit = customerId !== "" && locationId !== "" && complete.length > 0;
+  const canSubmit =
+    customerId !== "" && locationId !== "" && complete.length > 0;
 
   return (
     <Panel title="New sales order">
@@ -144,7 +154,11 @@ export function NewSalesOrderForm({
               label="From godown"
               htmlFor="sale-godown"
               required
-              hint={locationId === "" ? "Choose one to see what is available" : undefined}
+              hint={
+                locationId === ""
+                  ? "Choose one to see what is available"
+                  : undefined
+              }
             >
               <Select
                 id="sale-godown"
@@ -163,7 +177,11 @@ export function NewSalesOrderForm({
             </Field>
           </div>
           <div className="min-w-[170px] flex-1">
-            <Field label="Reference" htmlFor="sale-reference" hint="Blank gets a number">
+            <Field
+              label="Reference"
+              htmlFor="sale-reference"
+              hint="Blank gets a number"
+            >
               <Input
                 id="sale-reference"
                 value={reference}
@@ -178,8 +196,11 @@ export function NewSalesOrderForm({
             const stock = inGodown.get(line.productId);
             const wanted = Number.parseInt(line.qty, 10);
             const short =
-              stock !== undefined && Number.isFinite(wanted) && wanted > stock.availableUnits;
-            const notHere = line.productId !== "" && (stock?.availableUnits ?? 0) === 0;
+              stock !== undefined &&
+              Number.isFinite(wanted) &&
+              wanted > stock.availableUnits;
+            const notHere =
+              line.productId !== "" && (stock?.availableUnits ?? 0) === 0;
 
             return (
               <div key={index} className="flex flex-wrap items-end gap-3">
@@ -202,17 +223,22 @@ export function NewSalesOrderForm({
                     <Select
                       id={`sale-board-${index}`}
                       value={line.productId}
-                      onChange={(event) => setLine(index, { productId: event.target.value })}
+                      onChange={(event) =>
+                        setLine(index, { productId: event.target.value })
+                      }
                     >
                       <option value="" disabled>
                         Choose a board
                       </option>
                       {boards.map((board) => {
-                        const available = inGodown.get(board.id)?.availableUnits ?? 0;
+                        const available =
+                          inGodown.get(board.id)?.availableUnits ?? 0;
                         return (
                           <option key={board.id} value={board.id}>
                             {board.label}
-                            {locationId === "" ? "" : ` — ${available} available`}
+                            {locationId === ""
+                              ? ""
+                              : ` — ${available} available`}
                           </option>
                         );
                       })}
@@ -220,13 +246,19 @@ export function NewSalesOrderForm({
                   </Field>
                 </div>
                 <div className="w-[120px]">
-                  <Field label="Quantity" htmlFor={`sale-qty-${index}`} required>
+                  <Field
+                    label="Quantity"
+                    htmlFor={`sale-qty-${index}`}
+                    required
+                  >
                     <Input
                       id={`sale-qty-${index}`}
                       type="number"
                       min={1}
                       value={line.qty}
-                      onChange={(event) => setLine(index, { qty: event.target.value })}
+                      onChange={(event) =>
+                        setLine(index, { qty: event.target.value })
+                      }
                     />
                   </Field>
                 </div>
@@ -248,7 +280,9 @@ export function NewSalesOrderForm({
                       min={0}
                       step="0.01"
                       value={line.price}
-                      onChange={(event) => setLine(index, { price: event.target.value })}
+                      onChange={(event) =>
+                        setLine(index, { price: event.target.value })
+                      }
                     />
                   </Field>
                 </div>
@@ -256,15 +290,19 @@ export function NewSalesOrderForm({
                   <Button
                     size="sm"
                     disabled={pending}
-                    onClick={() => setLines((current) => current.filter((_, at) => at !== index))}
+                    onClick={() =>
+                      setLines((current) =>
+                        current.filter((_, at) => at !== index),
+                      )
+                    }
                   >
                     Remove
                   </Button>
                 )}
                 {short && (
                   <p className="m-0 w-full text-[12px] text-warning">
-                    Only {stock!.availableUnits} available here. The order can still be taken; it
-                    cannot be reserved until there is stock.
+                    Only {stock!.availableUnits} available here. The order can
+                    still be taken; it cannot be reserved until there is stock.
                   </p>
                 )}
               </div>
@@ -273,7 +311,11 @@ export function NewSalesOrderForm({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button size="sm" disabled={pending} onClick={() => setLines((c) => [...c, { ...EMPTY_LINE }])}>
+          <Button
+            size="sm"
+            disabled={pending}
+            onClick={() => setLines((c) => [...c, { ...EMPTY_LINE }])}
+          >
             Add another board
           </Button>
           {total > 0 && (
@@ -297,7 +339,11 @@ export function NewSalesOrderForm({
                   qtyOrdered: Number.parseInt(line.qty, 10),
                   ...(line.price === ""
                     ? {}
-                    : { unitPricePaise: Math.round(Number.parseFloat(line.price) * 100) }),
+                    : {
+                        unitPricePaise: Math.round(
+                          Number.parseFloat(line.price) * 100,
+                        ),
+                      }),
                 })),
               })
             }
@@ -310,8 +356,9 @@ export function NewSalesOrderForm({
         </div>
 
         <p className="m-0 text-[12px] text-text-tertiary">
-          An order that takes the customer past their credit limit is held rather than refused, and
-          shows here for someone with authority to approve.
+          An order that takes the customer past their credit limit is held
+          rather than refused, and shows here for someone with authority to
+          approve.
         </p>
       </div>
     </Panel>

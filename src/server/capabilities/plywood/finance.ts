@@ -11,7 +11,10 @@ import { resolveTaxRate } from "./tax";
 import { assertPeriodOpen } from "./period";
 import { reachableGodownIds } from "./scope";
 import { businessZone } from "./clock";
-import { ValidationError, type CommandDefinition } from "@/server/platform/command";
+import {
+  ValidationError,
+  type CommandDefinition,
+} from "@/server/platform/command";
 import { type QueryDefinition } from "@/server/platform/query";
 import { resolveConfig } from "@/server/platform/capability";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
@@ -92,9 +95,12 @@ const INVOICEABLE_PURCHASE_ORDER_STATES = new Set([
  */
 function configNumber(value: unknown, key: string): number | undefined {
   if (value === undefined || value === null) return undefined;
-  const parsed = typeof value === "number" ? value : Number(String(value).trim());
+  const parsed =
+    typeof value === "number" ? value : Number(String(value).trim());
   if (!Number.isFinite(parsed)) {
-    throw new ValidationError(`E_VALIDATION: ${key} is not a number (${String(value)})`);
+    throw new ValidationError(
+      `E_VALIDATION: ${key} is not a number (${String(value)})`,
+    );
   }
   return parsed;
 }
@@ -135,9 +141,15 @@ export function computeInvoiceTax(input: {
 } {
   const interState = input.supplyStateCode !== input.placeOfSupplyStateCode;
 
-  const cgstPaise = interState ? 0 : Math.round((input.taxablePaise * input.cgstRateBp) / 10_000);
-  const sgstPaise = interState ? 0 : Math.round((input.taxablePaise * input.sgstRateBp) / 10_000);
-  const igstPaise = interState ? Math.round((input.taxablePaise * input.igstRateBp) / 10_000) : 0;
+  const cgstPaise = interState
+    ? 0
+    : Math.round((input.taxablePaise * input.cgstRateBp) / 10_000);
+  const sgstPaise = interState
+    ? 0
+    : Math.round((input.taxablePaise * input.sgstRateBp) / 10_000);
+  const igstPaise = interState
+    ? Math.round((input.taxablePaise * input.igstRateBp) / 10_000)
+    : 0;
 
   return {
     interState,
@@ -164,7 +176,11 @@ export async function nextDocumentNumber(
   tenantId: string,
   seriesKey: string,
   financialYear: string,
-): Promise<{ seriesId: string; sequenceNumber: number; invoiceNumber: string }> {
+): Promise<{
+  seriesId: string;
+  sequenceNumber: number;
+  invoiceNumber: string;
+}> {
   const locked = await tx.$queryRaw<{ id: string; next_number: number }[]>`
     SELECT id, next_number
       FROM plywood_invoice_series
@@ -233,7 +249,9 @@ export const raiseSalesInvoice: CommandDefinition<
       where: { salesOrderId: order.id },
     });
     if (existing) {
-      throw new ValidationError("E_VALIDATION: this order has already been invoiced");
+      throw new ValidationError(
+        "E_VALIDATION: this order has already been invoiced",
+      );
     }
     // Audit P0-03. The previous guard rejected only `draft` and `cancelled`,
     // which let an order sitting in `pending_credit` be invoiced — a financial
@@ -253,14 +271,16 @@ export const raiseSalesInvoice: CommandDefinition<
     // tell someone. The more specific refusal goes first.
     // Nothing has left the yard: there is nothing to bill for. Slice 4
     // completes P0-03 — the invoice follows the Goods Issue, not the order.
-    const issuedTotal = order.lines.reduce((sum, line) => sum + line.qtyShipped, 0);
+    const issuedTotal = order.lines.reduce(
+      (sum, line) => sum + line.qtyShipped,
+      0,
+    );
     if (issuedTotal === 0) {
       throw new ValidationError(
         "E_VALIDATION: nothing has been issued against this order, so there is " +
           "nothing to invoice. Issue the goods first.",
       );
     }
-
 
     // The seller's identity comes from the GST registration (P0-09), not from
     // a configuration key. The key remains as a transitional fallback for
@@ -270,7 +290,9 @@ export const raiseSalesInvoice: CommandDefinition<
     const seller = await sellerIdentity(ctx.tx);
     const supplyStateCode =
       seller.stateCode ??
-      String((await resolveConfig<unknown>(ctx.tx, CONFIG_TENANT_STATE_CODE)) ?? "").trim();
+      String(
+        (await resolveConfig<unknown>(ctx.tx, CONFIG_TENANT_STATE_CODE)) ?? "",
+      ).trim();
     if (!supplyStateCode) {
       throw new ValidationError(
         "E_VALIDATION: this business has no GST registration, so tax cannot be decided. " +
@@ -317,7 +339,9 @@ export const raiseSalesInvoice: CommandDefinition<
     let sgstRateBp: number | undefined;
     let igstRateBp: number | undefined;
 
-    const registration = await ctx.tx.plywoodGstRegistration.findFirst({ where: { active: true } });
+    const registration = await ctx.tx.plywoodGstRegistration.findFirst({
+      where: { active: true },
+    });
     if (registration) {
       const rates = new Set<string>();
       for (const line of order.lines) {
@@ -437,7 +461,9 @@ export const raiseSalesInvoice: CommandDefinition<
         totalPaise: tax.totalPaise,
         interState: tax.interState,
       },
-      events: [{ name: "verity.plywood.sales_invoice_raised", entityId: invoice.id }],
+      events: [
+        { name: "verity.plywood.sales_invoice_raised", entityId: invoice.id },
+      ],
     };
   },
 };
@@ -501,7 +527,9 @@ export const raisePurchaseInvoice: CommandDefinition<
       where: { purchaseOrderId: order.id },
     });
     if (existing) {
-      throw new ValidationError("E_VALIDATION: this purchase order has already been invoiced");
+      throw new ValidationError(
+        "E_VALIDATION: this purchase order has already been invoiced",
+      );
     }
 
     // Audit P0-03, the purchasing half: there was no state guard at all, so a
@@ -558,7 +586,8 @@ export const raisePurchaseInvoice: CommandDefinition<
     // Defaulted rather than required, so an invoice can still be recorded from
     // a document whose split has not been read off yet. That case now surfaces
     // as an exception instead of silently costing the business its credit.
-    const taxablePaise = input.taxablePaise ?? input.supplierInvoiceTotalPaise - taxPaise;
+    const taxablePaise =
+      input.taxablePaise ?? input.supplierInvoiceTotalPaise - taxPaise;
 
     if (taxablePaise < 0) {
       throw new ValidationError(
@@ -602,7 +631,11 @@ export const raisePurchaseInvoice: CommandDefinition<
         // `invoiceNumber` is ours. Conflating the two would break our own
         // sequence guarantee.
         ...(input.supplierInvoiceNumber
-          ? { customFields: { supplierInvoiceNumber: input.supplierInvoiceNumber } }
+          ? {
+              customFields: {
+                supplierInvoiceNumber: input.supplierInvoiceNumber,
+              },
+            }
           : {}),
       },
     });
@@ -641,7 +674,12 @@ export const raisePurchaseInvoice: CommandDefinition<
 
     return {
       result: { id: invoice.id, invoiceNumber: numbering.invoiceNumber },
-      events: [{ name: "verity.plywood.purchase_invoice_raised", entityId: invoice.id }],
+      events: [
+        {
+          name: "verity.plywood.purchase_invoice_raised",
+          entityId: invoice.id,
+        },
+      ],
     };
   },
 };
@@ -670,7 +708,10 @@ export const recordPayment: CommandDefinition<
       include: { payments: true },
     });
 
-    const paid = invoice.payments.reduce((sum, payment) => sum + payment.amountPaise, 0);
+    const paid = invoice.payments.reduce(
+      (sum, payment) => sum + payment.amountPaise,
+      0,
+    );
     const outstandingBefore = invoice.totalPaise - paid;
     if (input.amountPaise > outstandingBefore) {
       // Refused rather than accepted as an overpayment. An overpayment is a real
@@ -707,8 +748,13 @@ export const recordPayment: CommandDefinition<
     });
 
     return {
-      result: { id: payment.id, outstandingPaise: outstandingBefore - input.amountPaise },
-      events: [{ name: "verity.plywood.payment_recorded", entityId: payment.id }],
+      result: {
+        id: payment.id,
+        outstandingPaise: outstandingBefore - input.amountPaise,
+      },
+      events: [
+        { name: "verity.plywood.payment_recorded", entityId: payment.id },
+      ],
     };
   },
 };
@@ -771,7 +817,10 @@ export const outstandingReceivables: QueryDefinition<
 
     for (const invoice of invoices) {
       const customerId = invoice.customerId!;
-      const paid = invoice.payments.reduce((sum, payment) => sum + payment.amountPaise, 0);
+      const paid = invoice.payments.reduce(
+        (sum, payment) => sum + payment.amountPaise,
+        0,
+      );
       const outstanding = invoice.totalPaise - paid;
       const row = byCustomer.get(customerId) ?? {
         customerId,
@@ -786,7 +835,10 @@ export const outstandingReceivables: QueryDefinition<
       row.outstandingPaise += outstanding;
       // The age of the oldest unpaid invoice is what a collections call is
       // about, so it is carried rather than left to be derived from a list.
-      if (outstanding > 0 && (!row.oldestUnpaidAt || invoice.issuedAt < row.oldestUnpaidAt)) {
+      if (
+        outstanding > 0 &&
+        (!row.oldestUnpaidAt || invoice.issuedAt < row.oldestUnpaidAt)
+      ) {
         row.oldestUnpaidAt = invoice.issuedAt;
       }
       byCustomer.set(customerId, row);
@@ -835,7 +887,8 @@ export const partyLedger: QueryDefinition<
     // entries it summarises.
     let running = 0;
     const rows = entries.map((entry) => {
-      running += entry.entryType === "debit" ? entry.amountPaise : -entry.amountPaise;
+      running +=
+        entry.entryType === "debit" ? entry.amountPaise : -entry.amountPaise;
       return {
         id: entry.id,
         entryType: entry.entryType,
@@ -913,16 +966,22 @@ export const invoiceDetail: QueryDefinition<
     });
     if (!invoice) return null;
 
-    const paidPaise = invoice.payments.reduce((sum, payment) => sum + payment.amountPaise, 0);
+    const paidPaise = invoice.payments.reduce(
+      (sum, payment) => sum + payment.amountPaise,
+      0,
+    );
     return {
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
-      direction: invoice.customerId ? ("sales" as const) : ("purchase" as const),
+      direction: invoice.customerId
+        ? ("sales" as const)
+        : ("purchase" as const),
       customerId: invoice.customerId,
       supplierId: invoice.supplierId,
       salesOrderId: invoice.salesOrderId,
       purchaseOrderId: invoice.purchaseOrderId,
-      partyName: invoice.customer?.displayName ?? invoice.supplier?.displayName ?? "—",
+      partyName:
+        invoice.customer?.displayName ?? invoice.supplier?.displayName ?? "—",
       partyGstin: invoice.customer?.gstin ?? invoice.supplier?.gstin ?? null,
       issuedAt: invoice.issuedAt,
       interState: invoice.igstPaise > 0,
@@ -986,12 +1045,20 @@ export const listInvoices: QueryDefinition<
 
     return invoices
       .map((invoice) => {
-        const paid = invoice.payments.reduce((sum, payment) => sum + payment.amountPaise, 0);
+        const paid = invoice.payments.reduce(
+          (sum, payment) => sum + payment.amountPaise,
+          0,
+        );
         return {
           id: invoice.id,
           invoiceNumber: invoice.invoiceNumber,
-          partyName: invoice.customer?.displayName ?? invoice.supplier?.displayName ?? "—",
-          direction: invoice.customerId ? ("sales" as const) : ("purchase" as const),
+          partyName:
+            invoice.customer?.displayName ??
+            invoice.supplier?.displayName ??
+            "—",
+          direction: invoice.customerId
+            ? ("sales" as const)
+            : ("purchase" as const),
           issuedAt: invoice.issuedAt,
           totalPaise: invoice.totalPaise,
           outstandingPaise: invoice.totalPaise - paid,
@@ -1064,15 +1131,17 @@ export const ownerConsole: QueryDefinition<
     // sales as this month's and yesterday's as today's.
     const zone = await businessZone(ctx);
 
-    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_STOCK_BALANCE);
+    const reachable = await reachableGodownIds(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_STOCK_BALANCE,
+    );
     // An empty reachable set means nothing, never everything. Prisma renders an
     // empty `IN ()` as false, which is the correct reading, but the array is
     // passed explicitly so the intent survives a future refactor.
     const godowns = reachable.length > 0 ? reachable : [NO_GODOWN];
 
-    const rows = await ctx.tx.$queryRaw<
-      Record<string, bigint | null>[]
-    >`SELECT
+    const rows = await ctx.tx.$queryRaw<Record<string, bigint | null>[]>`SELECT
         (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
           WHERE customer_id IS NOT NULL AND issued_at >= date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS sales_this_month,
@@ -1235,7 +1304,10 @@ export const marginReport: QueryDefinition<
       revenuePaise,
       costOfGoodsSoldPaise,
       marginPaise,
-      marginBp: revenuePaise === 0 ? 0 : Math.round((marginPaise / revenuePaise) * 10_000),
+      marginBp:
+        revenuePaise === 0
+          ? 0
+          : Math.round((marginPaise / revenuePaise) * 10_000),
     };
   },
 };
@@ -1268,7 +1340,12 @@ export const purchaseMatch: QueryDefinition<
     orderedTotalPaise: number;
     receivedTotalPaise: number;
     invoicedTotalPaise: number;
-    receipts: Array<{ id: string; receiptNumber: string; receivedAt: Date; lineCount: number }>;
+    receipts: Array<{
+      id: string;
+      receiptNumber: string;
+      receivedAt: Date;
+      lineCount: number;
+    }>;
     lines: Array<{
       productId: string;
       productName: string;
@@ -1290,7 +1367,11 @@ export const purchaseMatch: QueryDefinition<
   input: z.object({ purchaseOrderId: z.string().uuid() }),
   handler: async (ctx, input) => {
     // Layer 2. Audit finding F-09.
-    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_PURCHASE_ORDER);
+    const reachable = await reachableGodownIds(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_PURCHASE_ORDER,
+    );
     // findFirst with the scope in the predicate, not findUniqueOrThrow then a
     // check: a read that returns the row and refuses afterwards has already
     // read it, and the difference matters when the caller logs the error.
@@ -1319,17 +1400,25 @@ export const purchaseMatch: QueryDefinition<
       (sum, line) => sum + line.qtyReceived * line.unitCostPaise,
       0,
     );
-    const invoicedTotalPaise = invoices.reduce((sum, invoice) => sum + invoice.totalPaise, 0);
+    const invoicedTotalPaise = invoices.reduce(
+      (sum, invoice) => sum + invoice.totalPaise,
+      0,
+    );
 
     // Named in the words an accountant would use, not as codes. Each one is
     // something a person has to go and do.
     const exceptions: string[] = [];
-    const shortLines = order.lines.filter((line) => line.qtyReceived < line.qtyOrdered);
+    const shortLines = order.lines.filter(
+      (line) => line.qtyReceived < line.qtyOrdered,
+    );
     if (shortLines.length > 0) {
       exceptions.push(
         `${shortLines.length} line(s) not fully received: ` +
           shortLines
-            .map((l) => `${l.productNameSnapshot} ${l.qtyReceived}/${l.qtyOrdered}`)
+            .map(
+              (l) =>
+                `${l.productNameSnapshot} ${l.qtyReceived}/${l.qtyOrdered}`,
+            )
             .join(", "),
       );
     }
@@ -1412,9 +1501,16 @@ export const purchaseReviewQueue: QueryDefinition<
     // this queue would bury the invoices that genuinely need a decision.
     // Layer 2. Audit finding F-09: the accountant's queue listed every
     // godown's purchases regardless of the reader's scope.
-    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_PURCHASE_ORDER);
+    const reachable = await reachableGodownIds(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_PURCHASE_ORDER,
+    );
     const orders = await ctx.tx.plywoodPurchaseOrder.findMany({
-      where: { state: { in: ["receiving", "completed"] }, locationId: { in: reachable } },
+      where: {
+        state: { in: ["receiving", "completed"] },
+        locationId: { in: reachable },
+      },
       include: {
         lines: true,
         supplier: { select: { id: true, displayName: true } },
@@ -1424,8 +1520,14 @@ export const purchaseReviewQueue: QueryDefinition<
     });
 
     const rows = orders.map((order) => {
-      const orderedUnits = order.lines.reduce((sum, line) => sum + line.qtyOrdered, 0);
-      const receivedUnits = order.lines.reduce((sum, line) => sum + line.qtyReceived, 0);
+      const orderedUnits = order.lines.reduce(
+        (sum, line) => sum + line.qtyOrdered,
+        0,
+      );
+      const receivedUnits = order.lines.reduce(
+        (sum, line) => sum + line.qtyReceived,
+        0,
+      );
       const orderedTotalPaise = order.lines.reduce(
         (sum, line) => sum + line.qtyOrdered * line.unitCostPaise,
         0,
@@ -1441,7 +1543,9 @@ export const purchaseReviewQueue: QueryDefinition<
         blockers.push("No supplier invoice recorded");
       } else {
         if (invoice.cgstPaise + invoice.sgstPaise + invoice.igstPaise === 0) {
-          blockers.push("Invoice has no tax split, so no input credit can be evidenced");
+          blockers.push(
+            "Invoice has no tax split, so no input credit can be evidenced",
+          );
         }
         if (invoicedTotalPaise !== orderedTotalPaise) {
           blockers.push("Invoiced value differs from the order");
@@ -1508,7 +1612,11 @@ export const goodsReceiptDetail: QueryDefinition<
     // Layer 2. Audit finding F-09: a goods receipt names what arrived, at what
     // cost, into which godown — readable by id from any godown before this.
     // Scoped through its order, which is where the location lives.
-    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_PURCHASE_ORDER);
+    const reachable = await reachableGodownIds(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_PURCHASE_ORDER,
+    );
     const receipt = await ctx.tx.plywoodGoodsReceipt.findFirst({
       where: {
         id: input.receiptId,
@@ -1517,7 +1625,9 @@ export const goodsReceiptDetail: QueryDefinition<
       include: {
         lines: true,
         location: { select: { name: true } },
-        purchaseOrder: { include: { supplier: { select: { displayName: true } } } },
+        purchaseOrder: {
+          include: { supplier: { select: { displayName: true } } },
+        },
       },
     });
     if (!receipt) return null;
@@ -1540,7 +1650,10 @@ export const goodsReceiptDetail: QueryDefinition<
       supplierName: receipt.purchaseOrder.supplier.displayName,
       locationName: receipt.location.name,
       lines,
-      totalValuePaise: lines.reduce((sum, line) => sum + line.lineValuePaise, 0),
+      totalValuePaise: lines.reduce(
+        (sum, line) => sum + line.lineValuePaise,
+        0,
+      ),
     };
   },
 };
@@ -1613,16 +1726,27 @@ export const raiseInvoiceNote: CommandDefinition<
     }
 
     // The invoice's own rates, not today's.
-    const cgstPaise = Math.round((input.taxablePaise * invoice.cgstRateBp) / 10_000);
-    const sgstPaise = Math.round((input.taxablePaise * invoice.sgstRateBp) / 10_000);
-    const igstPaise = Math.round((input.taxablePaise * invoice.igstRateBp) / 10_000);
+    const cgstPaise = Math.round(
+      (input.taxablePaise * invoice.cgstRateBp) / 10_000,
+    );
+    const sgstPaise = Math.round(
+      (input.taxablePaise * invoice.sgstRateBp) / 10_000,
+    );
+    const igstPaise = Math.round(
+      (input.taxablePaise * invoice.igstRateBp) / 10_000,
+    );
     const totalPaise = input.taxablePaise + cgstPaise + sgstPaise + igstPaise;
 
     const issuedAt = new Date();
     await assertPeriodOpen(ctx.tx, issuedAt);
     const financialYear = financialYearOf(issuedAt);
     const seriesKey = input.noteType === "credit" ? "CN" : "DN";
-    const numbering = await nextDocumentNumber(ctx.tx, ctx.actor.tenantId, seriesKey, financialYear);
+    const numbering = await nextDocumentNumber(
+      ctx.tx,
+      ctx.actor.tenantId,
+      seriesKey,
+      financialYear,
+    );
 
     const note = await ctx.tx.plywoodInvoiceNote.create({
       data: {

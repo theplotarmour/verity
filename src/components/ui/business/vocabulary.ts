@@ -94,7 +94,9 @@ export const COMMAND_LABEL: Record<string, string> = {
 };
 
 export function entityLabelOf(entityKey: string): string {
-  return ENTITY_LABEL[entityKey] ?? entityKey.split(".").slice(-1)[0] ?? entityKey;
+  return (
+    ENTITY_LABEL[entityKey] ?? entityKey.split(".").slice(-1)[0] ?? entityKey
+  );
 }
 
 export function fieldLabelOf(field: string): string {

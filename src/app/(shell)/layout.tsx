@@ -1,13 +1,21 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { getAuthUser, listMemberships, resolveActor } from "@/server/platform/auth";
+import {
+  getAuthUser,
+  listMemberships,
+  resolveActor,
+} from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { resolvePermissions } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { installAdministration } from "@/server/platform/administration";
 import { navigationFor } from "@/server/platform/contribution";
 import { PLYWOOD_CAPABILITY } from "@/server/capabilities/plywood/keys";
-import { ShellChrome, type NavArea, type NavItem } from "@/components/shell/ShellChrome";
+import {
+  ShellChrome,
+  type NavArea,
+  type NavItem,
+} from "@/components/shell/ShellChrome";
 import { isIconName } from "@/components/ui/icons";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +32,11 @@ export const dynamic = "force-dynamic";
  * Navigation is derived from what the actor can actually reach — the capability
  * registry and their resolved permissions — never from a hard-coded module list.
  */
-export default async function ShellLayout({ children }: { children: ReactNode }) {
+export default async function ShellLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
   installCapabilities();
   // Pre-existing gap, not introduced here: only HQ routes called this
   // (`hq.ts`), so `verity.platform.set_configuration` and the rest of the
@@ -37,33 +49,45 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   if (!actor) redirect("/sign-in");
 
   const memberships = await listMemberships();
-  const active = memberships.find((m) => m.membershipId === actor.membershipId) ?? memberships[0]!;
+  const active =
+    memberships.find((m) => m.membershipId === actor.membershipId) ??
+    memberships[0]!;
 
-  const { capabilities, canAudit, canConfigure, grants } = await withTenant(actor.tenantId, async (tx) => {
-    const activations = await tx.tenantActivation.findMany({
-      where: { status: "Active" },
-      include: { capability: true },
-    });
-    const permissions = actor.roleId ? await resolvePermissions(tx, actor.roleId) : [];
-    const readable = new Set(permissions.filter((p) => p.verb === "Read").map((p) => p.entity));
+  const { capabilities, canAudit, canConfigure, grants } = await withTenant(
+    actor.tenantId,
+    async (tx) => {
+      const activations = await tx.tenantActivation.findMany({
+        where: { status: "Active" },
+        include: { capability: true },
+      });
+      const permissions = actor.roleId
+        ? await resolvePermissions(tx, actor.roleId)
+        : [];
+      const readable = new Set(
+        permissions.filter((p) => p.verb === "Read").map((p) => p.entity),
+      );
 
-    return {
-      // Every active capability is offered to the contribution layer, which
-      // applies the per-item permission filter. Filtering here as well would
-      // hide a capability whose only visible surface is one the actor *can*
-      // reach.
-      capabilities: activations.map((a) => ({ id: a.capabilityId, name: a.capability.name })),
-      grants: permissions.map((p) => ({ entity: p.entity, verb: p.verb })),
-      canAudit: readable.size > 0,
-      // Edit on the TENANT, not "holds any Edit at all". The old test let a
-      // salesperson who may edit a customer see a Configuration link, and §0
-      // is explicit that raw configuration keys are not a client surface. It
-      // now matches what the page and the write command both require.
-      canConfigure: permissions.some(
-        (p) => p.verb === "Edit" && p.entity === "verity.platform.tenant",
-      ),
-    };
-  });
+      return {
+        // Every active capability is offered to the contribution layer, which
+        // applies the per-item permission filter. Filtering here as well would
+        // hide a capability whose only visible surface is one the actor *can*
+        // reach.
+        capabilities: activations.map((a) => ({
+          id: a.capabilityId,
+          name: a.capability.name,
+        })),
+        grants: permissions.map((p) => ({ entity: p.entity, verb: p.verb })),
+        canAudit: readable.size > 0,
+        // Edit on the TENANT, not "holds any Edit at all". The old test let a
+        // salesperson who may edit a customer see a Configuration link, and §0
+        // is explicit that raw configuration keys are not a client surface. It
+        // now matches what the page and the write command both require.
+        canConfigure: permissions.some(
+          (p) => p.verb === "Edit" && p.entity === "verity.platform.tenant",
+        ),
+      };
+    },
+  );
 
   // Capability navigation is declared by the capabilities themselves. The shell
   // previously held a hard-coded id-to-route map, which meant every new
@@ -73,7 +97,8 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const contributed = navigationFor({
     activeCapabilityIds,
     shell: "platform",
-    canRead: (entity, verb) => grants.some((g) => g.entity === entity && g.verb === verb),
+    canRead: (entity, verb) =>
+      grants.some((g) => g.entity === entity && g.verb === verb),
   })
     // Plywood supersedes the generic Location/Asset nav for its own tenants —
     // godowns are Locations under the hood (a real dependency, see the
@@ -111,41 +136,90 @@ export default async function ShellLayout({ children }: { children: ReactNode })
    * empty. Nothing here is plywood-specific: a capability picks a group and the
    * shell renders it in this order.
    */
-  const BUSINESS_GROUPS = ["Overview", "Trade", "Inventory", "Money", "Insights"] as const;
+  const BUSINESS_GROUPS = [
+    "Overview",
+    "Trade",
+    "Inventory",
+    "Money",
+    "Insights",
+  ] as const;
 
   const businessAreas: NavArea[] = BUSINESS_GROUPS.map((group) => ({
     group,
     items: contributed.filter((c) => c.group === group).map(toItem),
   }));
 
+  /**
+   * Every href a capability already contributes.
+   *
+   * Audit finding U3-1: the plywood capability contributes an Audit entry and
+   * the shell added its own, so "Audit" appeared twice in Administration and
+   * React reported duplicate keys on every render. The capability's entry is
+   * the one that carries the right group and ordering, so a shell default
+   * stands down when a capability has already claimed the route.
+   */
+  const contributedHrefs = new Set(contributed.map((item) => item.href));
+
+  /**
+   * Audit finding U3-2. A client saw a "Platform" group (Overview, Workspace)
+   * and a "Capabilities" group beside their own navigation — and therefore two
+   * entries called "Overview" pointing at different pages. §0 of the target
+   * flow lists exactly this as what a normal client must never be shown: the
+   * foundation's vocabulary leaking into the product.
+   *
+   * Kept for the platform tenant, whose operators genuinely work in those
+   * terms.
+   */
   const areas: NavArea[] = [
     ...businessAreas,
-    {
-      group: "Platform",
-      items: [
-        { href: "/", label: "Overview", icon: "overview" as const },
-        { href: "/workspace", label: "Workspace", icon: "workspace" as const },
-      ],
-    },
-    {
-      group: "Capabilities",
-      items: contributed
-        .filter((c) => (c.group ?? "Capabilities") === "Capabilities")
-        .map(toItem),
-    },
+    ...(active.isPlatform
+      ? [
+          {
+            group: "Platform" as const,
+            items: [
+              { href: "/", label: "Overview", icon: "overview" as const },
+              {
+                href: "/workspace",
+                label: "Workspace",
+                icon: "workspace" as const,
+              },
+            ],
+          },
+          {
+            group: "Capabilities" as const,
+            items: contributed
+              .filter((c) => (c.group ?? "Capabilities") === "Capabilities")
+              .map(toItem),
+          },
+        ]
+      : []),
     {
       group: "Administration",
       items: [
         // Raw system-level capability toggling is platform-tenant-only (see
         // capabilities/page.tsx) — a client tenant must never see the link.
         ...(active.isPlatform
-          ? [{ href: "/capabilities", label: "Capability registry", icon: "capabilities" as const }]
+          ? [
+              {
+                href: "/capabilities",
+                label: "Capability registry",
+                icon: "capabilities" as const,
+              },
+            ]
           : []),
         ...contributed.filter((c) => c.group === "Administration").map(toItem),
-        ...(canConfigure
-          ? [{ href: "/configuration", label: "Configuration", icon: "configuration" as const }]
+        ...(canConfigure && !contributedHrefs.has("/configuration")
+          ? [
+              {
+                href: "/configuration",
+                label: "Configuration",
+                icon: "configuration" as const,
+              },
+            ]
           : []),
-        ...(canAudit ? [{ href: "/audit", label: "Audit", icon: "audit" as const }] : []),
+        ...(canAudit && !contributedHrefs.has("/audit")
+          ? [{ href: "/audit", label: "Audit", icon: "audit" as const }]
+          : []),
       ],
     },
   ].filter((area) => area.items.length > 0);
@@ -156,7 +230,12 @@ export default async function ShellLayout({ children }: { children: ReactNode })
   const authUser = await getAuthUser();
   const email = authUser?.email ?? "";
   const userLabel = email.split("@")[0] || "Signed in";
-  const userInitials = (userLabel.match(/\b[a-z0-9]/gi)?.slice(0, 2).join("") || "V").toUpperCase();
+  const userInitials = (
+    userLabel
+      .match(/\b[a-z0-9]/gi)
+      ?.slice(0, 2)
+      .join("") || "V"
+  ).toUpperCase();
 
   return (
     <ShellChrome

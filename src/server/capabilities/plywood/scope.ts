@@ -1,5 +1,8 @@
 import type { PermissionVerb } from "@prisma/client";
-import { ForbiddenError, reachableOrganizations } from "@/server/platform/authorization";
+import {
+  ForbiddenError,
+  reachableOrganizations,
+} from "@/server/platform/authorization";
 import type { ActorContext } from "@/server/platform/command";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
 
@@ -46,7 +49,12 @@ export async function reachableGodownIds(
   entity: string,
   verb: PermissionVerb = "Read",
 ): Promise<string[]> {
-  const { organizationIds } = await reachableOrganizations(tx, actor, verb, entity);
+  const { organizationIds } = await reachableOrganizations(
+    tx,
+    actor,
+    verb,
+    entity,
+  );
   if (organizationIds.length === 0) return [];
 
   const locations = await tx.location.findMany({
@@ -69,7 +77,9 @@ export async function godownFilter(
   entity: string,
   verb: PermissionVerb = "Read",
 ): Promise<{ locationId: { in: string[] } }> {
-  return { locationId: { in: await reachableGodownIds(tx, actor, entity, verb) } };
+  return {
+    locationId: { in: await reachableGodownIds(tx, actor, entity, verb) },
+  };
 }
 
 /**

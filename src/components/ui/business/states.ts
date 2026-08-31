@@ -70,5 +70,7 @@ export function present(
 
 /** Every state key the UI can name, for the conformance check. */
 export function knownStateKeys(): string[] {
-  return [...new Set([...Object.keys(PURCHASE_STATE), ...Object.keys(SALES_STATE)])];
+  return [
+    ...new Set([...Object.keys(PURCHASE_STATE), ...Object.keys(SALES_STATE)]),
+  ];
 }

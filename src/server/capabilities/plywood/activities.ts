@@ -135,7 +135,12 @@ export const BUSINESS_ACTIVITIES: BusinessActivity[] = [
     grants: [
       // The four reads are not padding. Raising an order means picking a
       // board, a supplier and a godown, and knowing what is already in stock.
-      ...view(ENTITY_PURCHASE_ORDER, ENTITY_PRODUCT, ENTITY_SUPPLIER, ENTITY_STOCK_BALANCE),
+      ...view(
+        ENTITY_PURCHASE_ORDER,
+        ENTITY_PRODUCT,
+        ENTITY_SUPPLIER,
+        ENTITY_STOCK_BALANCE,
+      ),
       { verb: "Create", entity: ENTITY_PURCHASE_ORDER },
       { verb: "Edit", entity: ENTITY_PURCHASE_ORDER },
       { verb: "ActionExecute", entity: ENTITY_PURCHASE_ORDER },
@@ -178,7 +183,12 @@ export const BUSINESS_ACTIVITIES: BusinessActivity[] = [
     label: "Take sales orders",
     group: "Trade",
     grants: [
-      ...view(ENTITY_SALES_ORDER, ENTITY_PRODUCT, ENTITY_CUSTOMER, ENTITY_STOCK_BALANCE),
+      ...view(
+        ENTITY_SALES_ORDER,
+        ENTITY_PRODUCT,
+        ENTITY_CUSTOMER,
+        ENTITY_STOCK_BALANCE,
+      ),
       { verb: "Create", entity: ENTITY_SALES_ORDER },
       { verb: "Edit", entity: ENTITY_SALES_ORDER },
     ],
@@ -204,7 +214,10 @@ export const BUSINESS_ACTIVITIES: BusinessActivity[] = [
     key: "set_credit_limits",
     label: "Set credit limits",
     group: "Trade",
-    grants: [...view(ENTITY_CUSTOMER), { verb: "Edit", entity: ENTITY_CUSTOMER }],
+    grants: [
+      ...view(ENTITY_CUSTOMER),
+      { verb: "Edit", entity: ENTITY_CUSTOMER },
+    ],
   },
 
   /* ------------------------------------------------------------ inventory */
@@ -260,7 +273,13 @@ export const BUSINESS_ACTIVITIES: BusinessActivity[] = [
     label: "Raise invoices",
     group: "Money",
     grants: [
-      ...view(ENTITY_INVOICE, ENTITY_SALES_ORDER, ENTITY_PURCHASE_ORDER, ENTITY_CUSTOMER, ENTITY_SUPPLIER),
+      ...view(
+        ENTITY_INVOICE,
+        ENTITY_SALES_ORDER,
+        ENTITY_PURCHASE_ORDER,
+        ENTITY_CUSTOMER,
+        ENTITY_SUPPLIER,
+      ),
       { verb: "Create", entity: ENTITY_INVOICE },
     ],
   },
@@ -334,7 +353,9 @@ export function grantsFor(activityKeys: string[]): Grant[] {
   const seen = new Set<string>();
   const grants: Grant[] = [];
   for (const key of activityKeys) {
-    const activity = BUSINESS_ACTIVITIES.find((candidate) => candidate.key === key);
+    const activity = BUSINESS_ACTIVITIES.find(
+      (candidate) => candidate.key === key,
+    );
     if (!activity) continue;
     for (const grant of activity.grants) {
       const id = `${grant.verb}:${grant.entity}`;
@@ -355,21 +376,26 @@ export function grantsFor(activityKeys: string[]): Grant[] {
  * an authorization error, and rounding down would hide a grant the role really
  * has from the person reviewing it.
  */
-export function activitiesOf(resolved: Array<{ verb: string; entity: string }>): {
+export function activitiesOf(
+  resolved: Array<{ verb: string; entity: string }>,
+): {
   held: string[];
   partial: string[];
 } {
-  const have = new Set(resolved.map((grant) => `${grant.verb}:${grant.entity}`));
+  const have = new Set(
+    resolved.map((grant) => `${grant.verb}:${grant.entity}`),
+  );
   const held: string[] = [];
   const partial: string[] = [];
   for (const activity of BUSINESS_ACTIVITIES) {
-    const present = activity.grants.filter((grant) => have.has(`${grant.verb}:${grant.entity}`));
+    const present = activity.grants.filter((grant) =>
+      have.has(`${grant.verb}:${grant.entity}`),
+    );
     if (present.length === activity.grants.length) held.push(activity.key);
     else if (present.length > 0) partial.push(activity.key);
   }
   return { held, partial };
 }
-
 
 /**
  * §1 — where a role's work actually starts.
@@ -407,12 +433,18 @@ const LANDING_RULES: Array<{ href: string; needs: string[] }> = [
   { href: "/customers", needs: ["change_customer_pricing", "approve_credit"] },
 ];
 
-export function landingRouteFor(resolved: Array<{ verb: string; entity: string }>): string | null {
+export function landingRouteFor(
+  resolved: Array<{ verb: string; entity: string }>,
+): string | null {
   const { held } = activitiesOf(resolved);
   // An owner — someone who can do essentially everything — belongs on the
-  // overview, which exists to answer their question. Falling through to a
-  // narrower screen would demote the person the console was built for.
-  if (held.length >= BUSINESS_ACTIVITIES.length - 4) return null;
+  // BUSINESS overview, which exists to answer their question.
+  //
+  // Audit finding U3-3: this returned null, which left them on `/`, the
+  // platform's own overview, reading "the platform's current state in this
+  // organization" over counts of Locations and Assets. The owner is the
+  // primary user of this product and was landing furthest from their work.
+  if (held.length >= BUSINESS_ACTIVITIES.length - 4) return "/overview";
 
   for (const rule of LANDING_RULES) {
     if (rule.needs.every((key) => held.includes(key))) return rule.href;
@@ -429,7 +461,13 @@ export function landingRouteFor(resolved: Array<{ verb: string; entity: string }
  */
 export const listBusinessActivities: QueryDefinition<
   Record<string, never>,
-  Array<{ key: string; label: string; group: string; note: string | null; grantCount: number }>
+  Array<{
+    key: string;
+    label: string;
+    group: string;
+    note: string | null;
+    grantCount: number;
+  }>
 > = {
   key: "verity.plywood.list_business_activities",
   // Read on the product: anyone who can see the catalogue may see what the
@@ -446,7 +484,6 @@ export const listBusinessActivities: QueryDefinition<
       grantCount: activity.grants.length,
     })),
 };
-
 
 /**
  * Grants or withdraws one business activity on one role.
@@ -488,23 +525,30 @@ export const setRoleActivity: CommandDefinition<
     enabled: z.boolean(),
   }),
   handler: async (ctx, input) => {
-    const activity = BUSINESS_ACTIVITIES.find((candidate) => candidate.key === input.activityKey);
+    const activity = BUSINESS_ACTIVITIES.find(
+      (candidate) => candidate.key === input.activityKey,
+    );
     if (!activity) {
-      throw new ValidationError(`E_VALIDATION: no such activity: ${input.activityKey}`);
+      throw new ValidationError(
+        `E_VALIDATION: no such activity: ${input.activityKey}`,
+      );
     }
 
     const role = await ctx.tx.role.findUnique({
       where: { id: input.roleId },
       include: { permissions: true },
     });
-    if (!role) throw new ValidationError("E_VALIDATION: role not found in this client");
+    if (!role)
+      throw new ValidationError("E_VALIDATION: role not found in this client");
 
     const have = new Set(role.permissions.map((p) => `${p.verb}:${p.entity}`));
     let granted = 0;
     let revoked = 0;
 
     if (input.enabled) {
-      const missing = activity.grants.filter((grant) => !have.has(`${grant.verb}:${grant.entity}`));
+      const missing = activity.grants.filter(
+        (grant) => !have.has(`${grant.verb}:${grant.entity}`),
+      );
       if (missing.length > 0) {
         await ctx.tx.permission.createMany({
           data: missing.map((grant) => ({
@@ -521,7 +565,9 @@ export const setRoleActivity: CommandDefinition<
       // What the role still holds once this activity is taken away.
       const remaining = BUSINESS_ACTIVITIES.filter((candidate) => {
         if (candidate.key === activity.key) return false;
-        return candidate.grants.every((grant) => have.has(`${grant.verb}:${grant.entity}`));
+        return candidate.grants.every((grant) =>
+          have.has(`${grant.verb}:${grant.entity}`),
+        );
       });
       const stillNeeded = new Set(
         remaining.flatMap((candidate) =>
@@ -536,7 +582,10 @@ export const setRoleActivity: CommandDefinition<
         const result = await ctx.tx.permission.deleteMany({
           where: {
             roleId: role.id,
-            OR: droppable.map((grant) => ({ verb: grant.verb as never, entity: grant.entity })),
+            OR: droppable.map((grant) => ({
+              verb: grant.verb as never,
+              entity: grant.entity,
+            })),
           },
         });
         revoked = result.count;
@@ -561,7 +610,9 @@ export const setRoleActivity: CommandDefinition<
 
     return {
       result: { granted, revoked },
-      events: [{ name: "verity.plywood.role_activity_changed", entityId: role.id }],
+      events: [
+        { name: "verity.plywood.role_activity_changed", entityId: role.id },
+      ],
     };
   },
 };

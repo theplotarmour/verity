@@ -42,7 +42,9 @@ const GSTIN = z
     "that is not a valid GSTIN",
   );
 
-const PERIOD_KEY = z.string().regex(/^[0-9]{4}-[0-9]{2}$/, "a period is YYYY-MM");
+const PERIOD_KEY = z
+  .string()
+  .regex(/^[0-9]{4}-[0-9]{2}$/, "a period is YYYY-MM");
 
 /**
  * Replaces one period's portal rows with what was imported.
@@ -165,8 +167,17 @@ export const importGstPortalRecords: CommandDefinition<
     });
 
     return {
-      result: { periodKey: input.periodKey, imported: input.rows.length, replaced: removed.count },
-      events: [{ name: "verity.plywood.gst_portal_records_imported", entityId: ctx.actor.tenantId }],
+      result: {
+        periodKey: input.periodKey,
+        imported: input.rows.length,
+        replaced: removed.count,
+      },
+      events: [
+        {
+          name: "verity.plywood.gst_portal_records_imported",
+          entityId: ctx.actor.tenantId,
+        },
+      ],
     };
   },
 };
@@ -236,7 +247,10 @@ export const itcReconciliation: QueryDefinition<
     // differences that are only calendar arithmetic.
     const zone = await businessZone(ctx);
     const periodKey = input.periodKey ?? periodKeyOf(new Date(), zone);
-    const { startsAt: from, endsAt: to } = businessPeriodWindow(zone, periodKey);
+    const { startsAt: from, endsAt: to } = businessPeriodWindow(
+      zone,
+      periodKey,
+    );
 
     const [portal, invoices] = await Promise.all([
       ctx.tx.plywoodGstPortalRecord.findMany({ where: { periodKey } }),
@@ -246,18 +260,26 @@ export const itcReconciliation: QueryDefinition<
       }),
     ]);
 
-    const taxOf = (row: { cgstPaise: number; sgstPaise: number; igstPaise: number }) =>
-      row.cgstPaise + row.sgstPaise + row.igstPaise;
+    const taxOf = (row: {
+      cgstPaise: number;
+      sgstPaise: number;
+      igstPaise: number;
+    }) => row.cgstPaise + row.sgstPaise + row.igstPaise;
 
-    const rows: Awaited<ReturnType<typeof itcReconciliation.handler>>["rows"] = [];
-    const unmatchable: Awaited<ReturnType<typeof itcReconciliation.handler>>["unmatchable"] = [];
+    const rows: Awaited<ReturnType<typeof itcReconciliation.handler>>["rows"] =
+      [];
+    const unmatchable: Awaited<
+      ReturnType<typeof itcReconciliation.handler>
+    >["unmatchable"] = [];
 
     // Our register, keyed the way the portal keys it.
     const register = new Map<string, (typeof invoices)[number]>();
     for (const invoice of invoices) {
       const fields = (invoice.customFields ?? {}) as Record<string, unknown>;
       const supplierNumber =
-        typeof fields.supplierInvoiceNumber === "string" ? fields.supplierInvoiceNumber : null;
+        typeof fields.supplierInvoiceNumber === "string"
+          ? fields.supplierInvoiceNumber
+          : null;
       if (!supplierNumber || !invoice.supplier?.gstin) {
         unmatchable.push({
           invoiceId: invoice.id,
@@ -294,7 +316,8 @@ export const itcReconciliation: QueryDefinition<
           rows.push({
             bucket: "gstin_mismatch",
             supplierGstin: record.supplierGstin,
-            supplierName: record.supplierName ?? candidate.supplier?.displayName ?? null,
+            supplierName:
+              record.supplierName ?? candidate.supplier?.displayName ?? null,
             invoiceNumber: record.invoiceNumber,
             ourInvoiceId: candidate.id,
             ourInvoiceNumber: candidate.invoiceNumber,
@@ -316,7 +339,8 @@ export const itcReconciliation: QueryDefinition<
           booksTaxPaise: null,
           portalTaxPaise: portalTax,
           differencePaise: null,
-          detail: "The supplier filed it; there is no purchase invoice recorded here",
+          detail:
+            "The supplier filed it; there is no purchase invoice recorded here",
         });
         continue;
       }
@@ -327,7 +351,8 @@ export const itcReconciliation: QueryDefinition<
         rows.push({
           bucket: "matched",
           supplierGstin: record.supplierGstin,
-          supplierName: record.supplierName ?? ours.supplier?.displayName ?? null,
+          supplierName:
+            record.supplierName ?? ours.supplier?.displayName ?? null,
           invoiceNumber: record.invoiceNumber,
           ourInvoiceId: ours.id,
           ourInvoiceNumber: ours.invoiceNumber,
@@ -340,7 +365,8 @@ export const itcReconciliation: QueryDefinition<
         rows.push({
           bucket: "amount_mismatch",
           supplierGstin: record.supplierGstin,
-          supplierName: record.supplierName ?? ours.supplier?.displayName ?? null,
+          supplierName:
+            record.supplierName ?? ours.supplier?.displayName ?? null,
           invoiceNumber: record.invoiceNumber,
           ourInvoiceId: ours.id,
           ourInvoiceNumber: ours.invoiceNumber,
@@ -391,7 +417,9 @@ export const itcReconciliation: QueryDefinition<
         .reduce((sum, row) => sum + (row.portalTaxPaise ?? 0), 0),
       // Exceptions first, matched last: §59's point is that an accountant
       // works the differences, so the differences lead.
-      rows: rows.sort((a, b) => order.indexOf(a.bucket) - order.indexOf(b.bucket)),
+      rows: rows.sort(
+        (a, b) => order.indexOf(a.bucket) - order.indexOf(b.bucket),
+      ),
       unmatchable,
     };
   },

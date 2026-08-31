@@ -33,8 +33,10 @@ export function rupeesShort(paise: number): string {
   const rupeeValue = Math.round(paise / 100);
   const sign = rupeeValue < 0 ? "-" : "";
   const magnitude = Math.abs(rupeeValue);
-  if (magnitude >= 10_000_000) return `${sign}₹${(magnitude / 10_000_000).toFixed(2)}Cr`;
-  if (magnitude >= 100_000) return `${sign}₹${(magnitude / 100_000).toFixed(1)}L`;
+  if (magnitude >= 10_000_000)
+    return `${sign}₹${(magnitude / 10_000_000).toFixed(2)}Cr`;
+  if (magnitude >= 100_000)
+    return `${sign}₹${(magnitude / 100_000).toFixed(1)}L`;
   return `${sign}₹${magnitude.toLocaleString("en-IN")}`;
 }
 
@@ -52,11 +54,17 @@ export function day(value: Date | string | null | undefined): string {
   if (!value) return "—";
   const date = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 /** Whole days since an instant, or null. Used for ageing, never for display. */
-export function daysSince(value: Date | string | null | undefined): number | null {
+export function daysSince(
+  value: Date | string | null | undefined,
+): number | null {
   if (!value) return null;
   const then = typeof value === "string" ? new Date(value) : value;
   if (Number.isNaN(then.getTime())) return null;

@@ -2,7 +2,11 @@ import { z } from "zod";
 import { reachableGodownIds } from "./scope";
 import { businessZone, startOfBusinessDay } from "./clock";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
-import { ENTITY_INVOICE, ENTITY_PURCHASE_ORDER, ENTITY_STOCK_BALANCE } from "./keys";
+import {
+  ENTITY_INVOICE,
+  ENTITY_PURCHASE_ORDER,
+  ENTITY_STOCK_BALANCE,
+} from "./keys";
 
 /**
  * PLYWOOD — the reports §73 names.
@@ -76,10 +80,16 @@ export const salesAnalysis: QueryDefinition<
     const from = windowStart(await businessZone(ctx), input.sinceDays);
     const invoices = await ctx.tx.plywoodInvoice.findMany({
       where: { customerId: { not: null }, issuedAt: { gte: from } },
-      include: { lines: true, customer: { select: { id: true, displayName: true } } },
+      include: {
+        lines: true,
+        customer: { select: { id: true, displayName: true } },
+      },
     });
 
-    const byProduct = new Map<string, { productName: string; qtyUnits: number; revenuePaise: number }>();
+    const byProduct = new Map<
+      string,
+      { productName: string; qtyUnits: number; revenuePaise: number }
+    >();
     const byCustomer = new Map<
       string,
       { customerName: string; invoiceCount: number; revenuePaise: number }
@@ -179,12 +189,21 @@ export const purchaseAnalysis: QueryDefinition<
       // Drafts are excluded: a draft is a note to self, not a purchase, and
       // counting one as spend reports money the business has not committed.
       where: { createdAt: { gte: from }, state: { not: "draft" } },
-      include: { lines: true, supplier: { select: { id: true, displayName: true } } },
+      include: {
+        lines: true,
+        supplier: { select: { id: true, displayName: true } },
+      },
       orderBy: { createdAt: "asc" },
     });
 
-    const bySupplier = new Map<string, { supplierName: string; orderCount: number; valuePaise: number }>();
-    const byProduct = new Map<string, { productName: string; qtyUnits: number; valuePaise: number }>();
+    const bySupplier = new Map<
+      string,
+      { supplierName: string; orderCount: number; valuePaise: number }
+    >();
+    const byProduct = new Map<
+      string,
+      { productName: string; qtyUnits: number; valuePaise: number }
+    >();
     // Keyed on supplier+product, holding the first and latest price seen in
     // the window. Two ends of a line, not a full series: the question §16 asks
     // is "has this got dearer", and a chart of every order answers it slower.
@@ -263,7 +282,10 @@ export const purchaseAnalysis: QueryDefinition<
       // Only the ones that actually moved. A list where most rows read "no
       // change" buries the two that matter.
       priceTrend: [...trend.values()]
-        .map((row) => ({ ...row, changePaise: row.latestCostPaise - row.firstCostPaise }))
+        .map((row) => ({
+          ...row,
+          changePaise: row.latestCostPaise - row.firstCostPaise,
+        }))
         .filter((row) => row.changePaise !== 0)
         .sort((a, b) => Math.abs(b.changePaise) - Math.abs(a.changePaise)),
     };
@@ -316,7 +338,11 @@ export const inventoryAnalysis: QueryDefinition<
   input: z.object({ sinceDays: z.number().int().min(1).max(3650).optional() }),
   handler: async (ctx, input) => {
     const from = windowStart(await businessZone(ctx), input.sinceDays);
-    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_STOCK_BALANCE);
+    const reachable = await reachableGodownIds(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_STOCK_BALANCE,
+    );
 
     const [balances, movements] = await Promise.all([
       ctx.tx.stockBalance.findMany({
@@ -344,7 +370,10 @@ export const inventoryAnalysis: QueryDefinition<
       _max: { occurredAt: true },
     });
     const lastInwardAt = new Map(
-      lastInward.map((row) => [`${row.productId}:${row.locationId}`, row._max.occurredAt]),
+      lastInward.map((row) => [
+        `${row.productId}:${row.locationId}`,
+        row._max.occurredAt,
+      ]),
     );
 
     const buckets = [
@@ -359,8 +388,11 @@ export const inventoryAnalysis: QueryDefinition<
       // No inward movement recorded means opening stock, which is the oldest
       // thing in the godown — placed in the last bucket rather than the first,
       // because guessing "new" understates ageing and is the flattering error.
-      const days = at ? Math.floor((Date.now() - at.getTime()) / 86_400_000) : Number.POSITIVE_INFINITY;
-      const bucket = buckets.find((b) => days < b.max) ?? buckets[buckets.length - 1]!;
+      const days = at
+        ? Math.floor((Date.now() - at.getTime()) / 86_400_000)
+        : Number.POSITIVE_INFINITY;
+      const bucket =
+        buckets.find((b) => days < b.max) ?? buckets[buckets.length - 1]!;
       bucket.qtyUnits += balance.qtyUnits;
       bucket.valuePaise += balance.qtyUnits * balance.avgUnitCostPaise;
     }
@@ -380,9 +412,16 @@ export const inventoryAnalysis: QueryDefinition<
     return {
       sinceDays: input.sinceDays ?? DEFAULT_DAYS,
       from,
-      valuePaise: balances.reduce((sum, b) => sum + b.qtyUnits * b.avgUnitCostPaise, 0),
+      valuePaise: balances.reduce(
+        (sum, b) => sum + b.qtyUnits * b.avgUnitCostPaise,
+        0,
+      ),
       qtyUnits: balances.reduce((sum, b) => sum + b.qtyUnits, 0),
-      ageing: buckets.map(({ bucket, qtyUnits, valuePaise }) => ({ bucket, qtyUnits, valuePaise })),
+      ageing: buckets.map(({ bucket, qtyUnits, valuePaise }) => ({
+        bucket,
+        qtyUnits,
+        valuePaise,
+      })),
       damage,
       adjustments: movements
         .filter((entry) => entry.kind !== "damaged_out")
@@ -395,7 +434,8 @@ export const inventoryAnalysis: QueryDefinition<
           occurredAt: entry.occurredAt,
         })),
       damageValuePaise: damage.reduce((sum, row) => sum + row.valuePaise, 0),
-      adjustmentCount: movements.filter((entry) => entry.kind !== "damaged_out").length,
+      adjustmentCount: movements.filter((entry) => entry.kind !== "damaged_out")
+        .length,
     };
   },
 };
@@ -411,8 +451,16 @@ export const inventoryAnalysis: QueryDefinition<
 export const financeAgeing: QueryDefinition<
   Record<string, never>,
   {
-    receivable: Array<{ bucket: string; amountPaise: number; invoiceCount: number }>;
-    payable: Array<{ bucket: string; amountPaise: number; invoiceCount: number }>;
+    receivable: Array<{
+      bucket: string;
+      amountPaise: number;
+      invoiceCount: number;
+    }>;
+    payable: Array<{
+      bucket: string;
+      amountPaise: number;
+      invoiceCount: number;
+    }>;
     receivableTotalPaise: number;
     payableTotalPaise: number;
   }
@@ -447,10 +495,15 @@ export const financeAgeing: QueryDefinition<
       const debited = invoice.notes
         .filter((n) => n.noteType === "debit")
         .reduce((sum, n) => sum + n.totalPaise, 0);
-      const outstanding = Math.max(0, invoice.totalPaise + debited - paid - credited);
+      const outstanding = Math.max(
+        0,
+        invoice.totalPaise + debited - paid - credited,
+      );
       if (outstanding === 0) continue;
 
-      const days = Math.floor((Date.now() - invoice.issuedAt.getTime()) / 86_400_000);
+      const days = Math.floor(
+        (Date.now() - invoice.issuedAt.getTime()) / 86_400_000,
+      );
       const into = invoice.customerId ? receivable : payable;
       const bucket = into.find((b) => days < b.max) ?? into[into.length - 1]!;
       bucket.amountPaise += outstanding;
@@ -458,12 +511,19 @@ export const financeAgeing: QueryDefinition<
     }
 
     const strip = (rows: ReturnType<typeof shape>) =>
-      rows.map(({ bucket, amountPaise, invoiceCount }) => ({ bucket, amountPaise, invoiceCount }));
+      rows.map(({ bucket, amountPaise, invoiceCount }) => ({
+        bucket,
+        amountPaise,
+        invoiceCount,
+      }));
 
     return {
       receivable: strip(receivable),
       payable: strip(payable),
-      receivableTotalPaise: receivable.reduce((sum, b) => sum + b.amountPaise, 0),
+      receivableTotalPaise: receivable.reduce(
+        (sum, b) => sum + b.amountPaise,
+        0,
+      ),
       payableTotalPaise: payable.reduce((sum, b) => sum + b.amountPaise, 0),
     };
   },

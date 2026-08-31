@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { reachableGodownIds } from "./scope";
 import { assertPeriodOpen } from "./period";
-import { ValidationError, type CommandDefinition } from "@/server/platform/command";
+import {
+  ValidationError,
+  type CommandDefinition,
+} from "@/server/platform/command";
 import { type QueryDefinition } from "@/server/platform/query";
 import { diffFields, recordActivity } from "@/server/platform/audit";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
@@ -27,10 +30,21 @@ import { ENTITY_STOCK_BALANCE, ENTITY_STOCK_LEDGER } from "./keys";
  * check constraint on the table keeps the two consistent — a kind that says
  * "inward" cannot be stored against a negative delta.
  */
-const INWARD_KINDS = ["purchase_inward", "transfer_in", "adjust_in", "returned_stock"] as const;
-const OUTWARD_KINDS = ["sales_outward", "transfer_out", "adjust_out", "damaged_out"] as const;
+const INWARD_KINDS = [
+  "purchase_inward",
+  "transfer_in",
+  "adjust_in",
+  "returned_stock",
+] as const;
+const OUTWARD_KINDS = [
+  "sales_outward",
+  "transfer_out",
+  "adjust_out",
+  "damaged_out",
+] as const;
 
-export type MovementKind = (typeof INWARD_KINDS)[number] | (typeof OUTWARD_KINDS)[number];
+export type MovementKind =
+  (typeof INWARD_KINDS)[number] | (typeof OUTWARD_KINDS)[number];
 
 /**
  * Weighted average cost — P1.
@@ -49,7 +63,8 @@ export function blendAverageCost(input: {
   const total = input.onHandUnits + input.inwardUnits;
   if (total <= 0) return input.inwardUnitCostPaise;
   const value =
-    input.onHandUnits * input.avgUnitCostPaise + input.inwardUnits * input.inwardUnitCostPaise;
+    input.onHandUnits * input.avgUnitCostPaise +
+    input.inwardUnits * input.inwardUnitCostPaise;
   return Math.round(value / total);
 }
 
@@ -115,7 +130,9 @@ export async function applyMovement(
   const currentAvg = existing[0]?.avg_unit_cost_paise ?? 0;
 
   if (inward && movement.unitCostPaise === undefined) {
-    throw new ValidationError("E_VALIDATION: an inward movement needs a unit cost");
+    throw new ValidationError(
+      "E_VALIDATION: an inward movement needs a unit cost",
+    );
   }
   if (!inward && onHand < movement.qtyUnits) {
     // Refused here as well as by the CHECK constraint, so the operator is told
@@ -159,7 +176,11 @@ export async function applyMovement(
   if (existing[0]) {
     await tx.stockBalance.update({
       where: { id: existing[0].id },
-      data: { qtyUnits: newQty, avgUnitCostPaise: newAvg, version: { increment: 1 } },
+      data: {
+        qtyUnits: newQty,
+        avgUnitCostPaise: newAvg,
+        version: { increment: 1 },
+      },
     });
   } else {
     await tx.stockBalance.create({
@@ -173,7 +194,11 @@ export async function applyMovement(
     });
   }
 
-  return { ledgerId: entry.id, unitCostPaise: appliedCost, onHandUnits: newQty };
+  return {
+    ledgerId: entry.id,
+    unitCostPaise: appliedCost,
+    onHandUnits: newQty,
+  };
 }
 
 /** Shared input shape for the movement commands. */
@@ -189,20 +214,28 @@ export async function assertTradeable(
   productId: string,
   locationId: string,
 ): Promise<void> {
-  const product = await tx.plywoodProduct.findUnique({ where: { id: productId } });
-  if (!product) throw new ValidationError("E_VALIDATION: board not found in this tenant");
+  const product = await tx.plywoodProduct.findUnique({
+    where: { id: productId },
+  });
+  if (!product)
+    throw new ValidationError("E_VALIDATION: board not found in this tenant");
   if (!product.active) {
-    throw new ValidationError("E_VALIDATION: that board has been withdrawn from the catalogue");
+    throw new ValidationError(
+      "E_VALIDATION: that board has been withdrawn from the catalogue",
+    );
   }
   if (product.type === "SERVICE") {
     // A service (sawing, estimating, a rental) has no physical stock. Every
     // direct movement command (receive/issue/transfer/adjust/damage/return)
     // funnels through this one precondition, so this is the single place
     // that refuses all six for a service product.
-    throw new ValidationError("E_VALIDATION: this is a service — it has no stock to move");
+    throw new ValidationError(
+      "E_VALIDATION: this is a service — it has no stock to move",
+    );
   }
   const godown = await tx.location.findUnique({ where: { id: locationId } });
-  if (!godown) throw new ValidationError("E_VALIDATION: godown not found in this tenant");
+  if (!godown)
+    throw new ValidationError("E_VALIDATION: godown not found in this tenant");
 }
 
 /**
@@ -243,7 +276,8 @@ export const receiveStock: CommandDefinition<
     unitCostPaise: z.number().int().min(0),
     reason: z.string().max(400).optional(),
   }),
-  preconditions: async (ctx, input) => assertTradeable(ctx.tx, input.productId, input.locationId),
+  preconditions: async (ctx, input) =>
+    assertTradeable(ctx.tx, input.productId, input.locationId),
   handler: async (ctx, input) => {
     const moved = await applyMovement(ctx.tx, ctx.actor, {
       ...input,
@@ -252,20 +286,29 @@ export const receiveStock: CommandDefinition<
     });
     return {
       result: { ledgerId: moved.ledgerId, onHandUnits: moved.onHandUnits },
-      events: [{ name: "verity.plywood.stock_received", entityId: moved.ledgerId }],
+      events: [
+        { name: "verity.plywood.stock_received", entityId: moved.ledgerId },
+      ],
     };
   },
 };
 
 export const issueStock: CommandDefinition<
-  { productId: string; locationId: string; rackId?: string; qtyUnits: number; reason?: string },
+  {
+    productId: string;
+    locationId: string;
+    rackId?: string;
+    qtyUnits: number;
+    reason?: string;
+  },
   { ledgerId: string; unitCostPaise: number; onHandUnits: number }
 > = {
   key: "verity.plywood.issue_stock",
   entity: ENTITY_STOCK_LEDGER,
   verb: "Create",
   input: z.object({ ...movementInput, reason: z.string().max(400).optional() }),
-  preconditions: async (ctx, input) => assertTradeable(ctx.tx, input.productId, input.locationId),
+  preconditions: async (ctx, input) =>
+    assertTradeable(ctx.tx, input.productId, input.locationId),
   handler: async (ctx, input) => {
     const moved = await applyMovement(ctx.tx, ctx.actor, {
       ...input,
@@ -274,7 +317,9 @@ export const issueStock: CommandDefinition<
     });
     return {
       result: moved,
-      events: [{ name: "verity.plywood.stock_issued", entityId: moved.ledgerId }],
+      events: [
+        { name: "verity.plywood.stock_issued", entityId: moved.ledgerId },
+      ],
     };
   },
 };
@@ -301,7 +346,9 @@ export const transferStock: CommandDefinition<
   }),
   preconditions: async (ctx, input) => {
     if (input.fromLocationId === input.toLocationId) {
-      throw new ValidationError("E_VALIDATION: a transfer needs two different godowns");
+      throw new ValidationError(
+        "E_VALIDATION: a transfer needs two different godowns",
+      );
     }
     await assertTradeable(ctx.tx, input.productId, input.fromLocationId);
     await assertTradeable(ctx.tx, input.productId, input.toLocationId);
@@ -327,7 +374,12 @@ export const transferStock: CommandDefinition<
     });
     return {
       result: { outLedgerId: out.ledgerId, inLedgerId: incoming.ledgerId },
-      events: [{ name: "verity.plywood.stock_transferred", entityId: incoming.ledgerId }],
+      events: [
+        {
+          name: "verity.plywood.stock_transferred",
+          entityId: incoming.ledgerId,
+        },
+      ],
     };
   },
 };
@@ -354,7 +406,8 @@ export const adjustStock: CommandDefinition<
     direction: z.enum(["in", "out"]),
     reason: z.string().min(3).max(400),
   }),
-  preconditions: async (ctx, input) => assertTradeable(ctx.tx, input.productId, input.locationId),
+  preconditions: async (ctx, input) =>
+    assertTradeable(ctx.tx, input.productId, input.locationId),
   handler: async (ctx, input) => {
     const balance = await ctx.tx.stockBalance.findFirst({
       where: { productId: input.productId, locationId: input.locationId },
@@ -375,25 +428,37 @@ export const adjustStock: CommandDefinition<
       entityKey: ENTITY_STOCK_BALANCE,
       entityId: balance?.id ?? moved.ledgerId,
       commandKey: "verity.plywood.adjust_stock",
-      changes: diffFields({ qtyUnits: balance?.qtyUnits ?? 0 }, { qtyUnits: moved.onHandUnits }),
+      changes: diffFields(
+        { qtyUnits: balance?.qtyUnits ?? 0 },
+        { qtyUnits: moved.onHandUnits },
+      ),
     });
 
     return {
       result: { ledgerId: moved.ledgerId, onHandUnits: moved.onHandUnits },
-      events: [{ name: "verity.plywood.stock_adjusted", entityId: moved.ledgerId }],
+      events: [
+        { name: "verity.plywood.stock_adjusted", entityId: moved.ledgerId },
+      ],
     };
   },
 };
 
 export const recordDamagedStock: CommandDefinition<
-  { productId: string; locationId: string; rackId?: string; qtyUnits: number; reason: string },
+  {
+    productId: string;
+    locationId: string;
+    rackId?: string;
+    qtyUnits: number;
+    reason: string;
+  },
   { ledgerId: string; onHandUnits: number }
 > = {
   key: "verity.plywood.record_damaged_stock",
   entity: ENTITY_STOCK_LEDGER,
   verb: "ActionExecute",
   input: z.object({ ...movementInput, reason: z.string().min(3).max(400) }),
-  preconditions: async (ctx, input) => assertTradeable(ctx.tx, input.productId, input.locationId),
+  preconditions: async (ctx, input) =>
+    assertTradeable(ctx.tx, input.productId, input.locationId),
   handler: async (ctx, input) => {
     const moved = await applyMovement(ctx.tx, ctx.actor, {
       ...input,
@@ -402,7 +467,9 @@ export const recordDamagedStock: CommandDefinition<
     });
     return {
       result: { ledgerId: moved.ledgerId, onHandUnits: moved.onHandUnits },
-      events: [{ name: "verity.plywood.stock_damaged", entityId: moved.ledgerId }],
+      events: [
+        { name: "verity.plywood.stock_damaged", entityId: moved.ledgerId },
+      ],
     };
   },
 };
@@ -445,17 +512,21 @@ export const recordReturnedStock: CommandDefinition<
     reason: z.string().min(3).max(400),
     goodsIssueId: z.string().uuid().optional(),
   }),
-  preconditions: async (ctx, input) => assertTradeable(ctx.tx, input.productId, input.locationId),
+  preconditions: async (ctx, input) =>
+    assertTradeable(ctx.tx, input.productId, input.locationId),
   handler: async (ctx, input) => {
     let unitCostPaise: number | undefined;
-    let source: { type: string; id: string; number?: string | null } | undefined;
+    let source:
+      { type: string; id: string; number?: string | null } | undefined;
 
     if (input.goodsIssueId) {
       const issue = await ctx.tx.plywoodGoodsIssue.findUniqueOrThrow({
         where: { id: input.goodsIssueId },
         include: { lines: true },
       });
-      const line = issue.lines.find((candidate) => candidate.productId === input.productId);
+      const line = issue.lines.find(
+        (candidate) => candidate.productId === input.productId,
+      );
       if (!line) {
         throw new ValidationError(
           "E_VALIDATION: that board was not issued on this goods issue",
@@ -465,10 +536,16 @@ export const recordReturnedStock: CommandDefinition<
       // A customer cannot return more than they were given. Without the cap,
       // a return is a way to create stock out of nothing.
       const alreadyReturned = await ctx.tx.stockLedgerEntry.aggregate({
-        where: { kind: "returned_stock", sourceType: "goods_issue", sourceId: issue.id, productId: input.productId },
+        where: {
+          kind: "returned_stock",
+          sourceType: "goods_issue",
+          sourceId: issue.id,
+          productId: input.productId,
+        },
         _sum: { qtyDeltaUnits: true },
       });
-      const returnable = line.qtyIssued - (alreadyReturned._sum.qtyDeltaUnits ?? 0);
+      const returnable =
+        line.qtyIssued - (alreadyReturned._sum.qtyDeltaUnits ?? 0);
       if (input.qtyUnits > returnable) {
         throw new ValidationError(
           `E_VALIDATION: ${line.productNameSnapshot} had ${line.qtyIssued} issued on ${issue.issueNumber} ` +
@@ -538,7 +615,11 @@ export const stockOnHand: QueryDefinition<
   handler: async (ctx, input) => {
     // Layer 2 (P0-01). Without this a godown-scoped role reads every godown's
     // stock, and the number it reads is the business's whole inventory.
-    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_STOCK_BALANCE);
+    const reachable = await reachableGodownIds(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_STOCK_BALANCE,
+    );
     const balances = await ctx.tx.stockBalance.findMany({
       where: {
         // An explicit locationId is intersected with the reachable set rather
@@ -600,7 +681,11 @@ export const lowStock: QueryDefinition<
     // Across every godown, not per godown: the buying decision is made for the
     // business, and a board short in Okhla but plentiful in Noida is a transfer,
     // not a purchase order.
-    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_STOCK_BALANCE);
+    const reachable = await reachableGodownIds(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_STOCK_BALANCE,
+    );
     const products = await ctx.tx.plywoodProduct.findMany({
       // A service has no reorder level worth sweeping — it never holds stock.
       where: { active: true, reorderLevelUnits: { gt: 0 }, type: "PHYSICAL" },
@@ -630,7 +715,10 @@ export const lowStock: QueryDefinition<
 
     return products
       .map((product) => {
-        const onHandUnits = product.balances.reduce((sum, balance) => sum + balance.qtyUnits, 0);
+        const onHandUnits = product.balances.reduce(
+          (sum, balance) => sum + balance.qtyUnits,
+          0,
+        );
         const reservedUnits = reservedByProduct.get(product.id) ?? 0;
         return {
           productId: product.id,
@@ -677,12 +765,19 @@ export const productMovements: QueryDefinition<
     // Noida could read the movement history of every godown in the business —
     // quantities, costs and the orders behind them — just by asking for a
     // product. Layer 1 passed, which is what made it look authorized.
-    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_STOCK_LEDGER);
+    const reachable = await reachableGodownIds(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_STOCK_LEDGER,
+    );
     const entries = await ctx.tx.stockLedgerEntry.findMany({
       where: { productId: input.productId, locationId: { in: reachable } },
       orderBy: { occurredAt: "desc" },
       take: input.limit ?? 100,
-      include: { location: { select: { name: true } }, rack: { select: { rackLabel: true } } },
+      include: {
+        location: { select: { name: true } },
+        rack: { select: { rackLabel: true } },
+      },
     });
 
     return entries.map((entry) => ({

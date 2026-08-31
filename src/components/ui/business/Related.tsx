@@ -32,7 +32,9 @@ export function Related({
             >
               <span>{link.label}</span>
               {link.note && (
-                <span className="tabular shrink-0 text-[13px] text-text-tertiary">{link.note}</span>
+                <span className="tabular shrink-0 text-[13px] text-text-tertiary">
+                  {link.note}
+                </span>
               )}
             </Link>
           </li>

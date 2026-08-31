@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { registerCommand, ValidationError, type CommandDefinition } from "@/server/platform/command";
+import {
+  registerCommand,
+  ValidationError,
+  type CommandDefinition,
+} from "@/server/platform/command";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
 import { ENTITY_BUSINESS_PROFILE, ENTITY_GST_REGISTRATION } from "./keys";
@@ -44,7 +48,9 @@ export type SellerIdentity = {
  * real state, and the refusal belongs at the point a tax document is raised —
  * where it can say which specific field is missing — not at every read.
  */
-export async function sellerIdentity(tx: TenantScopedClient): Promise<SellerIdentity> {
+export async function sellerIdentity(
+  tx: TenantScopedClient,
+): Promise<SellerIdentity> {
   const [profile, registration] = await Promise.all([
     tx.plywoodBusinessProfile.findFirst(),
     tx.plywoodGstRegistration.findFirst({ where: { active: true } }),
@@ -77,7 +83,13 @@ export const setBusinessProfile: CommandDefinition<
     tradeName: z.string().max(200).optional(),
     // Shape only. Validity belongs to the income tax department; this catches
     // a phone number typed into the wrong box.
-    pan: z.string().regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, "PAN must be 5 letters, 4 digits, 1 letter").optional(),
+    pan: z
+      .string()
+      .regex(
+        /^[A-Z]{5}[0-9]{4}[A-Z]$/,
+        "PAN must be 5 letters, 4 digits, 1 letter",
+      )
+      .optional(),
     registeredAddress: z.string().max(500).optional(),
     financialYearStartMonth: z.number().int().min(1).max(12).optional(),
     currencyCode: z.string().length(3).optional(),
@@ -96,7 +108,9 @@ export const setBusinessProfile: CommandDefinition<
             tradeName: input.tradeName ?? null,
             pan: input.pan ?? null,
             registeredAddress: input.registeredAddress ?? null,
-            ...(input.financialYearStartMonth ? { financialYearStartMonth: input.financialYearStartMonth } : {}),
+            ...(input.financialYearStartMonth
+              ? { financialYearStartMonth: input.financialYearStartMonth }
+              : {}),
             ...(input.currencyCode ? { currencyCode: input.currencyCode } : {}),
           },
         })
@@ -153,7 +167,9 @@ export const registerGstRegistration: CommandDefinition<
     // CGST+SGST against IGST on every invoice the business ever raises.
     const stateCode = input.gstin.slice(0, 2);
 
-    const active = await ctx.tx.plywoodGstRegistration.findFirst({ where: { active: true } });
+    const active = await ctx.tx.plywoodGstRegistration.findFirst({
+      where: { active: true },
+    });
     if (active) {
       throw new ValidationError(
         `E_VALIDATION: this business already has an active GST registration (${active.gstin}). ` +
@@ -240,7 +256,6 @@ export const businessSettings: QueryDefinition<
   },
 };
 
-
 /**
  * §3 — what a new business still has to do before it can trade.
  *
@@ -281,26 +296,38 @@ export const onboardingChecklist: QueryDefinition<
   entity: ENTITY_BUSINESS_PROFILE,
   input: z.object({}),
   handler: async (ctx) => {
-    const [profile, registration, godowns, roles, products, suppliers, customers, orders] =
-      await Promise.all([
-        ctx.tx.plywoodBusinessProfile.findFirst({ select: { id: true } }),
-        ctx.tx.plywoodGstRegistration.findFirst({ where: { active: true }, select: { id: true } }),
-        ctx.tx.location.count(),
-        // A role with at least one permission. An empty role is not a
-        // configured team — it is a role that grants nothing, and counting it
-        // as done would tick a step that leaves everyone locked out.
-        ctx.tx.role.count({ where: { permissions: { some: {} } } }),
-        ctx.tx.plywoodProduct.count({ where: { active: true } }),
-        ctx.tx.plywoodSupplier.count({ where: { active: true } }),
-        ctx.tx.plywoodCustomer.count({ where: { active: true } }),
-        ctx.tx.plywoodPurchaseOrder.count(),
-      ]);
+    const [
+      profile,
+      registration,
+      godowns,
+      roles,
+      products,
+      suppliers,
+      customers,
+      orders,
+    ] = await Promise.all([
+      ctx.tx.plywoodBusinessProfile.findFirst({ select: { id: true } }),
+      ctx.tx.plywoodGstRegistration.findFirst({
+        where: { active: true },
+        select: { id: true },
+      }),
+      ctx.tx.location.count(),
+      // A role with at least one permission. An empty role is not a
+      // configured team — it is a role that grants nothing, and counting it
+      // as done would tick a step that leaves everyone locked out.
+      ctx.tx.role.count({ where: { permissions: { some: {} } } }),
+      ctx.tx.plywoodProduct.count({ where: { active: true } }),
+      ctx.tx.plywoodSupplier.count({ where: { active: true } }),
+      ctx.tx.plywoodCustomer.count({ where: { active: true } }),
+      ctx.tx.plywoodPurchaseOrder.count(),
+    ]);
 
     const steps = [
       {
         key: "business_details",
         label: "Business details",
-        description: "Legal name, PAN and registered address. These print on every invoice.",
+        description:
+          "Legal name, PAN and registered address. These print on every invoice.",
         href: "/settings/business",
         done: profile !== null,
         blockedBy: null,
@@ -308,7 +335,8 @@ export const onboardingChecklist: QueryDefinition<
       {
         key: "tax_details",
         label: "Tax details",
-        description: "GSTIN, invoice series, and the rate for each HSN you trade.",
+        description:
+          "GSTIN, invoice series, and the rate for each HSN you trade.",
         href: "/settings/tax",
         done: registration !== null,
         blockedBy: profile === null ? "Business details" : null,
@@ -316,7 +344,8 @@ export const onboardingChecklist: QueryDefinition<
       {
         key: "godowns",
         label: "Godowns",
-        description: "Where stock physically sits. Everything you hold is held somewhere.",
+        description:
+          "Where stock physically sits. Everything you hold is held somewhere.",
         href: "/godowns",
         done: godowns > 0,
         blockedBy: null,
@@ -356,11 +385,18 @@ export const onboardingChecklist: QueryDefinition<
       {
         key: "first_order",
         label: "Ready to trade",
-        description: "Raise your first purchase order and receive the stock against it.",
+        description:
+          "Raise your first purchase order and receive the stock against it.",
         href: "/purchases",
         done: orders > 0,
         blockedBy:
-          suppliers === 0 ? "Suppliers" : godowns === 0 ? "Godowns" : products === 0 ? "Catalogue" : null,
+          suppliers === 0
+            ? "Suppliers"
+            : godowns === 0
+              ? "Godowns"
+              : products === 0
+                ? "Catalogue"
+                : null,
       },
     ];
 

@@ -1,7 +1,16 @@
 import { z } from "zod";
-import { registerCommand, ValidationError, type CommandDefinition } from "@/server/platform/command";
+import {
+  registerCommand,
+  ValidationError,
+  type CommandDefinition,
+} from "@/server/platform/command";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
-import { businessPeriodKey, businessPeriodWindow, businessZone, tenantZone } from "./clock";
+import {
+  businessPeriodKey,
+  businessPeriodWindow,
+  businessZone,
+  tenantZone,
+} from "./clock";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
 import { ENTITY_ACCOUNTING_PERIOD } from "./keys";
 
@@ -52,13 +61,18 @@ export class PeriodClosedError extends ValidationError {
  * into, so a business that has never closed anything is never blocked, and the
  * first close is what creates the boundary.
  */
-export async function assertPeriodOpen(tx: TenantScopedClient, on: Date): Promise<void> {
+export async function assertPeriodOpen(
+  tx: TenantScopedClient,
+  on: Date,
+): Promise<void> {
   // The period an instant belongs to is decided in the BUSINESS's zone (U0-3).
   // This is the highest-consequence use of that rule in the capability: it runs
   // on every document write, so getting it wrong files a real invoice into the
   // wrong month.
   const periodKey = periodKeyOf(on, await tenantZone(tx));
-  const period = await tx.plywoodAccountingPeriod.findFirst({ where: { periodKey } });
+  const period = await tx.plywoodAccountingPeriod.findFirst({
+    where: { periodKey },
+  });
   if (period?.state === "closed") throw new PeriodClosedError(periodKey);
 }
 
@@ -82,14 +96,21 @@ export const closeChecklist: QueryDefinition<
 > = {
   key: "verity.plywood.close_checklist",
   entity: ENTITY_ACCOUNTING_PERIOD,
-  input: z.object({ periodKey: z.string().regex(/^\d{4}-\d{2}$/).optional() }),
+  input: z.object({
+    periodKey: z
+      .string()
+      .regex(/^\d{4}-\d{2}$/)
+      .optional(),
+  }),
   handler: async (ctx, input) => {
     // The period defaults to the month the BUSINESS is in, not UTC's (U0-3).
     const zone = await businessZone(ctx);
     const periodKey = input.periodKey ?? periodKeyOf(new Date(), zone);
     const { startsAt, endsAt } = businessPeriodWindow(zone, periodKey);
 
-    const period = await ctx.tx.plywoodAccountingPeriod.findFirst({ where: { periodKey } });
+    const period = await ctx.tx.plywoodAccountingPeriod.findFirst({
+      where: { periodKey },
+    });
 
     const invoices = await ctx.tx.plywoodInvoice.findMany({
       where: { issuedAt: { gte: startsAt, lt: endsAt } },
@@ -100,7 +121,9 @@ export const closeChecklist: QueryDefinition<
 
     const blockers: Array<{ kind: string; detail: string; count: number }> = [];
 
-    const missingState = sales.filter((invoice) => !invoice.customer?.stateCode).length;
+    const missingState = sales.filter(
+      (invoice) => !invoice.customer?.stateCode,
+    ).length;
     if (missingState > 0) {
       blockers.push({
         kind: "missing_place_of_supply",
@@ -121,12 +144,14 @@ export const closeChecklist: QueryDefinition<
     }
 
     const untaxedPurchases = purchases.filter(
-      (invoice) => invoice.cgstPaise + invoice.sgstPaise + invoice.igstPaise === 0,
+      (invoice) =>
+        invoice.cgstPaise + invoice.sgstPaise + invoice.igstPaise === 0,
     ).length;
     if (untaxedPurchases > 0) {
       blockers.push({
         kind: "no_input_credit",
-        detail: "Supplier invoices with no tax split, so no input credit can be claimed",
+        detail:
+          "Supplier invoices with no tax split, so no input credit can be claimed",
         count: untaxedPurchases,
       });
     }
@@ -149,7 +174,9 @@ export const closeChecklist: QueryDefinition<
         })
       ).map((invoice) => invoice.salesOrderId),
     );
-    const uninvoiced = fulfilled.filter((order) => !invoicedOrderIds.has(order.id)).length;
+    const uninvoiced = fulfilled.filter(
+      (order) => !invoicedOrderIds.has(order.id),
+    ).length;
     if (uninvoiced > 0) {
       blockers.push({
         kind: "uninvoiced_fulfilment",
@@ -186,7 +213,10 @@ export const closePeriod: CommandDefinition<
   handler: async (ctx, input) => {
     const [year, month] = input.periodKey.split("-").map(Number);
     // The window a period covers is the business's own month (U0-3).
-    const { startsAt, endsAt } = businessPeriodWindow(await businessZone(ctx), input.periodKey);
+    const { startsAt, endsAt } = businessPeriodWindow(
+      await businessZone(ctx),
+      input.periodKey,
+    );
 
     if (endsAt > new Date()) {
       throw new ValidationError(
@@ -198,10 +228,14 @@ export const closePeriod: CommandDefinition<
       where: { periodKey: input.periodKey },
     });
     if (existing?.state === "closed") {
-      throw new ValidationError(`E_VALIDATION: ${input.periodKey} is already closed`);
+      throw new ValidationError(
+        `E_VALIDATION: ${input.periodKey} is already closed`,
+      );
     }
 
-    const checklist = await closeChecklist.handler(ctx as never, { periodKey: input.periodKey });
+    const checklist = await closeChecklist.handler(ctx as never, {
+      periodKey: input.periodKey,
+    });
     if (checklist.blockers.length > 0 && !input.force) {
       throw new ValidationError(
         `E_VALIDATION: ${input.periodKey} has ${checklist.blockers.length} unresolved item(s): ` +
@@ -266,7 +300,9 @@ export const reopenPeriod: CommandDefinition<
       where: { periodKey: input.periodKey },
     });
     if (!period || period.state !== "closed") {
-      throw new ValidationError(`E_VALIDATION: ${input.periodKey} is not closed`);
+      throw new ValidationError(
+        `E_VALIDATION: ${input.periodKey} is not closed`,
+      );
     }
 
     const reopened = await ctx.tx.plywoodAccountingPeriod.update({

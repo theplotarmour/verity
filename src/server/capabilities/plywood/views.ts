@@ -1,7 +1,11 @@
 import { z } from "zod";
 import { reachableGodownIds } from "./scope";
 import { type QueryDefinition } from "@/server/platform/query";
-import { ENTITY_PRODUCT, ENTITY_STOCK_BALANCE, ENTITY_STOCK_LEDGER } from "./keys";
+import {
+  ENTITY_PRODUCT,
+  ENTITY_STOCK_BALANCE,
+  ENTITY_STOCK_LEDGER,
+} from "./keys";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
 
 /**
@@ -31,7 +35,6 @@ import type { TenantScopedClient } from "@/server/platform/tenancy";
  * neither contributes.
  */
 
-
 /**
  * Turns a stock movement's source into a document a screen can link to.
  *
@@ -51,23 +54,33 @@ async function resolveMovementOrders(
 ): Promise<Map<string, { orderType: "purchase" | "sales"; orderId: string }>> {
   const receiptIds = [
     ...new Set(
-      movements.filter((m) => m.sourceType === "goods_receipt" && m.sourceId).map((m) => m.sourceId!),
+      movements
+        .filter((m) => m.sourceType === "goods_receipt" && m.sourceId)
+        .map((m) => m.sourceId!),
     ),
   ];
   const issueIds = [
     ...new Set(
-      movements.filter((m) => m.sourceType === "goods_issue" && m.sourceId).map((m) => m.sourceId!),
+      movements
+        .filter((m) => m.sourceType === "goods_issue" && m.sourceId)
+        .map((m) => m.sourceId!),
     ),
   ];
 
-  const resolved = new Map<string, { orderType: "purchase" | "sales"; orderId: string }>();
+  const resolved = new Map<
+    string,
+    { orderType: "purchase" | "sales"; orderId: string }
+  >();
   if (receiptIds.length > 0) {
     const receipts = await tx.plywoodGoodsReceipt.findMany({
       where: { id: { in: receiptIds } },
       select: { id: true, purchaseOrderId: true },
     });
     for (const receipt of receipts) {
-      resolved.set(receipt.id, { orderType: "purchase", orderId: receipt.purchaseOrderId });
+      resolved.set(receipt.id, {
+        orderType: "purchase",
+        orderId: receipt.purchaseOrderId,
+      });
     }
   }
   if (issueIds.length > 0) {
@@ -76,7 +89,10 @@ async function resolveMovementOrders(
       select: { id: true, salesOrderId: true },
     });
     for (const issue of issues) {
-      resolved.set(issue.id, { orderType: "sales", orderId: issue.salesOrderId });
+      resolved.set(issue.id, {
+        orderType: "sales",
+        orderId: issue.salesOrderId,
+      });
     }
   }
   return resolved;
@@ -137,8 +153,16 @@ export const productDetail: QueryDefinition<
       avgUnitCostPaise: number;
       valuePaise: number;
     }>;
-    supplierPricing: Array<{ supplierId: string; supplierName: string; costPaise: number }>;
-    customerPricing: Array<{ customerId: string; customerName: string; pricePaise: number }>;
+    supplierPricing: Array<{
+      supplierId: string;
+      supplierName: string;
+      costPaise: number;
+    }>;
+    customerPricing: Array<{
+      customerId: string;
+      customerName: string;
+      pricePaise: number;
+    }>;
     openPurchases: Array<{
       orderId: string;
       reference: string | null;
@@ -184,8 +208,12 @@ export const productDetail: QueryDefinition<
       where: { id: input.productId },
       include: {
         brand: { select: { id: true, name: true } },
-        plywoodSupplierPrices: { include: { supplier: { select: { id: true, displayName: true } } } },
-        plywoodCustomerPrices: { include: { customer: { select: { id: true, displayName: true } } } },
+        plywoodSupplierPrices: {
+          include: { supplier: { select: { id: true, displayName: true } } },
+        },
+        plywoodCustomerPrices: {
+          include: { customer: { select: { id: true, displayName: true } } },
+        },
       },
     });
     if (!product) return null;
@@ -193,72 +221,88 @@ export const productDetail: QueryDefinition<
     // Layer 2 on every stock read. Without it a godown-scoped role reads the
     // whole business's inventory through a product page — the same hole
     // `stockOnHand` closes, which this module must not reopen.
-    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_STOCK_BALANCE);
+    const reachable = await reachableGodownIds(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_STOCK_BALANCE,
+    );
 
-    const [balances, reservations, purchaseLines, salesLines, movements, lastInvoiceLine] =
-      await Promise.all([
-        ctx.tx.stockBalance.findMany({
-          where: { productId: product.id, locationId: { in: reachable } },
-          include: { location: { select: { id: true, name: true } } },
-        }),
-        ctx.tx.plywoodStockReservation.findMany({
-          where: {
-            productId: product.id,
+    const [
+      balances,
+      reservations,
+      purchaseLines,
+      salesLines,
+      movements,
+      lastInvoiceLine,
+    ] = await Promise.all([
+      ctx.tx.stockBalance.findMany({
+        where: { productId: product.id, locationId: { in: reachable } },
+        include: { location: { select: { id: true, name: true } } },
+      }),
+      ctx.tx.plywoodStockReservation.findMany({
+        where: {
+          productId: product.id,
+          locationId: { in: reachable },
+          releasedAt: null,
+        },
+        select: { locationId: true, qtyUnits: true },
+      }),
+      ctx.tx.plywoodPurchaseOrderLine.findMany({
+        where: {
+          productId: product.id,
+          purchaseOrder: {
+            state: { in: OPEN_PURCHASE_STATES },
             locationId: { in: reachable },
-            releasedAt: null,
           },
-          select: { locationId: true, qtyUnits: true },
-        }),
-        ctx.tx.plywoodPurchaseOrderLine.findMany({
-          where: {
-            productId: product.id,
-            purchaseOrder: {
-              state: { in: OPEN_PURCHASE_STATES },
-              locationId: { in: reachable },
+        },
+        include: {
+          purchaseOrder: {
+            select: {
+              id: true,
+              reference: true,
+              state: true,
+              supplier: { select: { id: true, displayName: true } },
             },
           },
-          include: {
-            purchaseOrder: {
-              select: {
-                id: true,
-                reference: true,
-                state: true,
-                supplier: { select: { id: true, displayName: true } },
-              },
+        },
+      }),
+      ctx.tx.plywoodSalesOrderLine.findMany({
+        where: {
+          productId: product.id,
+          salesOrder: {
+            state: { in: OPEN_SALES_STATES },
+            locationId: { in: reachable },
+          },
+        },
+        include: {
+          salesOrder: {
+            select: {
+              id: true,
+              reference: true,
+              state: true,
+              customer: { select: { id: true, displayName: true } },
             },
           },
-        }),
-        ctx.tx.plywoodSalesOrderLine.findMany({
-          where: {
-            productId: product.id,
-            salesOrder: { state: { in: OPEN_SALES_STATES }, locationId: { in: reachable } },
-          },
-          include: {
-            salesOrder: {
-              select: {
-                id: true,
-                reference: true,
-                state: true,
-                customer: { select: { id: true, displayName: true } },
-              },
-            },
-          },
-        }),
-        ctx.tx.stockLedgerEntry.findMany({
-          where: { productId: product.id, locationId: { in: reachable } },
-          orderBy: { occurredAt: "desc" },
-          take: 50,
-          include: {
-            location: { select: { id: true, name: true } },
-            rack: { select: { rackLabel: true } },
-          },
-        }),
-        ctx.tx.plywoodInvoiceLine.findFirst({
-          where: { productId: product.id, invoice: { customerId: { not: null } } },
-          orderBy: { invoice: { issuedAt: "desc" } },
-          select: { unitPricePaise: true },
-        }),
-      ]);
+        },
+      }),
+      ctx.tx.stockLedgerEntry.findMany({
+        where: { productId: product.id, locationId: { in: reachable } },
+        orderBy: { occurredAt: "desc" },
+        take: 50,
+        include: {
+          location: { select: { id: true, name: true } },
+          rack: { select: { rackLabel: true } },
+        },
+      }),
+      ctx.tx.plywoodInvoiceLine.findFirst({
+        where: {
+          productId: product.id,
+          invoice: { customerId: { not: null } },
+        },
+        orderBy: { invoice: { issuedAt: "desc" } },
+        select: { unitPricePaise: true },
+      }),
+    ]);
 
     const sourceOrders = await resolveMovementOrders(ctx.tx, movements);
 
@@ -266,7 +310,8 @@ export const productDetail: QueryDefinition<
     for (const reservation of reservations) {
       reservedByLocation.set(
         reservation.locationId,
-        (reservedByLocation.get(reservation.locationId) ?? 0) + reservation.qtyUnits,
+        (reservedByLocation.get(reservation.locationId) ?? 0) +
+          reservation.qtyUnits,
       );
     }
 
@@ -286,7 +331,10 @@ export const productDetail: QueryDefinition<
       .sort((a, b) => a.locationName.localeCompare(b.locationName));
 
     const onHandUnits = byGodown.reduce((sum, row) => sum + row.onHandUnits, 0);
-    const reservedUnits = byGodown.reduce((sum, row) => sum + row.reservedUnits, 0);
+    const reservedUnits = byGodown.reduce(
+      (sum, row) => sum + row.reservedUnits,
+      0,
+    );
     const valuePaise = byGodown.reduce((sum, row) => sum + row.valuePaise, 0);
     const incomingUnits = purchaseLines.reduce(
       (sum, line) => sum + Math.max(0, line.qtyOrdered - line.qtyReceived),
@@ -314,13 +362,15 @@ export const productDetail: QueryDefinition<
       // at ₹1,000 in one godown and 1 sheet at ₹2,000 in another average to
       // ₹1,010, not ₹1,500. Guarded because a product with no stock has no
       // average cost, and 0/0 is not zero.
-      avgUnitCostPaise: onHandUnits > 0 ? Math.round(valuePaise / onHandUnits) : 0,
+      avgUnitCostPaise:
+        onHandUnits > 0 ? Math.round(valuePaise / onHandUnits) : 0,
       valuePaise,
       lastSoldPricePaise: lastInvoiceLine?.unitPricePaise ?? null,
       // §17. Zero is not a reorder level — a product with no level set has not
       // opted in to low-stock alerting and must not raise one.
       lowStock:
-        product.reorderLevelUnits > 0 && onHandUnits - reservedUnits <= product.reorderLevelUnits,
+        product.reorderLevelUnits > 0 &&
+        onHandUnits - reservedUnits <= product.reorderLevelUnits,
       byGodown,
       supplierPricing: product.plywoodSupplierPrices
         .map((price) => ({
@@ -367,7 +417,9 @@ export const productDetail: QueryDefinition<
         sourceOrderType: entry.sourceId
           ? (sourceOrders.get(entry.sourceId)?.orderType ?? null)
           : null,
-        sourceOrderId: entry.sourceId ? (sourceOrders.get(entry.sourceId)?.orderId ?? null) : null,
+        sourceOrderId: entry.sourceId
+          ? (sourceOrders.get(entry.sourceId)?.orderId ?? null)
+          : null,
         // Carried so the screen can link a movement to the order that caused
         // it (§71). Without these the movement ledger is a list of numbers
         // with no way back to the document that explains them.
@@ -439,7 +491,11 @@ export const godownDetail: QueryDefinition<
   entity: ENTITY_STOCK_BALANCE,
   input: z.object({ locationId: z.string().uuid() }),
   handler: async (ctx, input) => {
-    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_STOCK_BALANCE);
+    const reachable = await reachableGodownIds(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_STOCK_BALANCE,
+    );
     if (!reachable.includes(input.locationId)) return null;
 
     const location = await ctx.tx.location.findUnique({
@@ -448,45 +504,51 @@ export const godownDetail: QueryDefinition<
     });
     if (!location) return null;
 
-    const [balances, reservations, racks, purchaseLines, movements] = await Promise.all([
-      ctx.tx.stockBalance.findMany({
-        where: { locationId: location.id },
-        include: { product: { include: { brand: { select: { name: true } } } } },
-      }),
-      ctx.tx.plywoodStockReservation.findMany({
-        where: { locationId: location.id, releasedAt: null },
-        select: { productId: true, qtyUnits: true },
-      }),
-      ctx.tx.godownRack.findMany({
-        where: { locationId: location.id },
-        orderBy: { rackLabel: "asc" },
-        select: { id: true, rackLabel: true, active: true },
-      }),
-      ctx.tx.plywoodPurchaseOrderLine.findMany({
-        where: {
-          purchaseOrder: { locationId: location.id, state: { in: OPEN_PURCHASE_STATES } },
-        },
-        include: {
-          purchaseOrder: {
-            select: {
-              id: true,
-              reference: true,
-              state: true,
-              supplier: { select: { id: true, displayName: true } },
+    const [balances, reservations, racks, purchaseLines, movements] =
+      await Promise.all([
+        ctx.tx.stockBalance.findMany({
+          where: { locationId: location.id },
+          include: {
+            product: { include: { brand: { select: { name: true } } } },
+          },
+        }),
+        ctx.tx.plywoodStockReservation.findMany({
+          where: { locationId: location.id, releasedAt: null },
+          select: { productId: true, qtyUnits: true },
+        }),
+        ctx.tx.godownRack.findMany({
+          where: { locationId: location.id },
+          orderBy: { rackLabel: "asc" },
+          select: { id: true, rackLabel: true, active: true },
+        }),
+        ctx.tx.plywoodPurchaseOrderLine.findMany({
+          where: {
+            purchaseOrder: {
+              locationId: location.id,
+              state: { in: OPEN_PURCHASE_STATES },
             },
           },
-        },
-      }),
-      ctx.tx.stockLedgerEntry.findMany({
-        where: { locationId: location.id },
-        orderBy: { occurredAt: "desc" },
-        take: 50,
-        include: {
-          product: { select: { id: true, name: true } },
-          rack: { select: { rackLabel: true } },
-        },
-      }),
-    ]);
+          include: {
+            purchaseOrder: {
+              select: {
+                id: true,
+                reference: true,
+                state: true,
+                supplier: { select: { id: true, displayName: true } },
+              },
+            },
+          },
+        }),
+        ctx.tx.stockLedgerEntry.findMany({
+          where: { locationId: location.id },
+          orderBy: { occurredAt: "desc" },
+          take: 50,
+          include: {
+            product: { select: { id: true, name: true } },
+            rack: { select: { rackLabel: true } },
+          },
+        }),
+      ]);
 
     const sourceOrders = await resolveMovementOrders(ctx.tx, movements);
 
@@ -494,7 +556,8 @@ export const godownDetail: QueryDefinition<
     for (const reservation of reservations) {
       reservedByProduct.set(
         reservation.productId,
-        (reservedByProduct.get(reservation.productId) ?? 0) + reservation.qtyUnits,
+        (reservedByProduct.get(reservation.productId) ?? 0) +
+          reservation.qtyUnits,
       );
     }
 
@@ -513,11 +576,14 @@ export const godownDetail: QueryDefinition<
           valuePaise: balance.qtyUnits * balance.avgUnitCostPaise,
           reorderLevelUnits: balance.product.reorderLevelUnits,
           lowStock:
-            balance.product.reorderLevelUnits > 0 && available <= balance.product.reorderLevelUnits,
+            balance.product.reorderLevelUnits > 0 &&
+            available <= balance.product.reorderLevelUnits,
         };
       })
       .sort(
-        (a, b) => a.brandName.localeCompare(b.brandName) || a.productName.localeCompare(b.productName),
+        (a, b) =>
+          a.brandName.localeCompare(b.brandName) ||
+          a.productName.localeCompare(b.productName),
       );
 
     // Grouped to the order rather than listed per line: the warehouse question
@@ -572,7 +638,9 @@ export const godownDetail: QueryDefinition<
         sourceOrderType: entry.sourceId
           ? (sourceOrders.get(entry.sourceId)?.orderType ?? null)
           : null,
-        sourceOrderId: entry.sourceId ? (sourceOrders.get(entry.sourceId)?.orderId ?? null) : null,
+        sourceOrderId: entry.sourceId
+          ? (sourceOrders.get(entry.sourceId)?.orderId ?? null)
+          : null,
         sourceType: entry.sourceType,
         sourceId: entry.sourceId,
         sourceNumber: entry.sourceNumber,
@@ -629,7 +697,11 @@ export const stockLedger: QueryDefinition<
     limit: z.number().int().min(1).max(1000).optional(),
   }),
   handler: async (ctx, input) => {
-    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_STOCK_LEDGER);
+    const reachable = await reachableGodownIds(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_STOCK_LEDGER,
+    );
 
     const product = await ctx.tx.plywoodProduct.findUnique({
       where: { id: input.productId },
@@ -674,7 +746,9 @@ export const stockLedger: QueryDefinition<
         sourceOrderType: entry.sourceId
           ? (sourceOrders.get(entry.sourceId)?.orderType ?? null)
           : null,
-        sourceOrderId: entry.sourceId ? (sourceOrders.get(entry.sourceId)?.orderId ?? null) : null,
+        sourceOrderId: entry.sourceId
+          ? (sourceOrders.get(entry.sourceId)?.orderId ?? null)
+          : null,
         occurredAt: entry.occurredAt,
         runningBalanceUnits: running,
       };
@@ -688,7 +762,8 @@ export const stockLedger: QueryDefinition<
     return {
       productId: product.id,
       productName: product.name,
-      locationId: input.locationId && locationIds.length === 1 ? input.locationId : null,
+      locationId:
+        input.locationId && locationIds.length === 1 ? input.locationId : null,
       locationName: named?.name ?? null,
       closingUnits: running,
       entries: rows,
@@ -730,11 +805,18 @@ export const sellableStock: QueryDefinition<
   entity: ENTITY_STOCK_BALANCE,
   input: z.object({ customerId: z.string().uuid().optional() }),
   handler: async (ctx, input) => {
-    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_STOCK_BALANCE);
+    const reachable = await reachableGodownIds(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_STOCK_BALANCE,
+    );
 
     const [balances, reservations, prices] = await Promise.all([
       ctx.tx.stockBalance.findMany({
-        where: { locationId: { in: reachable }, product: { active: true, type: "PHYSICAL" } },
+        where: {
+          locationId: { in: reachable },
+          product: { active: true, type: "PHYSICAL" },
+        },
         include: {
           product: { include: { brand: { select: { name: true } } } },
           location: { select: { name: true } },
@@ -757,11 +839,14 @@ export const sellableStock: QueryDefinition<
       const key = `${hold.productId}:${hold.locationId}`;
       reservedBy.set(key, (reservedBy.get(key) ?? 0) + hold.qtyUnits);
     }
-    const priceBy = new Map(prices.map((price) => [price.productId, price.customPricePaise]));
+    const priceBy = new Map(
+      prices.map((price) => [price.productId, price.customPricePaise]),
+    );
 
     return balances
       .map((balance) => {
-        const reserved = reservedBy.get(`${balance.productId}:${balance.locationId}`) ?? 0;
+        const reserved =
+          reservedBy.get(`${balance.productId}:${balance.locationId}`) ?? 0;
         return {
           productId: balance.productId,
           productName: balance.product.name,

@@ -61,8 +61,20 @@ function joinPrereqs(parts: Array<ReactNode | false>): ReactNode | null {
   ));
 }
 
-function PrereqHint({ children, className }: { children: ReactNode; className?: string }) {
-  return <p className={`text-right text-[12px] text-text-tertiary ${className ?? ""}`}>{children}</p>;
+function PrereqHint({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <p
+      className={`text-right text-[12px] text-text-tertiary ${className ?? ""}`}
+    >
+      {children}
+    </p>
+  );
 }
 
 /** State keys are the capability's; these are what a buyer calls them. */
@@ -120,7 +132,8 @@ export function PurchaseDesk({
    */
   // The order the cancel panel is for, so the panel can name it rather than
   // appearing unattached below the table (U1-4).
-  const cancellingOrder = orders.find((order) => order.id === cancelling) ?? null;
+  const cancellingOrder =
+    orders.find((order) => order.id === cancelling) ?? null;
 
   function openPanel(change: () => void) {
     setFailure(null);
@@ -144,16 +157,38 @@ export function PurchaseDesk({
   // id the form would have to look up.
   const receivingOrder = orders.find((order) => order.id === receiving) ?? null;
 
-  const canOrder = suppliers.length > 0 && godowns.length > 0 && boards.length > 0;
+  const canOrder =
+    suppliers.length > 0 && godowns.length > 0 && boards.length > 0;
 
   const priceHint = joinPrereqs([
     suppliers.length === 0 && "a supplier",
-    boards.length === 0 && <>a board in <Link href="/catalogue" className="text-accent-ink hover:underline">Catalogue</Link></>,
+    boards.length === 0 && (
+      <>
+        a board in{" "}
+        <Link href="/catalogue" className="text-accent-ink hover:underline">
+          Catalogue
+        </Link>
+      </>
+    ),
   ]);
   const orderHint = joinPrereqs([
     suppliers.length === 0 && "a supplier",
-    godowns.length === 0 && <>a godown in <Link href="/locations" className="text-accent-ink hover:underline">Locations</Link></>,
-    boards.length === 0 && <>a board in <Link href="/catalogue" className="text-accent-ink hover:underline">Catalogue</Link></>,
+    godowns.length === 0 && (
+      <>
+        a godown in{" "}
+        <Link href="/locations" className="text-accent-ink hover:underline">
+          Locations
+        </Link>
+      </>
+    ),
+    boards.length === 0 && (
+      <>
+        a board in{" "}
+        <Link href="/catalogue" className="text-accent-ink hover:underline">
+          Catalogue
+        </Link>
+      </>
+    ),
   ]);
 
   return (
@@ -191,8 +226,14 @@ export function PurchaseDesk({
       {/* Each disabled action names its own missing prerequisite — three
           different reasons can gate "New order" and a shared "not ready" line
           would tell the buyer nothing they could act on. */}
-      {priceHint && <PrereqHint className="mb-1.5">Agree a price needs {priceHint}.</PrereqHint>}
-      {orderHint && <PrereqHint className="mb-4">New order needs {orderHint}.</PrereqHint>}
+      {priceHint && (
+        <PrereqHint className="mb-1.5">
+          Agree a price needs {priceHint}.
+        </PrereqHint>
+      )}
+      {orderHint && (
+        <PrereqHint className="mb-4">New order needs {orderHint}.</PrereqHint>
+      )}
 
       {newSupplier && (
         <div className="mb-6">
@@ -204,11 +245,15 @@ export function PurchaseDesk({
                   "verity.plywood.create_supplier",
                   {
                     displayName: String(formData.get("name") ?? ""),
-                    ...(formData.get("gstin") ? { gstin: String(formData.get("gstin")) } : {}),
+                    ...(formData.get("gstin")
+                      ? { gstin: String(formData.get("gstin")) }
+                      : {}),
                     ...(formData.get("state")
                       ? { stateCode: String(formData.get("state")) }
                       : {}),
-                    ...(formData.get("phone") ? { phone: String(formData.get("phone")) } : {}),
+                    ...(formData.get("phone")
+                      ? { phone: String(formData.get("phone")) }
+                      : {}),
                   },
                   () => setNewSupplier(false),
                 )
@@ -220,7 +265,11 @@ export function PurchaseDesk({
                 </Field>
               </div>
               <div className="w-[200px]">
-                <Field label="GSTIN" htmlFor="supplier-gstin" hint="15 characters">
+                <Field
+                  label="GSTIN"
+                  htmlFor="supplier-gstin"
+                  hint="15 characters"
+                >
                   <Input id="supplier-gstin" name="gstin" />
                 </Field>
               </div>
@@ -230,7 +279,12 @@ export function PurchaseDesk({
                   htmlFor="supplier-state"
                   hint="Two digits"
                 >
-                  <Input id="supplier-state" name="state" inputMode="numeric" pattern="[0-9]{2}" />
+                  <Input
+                    id="supplier-state"
+                    name="state"
+                    inputMode="numeric"
+                    pattern="[0-9]{2}"
+                  />
                 </Field>
               </div>
               <div className="w-[160px]">
@@ -257,7 +311,9 @@ export function PurchaseDesk({
                   {
                     supplierId: String(formData.get("supplierId") ?? ""),
                     productId: String(formData.get("productId") ?? ""),
-                    negotiatedCostPaise: Math.round(Number(formData.get("cost") ?? 0) * 100),
+                    negotiatedCostPaise: Math.round(
+                      Number(formData.get("cost") ?? 0) * 100,
+                    ),
                   },
                   () => setPricing(false),
                 )
@@ -265,7 +321,12 @@ export function PurchaseDesk({
             >
               <div className="min-w-[200px]">
                 <Field label="Supplier" htmlFor="price-supplier" required>
-                  <Select id="price-supplier" name="supplierId" required defaultValue="">
+                  <Select
+                    id="price-supplier"
+                    name="supplierId"
+                    required
+                    defaultValue=""
+                  >
                     <option value="" disabled>
                       Choose a supplier
                     </option>
@@ -279,7 +340,12 @@ export function PurchaseDesk({
               </div>
               <div className="min-w-[260px] flex-1">
                 <Field label="Board" htmlFor="price-board" required>
-                  <Select id="price-board" name="productId" required defaultValue="">
+                  <Select
+                    id="price-board"
+                    name="productId"
+                    required
+                    defaultValue=""
+                  >
                     <option value="" disabled>
                       Choose a board
                     </option>
@@ -293,15 +359,23 @@ export function PurchaseDesk({
               </div>
               <div className="w-[170px]">
                 <Field label="Agreed cost (₹)" htmlFor="price-cost" required>
-                  <Input id="price-cost" name="cost" type="number" step="0.01" min="0" required />
+                  <Input
+                    id="price-cost"
+                    name="cost"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                  />
                 </Field>
               </div>
               <Button type="submit" variant="primary" disabled={pending}>
                 Save
               </Button>
               <p className="m-0 w-full text-[12px] text-text-tertiary">
-                Used when an order leaves the cost blank. One current price per supplier per board;
-                what it used to be lives in the orders that were placed at it.
+                Used when an order leaves the cost blank. One current price per
+                supplier per board; what it used to be lives in the orders that
+                were placed at it.
               </p>
             </form>
           </Panel>
@@ -331,7 +405,11 @@ export function PurchaseDesk({
                         // weighted average.
                         ...(String(formData.get("cost") ?? "") === ""
                           ? {}
-                          : { unitCostPaise: Math.round(Number(formData.get("cost")) * 100) }),
+                          : {
+                              unitCostPaise: Math.round(
+                                Number(formData.get("cost")) * 100,
+                              ),
+                            }),
                       },
                     ],
                   },
@@ -341,7 +419,12 @@ export function PurchaseDesk({
             >
               <div className="min-w-[200px]">
                 <Field label="Supplier" htmlFor="order-supplier" required>
-                  <Select id="order-supplier" name="supplierId" required defaultValue="">
+                  <Select
+                    id="order-supplier"
+                    name="supplierId"
+                    required
+                    defaultValue=""
+                  >
                     <option value="" disabled>
                       Choose a supplier
                     </option>
@@ -355,7 +438,12 @@ export function PurchaseDesk({
               </div>
               <div className="min-w-[180px]">
                 <Field label="Deliver to" htmlFor="order-godown" required>
-                  <Select id="order-godown" name="locationId" required defaultValue="">
+                  <Select
+                    id="order-godown"
+                    name="locationId"
+                    required
+                    defaultValue=""
+                  >
                     <option value="" disabled>
                       Choose a godown
                     </option>
@@ -369,7 +457,12 @@ export function PurchaseDesk({
               </div>
               <div className="min-w-[240px] flex-1">
                 <Field label="Board" htmlFor="order-board" required>
-                  <Select id="order-board" name="productId" required defaultValue="">
+                  <Select
+                    id="order-board"
+                    name="productId"
+                    required
+                    defaultValue=""
+                  >
                     <option value="" disabled>
                       Choose a board
                     </option>
@@ -383,7 +476,13 @@ export function PurchaseDesk({
               </div>
               <div className="w-[120px]">
                 <Field label="Quantity" htmlFor="order-qty" required>
-                  <Input id="order-qty" name="qty" type="number" min="1" required />
+                  <Input
+                    id="order-qty"
+                    name="qty"
+                    type="number"
+                    min="1"
+                    required
+                  />
                 </Field>
               </div>
               <div className="w-[150px]">
@@ -392,7 +491,13 @@ export function PurchaseDesk({
                   htmlFor="order-cost"
                   hint="Blank uses agreed price"
                 >
-                  <Input id="order-cost" name="cost" type="number" step="0.01" min="0" />
+                  <Input
+                    id="order-cost"
+                    name="cost"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                  />
                 </Field>
               </div>
               <div className="w-[150px]">
@@ -425,7 +530,15 @@ export function PurchaseDesk({
               <caption className="sr-only">Open purchase orders</caption>
               <thead>
                 <tr>
-                  {["Order", "Board", "Status", "Ordered", "Still owed", "Order value", ""].map((heading, index) => (
+                  {[
+                    "Order",
+                    "Board",
+                    "Status",
+                    "Ordered",
+                    "Still owed",
+                    "Order value",
+                    "",
+                  ].map((heading, index) => (
                     <th
                       key={heading || index}
                       className={
@@ -473,7 +586,9 @@ export function PurchaseDesk({
                     {/* U2-3: a bare number beside a rupee figure reads as money.
                         These are sheets, and the column says so. */}
                     <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                      {order.outstandingUnits === 0 ? "—" : sheets(order.outstandingUnits)}
+                      {order.outstandingUnits === 0
+                        ? "—"
+                        : sheets(order.outstandingUnits)}
                     </td>
                     <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
                       {rupees(order.totalCostPaise)}
@@ -485,18 +600,25 @@ export function PurchaseDesk({
                             size="sm"
                             disabled={pending}
                             onClick={() =>
-                              run("verity.plywood.submit_purchase_order", { orderId: order.id })
+                              run("verity.plywood.submit_purchase_order", {
+                                orderId: order.id,
+                              })
                             }
                           >
                             Send to supplier
                           </Button>
                         )}
-                        {(order.state === "submitted" || order.state === "receiving") && (
+                        {(order.state === "submitted" ||
+                          order.state === "receiving") && (
                           <Button
                             size="sm"
                             disabled={pending}
                             onClick={() =>
-                              openPanel(() => setReceiving(receiving === order.id ? null : order.id))
+                              openPanel(() =>
+                                setReceiving(
+                                  receiving === order.id ? null : order.id,
+                                ),
+                              )
                             }
                           >
                             {receiving === order.id ? "Close" : "Receive…"}
@@ -507,10 +629,16 @@ export function PurchaseDesk({
                             size="sm"
                             disabled={pending}
                             onClick={() =>
-                              openPanel(() => setCancelling(cancelling === order.id ? null : order.id))
+                              openPanel(() =>
+                                setCancelling(
+                                  cancelling === order.id ? null : order.id,
+                                ),
+                              )
                             }
                           >
-                            {cancelling === order.id ? "Keep order" : "Cancel order…"}
+                            {cancelling === order.id
+                              ? "Keep order"
+                              : "Cancel order…"}
                           </Button>
                         )}
                       </div>
@@ -527,7 +655,10 @@ export function PurchaseDesk({
               action={(formData) =>
                 run(
                   "verity.plywood.cancel_purchase_order",
-                  { orderId: cancelling, reason: String(formData.get("reason") ?? "") },
+                  {
+                    orderId: cancelling,
+                    reason: String(formData.get("reason") ?? ""),
+                  },
                   () => setCancelling(null),
                 )
               }
@@ -552,8 +683,9 @@ export function PurchaseDesk({
                 Cancel order
               </Button>
               <p className="m-0 w-full text-[12px] text-text-tertiary">
-                Anything already received stays received. Cancelling closes what is still owed; it
-                does not unwind stock that came through the door.
+                Anything already received stays received. Cancelling closes what
+                is still owed; it does not unwind stock that came through the
+                door.
               </p>
             </form>
           )}
@@ -564,7 +696,9 @@ export function PurchaseDesk({
               pending={pending}
               onClose={() => setReceiving(null)}
               onSubmit={(input) =>
-                run("verity.plywood.receive_goods", input, () => setReceiving(null))
+                run("verity.plywood.receive_goods", input, () =>
+                  setReceiving(null),
+                )
               }
             />
           )}
@@ -577,17 +711,19 @@ export function PurchaseDesk({
             <caption className="sr-only">Suppliers</caption>
             <thead>
               <tr>
-                {["Supplier", "GSTIN", "GST state", "Open orders"].map((heading, index) => (
-                  <th
-                    key={heading}
-                    className={
-                      "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                      (index === 0 ? "text-left" : "text-right")
-                    }
-                  >
-                    {heading}
-                  </th>
-                ))}
+                {["Supplier", "GSTIN", "GST state", "Open orders"].map(
+                  (heading, index) => (
+                    <th
+                      key={heading}
+                      className={
+                        "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
+                        (index === 0 ? "text-left" : "text-right")
+                      }
+                    >
+                      {heading}
+                    </th>
+                  ),
+                )}
               </tr>
             </thead>
             <tbody>
@@ -640,7 +776,9 @@ function ReceiveForm({
   onClose: () => void;
 }) {
   const [quantities, setQuantities] = useState<Record<string, string>>(() =>
-    Object.fromEntries(order.lines.map((line) => [line.productId, String(line.qtyOutstanding)])),
+    Object.fromEntries(
+      order.lines.map((line) => [line.productId, String(line.qtyOutstanding)]),
+    ),
   );
 
   const lines = order.lines
@@ -651,14 +789,19 @@ function ReceiveForm({
     // A line receiving nothing is omitted rather than sent as zero: the command
     // requires a positive quantity, and "none of this arrived" is expressed by
     // its absence.
-    .filter((line) => Number.isFinite(line.qtyReceived) && line.qtyReceived > 0);
+    .filter(
+      (line) => Number.isFinite(line.qtyReceived) && line.qtyReceived > 0,
+    );
 
   return (
     <div className="mt-4 rounded-lg bg-glass-2 p-4">
       <div className="mb-3 flex items-baseline justify-between gap-4">
         <h3 className="m-0 text-[13px] font-medium text-text">
           Receive against {order.reference ?? `order ${order.id.slice(0, 8)}`}
-          <span className="font-normal text-text-tertiary"> · {order.supplierName}</span>
+          <span className="font-normal text-text-tertiary">
+            {" "}
+            · {order.supplierName}
+          </span>
         </h3>
         <Button size="sm" onClick={onClose} disabled={pending}>
           Close
@@ -673,7 +816,10 @@ function ReceiveForm({
         <>
           <div className="flex flex-col gap-3">
             {order.lines.map((line) => (
-              <div key={line.productId} className="flex flex-wrap items-end gap-3">
+              <div
+                key={line.productId}
+                className="flex flex-wrap items-end gap-3"
+              >
                 <div className="min-w-[240px] flex-1">
                   <Field
                     label={line.name}
@@ -707,8 +853,9 @@ function ReceiveForm({
               {pending ? "Recording…" : "Record receipt"}
             </Button>
             <p className="m-0 text-[12px] text-text-tertiary">
-              Costed at what the order agreed. Receiving moves the stock into the godown in the same
-              step, and more than was ordered is refused rather than accepted.
+              Costed at what the order agreed. Receiving moves the stock into
+              the godown in the same step, and more than was ordered is refused
+              rather than accepted.
             </p>
           </div>
         </>
@@ -716,4 +863,3 @@ function ReceiveForm({
     </div>
   );
 }
-

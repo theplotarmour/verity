@@ -37,5 +37,7 @@ export function movementHref(
   orderId: string | null | undefined,
 ): string | null {
   if (!orderType || !orderId) return null;
-  return orderType === "purchase" ? `/purchases/${orderId}` : `/sales/${orderId}`;
+  return orderType === "purchase"
+    ? `/purchases/${orderId}`
+    : `/sales/${orderId}`;
 }

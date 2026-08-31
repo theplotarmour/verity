@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { registerContribution } from "@/server/platform/contribution";
-import { registerCommand, ValidationError, type CommandDefinition } from "@/server/platform/command";
+import {
+  registerCommand,
+  ValidationError,
+  type CommandDefinition,
+} from "@/server/platform/command";
 import { registerBusinessIdentity } from "./business";
 import { registerTax } from "./tax";
 import { registerBusinessActivities } from "./activities";
@@ -14,7 +18,12 @@ import {
   purchaseReviewQueue,
   raiseInvoiceNote,
 } from "./finance";
-import { godownDetail, productDetail, sellableStock, stockLedger } from "./views";
+import {
+  godownDetail,
+  productDetail,
+  sellableStock,
+  stockLedger,
+} from "./views";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import { diffFields, recordActivity } from "@/server/platform/audit";
 import { notify } from "@/server/platform/notification";
@@ -130,27 +139,33 @@ export * from "./itc";
 
 /* ================================= brands ================================= */
 
-export const createBrand: CommandDefinition<{ name: string }, { id: string }> = {
-  key: "verity.plywood.create_brand",
-  entity: ENTITY_BRAND,
-  verb: "Create",
-  input: z.object({ name: z.string().min(1).max(120) }),
-  preconditions: async (ctx, input) => {
-    // The unique index would catch this, but a named failure reads better than
-    // a constraint violation on a screen.
-    const clash = await ctx.tx.plywoodBrand.findFirst({ where: { name: input.name } });
-    if (clash) throw new ValidationError("E_VALIDATION: a brand with that name already exists");
-  },
-  handler: async (ctx, input) => {
-    const brand = await ctx.tx.plywoodBrand.create({
-      data: { tenantId: ctx.actor.tenantId, name: input.name },
-    });
-    return {
-      result: { id: brand.id },
-      events: [{ name: "verity.plywood.brand_created", entityId: brand.id }],
-    };
-  },
-};
+export const createBrand: CommandDefinition<{ name: string }, { id: string }> =
+  {
+    key: "verity.plywood.create_brand",
+    entity: ENTITY_BRAND,
+    verb: "Create",
+    input: z.object({ name: z.string().min(1).max(120) }),
+    preconditions: async (ctx, input) => {
+      // The unique index would catch this, but a named failure reads better than
+      // a constraint violation on a screen.
+      const clash = await ctx.tx.plywoodBrand.findFirst({
+        where: { name: input.name },
+      });
+      if (clash)
+        throw new ValidationError(
+          "E_VALIDATION: a brand with that name already exists",
+        );
+    },
+    handler: async (ctx, input) => {
+      const brand = await ctx.tx.plywoodBrand.create({
+        data: { tenantId: ctx.actor.tenantId, name: input.name },
+      });
+      return {
+        result: { id: brand.id },
+        events: [{ name: "verity.plywood.brand_created", entityId: brand.id }],
+      };
+    },
+  };
 
 export const setBrandActive: CommandDefinition<
   { brandId: string; active: boolean },
@@ -171,7 +186,9 @@ export const setBrandActive: CommandDefinition<
       result: { id: brand.id },
       events: [
         {
-          name: input.active ? "verity.plywood.brand_activated" : "verity.plywood.brand_deactivated",
+          name: input.active
+            ? "verity.plywood.brand_activated"
+            : "verity.plywood.brand_deactivated",
           entityId: brand.id,
         },
       ],
@@ -230,10 +247,15 @@ export const createProduct: CommandDefinition<
     type: z.enum(PRODUCT_TYPES).optional(),
   }),
   preconditions: async (ctx, input) => {
-    const brand = await ctx.tx.plywoodBrand.findUnique({ where: { id: input.brandId } });
-    if (!brand) throw new ValidationError("E_VALIDATION: brand not found in this tenant");
+    const brand = await ctx.tx.plywoodBrand.findUnique({
+      where: { id: input.brandId },
+    });
+    if (!brand)
+      throw new ValidationError("E_VALIDATION: brand not found in this tenant");
     if (!brand.active) {
-      throw new ValidationError("E_VALIDATION: cannot add a product to a deactivated brand");
+      throw new ValidationError(
+        "E_VALIDATION: cannot add a product to a deactivated brand",
+      );
     }
   },
   handler: async (ctx, input) => {
@@ -255,7 +277,9 @@ export const createProduct: CommandDefinition<
     });
     return {
       result: { id: product.id },
-      events: [{ name: "verity.plywood.product_created", entityId: product.id }],
+      events: [
+        { name: "verity.plywood.product_created", entityId: product.id },
+      ],
     };
   },
 };
@@ -300,7 +324,9 @@ export const editProduct: CommandDefinition<
         ...(input.reorderLevelUnits === undefined
           ? {}
           : { reorderLevelUnits: input.reorderLevelUnits }),
-        ...(input.unitLabel === undefined ? {} : { unitLabel: input.unitLabel }),
+        ...(input.unitLabel === undefined
+          ? {}
+          : { unitLabel: input.unitLabel }),
         version: { increment: 1 },
       },
     });
@@ -379,16 +405,27 @@ export const defineGodownRack: CommandDefinition<
   key: "verity.plywood.define_godown_rack",
   entity: ENTITY_GODOWN_RACK,
   verb: "Create",
-  input: z.object({ locationId: z.string().uuid(), rackLabel: z.string().min(1).max(60) }),
+  input: z.object({
+    locationId: z.string().uuid(),
+    rackLabel: z.string().min(1).max(60),
+  }),
   preconditions: async (ctx, input) => {
     // The composite foreign key would reject a cross-tenant Location, but a
     // named precondition is a better error than a constraint violation.
-    const location = await ctx.tx.location.findUnique({ where: { id: input.locationId } });
-    if (!location) throw new ValidationError("E_VALIDATION: godown not found in this tenant");
+    const location = await ctx.tx.location.findUnique({
+      where: { id: input.locationId },
+    });
+    if (!location)
+      throw new ValidationError(
+        "E_VALIDATION: godown not found in this tenant",
+      );
     const clash = await ctx.tx.godownRack.findFirst({
       where: { locationId: input.locationId, rackLabel: input.rackLabel },
     });
-    if (clash) throw new ValidationError("E_VALIDATION: that rack already exists in this godown");
+    if (clash)
+      throw new ValidationError(
+        "E_VALIDATION: that rack already exists in this godown",
+      );
   },
   handler: async (ctx, input) => {
     const rack = await ctx.tx.godownRack.create({
@@ -400,7 +437,9 @@ export const defineGodownRack: CommandDefinition<
     });
     return {
       result: { id: rack.id },
-      events: [{ name: "verity.plywood.godown_rack_defined", entityId: rack.id }],
+      events: [
+        { name: "verity.plywood.godown_rack_defined", entityId: rack.id },
+      ],
     };
   },
 };
@@ -514,7 +553,11 @@ export const listGodownRacks: QueryDefinition<
   handler: async (ctx, input) => {
     // Layer 2. Audit finding F-09: rack layout is a map of another branch's
     // godown, and it was readable tenant-wide.
-    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_GODOWN_RACK);
+    const reachable = await reachableGodownIds(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_GODOWN_RACK,
+    );
     const racks = await ctx.tx.godownRack.findMany({
       where: {
         locationId: { in: reachable },
@@ -529,7 +572,11 @@ export const listGodownRacks: QueryDefinition<
     // racks in one business's godowns, and a join already carried the name.
     const byLocation = new Map<
       string,
-      { locationId: string; locationName: string; racks: Array<{ id: string; rackLabel: string; active: boolean }> }
+      {
+        locationId: string;
+        locationName: string;
+        racks: Array<{ id: string; rackLabel: string; active: boolean }>;
+      }
     >();
     for (const rack of racks) {
       const existing = byLocation.get(rack.locationId) ?? {
@@ -537,7 +584,11 @@ export const listGodownRacks: QueryDefinition<
         locationName: rack.location.name,
         racks: [],
       };
-      existing.racks.push({ id: rack.id, rackLabel: rack.rackLabel, active: rack.active });
+      existing.racks.push({
+        id: rack.id,
+        rackLabel: rack.rackLabel,
+        active: rack.active,
+      });
       byLocation.set(rack.locationId, existing);
     }
     return [...byLocation.values()];
@@ -774,7 +825,12 @@ export function registerPlywoodCapability(): void {
         cadence: "daily",
         run: async ({ tx, tenantId }) => {
           const short = await tx.$queryRaw<
-            { id: string; name: string; on_hand: bigint; reorder_level_units: number }[]
+            {
+              id: string;
+              name: string;
+              on_hand: bigint;
+              reorder_level_units: number;
+            }[]
           >`SELECT p.id,
                    p.name,
                    COALESCE((SELECT sum(b.qty_units) FROM stock_balance b WHERE b.product_id = p.id), 0) AS on_hand,
@@ -792,7 +848,11 @@ export function registerPlywoodCapability(): void {
           // belong to the client and permissions are the model.
           const buyers = await tx.tenantMembership.findMany({
             where: {
-              role: { permissions: { some: { verb: "Create", entity: ENTITY_STOCK_LEDGER } } },
+              role: {
+                permissions: {
+                  some: { verb: "Create", entity: ENTITY_STOCK_LEDGER },
+                },
+              },
             },
             select: { userId: true },
           });

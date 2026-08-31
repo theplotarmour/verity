@@ -98,11 +98,17 @@ export function ContextPanel({
             transition={
               reducedMotion
                 ? { duration: 0 }
-                : { duration: open ? 0.45 : 0.35, ease: open ? slideIn : slideOut }
+                : {
+                    duration: open ? 0.45 : 0.35,
+                    ease: open ? slideIn : slideOut,
+                  }
             }
           >
             <div className="flex items-center justify-between gap-3">
-              <h2 id={titleId} className="m-0 text-[17px] font-normal text-text">
+              <h2
+                id={titleId}
+                className="m-0 text-[17px] font-normal text-text"
+              >
                 {title}
               </h2>
               <Button size="sm" onClick={onClose}>

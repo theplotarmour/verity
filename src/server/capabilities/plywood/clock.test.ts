@@ -33,7 +33,10 @@ describe("business-zone period boundaries (U0-3)", () => {
   });
 
   it("gives a half-open window that covers exactly one month", () => {
-    const { startsAt, endsAt } = businessPeriodWindow("Asia/Kolkata", "2026-09");
+    const { startsAt, endsAt } = businessPeriodWindow(
+      "Asia/Kolkata",
+      "2026-09",
+    );
     expect(startsAt.toISOString()).toBe("2026-08-31T18:30:00.000Z");
     expect(endsAt.toISOString()).toBe("2026-09-30T18:30:00.000Z");
     // The instant from the audit falls inside September, which is the whole

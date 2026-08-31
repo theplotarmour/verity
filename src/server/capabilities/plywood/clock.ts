@@ -64,15 +64,26 @@ function offsetMs(instant: Date, zone: string): number {
     minute: "2-digit",
     second: "2-digit",
   }).formatToParts(instant);
-  const at = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? "0");
+  const at = (type: string) =>
+    Number(parts.find((part) => part.type === type)?.value ?? "0");
   // `hour` renders as 24 at midnight under some ICU versions; 24 % 24 is the
   // same instant as 0 and keeps the arithmetic honest.
-  const asIfUtc = Date.UTC(at("year"), at("month") - 1, at("day"), at("hour") % 24, at("minute"), at("second"));
+  const asIfUtc = Date.UTC(
+    at("year"),
+    at("month") - 1,
+    at("day"),
+    at("hour") % 24,
+    at("minute"),
+    at("second"),
+  );
   return asIfUtc - instant.getTime();
 }
 
 /** The wall-clock calendar date in the zone. */
-function partsIn(instant: Date, zone: string): { year: number; month: number; day: number } {
+function partsIn(
+  instant: Date,
+  zone: string,
+): { year: number; month: number; day: number } {
   const shifted = new Date(instant.getTime() + offsetMs(instant, zone));
   return {
     year: shifted.getUTCFullYear(),
@@ -88,7 +99,12 @@ function partsIn(instant: Date, zone: string): { year: number; month: number; da
  * second re-measures at the candidate, which matters when the boundary being
  * sought is itself a daylight-saving transition and the two offsets differ.
  */
-function instantAtLocalMidnight(zone: string, year: number, month: number, day: number): Date {
+function instantAtLocalMidnight(
+  zone: string,
+  year: number,
+  month: number,
+  day: number,
+): Date {
   const naive = Date.UTC(year, month - 1, day);
   const firstPass = naive - offsetMs(new Date(naive), zone);
   return new Date(naive - offsetMs(new Date(firstPass), zone));
@@ -101,13 +117,19 @@ export function startOfBusinessDay(zone: string, at: Date = new Date()): Date {
 }
 
 /** Midnight on the first of this month, in the business's own zone. */
-export function startOfBusinessMonth(zone: string, at: Date = new Date()): Date {
+export function startOfBusinessMonth(
+  zone: string,
+  at: Date = new Date(),
+): Date {
   const { year, month } = partsIn(at, zone);
   return instantAtLocalMidnight(zone, year, month, 1);
 }
 
 /** The first instant of the month after the one containing `at`. */
-export function startOfNextBusinessMonth(zone: string, at: Date = new Date()): Date {
+export function startOfNextBusinessMonth(
+  zone: string,
+  at: Date = new Date(),
+): Date {
   const { year, month } = partsIn(at, zone);
   return month === 12
     ? instantAtLocalMidnight(zone, year + 1, 1, 1)

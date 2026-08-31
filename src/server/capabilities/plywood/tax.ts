@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { registerCommand, ValidationError, type CommandDefinition } from "@/server/platform/command";
+import {
+  registerCommand,
+  ValidationError,
+  type CommandDefinition,
+} from "@/server/platform/command";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
 import { businessZone, startOfBusinessMonth } from "./clock";
@@ -108,14 +112,18 @@ export const setTaxRule: CommandDefinition<
     authority: z.string().max(200).optional(),
   }),
   handler: async (ctx, input) => {
-    const registration = await ctx.tx.plywoodGstRegistration.findFirst({ where: { active: true } });
+    const registration = await ctx.tx.plywoodGstRegistration.findFirst({
+      where: { active: true },
+    });
     if (!registration) {
       throw new ValidationError(
         "E_VALIDATION: this business has no GST registration, so a rate has nothing to apply under",
       );
     }
 
-    const effectiveFrom = input.effectiveFrom ? new Date(input.effectiveFrom) : new Date();
+    const effectiveFrom = input.effectiveFrom
+      ? new Date(input.effectiveFrom)
+      : new Date();
 
     // Supersede rather than overwrite. The old rate stays in force for the
     // invoices raised under it — that is the whole reason these rows are
@@ -159,7 +167,11 @@ export const setTaxRule: CommandDefinition<
     // row would mean two rows to keep in step; instead the resolver reads
     // cgst+sgst when the supply is local and doubles it when it is not.
     return {
-      result: { id: rule.id, hsnCode: rule.hsnCode, supersededRuleId: current?.id ?? null },
+      result: {
+        id: rule.id,
+        hsnCode: rule.hsnCode,
+        supersededRuleId: current?.id ?? null,
+      },
       events: [
         {
           name: "verity.plywood.tax_rule_set",
@@ -194,7 +206,10 @@ export const taxSummary: QueryDefinition<
 > = {
   key: "verity.plywood.tax_summary",
   entity: ENTITY_INVOICE,
-  input: z.object({ from: z.string().datetime().optional(), to: z.string().datetime().optional() }),
+  input: z.object({
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
+  }),
   handler: async (ctx, input) => {
     const now = new Date();
     // Default window: the current month, which is the period an accountant is
@@ -212,8 +227,11 @@ export const taxSummary: QueryDefinition<
     const sales = invoices.filter((invoice) => invoice.customerId !== null);
     const purchases = invoices.filter((invoice) => invoice.supplierId !== null);
 
-    const taxOf = (invoice: { cgstPaise: number; sgstPaise: number; igstPaise: number }) =>
-      invoice.cgstPaise + invoice.sgstPaise + invoice.igstPaise;
+    const taxOf = (invoice: {
+      cgstPaise: number;
+      sgstPaise: number;
+      igstPaise: number;
+    }) => invoice.cgstPaise + invoice.sgstPaise + invoice.igstPaise;
 
     const outputGross = sales.reduce((sum, invoice) => sum + taxOf(invoice), 0);
     const creditNoteTaxPaise = sales.reduce(
@@ -221,7 +239,10 @@ export const taxSummary: QueryDefinition<
         sum +
         invoice.notes
           .filter((note) => note.noteType === "credit")
-          .reduce((n, note) => n + note.cgstPaise + note.sgstPaise + note.igstPaise, 0),
+          .reduce(
+            (n, note) => n + note.cgstPaise + note.sgstPaise + note.igstPaise,
+            0,
+          ),
       0,
     );
     const debitNoteTax = sales.reduce(
@@ -229,16 +250,26 @@ export const taxSummary: QueryDefinition<
         sum +
         invoice.notes
           .filter((note) => note.noteType === "debit")
-          .reduce((n, note) => n + note.cgstPaise + note.sgstPaise + note.igstPaise, 0),
+          .reduce(
+            (n, note) => n + note.cgstPaise + note.sgstPaise + note.igstPaise,
+            0,
+          ),
       0,
     );
 
     const outputTaxPaise = outputGross + debitNoteTax - creditNoteTaxPaise;
-    const inputTaxPaise = purchases.reduce((sum, invoice) => sum + taxOf(invoice), 0);
+    const inputTaxPaise = purchases.reduce(
+      (sum, invoice) => sum + taxOf(invoice),
+      0,
+    );
 
     // Exceptions are the accountant's actual work (§63). Each is something a
     // person has to go and fix, named with the document it is on.
-    const exceptions: Array<{ kind: string; detail: string; documentNumber: string }> = [];
+    const exceptions: Array<{
+      kind: string;
+      detail: string;
+      documentNumber: string;
+    }> = [];
     for (const invoice of sales) {
       if (!invoice.customer?.stateCode) {
         exceptions.push({
@@ -309,14 +340,27 @@ export const gstr1Working: QueryDefinition<
       taxablePaise: number;
       taxPaise: number;
     }>;
-    b2c: Array<{ invoiceNumber: string; placeOfSupply: string; taxablePaise: number; taxPaise: number }>;
-    hsnSummary: Array<{ hsnCode: string; qtyUnits: number; taxablePaise: number; taxPaise: number }>;
+    b2c: Array<{
+      invoiceNumber: string;
+      placeOfSupply: string;
+      taxablePaise: number;
+      taxPaise: number;
+    }>;
+    hsnSummary: Array<{
+      hsnCode: string;
+      qtyUnits: number;
+      taxablePaise: number;
+      taxPaise: number;
+    }>;
     validations: string[];
   }
 > = {
   key: "verity.plywood.gstr1_working",
   entity: ENTITY_INVOICE,
-  input: z.object({ from: z.string().datetime().optional(), to: z.string().datetime().optional() }),
+  input: z.object({
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
+  }),
   handler: async (ctx, input) => {
     const now = new Date();
     const from = input.from
@@ -330,8 +374,11 @@ export const gstr1Working: QueryDefinition<
       orderBy: { sequenceNumber: "asc" },
     });
 
-    const taxOf = (row: { cgstPaise: number; sgstPaise: number; igstPaise: number }) =>
-      row.cgstPaise + row.sgstPaise + row.igstPaise;
+    const taxOf = (row: {
+      cgstPaise: number;
+      sgstPaise: number;
+      igstPaise: number;
+    }) => row.cgstPaise + row.sgstPaise + row.igstPaise;
 
     const b2b = [];
     const b2c = [];
@@ -355,12 +402,19 @@ export const gstr1Working: QueryDefinition<
       }
     }
 
-    const byHsn = new Map<string, { qtyUnits: number; taxablePaise: number; taxPaise: number }>();
+    const byHsn = new Map<
+      string,
+      { qtyUnits: number; taxablePaise: number; taxPaise: number }
+    >();
     for (const invoice of invoices) {
       const invoiceTax = taxOf(invoice);
       for (const line of invoice.lines) {
         const key = line.hsnCodeSnapshot || "UNKNOWN";
-        const entry = byHsn.get(key) ?? { qtyUnits: 0, taxablePaise: 0, taxPaise: 0 };
+        const entry = byHsn.get(key) ?? {
+          qtyUnits: 0,
+          taxablePaise: 0,
+          taxPaise: 0,
+        };
         entry.qtyUnits += line.qtyUnits;
         entry.taxablePaise += line.lineTotalPaise;
         // Apportioned by line value, because tax is stored on the invoice
@@ -368,7 +422,9 @@ export const gstr1Working: QueryDefinition<
         // exact at invoice level and apportioned within it.
         entry.taxPaise +=
           invoice.taxablePaise > 0
-            ? Math.round((invoiceTax * line.lineTotalPaise) / invoice.taxablePaise)
+            ? Math.round(
+                (invoiceTax * line.lineTotalPaise) / invoice.taxablePaise,
+              )
             : 0;
         byHsn.set(key, entry);
       }
@@ -376,7 +432,9 @@ export const gstr1Working: QueryDefinition<
 
     const validations: string[] = [];
     // Sequence continuity is what a GST officer checks first.
-    const numbers = invoices.map((invoice) => invoice.sequenceNumber).sort((a, b) => a - b);
+    const numbers = invoices
+      .map((invoice) => invoice.sequenceNumber)
+      .sort((a, b) => a - b);
     for (let i = 1; i < numbers.length; i += 1) {
       if (numbers[i]! !== numbers[i - 1]! + 1) {
         validations.push(
@@ -391,12 +449,14 @@ export const gstr1Working: QueryDefinition<
     return {
       b2b,
       b2c,
-      hsnSummary: [...byHsn.entries()].map(([hsnCode, entry]) => ({ hsnCode, ...entry })),
+      hsnSummary: [...byHsn.entries()].map(([hsnCode, entry]) => ({
+        hsnCode,
+        ...entry,
+      })),
       validations,
     };
   },
 };
-
 
 /**
  * GSTR-3B working: the summary return, from posted documents (§62).
@@ -456,7 +516,10 @@ export const gstr3bWorking: QueryDefinition<
 > = {
   key: "verity.plywood.gstr3b_working",
   entity: ENTITY_INVOICE,
-  input: z.object({ from: z.string().datetime().optional(), to: z.string().datetime().optional() }),
+  input: z.object({
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
+  }),
   handler: async (ctx, input) => {
     const now = new Date();
     const from = input.from
@@ -469,8 +532,11 @@ export const gstr3bWorking: QueryDefinition<
       include: { notes: true, customer: true, supplier: true },
     });
 
-    const taxOf = (row: { cgstPaise: number; sgstPaise: number; igstPaise: number }) =>
-      row.cgstPaise + row.sgstPaise + row.igstPaise;
+    const taxOf = (row: {
+      cgstPaise: number;
+      sgstPaise: number;
+      igstPaise: number;
+    }) => row.cgstPaise + row.sgstPaise + row.igstPaise;
 
     const sales = invoices.filter((invoice) => invoice.customerId !== null);
     const purchases = invoices.filter((invoice) => invoice.supplierId !== null);
@@ -478,13 +544,17 @@ export const gstr3bWorking: QueryDefinition<
     const creditNoteTaxPaise = sales.reduce(
       (sum, invoice) =>
         sum +
-        invoice.notes.filter((n) => n.noteType === "credit").reduce((t, n) => t + taxOf(n), 0),
+        invoice.notes
+          .filter((n) => n.noteType === "credit")
+          .reduce((t, n) => t + taxOf(n), 0),
       0,
     );
     const debitNoteTaxPaise = sales.reduce(
       (sum, invoice) =>
         sum +
-        invoice.notes.filter((n) => n.noteType === "debit").reduce((t, n) => t + taxOf(n), 0),
+        invoice.notes
+          .filter((n) => n.noteType === "debit")
+          .reduce((t, n) => t + taxOf(n), 0),
       0,
     );
 
@@ -496,7 +566,10 @@ export const gstr3bWorking: QueryDefinition<
       invoiceCount: sales.length,
       creditNoteTaxPaise,
       debitNoteTaxPaise,
-      netTaxPaise: sales.reduce((sum, i) => sum + taxOf(i), 0) + debitNoteTaxPaise - creditNoteTaxPaise,
+      netTaxPaise:
+        sales.reduce((sum, i) => sum + taxOf(i), 0) +
+        debitNoteTaxPaise -
+        creditNoteTaxPaise,
     };
 
     const unsubstantiated = purchases.filter((invoice) => taxOf(invoice) === 0);
@@ -528,7 +601,9 @@ export const gstr3bWorking: QueryDefinition<
           "credit can be evidenced against them",
       );
     }
-    const missingPlaceOfSupply = sales.filter((invoice) => !invoice.customer?.stateCode).length;
+    const missingPlaceOfSupply = sales.filter(
+      (invoice) => !invoice.customer?.stateCode,
+    ).length;
     if (missingPlaceOfSupply > 0) {
       blockers.push(
         `${missingPlaceOfSupply} sales invoice(s) have no place of supply, so the ` +
@@ -543,13 +618,15 @@ export const gstr3bWorking: QueryDefinition<
       inward,
       // Clamped at zero: a credit surplus carries forward, it is not a refund
       // due this month, and showing it as negative cash reads as one.
-      netCashRequiredPaise: Math.max(0, outward.netTaxPaise - inward.eligibleItcPaise),
+      netCashRequiredPaise: Math.max(
+        0,
+        outward.netTaxPaise - inward.eligibleItcPaise,
+      ),
       ready: blockers.length === 0,
       blockers,
     };
   },
 };
-
 
 /**
  * §5 — tax settings in a business's own words.
@@ -620,7 +697,8 @@ export const taxSettings: QueryDefinition<
         effectiveFrom: rule.effectiveFrom,
         effectiveTo: rule.effectiveTo,
         inForce:
-          rule.effectiveFrom <= now && (rule.effectiveTo === null || rule.effectiveTo > now),
+          rule.effectiveFrom <= now &&
+          (rule.effectiveTo === null || rule.effectiveTo > now),
       })),
     };
   },

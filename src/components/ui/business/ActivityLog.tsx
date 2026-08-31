@@ -1,5 +1,8 @@
 import { EmptyState, Panel, Row, RowList } from "@/components/ui/primitives";
-import { commandLabelOf, fieldLabelOf } from "@/components/ui/business/vocabulary";
+import {
+  commandLabelOf,
+  fieldLabelOf,
+} from "@/components/ui/business/vocabulary";
 
 /**
  * §78 — who did what to this record, when, and what changed.
@@ -55,7 +58,8 @@ export function ActivityLog({
             <Row key={`${entry.occurredAt}-${entry.action}-${index}`}>
               <div className="min-w-0">
                 <p className="m-0 text-[14px] text-text">
-                  {commandLabelOf(entry.commandKey) ?? fieldLabelOf(entry.action)}
+                  {commandLabelOf(entry.commandKey) ??
+                    fieldLabelOf(entry.action)}
                 </p>
                 <p className="m-0 mt-0.5 text-[12px] text-text-tertiary">
                   {entry.before !== null || entry.after !== null ? (

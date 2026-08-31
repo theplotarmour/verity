@@ -1,9 +1,16 @@
 import { z } from "zod";
 import { financialYearOf, nextDocumentNumber } from "./finance";
 import { assertGodownInScope, reachableGodownIds } from "./scope";
-import { ValidationError, type CommandDefinition } from "@/server/platform/command";
+import {
+  ValidationError,
+  type CommandDefinition,
+} from "@/server/platform/command";
 import { type QueryDefinition } from "@/server/platform/query";
-import { diffFields, recordActivity, reconstructHistory } from "@/server/platform/audit";
+import {
+  diffFields,
+  recordActivity,
+  reconstructHistory,
+} from "@/server/platform/audit";
 import { transition } from "@/server/platform/state";
 import { notify } from "@/server/platform/notification";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
@@ -35,11 +42,15 @@ import { applyMovement, serviceProductIds } from "./stock";
 /** A GSTIN is 15 characters in a fixed shape; the column checks the same rule. */
 const GSTIN = z
   .string()
-  .regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/, "that is not a valid GSTIN");
+  .regex(
+    /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
+    "that is not a valid GSTIN",
+  );
 
 /** Two digits. It decides CGST + SGST against IGST (P4). */
-const STATE_CODE = z.string().regex(/^[0-9]{2}$/, "a GST state code is two digits");
-
+const STATE_CODE = z
+  .string()
+  .regex(/^[0-9]{2}$/, "a GST state code is two digits");
 
 /**
  * A readable number for an order, when the user gave it none.
@@ -75,7 +86,13 @@ async function orderNumber(
 /* ================================ suppliers =============================== */
 
 export const createSupplier: CommandDefinition<
-  { displayName: string; gstin?: string; phone?: string; email?: string; stateCode?: string },
+  {
+    displayName: string;
+    gstin?: string;
+    phone?: string;
+    email?: string;
+    stateCode?: string;
+  },
   { id: string }
 > = {
   key: "verity.plywood.create_supplier",
@@ -101,7 +118,9 @@ export const createSupplier: CommandDefinition<
     });
     return {
       result: { id: supplier.id },
-      events: [{ name: "verity.plywood.supplier_created", entityId: supplier.id }],
+      events: [
+        { name: "verity.plywood.supplier_created", entityId: supplier.id },
+      ],
     };
   },
 };
@@ -136,11 +155,16 @@ export const setSupplierPrice: CommandDefinition<
         productId: input.productId,
         negotiatedCostPaise: input.negotiatedCostPaise,
       },
-      update: { negotiatedCostPaise: input.negotiatedCostPaise, version: { increment: 1 } },
+      update: {
+        negotiatedCostPaise: input.negotiatedCostPaise,
+        version: { increment: 1 },
+      },
     });
     return {
       result: { id: price.id },
-      events: [{ name: "verity.plywood.supplier_price_set", entityId: price.id }],
+      events: [
+        { name: "verity.plywood.supplier_price_set", entityId: price.id },
+      ],
     };
   },
 };
@@ -185,7 +209,9 @@ export const createCustomer: CommandDefinition<
     });
     return {
       result: { id: customer.id },
-      events: [{ name: "verity.plywood.customer_created", entityId: customer.id }],
+      events: [
+        { name: "verity.plywood.customer_created", entityId: customer.id },
+      ],
     };
   },
 };
@@ -199,14 +225,20 @@ export const setCreditLimit: CommandDefinition<
   // Granting credit is not editing a phone number. ActionExecute so it can be
   // held by the owner and finance without also withholding ordinary edits.
   verb: "ActionExecute",
-  input: z.object({ customerId: z.string().uuid(), creditLimitPaise: z.number().int().min(0) }),
+  input: z.object({
+    customerId: z.string().uuid(),
+    creditLimitPaise: z.number().int().min(0),
+  }),
   handler: async (ctx, input) => {
     const before = await ctx.tx.plywoodCustomer.findUniqueOrThrow({
       where: { id: input.customerId },
     });
     const after = await ctx.tx.plywoodCustomer.update({
       where: { id: input.customerId },
-      data: { creditLimitPaise: input.creditLimitPaise, version: { increment: 1 } },
+      data: {
+        creditLimitPaise: input.creditLimitPaise,
+        version: { increment: 1 },
+      },
     });
 
     // Who raised whose limit, and from what, is the first question after a bad
@@ -255,11 +287,16 @@ export const setCustomerPrice: CommandDefinition<
         productId: input.productId,
         customPricePaise: input.customPricePaise,
       },
-      update: { customPricePaise: input.customPricePaise, version: { increment: 1 } },
+      update: {
+        customPricePaise: input.customPricePaise,
+        version: { increment: 1 },
+      },
     });
     return {
       result: { id: price.id },
-      events: [{ name: "verity.plywood.customer_price_set", entityId: price.id }],
+      events: [
+        { name: "verity.plywood.customer_price_set", entityId: price.id },
+      ],
     };
   },
 };
@@ -271,7 +308,11 @@ export const createPurchaseOrder: CommandDefinition<
     supplierId: string;
     locationId: string;
     reference?: string;
-    lines: Array<{ productId: string; qtyOrdered: number; unitCostPaise?: number }>;
+    lines: Array<{
+      productId: string;
+      qtyOrdered: number;
+      unitCostPaise?: number;
+    }>;
   },
   { id: string; totalCostPaise: number }
 > = {
@@ -293,20 +334,40 @@ export const createPurchaseOrder: CommandDefinition<
       .min(1),
   }),
   preconditions: async (ctx, input) => {
-    const supplier = await ctx.tx.plywoodSupplier.findUnique({ where: { id: input.supplierId } });
-    if (!supplier) throw new ValidationError("E_VALIDATION: supplier not found in this tenant");
+    const supplier = await ctx.tx.plywoodSupplier.findUnique({
+      where: { id: input.supplierId },
+    });
+    if (!supplier)
+      throw new ValidationError(
+        "E_VALIDATION: supplier not found in this tenant",
+      );
     if (!supplier.active) {
-      throw new ValidationError("E_VALIDATION: that supplier is no longer traded with");
+      throw new ValidationError(
+        "E_VALIDATION: that supplier is no longer traded with",
+      );
     }
-    const godown = await ctx.tx.location.findUnique({ where: { id: input.locationId } });
-    if (!godown) throw new ValidationError("E_VALIDATION: godown not found in this tenant");
+    const godown = await ctx.tx.location.findUnique({
+      where: { id: input.locationId },
+    });
+    if (!godown)
+      throw new ValidationError(
+        "E_VALIDATION: godown not found in this tenant",
+      );
   },
   handler: async (ctx, input) => {
     const products = await ctx.tx.plywoodProduct.findMany({
-      where: { id: { in: input.lines.map((line) => line.productId) }, active: true },
+      where: {
+        id: { in: input.lines.map((line) => line.productId) },
+        active: true,
+      },
     });
-    if (products.length !== new Set(input.lines.map((line) => line.productId)).size) {
-      throw new ValidationError("E_VALIDATION: a board on this order is unknown or withdrawn");
+    if (
+      products.length !==
+      new Set(input.lines.map((line) => line.productId)).size
+    ) {
+      throw new ValidationError(
+        "E_VALIDATION: a board on this order is unknown or withdrawn",
+      );
     }
 
     const negotiated = await ctx.tx.plywoodSupplierPrice.findMany({
@@ -314,8 +375,12 @@ export const createPurchaseOrder: CommandDefinition<
     });
 
     const priced = input.lines.map((line) => {
-      const product = products.find((candidate) => candidate.id === line.productId)!;
-      const agreed = negotiated.find((price) => price.productId === line.productId);
+      const product = products.find(
+        (candidate) => candidate.id === line.productId,
+      )!;
+      const agreed = negotiated.find(
+        (price) => price.productId === line.productId,
+      );
       // The caller may override; otherwise the negotiated price applies. An
       // order with neither is refused rather than defaulted to zero, because a
       // zero-cost receipt would poison the weighted average silently.
@@ -356,7 +421,8 @@ export const createPurchaseOrder: CommandDefinition<
         supplierId: input.supplierId,
         locationId: input.locationId,
         reference:
-          input.reference ?? (await orderNumber(ctx.tx, ctx.actor.tenantId, "PO", new Date())),
+          input.reference ??
+          (await orderNumber(ctx.tx, ctx.actor.tenantId, "PO", new Date())),
         totalCostPaise,
       },
     });
@@ -376,12 +442,17 @@ export const createPurchaseOrder: CommandDefinition<
 
     return {
       result: { id: order.id, totalCostPaise },
-      events: [{ name: "verity.plywood.purchase_order_created", entityId: order.id }],
+      events: [
+        { name: "verity.plywood.purchase_order_created", entityId: order.id },
+      ],
     };
   },
 };
 
-export const submitPurchaseOrder: CommandDefinition<{ orderId: string }, { id: string }> = {
+export const submitPurchaseOrder: CommandDefinition<
+  { orderId: string },
+  { id: string }
+> = {
   key: "verity.plywood.submit_purchase_order",
   entity: ENTITY_PURCHASE_ORDER,
   verb: "ActionExecute",
@@ -432,7 +503,10 @@ export const receiveGoods: CommandDefinition<
     notes: z.string().max(500).optional(),
     lines: z
       .array(
-        z.object({ productId: z.string().uuid(), qtyReceived: z.number().int().positive() }),
+        z.object({
+          productId: z.string().uuid(),
+          qtyReceived: z.number().int().positive(),
+        }),
       )
       .min(1),
   }),
@@ -442,7 +516,9 @@ export const receiveGoods: CommandDefinition<
       include: { lines: true },
     });
     if (order.state === "draft") {
-      throw new ValidationError("E_VALIDATION: submit the order before receiving against it");
+      throw new ValidationError(
+        "E_VALIDATION: submit the order before receiving against it",
+      );
     }
     if (order.state === "completed" || order.state === "cancelled") {
       throw new ValidationError("E_VALIDATION: that order is closed");
@@ -472,7 +548,12 @@ export const receiveGoods: CommandDefinition<
     // dispute turns on.
     const receivedAt = new Date();
     const financialYear = financialYearOf(receivedAt);
-    const numbering = await nextDocumentNumber(ctx.tx, ctx.actor.tenantId, "GRN", financialYear);
+    const numbering = await nextDocumentNumber(
+      ctx.tx,
+      ctx.actor.tenantId,
+      "GRN",
+      financialYear,
+    );
 
     const receipt = await ctx.tx.plywoodGoodsReceipt.create({
       data: {
@@ -489,9 +570,13 @@ export const receiveGoods: CommandDefinition<
     });
 
     for (const received of input.lines) {
-      const line = order.lines.find((candidate) => candidate.productId === received.productId);
+      const line = order.lines.find(
+        (candidate) => candidate.productId === received.productId,
+      );
       if (!line) {
-        throw new ValidationError("E_VALIDATION: that board is not on this order");
+        throw new ValidationError(
+          "E_VALIDATION: that board is not on this order",
+        );
       }
       const outstanding = line.qtyOrdered - line.qtyReceived;
       if (received.qtyReceived > outstanding) {
@@ -522,7 +607,11 @@ export const receiveGoods: CommandDefinition<
         unitCostPaise: line.unitCostPaise,
         // The movement now says what caused it. This is what makes the
         // specification's §13 possible: open a quantity, see the receipt.
-        source: { type: "goods_receipt", id: receipt.id, number: receipt.receiptNumber },
+        source: {
+          type: "goods_receipt",
+          id: receipt.id,
+          number: receipt.receiptNumber,
+        },
       });
     }
 
@@ -531,7 +620,9 @@ export const receiveGoods: CommandDefinition<
     // order rather than durability.
     await ctx.tx.plywoodGoodsReceiptLine.createMany({
       data: input.lines.map((received) => {
-        const line = order.lines.find((candidate) => candidate.productId === received.productId)!;
+        const line = order.lines.find(
+          (candidate) => candidate.productId === received.productId,
+        )!;
         return {
           tenantId: ctx.actor.tenantId,
           receiptId: receipt.id,
@@ -594,7 +685,10 @@ export const cancelPurchaseOrder: CommandDefinition<
   key: "verity.plywood.cancel_purchase_order",
   entity: ENTITY_PURCHASE_ORDER,
   verb: "ActionExecute",
-  input: z.object({ orderId: z.string().uuid(), reason: z.string().min(3).max(400) }),
+  input: z.object({
+    orderId: z.string().uuid(),
+    reason: z.string().min(3).max(400),
+  }),
   handler: async (ctx, input) => {
     const order = await ctx.tx.plywoodPurchaseOrder.findUniqueOrThrow({
       where: { id: input.orderId },
@@ -617,7 +711,12 @@ export const cancelPurchaseOrder: CommandDefinition<
     });
     return {
       result: { id: input.orderId },
-      events: [{ name: "verity.plywood.purchase_order_cancelled", entityId: input.orderId }],
+      events: [
+        {
+          name: "verity.plywood.purchase_order_cancelled",
+          entityId: input.orderId,
+        },
+      ],
     };
   },
 };
@@ -684,7 +783,10 @@ export async function customerExposurePaise(
   });
 
   const receivables = invoices.reduce((sum, invoice) => {
-    const paid = invoice.payments.reduce((p, payment) => p + payment.amountPaise, 0);
+    const paid = invoice.payments.reduce(
+      (p, payment) => p + payment.amountPaise,
+      0,
+    );
     const credited = invoice.notes
       .filter((note) => note.noteType === "credit")
       .reduce((c, note) => c + note.totalPaise, 0);
@@ -751,7 +853,11 @@ export const createSalesOrder: CommandDefinition<
     customerId: string;
     locationId: string;
     reference?: string;
-    lines: Array<{ productId: string; qtyOrdered: number; unitPricePaise?: number }>;
+    lines: Array<{
+      productId: string;
+      qtyOrdered: number;
+      unitPricePaise?: number;
+    }>;
   },
   { id: string; totalPricePaise: number; state: string }
 > = {
@@ -773,18 +879,37 @@ export const createSalesOrder: CommandDefinition<
       .min(1),
   }),
   preconditions: async (ctx, input) => {
-    const customer = await ctx.tx.plywoodCustomer.findUnique({ where: { id: input.customerId } });
-    if (!customer) throw new ValidationError("E_VALIDATION: customer not found in this tenant");
-    if (!customer.active) throw new ValidationError("E_VALIDATION: that customer is inactive");
-    const godown = await ctx.tx.location.findUnique({ where: { id: input.locationId } });
-    if (!godown) throw new ValidationError("E_VALIDATION: godown not found in this tenant");
+    const customer = await ctx.tx.plywoodCustomer.findUnique({
+      where: { id: input.customerId },
+    });
+    if (!customer)
+      throw new ValidationError(
+        "E_VALIDATION: customer not found in this tenant",
+      );
+    if (!customer.active)
+      throw new ValidationError("E_VALIDATION: that customer is inactive");
+    const godown = await ctx.tx.location.findUnique({
+      where: { id: input.locationId },
+    });
+    if (!godown)
+      throw new ValidationError(
+        "E_VALIDATION: godown not found in this tenant",
+      );
   },
   handler: async (ctx, input) => {
     const products = await ctx.tx.plywoodProduct.findMany({
-      where: { id: { in: input.lines.map((line) => line.productId) }, active: true },
+      where: {
+        id: { in: input.lines.map((line) => line.productId) },
+        active: true,
+      },
     });
-    if (products.length !== new Set(input.lines.map((line) => line.productId)).size) {
-      throw new ValidationError("E_VALIDATION: a board on this order is unknown or withdrawn");
+    if (
+      products.length !==
+      new Set(input.lines.map((line) => line.productId)).size
+    ) {
+      throw new ValidationError(
+        "E_VALIDATION: a board on this order is unknown or withdrawn",
+      );
     }
 
     const agreed = await ctx.tx.plywoodCustomerPrice.findMany({
@@ -792,9 +917,14 @@ export const createSalesOrder: CommandDefinition<
     });
 
     const priced = input.lines.map((line) => {
-      const product = products.find((candidate) => candidate.id === line.productId)!;
-      const customerPrice = agreed.find((price) => price.productId === line.productId);
-      const unitPricePaise = line.unitPricePaise ?? customerPrice?.customPricePaise;
+      const product = products.find(
+        (candidate) => candidate.id === line.productId,
+      )!;
+      const customerPrice = agreed.find(
+        (price) => price.productId === line.productId,
+      );
+      const unitPricePaise =
+        line.unitPricePaise ?? customerPrice?.customPricePaise;
       if (unitPricePaise === undefined) {
         throw new ValidationError(
           `E_VALIDATION: no price for ${product.name} for this customer, and none given`,
@@ -840,7 +970,8 @@ export const createSalesOrder: CommandDefinition<
         customerId: input.customerId,
         locationId: input.locationId,
         reference:
-          input.reference ?? (await orderNumber(ctx.tx, ctx.actor.tenantId, "SO", new Date())),
+          input.reference ??
+          (await orderNumber(ctx.tx, ctx.actor.tenantId, "SO", new Date())),
         totalPricePaise,
       },
     });
@@ -893,7 +1024,9 @@ export const createSalesOrder: CommandDefinition<
           key: "verity.plywood.credit_approval_needed",
           // De-duplicated: one person can hold several memberships, and being
           // told the same thing twice teaches people to ignore the channel.
-          recipientIds: [...new Set(approvers.map((membership) => membership.userId))],
+          recipientIds: [
+            ...new Set(approvers.map((membership) => membership.userId)),
+          ],
           variables: {
             customer: customer.displayName,
             over: String(Math.round(over / 100)),
@@ -914,7 +1047,12 @@ export const createSalesOrder: CommandDefinition<
       events: [
         { name: "verity.plywood.sales_order_created", entityId: order.id },
         ...(overLimit
-          ? [{ name: "verity.plywood.sales_order_held_for_credit", entityId: order.id }]
+          ? [
+              {
+                name: "verity.plywood.sales_order_held_for_credit",
+                entityId: order.id,
+              },
+            ]
           : []),
       ],
     };
@@ -928,7 +1066,10 @@ export const approveCredit: CommandDefinition<
   key: "verity.plywood.approve_credit",
   entity: ENTITY_SALES_ORDER,
   verb: "ActionExecute",
-  input: z.object({ orderId: z.string().uuid(), reason: z.string().min(3).max(400) }),
+  input: z.object({
+    orderId: z.string().uuid(),
+    reason: z.string().min(3).max(400),
+  }),
   handler: async (ctx, input) => {
     const order = await ctx.tx.plywoodSalesOrder.findUniqueOrThrow({
       where: { id: input.orderId },
@@ -949,11 +1090,16 @@ export const approveCredit: CommandDefinition<
       entityKey: ENTITY_SALES_ORDER,
       entityId: input.orderId,
       commandKey: "verity.plywood.approve_credit",
-      changes: diffFields({ creditOverrideReason: "" }, { creditOverrideReason: input.reason }),
+      changes: diffFields(
+        { creditOverrideReason: "" },
+        { creditOverrideReason: input.reason },
+      ),
     });
     return {
       result: { id: input.orderId },
-      events: [{ name: "verity.plywood.credit_approved", entityId: input.orderId }],
+      events: [
+        { name: "verity.plywood.credit_approved", entityId: input.orderId },
+      ],
     };
   },
 };
@@ -1003,16 +1149,26 @@ export async function availableUnits(
    * it.
    */
   options: { forUpdate?: boolean } = {},
-): Promise<{ onHandUnits: number; reservedUnits: number; availableUnits: number }> {
+): Promise<{
+  onHandUnits: number;
+  reservedUnits: number;
+  availableUnits: number;
+}> {
   if (options.forUpdate) await lockAvailability(tx, productId, locationId);
-  const balance = await tx.stockBalance.findFirst({ where: { productId, locationId } });
+  const balance = await tx.stockBalance.findFirst({
+    where: { productId, locationId },
+  });
   const held = await tx.plywoodStockReservation.aggregate({
     where: { productId, locationId, releasedAt: null },
     _sum: { qtyUnits: true },
   });
   const onHandUnits = balance?.qtyUnits ?? 0;
   const reservedUnits = held._sum.qtyUnits ?? 0;
-  return { onHandUnits, reservedUnits, availableUnits: onHandUnits - reservedUnits };
+  return {
+    onHandUnits,
+    reservedUnits,
+    availableUnits: onHandUnits - reservedUnits,
+  };
 }
 
 export const reserveForOrder: CommandDefinition<
@@ -1029,7 +1185,9 @@ export const reserveForOrder: CommandDefinition<
       include: { lines: true, reservations: { where: { releasedAt: null } } },
     });
     if (order.state !== "approved") {
-      throw new ValidationError("E_VALIDATION: only an approved order can hold stock");
+      throw new ValidationError(
+        "E_VALIDATION: only an approved order can hold stock",
+      );
     }
     if (order.reservations.length > 0) {
       throw new ValidationError("E_VALIDATION: this order already holds stock");
@@ -1073,7 +1231,9 @@ export const reserveForOrder: CommandDefinition<
           where: {
             productId: line.productId,
             locationId: {
-              in: reachableGodowns.filter((id: string) => id !== order.locationId),
+              in: reachableGodowns.filter(
+                (id: string) => id !== order.locationId,
+              ),
             },
             qtyUnits: { gt: 0 },
           },
@@ -1094,7 +1254,9 @@ export const reserveForOrder: CommandDefinition<
         throw new ValidationError(
           `E_VALIDATION: ${line.productNameSnapshot} has ${free} available in ` +
             `${here?.name ?? "this godown"}, so ${line.qtyOrdered} cannot be reserved.` +
-            (alsoAt ? ` ${alsoAt}. Transfer stock, or raise the order against that godown.` : ""),
+            (alsoAt
+              ? ` ${alsoAt}. Transfer stock, or raise the order against that godown.`
+              : ""),
         );
       }
       await ctx.tx.plywoodStockReservation.create({
@@ -1176,7 +1338,12 @@ export const dispatchOrder: CommandDefinition<
     collectedBy: z.string().max(120).optional(),
     notes: z.string().max(500).optional(),
     lines: z
-      .array(z.object({ productId: z.string().uuid(), qtyIssued: z.number().int().positive() }))
+      .array(
+        z.object({
+          productId: z.string().uuid(),
+          qtyIssued: z.number().int().positive(),
+        }),
+      )
       .min(1)
       .optional(),
   }),
@@ -1186,7 +1353,9 @@ export const dispatchOrder: CommandDefinition<
       include: { lines: true, reservations: { where: { releasedAt: null } } },
     });
     if (order.state !== "dispatching") {
-      throw new ValidationError("E_VALIDATION: hold stock for this order before issuing it");
+      throw new ValidationError(
+        "E_VALIDATION: hold stock for this order before issuing it",
+      );
     }
 
     await assertGodownInScope(
@@ -1207,15 +1376,25 @@ export const dispatchOrder: CommandDefinition<
       input.lines ??
       order.lines
         .filter((line) => line.qtyOrdered > line.qtyShipped)
-        .map((line) => ({ productId: line.productId, qtyIssued: line.qtyOrdered - line.qtyShipped }));
+        .map((line) => ({
+          productId: line.productId,
+          qtyIssued: line.qtyOrdered - line.qtyShipped,
+        }));
 
     if (requested.length === 0) {
-      throw new ValidationError("E_VALIDATION: this order has nothing left to issue");
+      throw new ValidationError(
+        "E_VALIDATION: this order has nothing left to issue",
+      );
     }
 
     const issuedAt = new Date();
     const financialYear = financialYearOf(issuedAt);
-    const numbering = await nextDocumentNumber(ctx.tx, ctx.actor.tenantId, "GI", financialYear);
+    const numbering = await nextDocumentNumber(
+      ctx.tx,
+      ctx.actor.tenantId,
+      "GI",
+      financialYear,
+    );
 
     const issue = await ctx.tx.plywoodGoodsIssue.create({
       data: {
@@ -1232,9 +1411,13 @@ export const dispatchOrder: CommandDefinition<
     });
 
     for (const line of requested) {
-      const orderLine = order.lines.find((candidate) => candidate.productId === line.productId);
+      const orderLine = order.lines.find(
+        (candidate) => candidate.productId === line.productId,
+      );
       if (!orderLine) {
-        throw new ValidationError("E_VALIDATION: that board is not on this order");
+        throw new ValidationError(
+          "E_VALIDATION: that board is not on this order",
+        );
       }
       const outstanding = orderLine.qtyOrdered - orderLine.qtyShipped;
       if (line.qtyIssued > outstanding) {
@@ -1256,7 +1439,11 @@ export const dispatchOrder: CommandDefinition<
           rackId: input.rackId ?? null,
           kind: "sales_outward",
           qtyUnits: line.qtyIssued,
-          source: { type: "goods_issue", id: issue.id, number: issue.issueNumber },
+          source: {
+            type: "goods_issue",
+            id: issue.id,
+            number: issue.issueNumber,
+          },
         });
         unitCostPaise = movement.unitCostPaise;
       }
@@ -1291,7 +1478,11 @@ export const dispatchOrder: CommandDefinition<
 
     for (const line of requested) {
       const held = await ctx.tx.plywoodStockReservation.findFirst({
-        where: { salesOrderId: order.id, productId: line.productId, releasedAt: null },
+        where: {
+          salesOrderId: order.id,
+          productId: line.productId,
+          releasedAt: null,
+        },
       });
       if (!held) continue;
 
@@ -1306,7 +1497,10 @@ export const dispatchOrder: CommandDefinition<
       } else {
         await ctx.tx.plywoodStockReservation.update({
           where: { id: held.id },
-          data: { releasedAt: issuedAt, releaseReason: `Issued on ${issue.issueNumber}` },
+          data: {
+            releasedAt: issuedAt,
+            releaseReason: `Issued on ${issue.issueNumber}`,
+          },
         });
       }
     }
@@ -1353,7 +1547,10 @@ export const cancelSalesOrder: CommandDefinition<
   key: "verity.plywood.cancel_sales_order",
   entity: ENTITY_SALES_ORDER,
   verb: "ActionExecute",
-  input: z.object({ orderId: z.string().uuid(), reason: z.string().min(3).max(400) }),
+  input: z.object({
+    orderId: z.string().uuid(),
+    reason: z.string().min(3).max(400),
+  }),
   handler: async (ctx, input) => {
     // Releasing the hold is the point of cancelling. Stock held for an order
     // nobody is going to fulfil is stock the business cannot sell.
@@ -1376,7 +1573,9 @@ export const cancelSalesOrder: CommandDefinition<
     });
     return {
       result: { id: order.id },
-      events: [{ name: "verity.plywood.sales_order_cancelled", entityId: order.id }],
+      events: [
+        { name: "verity.plywood.sales_order_cancelled", entityId: order.id },
+      ],
     };
   },
 };
@@ -1414,7 +1613,9 @@ export const listSuppliers: QueryDefinition<
         // Included rather than aggregated per supplier: the running balance is
         // a sum over the party's own entries, and one pass beats one query
         // per row on a list screen.
-        plywoodLedgerEntries: { select: { entryType: true, amountPaise: true } },
+        plywoodLedgerEntries: {
+          select: { entryType: true, amountPaise: true },
+        },
       },
     });
     return suppliers.map((supplier) => ({
@@ -1426,10 +1627,17 @@ export const listSuppliers: QueryDefinition<
       active: supplier.active,
       openOrders: supplier.orders.length,
       outstandingPaise: supplier.plywoodLedgerEntries.reduce(
-        (sum, entry) => sum + (entry.entryType === "debit" ? entry.amountPaise : -entry.amountPaise),
+        (sum, entry) =>
+          sum +
+          (entry.entryType === "debit"
+            ? entry.amountPaise
+            : -entry.amountPaise),
         0,
       ),
-      openCommitmentPaise: supplier.orders.reduce((sum, order) => sum + order.totalCostPaise, 0),
+      openCommitmentPaise: supplier.orders.reduce(
+        (sum, order) => sum + order.totalCostPaise,
+        0,
+      ),
     }));
   },
 };
@@ -1489,7 +1697,10 @@ export const listCustomers: QueryDefinition<
         exposurePaise,
         // Clamped at zero: a customer over their limit has no credit
         // available, and a negative headroom reads as a refund.
-        availableCreditPaise: Math.max(0, customer.creditLimitPaise - exposurePaise),
+        availableCreditPaise: Math.max(
+          0,
+          customer.creditLimitPaise - exposurePaise,
+        ),
       });
     }
     return rows;
@@ -1562,7 +1773,11 @@ export const purchaseOrderDetail: QueryDefinition<
     //
     // Intersected with the reachable set rather than checked afterwards: a
     // findUnique that returns the row and then refuses has already read it.
-    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_PURCHASE_ORDER);
+    const reachable = await reachableGodownIds(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_PURCHASE_ORDER,
+    );
     const order = await ctx.tx.plywoodPurchaseOrder.findFirst({
       where: { id: input.orderId, locationId: { in: reachable } },
       include: {
@@ -1584,10 +1799,20 @@ export const purchaseOrderDetail: QueryDefinition<
     });
     if (!order) return null;
 
-    const history = await reconstructHistory(ctx.tx, ENTITY_PURCHASE_ORDER, order.id);
+    const history = await reconstructHistory(
+      ctx.tx,
+      ENTITY_PURCHASE_ORDER,
+      order.id,
+    );
 
-    const qtyOrdered = order.lines.reduce((sum, line) => sum + line.qtyOrdered, 0);
-    const qtyReceived = order.lines.reduce((sum, line) => sum + line.qtyReceived, 0);
+    const qtyOrdered = order.lines.reduce(
+      (sum, line) => sum + line.qtyOrdered,
+      0,
+    );
+    const qtyReceived = order.lines.reduce(
+      (sum, line) => sum + line.qtyReceived,
+      0,
+    );
 
     return {
       id: order.id,
@@ -1618,10 +1843,16 @@ export const purchaseOrderDetail: QueryDefinition<
         id: receipt.id,
         receiptNumber: receipt.receiptNumber,
         receivedAt: receipt.receivedAt,
-        qtyUnits: receipt.lines.reduce((sum, line) => sum + line.qtyReceived, 0),
+        qtyUnits: receipt.lines.reduce(
+          (sum, line) => sum + line.qtyReceived,
+          0,
+        ),
       })),
       invoices: order.plywoodInvoices.map((invoice) => {
-        const paid = invoice.payments.reduce((sum, payment) => sum + payment.amountPaise, 0);
+        const paid = invoice.payments.reduce(
+          (sum, payment) => sum + payment.amountPaise,
+          0,
+        );
         const credited = invoice.notes
           .filter((note) => note.noteType === "credit")
           .reduce((sum, note) => sum + note.totalPaise, 0);
@@ -1634,7 +1865,10 @@ export const purchaseOrderDetail: QueryDefinition<
           issuedAt: invoice.issuedAt,
           totalPaise: invoice.totalPaise,
           paidPaise: paid,
-          balancePaise: Math.max(0, invoice.totalPaise + debited - paid - credited),
+          balancePaise: Math.max(
+            0,
+            invoice.totalPaise + debited - paid - credited,
+          ),
         };
       }),
       // Newest first here, unlike `reconstructHistory`'s forward order: an
@@ -1686,9 +1920,18 @@ export const salesOrderDetail: QueryDefinition<
       unitPricePaise: number;
       lineTotalPaise: number;
     }>;
-    holds: Array<{ productId: string; qtyUnits: number; releasedAt: Date | null }>;
+    holds: Array<{
+      productId: string;
+      qtyUnits: number;
+      releasedAt: Date | null;
+    }>;
     /// §47 — the goods that have physically left the godown.
-    issues: Array<{ id: string; issueNumber: string; issuedAt: Date; qtyUnits: number }>;
+    issues: Array<{
+      id: string;
+      issueNumber: string;
+      issuedAt: Date;
+      qtyUnits: number;
+    }>;
     invoices: Array<{
       id: string;
       invoiceNumber: string;
@@ -1713,13 +1956,19 @@ export const salesOrderDetail: QueryDefinition<
   handler: async (ctx, input) => {
     // Layer 2. Audit finding F-09, selling side: the credit position, the
     // customer and the prices on another godown's order were readable by id.
-    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_SALES_ORDER);
+    const reachable = await reachableGodownIds(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_SALES_ORDER,
+    );
     const order = await ctx.tx.plywoodSalesOrder.findFirst({
       where: { id: input.orderId, locationId: { in: reachable } },
       include: {
         lines: true,
         reservations: true,
-        customer: { select: { id: true, displayName: true, creditLimitPaise: true } },
+        customer: {
+          select: { id: true, displayName: true, creditLimitPaise: true },
+        },
         location: { select: { id: true, name: true } },
         goodsIssues: {
           orderBy: { issuedAt: "desc" },
@@ -1740,8 +1989,15 @@ export const salesOrderDetail: QueryDefinition<
     // explicit that a second definition anywhere in this capability is a
     // defect, and an approval screen showing a different figure from the check
     // that blocked the order would be the worst place to have one.
-    const exposurePaise = await customerExposurePaise(ctx.tx, order.customer.id);
-    const history = await reconstructHistory(ctx.tx, ENTITY_SALES_ORDER, order.id);
+    const exposurePaise = await customerExposurePaise(
+      ctx.tx,
+      order.customer.id,
+    );
+    const history = await reconstructHistory(
+      ctx.tx,
+      ENTITY_SALES_ORDER,
+      order.id,
+    );
 
     // Reservations are per product, and a line is per product, so the hold on
     // a line is the sum of its unreleased reservations. Released ones are kept
@@ -1756,9 +2012,18 @@ export const salesOrderDetail: QueryDefinition<
       );
     }
 
-    const qtyOrdered = order.lines.reduce((sum, line) => sum + line.qtyOrdered, 0);
-    const qtyIssued = order.lines.reduce((sum, line) => sum + line.qtyShipped, 0);
-    const qtyReserved = [...reservedByProduct.values()].reduce((sum, qty) => sum + qty, 0);
+    const qtyOrdered = order.lines.reduce(
+      (sum, line) => sum + line.qtyOrdered,
+      0,
+    );
+    const qtyIssued = order.lines.reduce(
+      (sum, line) => sum + line.qtyShipped,
+      0,
+    );
+    const qtyReserved = [...reservedByProduct.values()].reduce(
+      (sum, qty) => sum + qty,
+      0,
+    );
 
     return {
       id: order.id,
@@ -1766,8 +2031,14 @@ export const salesOrderDetail: QueryDefinition<
       customerName: order.customer.displayName,
       creditLimitPaise: order.customer.creditLimitPaise,
       exposurePaise,
-      availableCreditPaise: Math.max(0, order.customer.creditLimitPaise - exposurePaise),
-      overLimitPaise: Math.max(0, exposurePaise - order.customer.creditLimitPaise),
+      availableCreditPaise: Math.max(
+        0,
+        order.customer.creditLimitPaise - exposurePaise,
+      ),
+      overLimitPaise: Math.max(
+        0,
+        exposurePaise - order.customer.creditLimitPaise,
+      ),
       locationId: order.location.id,
       locationName: order.location.name,
       reference: order.reference,
@@ -1799,7 +2070,10 @@ export const salesOrderDetail: QueryDefinition<
         qtyUnits: issue.lines.reduce((sum, line) => sum + line.qtyIssued, 0),
       })),
       invoices: order.plywoodInvoices.map((invoice) => {
-        const paid = invoice.payments.reduce((sum, payment) => sum + payment.amountPaise, 0);
+        const paid = invoice.payments.reduce(
+          (sum, payment) => sum + payment.amountPaise,
+          0,
+        );
         const credited = invoice.notes
           .filter((note) => note.noteType === "credit")
           .reduce((sum, note) => sum + note.totalPaise, 0);
@@ -1812,7 +2086,10 @@ export const salesOrderDetail: QueryDefinition<
           issuedAt: invoice.issuedAt,
           totalPaise: invoice.totalPaise,
           paidPaise: paid,
-          balancePaise: Math.max(0, invoice.totalPaise + debited - paid - credited),
+          balancePaise: Math.max(
+            0,
+            invoice.totalPaise + debited - paid - credited,
+          ),
         };
       }),
       activity: history
@@ -1876,8 +2153,16 @@ export const openOrders: QueryDefinition<
     // filtered by the godowns this actor reaches. Each is scoped against its
     // OWN entity: reading sales orders must not be what lets someone read
     // purchase orders, even on a screen that shows them side by side.
-    const forPurchases = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_PURCHASE_ORDER);
-    const forSales = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_SALES_ORDER);
+    const forPurchases = await reachableGodownIds(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_PURCHASE_ORDER,
+    );
+    const forSales = await reachableGodownIds(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_SALES_ORDER,
+    );
 
     const purchases = await ctx.tx.plywoodPurchaseOrder.findMany({
       where: {
@@ -1899,7 +2184,10 @@ export const openOrders: QueryDefinition<
         state: { notIn: ["completed", "cancelled"] },
         locationId: { in: forSales },
       },
-      include: { lines: true, customer: { select: { id: true, displayName: true } } },
+      include: {
+        lines: true,
+        customer: { select: { id: true, displayName: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
 
@@ -1924,8 +2212,14 @@ export const openOrders: QueryDefinition<
         supplierName: order.supplier.displayName,
         state: order.state,
         totalCostPaise: order.totalCostPaise,
-        orderedUnits: order.lines.reduce((sum, line) => sum + line.qtyOrdered, 0),
-        receivedUnits: order.lines.reduce((sum, line) => sum + line.qtyReceived, 0),
+        orderedUnits: order.lines.reduce(
+          (sum, line) => sum + line.qtyOrdered,
+          0,
+        ),
+        receivedUnits: order.lines.reduce(
+          (sum, line) => sum + line.qtyReceived,
+          0,
+        ),
         outstandingUnits: order.lines.reduce(
           (sum, line) => sum + Math.max(0, line.qtyOrdered - line.qtyReceived),
           0,
@@ -1951,7 +2245,10 @@ export const openOrders: QueryDefinition<
         customerName: order.customer.displayName,
         state: order.state,
         totalPricePaise: order.totalPricePaise,
-        orderedUnits: order.lines.reduce((sum, line) => sum + line.qtyOrdered, 0),
+        orderedUnits: order.lines.reduce(
+          (sum, line) => sum + line.qtyOrdered,
+          0,
+        ),
         raisedAt: order.createdAt,
         summary: summarise(order.lines.map((line) => line.productNameSnapshot)),
       })),
@@ -1977,7 +2274,11 @@ export const stockAvailability: QueryDefinition<
     // naming another branch's godown returned its stock. Intersected rather
     // than replaced, which is the pattern `stockOnHand` already uses — an
     // empty result for an unreachable godown, not its contents.
-    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_STOCK_BALANCE);
+    const reachable = await reachableGodownIds(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_STOCK_BALANCE,
+    );
     if (!reachable.includes(input.locationId)) {
       return [];
     }
@@ -1994,7 +2295,8 @@ export const stockAvailability: QueryDefinition<
     return balances
       .map((balance) => {
         const reservedUnits =
-          holds.find((hold) => hold.productId === balance.productId)?._sum.qtyUnits ?? 0;
+          holds.find((hold) => hold.productId === balance.productId)?._sum
+            .qtyUnits ?? 0;
         return {
           productId: balance.productId,
           productName: balance.product.name,
@@ -2043,7 +2345,11 @@ export const supplierDetail: QueryDefinition<
     openCommitmentPaise: number;
     openOrders: number;
     incomingUnits: number;
-    pricing: Array<{ productId: string; productName: string; negotiatedCostPaise: number }>;
+    pricing: Array<{
+      productId: string;
+      productName: string;
+      negotiatedCostPaise: number;
+    }>;
     orders: Array<{
       id: string;
       reference: string | null;
@@ -2084,7 +2390,9 @@ export const supplierDetail: QueryDefinition<
         pricing: { include: { product: { select: { name: true } } } },
         orders: {
           orderBy: { createdAt: "desc" },
-          include: { lines: { select: { qtyOrdered: true, qtyReceived: true } } },
+          include: {
+            lines: { select: { qtyOrdered: true, qtyReceived: true } },
+          },
         },
         plywoodInvoices: {
           orderBy: { issuedAt: "desc" },
@@ -2112,16 +2420,27 @@ export const supplierDetail: QueryDefinition<
       stateCode: supplier.stateCode,
       active: supplier.active,
       outstandingPaise: supplier.plywoodLedgerEntries.reduce(
-        (sum, entry) => sum + (entry.entryType === "debit" ? entry.amountPaise : -entry.amountPaise),
+        (sum, entry) =>
+          sum +
+          (entry.entryType === "debit"
+            ? entry.amountPaise
+            : -entry.amountPaise),
         0,
       ),
-      openCommitmentPaise: openOrders.reduce((sum, order) => sum + order.totalCostPaise, 0),
+      openCommitmentPaise: openOrders.reduce(
+        (sum, order) => sum + order.totalCostPaise,
+        0,
+      ),
       openOrders: openOrders.length,
       // What is still on its way: ordered minus received, on open orders only.
       // A completed order has nothing incoming and a draft has not been placed.
       incomingUnits: openOrders.reduce(
         (sum, order) =>
-          sum + order.lines.reduce((u, line) => u + Math.max(0, line.qtyOrdered - line.qtyReceived), 0),
+          sum +
+          order.lines.reduce(
+            (u, line) => u + Math.max(0, line.qtyOrdered - line.qtyReceived),
+            0,
+          ),
         0,
       ),
       pricing: supplier.pricing
@@ -2141,7 +2460,10 @@ export const supplierDetail: QueryDefinition<
         createdAt: order.createdAt,
       })),
       invoices: supplier.plywoodInvoices.map((invoice) => {
-        const paid = invoice.payments.reduce((p, payment) => p + payment.amountPaise, 0);
+        const paid = invoice.payments.reduce(
+          (p, payment) => p + payment.amountPaise,
+          0,
+        );
         const credited = invoice.notes
           .filter((note) => note.noteType === "credit")
           .reduce((c, note) => c + note.totalPaise, 0);
@@ -2154,7 +2476,10 @@ export const supplierDetail: QueryDefinition<
           issuedAt: invoice.issuedAt,
           totalPaise: invoice.totalPaise,
           paidPaise: paid,
-          balancePaise: Math.max(0, invoice.totalPaise + debited - paid - credited),
+          balancePaise: Math.max(
+            0,
+            invoice.totalPaise + debited - paid - credited,
+          ),
           purchaseOrderId: invoice.purchaseOrderId,
           salesOrderId: invoice.salesOrderId,
         };
@@ -2171,7 +2496,8 @@ export const supplierDetail: QueryDefinition<
         })),
       ),
       ledger: supplier.plywoodLedgerEntries.map((entry) => {
-        running += entry.entryType === "debit" ? entry.amountPaise : -entry.amountPaise;
+        running +=
+          entry.entryType === "debit" ? entry.amountPaise : -entry.amountPaise;
         return {
           id: entry.id,
           entryType: entry.entryType,
@@ -2210,7 +2536,11 @@ export const customerDetail: QueryDefinition<
     outstandingPaise: number;
     openCommitmentPaise: number;
     openOrders: number;
-    pricing: Array<{ productId: string; productName: string; customPricePaise: number }>;
+    pricing: Array<{
+      productId: string;
+      productName: string;
+      customPricePaise: number;
+    }>;
     orders: Array<{
       id: string;
       reference: string | null;
@@ -2257,7 +2587,10 @@ export const customerDetail: QueryDefinition<
             // Reserved is NOT a column on the order line. A reservation is its
             // own record with a release, which is what lets a cancellation
             // return stock to available without rewriting the order (§69).
-            reservations: { where: { releasedAt: null }, select: { qtyUnits: true } },
+            reservations: {
+              where: { releasedAt: null },
+              select: { qtyUnits: true },
+            },
           },
         },
         plywoodInvoices: {
@@ -2274,7 +2607,9 @@ export const customerDetail: QueryDefinition<
 
     const exposurePaise = await customerExposurePaise(ctx.tx, customer.id);
     const committed = customer.orders.filter((order) =>
-      COMMITTED_ORDER_STATES.includes(order.state as (typeof COMMITTED_ORDER_STATES)[number]),
+      COMMITTED_ORDER_STATES.includes(
+        order.state as (typeof COMMITTED_ORDER_STATES)[number],
+      ),
     );
 
     let running = 0;
@@ -2290,12 +2625,22 @@ export const customerDetail: QueryDefinition<
       exposurePaise,
       // Clamped: a customer over their limit has no credit available, not a
       // negative amount of it, and a negative headroom reads as a refund.
-      availableCreditPaise: Math.max(0, customer.creditLimitPaise - exposurePaise),
+      availableCreditPaise: Math.max(
+        0,
+        customer.creditLimitPaise - exposurePaise,
+      ),
       outstandingPaise: customer.plywoodLedgerEntries.reduce(
-        (sum, entry) => sum + (entry.entryType === "debit" ? entry.amountPaise : -entry.amountPaise),
+        (sum, entry) =>
+          sum +
+          (entry.entryType === "debit"
+            ? entry.amountPaise
+            : -entry.amountPaise),
         0,
       ),
-      openCommitmentPaise: committed.reduce((sum, order) => sum + order.totalPricePaise, 0),
+      openCommitmentPaise: committed.reduce(
+        (sum, order) => sum + order.totalPricePaise,
+        0,
+      ),
       openOrders: committed.length,
       pricing: customer.pricing
         .map((price) => ({
@@ -2315,7 +2660,10 @@ export const customerDetail: QueryDefinition<
         createdAt: order.createdAt,
       })),
       invoices: customer.plywoodInvoices.map((invoice) => {
-        const paid = invoice.payments.reduce((p, payment) => p + payment.amountPaise, 0);
+        const paid = invoice.payments.reduce(
+          (p, payment) => p + payment.amountPaise,
+          0,
+        );
         const credited = invoice.notes
           .filter((note) => note.noteType === "credit")
           .reduce((c, note) => c + note.totalPaise, 0);
@@ -2328,7 +2676,10 @@ export const customerDetail: QueryDefinition<
           issuedAt: invoice.issuedAt,
           totalPaise: invoice.totalPaise,
           paidPaise: paid,
-          balancePaise: Math.max(0, invoice.totalPaise + debited - paid - credited),
+          balancePaise: Math.max(
+            0,
+            invoice.totalPaise + debited - paid - credited,
+          ),
           purchaseOrderId: invoice.purchaseOrderId,
           salesOrderId: invoice.salesOrderId,
         };
@@ -2345,7 +2696,8 @@ export const customerDetail: QueryDefinition<
         })),
       ),
       ledger: customer.plywoodLedgerEntries.map((entry) => {
-        running += entry.entryType === "debit" ? entry.amountPaise : -entry.amountPaise;
+        running +=
+          entry.entryType === "debit" ? entry.amountPaise : -entry.amountPaise;
         return {
           id: entry.id,
           entryType: entry.entryType,
