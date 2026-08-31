@@ -1,4 +1,9 @@
 import { requireActor } from "@/server/platform/auth";
+import {
+  commandLabelOf,
+  entityLabelOf,
+  fieldLabelOf,
+} from "@/components/ui/business/vocabulary";
 import { withTenant } from "@/server/platform/tenancy";
 import { resolvePermissions } from "@/server/platform/authorization";
 import { DataTable } from "@/components/ui/DataTable";
@@ -61,11 +66,14 @@ export default async function AuditPage() {
       eventCount: events,
       activity: activity.map<ActivityRow>((a) => ({
         id: a.id,
-        entity: a.entityKey.split(".").slice(-1)[0] ?? a.entityKey,
-        field: a.fieldChanged,
+        // §78 — a business audit, in business words. The raw keys are kept
+        // below for the context panel, because an operator chasing a support
+        // ticket needs the identifier and a manager reading the log does not.
+        entity: entityLabelOf(a.entityKey),
+        field: fieldLabelOf(a.fieldChanged),
         change: `${a.oldValue ?? "empty"} → ${a.newValue ?? "empty"}`,
         at: a.occurredAt.toISOString().replace("T", " ").slice(0, 16),
-        command: a.commandKey ?? "—",
+        command: commandLabelOf(a.commandKey) ?? "—",
         entityKey: a.entityKey,
         entityId: a.entityId,
         oldValue: a.oldValue ?? "empty",

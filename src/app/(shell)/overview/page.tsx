@@ -1,9 +1,16 @@
 import Link from "next/link";
 import { requireActor } from "@/server/platform/auth";
+import { withTenant } from "@/server/platform/tenancy";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
 import { ForbiddenError } from "@/server/platform/authorization";
-import { lowStock, marginReport, ownerConsole } from "@/server/capabilities/plywood";
+import {
+  lowStock,
+  marginReport,
+  onboardingChecklist,
+  ownerConsole,
+} from "@/server/capabilities/plywood";
+import { SetupChecklist } from "./SetupChecklist";
 import {
   Button,
   PageHeader,
@@ -42,7 +49,7 @@ export default async function OverviewPage() {
     throw error;
   }
 
-  const [margin, short] = await Promise.all([
+  const [margin, short, setup] = await Promise.all([
     executeQuery(actor, marginReport, { sinceDays: 30 }).catch((error) => {
       if (error instanceof ForbiddenError) return null;
       throw error;
@@ -51,7 +58,31 @@ export default async function OverviewPage() {
       if (error instanceof ForbiddenError) return [];
       throw error;
     }),
+    // §3. Denied is treated as "nothing to show" rather than as an error: a
+    // warehouse operator cannot read the business profile and does not need an
+    // onboarding checklist either.
+    executeQuery(actor, onboardingChecklist, {}).catch((error) => {
+      if (error instanceof ForbiddenError) return null;
+      throw error;
+    }),
   ]);
+
+  // The trade name if the business has set one, its legal name otherwise, and
+  // the tenant's own name until either exists. Read here rather than passed
+  // down from the shell, because the shell names the workspace and this names
+  // the business — they are the same string today and need not stay so.
+  const businessName = await withTenant(actor.tenantId, async (tx) => {
+    const profile = await tx.plywoodBusinessProfile.findFirst({
+      select: { tradeName: true, legalName: true },
+    });
+    if (profile?.tradeName) return profile.tradeName;
+    if (profile?.legalName) return profile.legalName;
+    const tenant = await tx.tenant.findUnique({
+      where: { id: actor.tenantId },
+      select: { name: true },
+    });
+    return tenant?.name ?? "your business";
+  });
 
   return (
     <>
@@ -59,6 +90,15 @@ export default async function OverviewPage() {
         title="Business Overview"
         description="Today's trade, what the godowns hold, and what is owed in each direction. Every figure is the sum of records — follow any of them through to the screen it came from."
       />
+
+      {/* §3 — the checklist leads while it is unfinished, and disappears
+          entirely once it is done. A permanent "you are set up" banner is
+          furniture. */}
+      {setup && !setup.complete && (
+        <div className="mb-6">
+          <SetupChecklist checklist={setup} businessName={businessName} />
+        </div>
+      )}
 
       <div className="mb-4">
         <StatRow>

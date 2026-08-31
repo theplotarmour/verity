@@ -785,9 +785,19 @@ export function registerPlywoodCapability(): void {
               variables: { count: String(short.length) },
               fallback: {
                 subject: `${short.length} board${short.length === 1 ? "" : "s"} at or below reorder level`,
-                body: short
-                  .map((row) => `${row.name}: ${row.on_hand} left, reorder at ${row.reorder_level_units}`)
-                  .join("\n"),
+                // §72 — a notification says what to do, not that something is
+                // wrong. "Low stock" is a fact the reader must then go and
+                // investigate; the board, the figure, the threshold and the
+                // next action is something they can act on without leaving the
+                // message.
+                body: [
+                  ...short.map(
+                    (row) =>
+                      `${row.name} — ${row.on_hand} available, reorder at ${row.reorder_level_units}`,
+                  ),
+                  "",
+                  "Raise a purchase order: /purchases",
+                ].join("\n"),
               },
             });
           }

@@ -240,8 +240,143 @@ export const businessSettings: QueryDefinition<
   },
 };
 
+
+/**
+ * §3 — what a new business still has to do before it can trade.
+ *
+ * THE POINT OF THIS QUERY. §3 opens with an instruction rather than a feature:
+ * "Do not drop them into an empty Overview." A first-time client landing on a
+ * dashboard of eight zeroes has been told nothing — not that the figures are
+ * zero because nothing has happened yet, not what to do about it, and not
+ * whether the product is broken. The eight steps are the answer, in the order a
+ * person would actually do them.
+ *
+ * ORDERED, AND EACH ONE CHECKED AGAINST REAL DATA. A step is complete when the
+ * records it produces exist, never because somebody ticked it. A checklist with
+ * its own state is a ninth thing to keep in sync with the eight it describes,
+ * and the first time they disagree the checklist is the one that is wrong.
+ *
+ * `blockedBy` names the earlier step that must come first, so the screen can
+ * explain why a step is not yet actionable instead of simply disabling it. You
+ * cannot price a board before there is a board.
+ */
+export const onboardingChecklist: QueryDefinition<
+  Record<string, never>,
+  {
+    complete: boolean;
+    completedSteps: number;
+    totalSteps: number;
+    steps: Array<{
+      key: string;
+      label: string;
+      description: string;
+      href: string;
+      done: boolean;
+      /// The step that must be done first, when this one depends on it.
+      blockedBy: string | null;
+    }>;
+  }
+> = {
+  key: "verity.plywood.onboarding_checklist",
+  entity: ENTITY_BUSINESS_PROFILE,
+  input: z.object({}),
+  handler: async (ctx) => {
+    const [profile, registration, godowns, roles, products, suppliers, customers, orders] =
+      await Promise.all([
+        ctx.tx.plywoodBusinessProfile.findFirst({ select: { id: true } }),
+        ctx.tx.plywoodGstRegistration.findFirst({ where: { active: true }, select: { id: true } }),
+        ctx.tx.location.count(),
+        // A role with at least one permission. An empty role is not a
+        // configured team — it is a role that grants nothing, and counting it
+        // as done would tick a step that leaves everyone locked out.
+        ctx.tx.role.count({ where: { permissions: { some: {} } } }),
+        ctx.tx.plywoodProduct.count({ where: { active: true } }),
+        ctx.tx.plywoodSupplier.count({ where: { active: true } }),
+        ctx.tx.plywoodCustomer.count({ where: { active: true } }),
+        ctx.tx.plywoodPurchaseOrder.count(),
+      ]);
+
+    const steps = [
+      {
+        key: "business_details",
+        label: "Business details",
+        description: "Legal name, PAN and registered address. These print on every invoice.",
+        href: "/settings/business",
+        done: profile !== null,
+        blockedBy: null,
+      },
+      {
+        key: "tax_details",
+        label: "Tax details",
+        description: "GSTIN, invoice series, and the rate for each HSN you trade.",
+        href: "/settings/tax",
+        done: registration !== null,
+        blockedBy: profile === null ? "Business details" : null,
+      },
+      {
+        key: "godowns",
+        label: "Godowns",
+        description: "Where stock physically sits. Everything you hold is held somewhere.",
+        href: "/locations",
+        done: godowns > 0,
+        blockedBy: null,
+      },
+      {
+        key: "team",
+        label: "Team & roles",
+        description: "Who works here and what each of them is allowed to do.",
+        href: "/roles",
+        done: roles > 0,
+        blockedBy: null,
+      },
+      {
+        key: "catalogue",
+        label: "Catalogue",
+        description: "The boards you trade — brand, size, grade and HSN.",
+        href: "/catalogue",
+        done: products > 0,
+        blockedBy: null,
+      },
+      {
+        key: "suppliers",
+        label: "Suppliers",
+        description: "Who you buy from, and what they charge.",
+        href: "/suppliers",
+        done: suppliers > 0,
+        blockedBy: products === 0 ? "Catalogue" : null,
+      },
+      {
+        key: "customers",
+        label: "Customers",
+        description: "Who you sell to, their credit limit and their prices.",
+        href: "/customers",
+        done: customers > 0,
+        blockedBy: products === 0 ? "Catalogue" : null,
+      },
+      {
+        key: "first_order",
+        label: "Ready to trade",
+        description: "Raise your first purchase order and receive the stock against it.",
+        href: "/purchases",
+        done: orders > 0,
+        blockedBy:
+          suppliers === 0 ? "Suppliers" : godowns === 0 ? "Godowns" : products === 0 ? "Catalogue" : null,
+      },
+    ];
+
+    const completedSteps = steps.filter((step) => step.done).length;
+    return {
+      complete: completedSteps === steps.length,
+      completedSteps,
+      totalSteps: steps.length,
+      steps,
+    };
+  },
+};
+
 export function registerBusinessIdentity(): void {
   registerCommand(setBusinessProfile);
   registerCommand(registerGstRegistration);
+  registerQuery(onboardingChecklist);
   registerQuery(businessSettings);
 }

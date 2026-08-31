@@ -1,4 +1,5 @@
 import { EmptyState, Panel, Row, RowList } from "@/components/ui/primitives";
+import { commandLabelOf, fieldLabelOf } from "@/components/ui/business/vocabulary";
 
 /**
  * §78 — who did what to this record, when, and what changed.
@@ -13,35 +14,6 @@ import { EmptyState, Panel, Row, RowList } from "@/components/ui/primitives";
  * change that happened and cannot be described is still a change that happened,
  * and dropping it would make the log quietly incomplete.
  */
-
-/** Field names as a business reads them. */
-const FIELD_LABEL: Record<string, string> = {
-  state: "Status",
-  totalCostPaise: "Order value",
-  totalPricePaise: "Order value",
-  qtyReceived: "Received quantity",
-  qtyShipped: "Issued quantity",
-  creditLimitPaise: "Credit limit",
-  reference: "Reference",
-  reason: "Reason",
-  active: "Active",
-};
-
-/** Command keys as an action, for the rows that carry one. */
-const COMMAND_LABEL: Record<string, string> = {
-  "verity.plywood.create_purchase_order": "Order raised",
-  "verity.plywood.submit_purchase_order": "Sent to supplier",
-  "verity.plywood.receive_goods": "Goods received",
-  "verity.plywood.cancel_purchase_order": "Order cancelled",
-  "verity.plywood.create_sales_order": "Order taken",
-  "verity.plywood.approve_credit": "Credit approved",
-  "verity.plywood.reserve_for_order": "Stock reserved",
-  "verity.plywood.dispatch_order": "Goods issued",
-  "verity.plywood.cancel_sales_order": "Order cancelled",
-  "verity.plywood.raise_sales_invoice": "Invoice raised",
-  "verity.plywood.raise_purchase_invoice": "Supplier invoice recorded",
-  "verity.plywood.record_payment": "Payment recorded",
-};
 
 export type ActivityEntry = {
   occurredAt: Date | string;
@@ -83,19 +55,17 @@ export function ActivityLog({
             <Row key={`${entry.occurredAt}-${entry.action}-${index}`}>
               <div className="min-w-0">
                 <p className="m-0 text-[14px] text-text">
-                  {(entry.commandKey && COMMAND_LABEL[entry.commandKey]) ??
-                    FIELD_LABEL[entry.action] ??
-                    entry.action}
+                  {commandLabelOf(entry.commandKey) ?? fieldLabelOf(entry.action)}
                 </p>
                 <p className="m-0 mt-0.5 text-[12px] text-text-tertiary">
                   {entry.before !== null || entry.after !== null ? (
                     <>
-                      {FIELD_LABEL[entry.action] ?? entry.action}
+                      {fieldLabelOf(entry.action)}
                       {": "}
                       {entry.before ?? "—"} → {entry.after ?? "—"}
                     </>
                   ) : (
-                    (FIELD_LABEL[entry.action] ?? entry.action)
+                    fieldLabelOf(entry.action)
                   )}
                 </p>
               </div>

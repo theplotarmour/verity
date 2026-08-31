@@ -5,6 +5,7 @@ import { ValidationError, type CommandDefinition } from "@/server/platform/comma
 import { type QueryDefinition } from "@/server/platform/query";
 import { diffFields, recordActivity, reconstructHistory } from "@/server/platform/audit";
 import { transition } from "@/server/platform/state";
+import { notify } from "@/server/platform/notification";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
 import {
   ENTITY_CUSTOMER,
@@ -832,6 +833,46 @@ export const createSalesOrder: CommandDefinition<
       where: { id: order.id },
       data: { state: target, version: { increment: 1 } },
     });
+
+    // §72 — tell someone, and tell them enough to act.
+    //
+    // A held order that nobody is told about is an order that sits until the
+    // customer rings to ask. The message names the customer, the amount over,
+    // and the order to open — "credit issue" would leave the approver to go and
+    // find all three.
+    if (overLimit) {
+      const approvers = await ctx.tx.tenantMembership.findMany({
+        where: {
+          role: {
+            permissions: {
+              some: { verb: "ActionExecute", entity: ENTITY_SALES_ORDER },
+            },
+          },
+        },
+        select: { userId: true },
+      });
+      if (approvers.length > 0) {
+        const over = exposure + totalPricePaise - customer.creditLimitPaise;
+        await notify(ctx.tx, {
+          tenantId: ctx.actor.tenantId,
+          key: "verity.plywood.credit_approval_needed",
+          // De-duplicated: one person can hold several memberships, and being
+          // told the same thing twice teaches people to ignore the channel.
+          recipientIds: [...new Set(approvers.map((membership) => membership.userId))],
+          variables: {
+            customer: customer.displayName,
+            over: String(Math.round(over / 100)),
+          },
+          fallback: {
+            subject: `${customer.displayName} needs credit approval`,
+            body:
+              `This order is ₹${Math.round(over / 100).toLocaleString("en-IN")} above ` +
+              `${customer.displayName}'s credit headroom. Nothing is reserved until it is ` +
+              `approved.\n\nReview the order: /sales/${order.id}`,
+          },
+        });
+      }
+    }
 
     return {
       result: { id: order.id, totalPricePaise, state: target },
