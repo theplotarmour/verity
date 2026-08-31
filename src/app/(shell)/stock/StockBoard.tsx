@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -249,7 +251,14 @@ export function StockBoard({
                 {short.map((row) => (
                   <tr key={row.productId}>
                     <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                      {row.brandName} · {row.productName}
+                      {/* §71 — the name is the way in. Low stock leads to the
+                          product, where the reorder decision has its context. */}
+                      <Link
+                        href={`/catalogue/${row.productId}`}
+                        className="text-text no-underline hover:underline"
+                      >
+                        {row.brandName} · {row.productName}
+                      </Link>
                     </td>
                     <td className="tabular border-b border-line px-3 py-2 text-right text-[14px] text-warning">
                       {row.onHandUnits} {row.unitLabel}
@@ -288,9 +297,17 @@ export function StockBoard({
               key={locationId}
               title={godown.name}
               action={
-                <span className="tabular text-[12px] text-text-tertiary">
-                  {rupeesRound(godown.valuePaise)}
-                </span>
+                <div className="flex items-center gap-4">
+                  <span className="tabular text-[12px] text-text-tertiary">
+                    {rupeesRound(godown.valuePaise)}
+                  </span>
+                  <Link
+                    href={`/godowns/${locationId}`}
+                    className="text-[12px] text-accent-ink no-underline hover:underline"
+                  >
+                    Open godown →
+                  </Link>
+                </div>
               }
             >
               <table className="w-full border-collapse">
@@ -314,7 +331,14 @@ export function StockBoard({
                   {godown.rows.map((row) => (
                     <tr key={`${row.productId}-${row.locationId}`}>
                       <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                        {row.brandName} · {row.productName}
+                        {/* §13 — clicking a quantity opens why that quantity
+                            exists, scoped to the godown of this row. */}
+                        <Link
+                          href={`/stock/${row.productId}?godown=${row.locationId}`}
+                          className="text-text no-underline hover:underline"
+                        >
+                          {row.brandName} · {row.productName}
+                        </Link>
                       </td>
                       <td className="border-b border-line px-3 py-2 text-[13px] text-text-secondary">
                         {row.grade}

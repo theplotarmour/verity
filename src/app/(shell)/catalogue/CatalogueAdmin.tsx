@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, EmptyState, ErrorState, Field, Input, Panel, Select } from "@/components/ui/primitives";
@@ -336,7 +338,15 @@ export function CatalogueAdmin({ catalogue }: { catalogue: Brand[] }) {
                     {brand.products.map((product) => (
                       <tr key={product.id}>
                         <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                          {product.name}
+                          {/* §10 — the product page connects everything about
+                              this board: stock by godown, both sides of its
+                              pricing, open orders, and every movement. */}
+                          <Link
+                            href={`/catalogue/${product.id}`}
+                            className="text-text no-underline hover:underline"
+                          >
+                            {product.name}
+                          </Link>
                         </td>
                         <td className="border-b border-line px-3 py-2 text-[13px] text-text-secondary">
                           {product.type === "SERVICE" ? "Service" : "Physical"}

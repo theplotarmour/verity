@@ -668,8 +668,18 @@ export const productMovements: QueryDefinition<
     limit: z.number().int().min(1).max(500).optional(),
   }),
   handler: async (ctx, input) => {
+    // Layer 2, and it was missing.
+    //
+    // THE DEFECT THIS CLOSES. `stockOnHand` above filters by
+    // `reachableGodownIds` and says why: without it a godown-scoped role reads
+    // every godown's stock. This handler read the same facts from the other
+    // table and applied no such filter, so a warehouse operator limited to
+    // Noida could read the movement history of every godown in the business —
+    // quantities, costs and the orders behind them — just by asking for a
+    // product. Layer 1 passed, which is what made it look authorized.
+    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_STOCK_LEDGER);
     const entries = await ctx.tx.stockLedgerEntry.findMany({
-      where: { productId: input.productId },
+      where: { productId: input.productId, locationId: { in: reachable } },
       orderBy: { occurredAt: "desc" },
       take: input.limit ?? 100,
       include: { location: { select: { name: true } }, rack: { select: { rackLabel: true } } },
