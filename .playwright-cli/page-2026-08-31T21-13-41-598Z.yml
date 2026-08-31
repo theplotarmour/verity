@@ -1,0 +1,68 @@
+- generic [active] [ref=f30e1]:
+  - link "Skip to content" [ref=f30e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f30e4]:
+    - generic [ref=f30e5]:
+      - link "Verity" [ref=f30e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f30e7]:
+          - generic [ref=f30e11]: verity
+          - generic [ref=f30e12]: Verity
+      - button "Menu" [ref=f30e15] [cursor=pointer]
+    - main [ref=f30e16]:
+      - generic [ref=f30e18]:
+        - heading "Sales" [level=1] [ref=f30e19]
+        - paragraph [ref=f30e20]: Orders taken from customers. Stock is held against an order before dispatch, so two representatives cannot promise the same sheets.
+      - generic [ref=f30e21]:
+        - button "New customer" [ref=f30e22] [cursor=pointer]
+        - button "Set a price" [ref=f30e23] [cursor=pointer]
+        - button "New order" [ref=f30e24] [cursor=pointer]
+      - generic [ref=f30e26]:
+        - heading "Open orders" [level=2] [ref=f30e28]
+        - table [ref=f30e30]:
+          - caption [ref=f30e31]: Open sales orders. Quantities in sheets.
+          - rowgroup [ref=f30e32]:
+            - row [ref=f30e33]:
+              - columnheader "Order" [ref=f30e34]
+              - columnheader "Board" [ref=f30e35]
+              - columnheader "Status" [ref=f30e36]
+              - columnheader "Ordered" [ref=f30e37]
+              - columnheader "Value" [ref=f30e38]
+              - columnheader [ref=f30e39]
+          - rowgroup [ref=f30e40]:
+            - row [ref=f30e41]:
+              - cell [ref=f30e42]:
+                - link "SO-2026-GANESH-01" [ref=f30e43] [cursor=pointer]:
+                  - /url: /sales/ffdbf16b-880b-4319-bd98-18ba8a845712
+                - generic [ref=f30e44]:
+                  - link "Shree Ji Interior Decorators" [ref=f30e45] [cursor=pointer]:
+                    - /url: /customers/2e4a036a-5e70-4e03-8f0a-b8d3173464b6
+                  - text: · 29 Aug 2026
+              - cell "Century MR Commercial Plywood 19mm" [ref=f30e46]
+              - cell "Processing" [ref=f30e47]
+              - cell "50" [ref=f30e50]
+              - cell "₹82,500" [ref=f30e51]
+              - cell [ref=f30e52]:
+                - button "Cancel order…" [ref=f30e54] [cursor=pointer]
+      - generic [ref=f30e55]:
+        - heading "Customers" [level=2] [ref=f30e57]
+        - table [ref=f30e59]:
+          - caption [ref=f30e60]: Customers and credit headroom
+          - rowgroup [ref=f30e61]:
+            - row [ref=f30e62]:
+              - columnheader "Customer" [ref=f30e63]
+              - columnheader "GSTIN" [ref=f30e64]
+              - columnheader "Limit" [ref=f30e65]
+              - columnheader "Exposure" [ref=f30e66]
+              - columnheader "Headroom" [ref=f30e67]
+              - columnheader [ref=f30e68]
+          - rowgroup [ref=f30e69]:
+            - row [ref=f30e70]:
+              - cell "Shree Ji Interior Decorators" [ref=f30e71]
+              - cell "07ABCFG1234H1Z5" [ref=f30e72]
+              - cell "₹10,00,000" [ref=f30e73]
+              - cell "₹1,80,780" [ref=f30e74]
+              - cell "₹8,19,220" [ref=f30e75]
+              - cell [ref=f30e76]:
+                - button "Credit limit" [ref=f30e77] [cursor=pointer]
+  - button "Open Next.js Dev Tools" [ref=f30e83] [cursor=pointer]

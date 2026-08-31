@@ -1,0 +1,237 @@
+- generic [active] [ref=f26e1]:
+  - link "Skip to content" [ref=f26e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f26e3]:
+    - complementary [ref=f26e4]:
+      - link "Verity" [ref=f26e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f26e6]:
+          - generic [ref=f26e10]: verity
+          - generic [ref=f26e11]: Verity
+      - navigation "Platform" [ref=f26e13]:
+        - list [ref=f26e14]:
+          - listitem [ref=f26e15]: Overview
+          - listitem [ref=f26e16]:
+            - link "Overview" [ref=f26e17] [cursor=pointer]:
+              - /url: /overview
+        - list [ref=f26e21]:
+          - listitem [ref=f26e22]: Trade
+          - listitem [ref=f26e23]:
+            - link "Catalogue" [ref=f26e24] [cursor=pointer]:
+              - /url: /catalogue
+          - listitem [ref=f26e28]:
+            - link "Suppliers" [ref=f26e29] [cursor=pointer]:
+              - /url: /suppliers
+          - listitem [ref=f26e33]:
+            - link "Purchases" [ref=f26e34] [cursor=pointer]:
+              - /url: /purchases
+          - listitem [ref=f26e38]:
+            - link "Customers" [ref=f26e39] [cursor=pointer]:
+              - /url: /customers
+          - listitem [ref=f26e43]:
+            - link "Sales" [ref=f26e44] [cursor=pointer]:
+              - /url: /sales
+        - list [ref=f26e48]:
+          - listitem [ref=f26e49]: Inventory
+          - listitem [ref=f26e50]:
+            - link "Stock" [ref=f26e51] [cursor=pointer]:
+              - /url: /stock
+          - listitem [ref=f26e55]:
+            - link "Godowns" [ref=f26e56] [cursor=pointer]:
+              - /url: /godowns
+        - list [ref=f26e60]:
+          - listitem [ref=f26e61]: Money
+          - listitem [ref=f26e62]:
+            - link "Finance" [ref=f26e63] [cursor=pointer]:
+              - /url: /finance
+          - listitem [ref=f26e67]:
+            - link "Ledgers" [ref=f26e68] [cursor=pointer]:
+              - /url: /ledgers
+          - listitem [ref=f26e72]:
+            - link "Tax & Compliance" [ref=f26e73] [cursor=pointer]:
+              - /url: /tax
+        - list [ref=f26e77]:
+          - listitem [ref=f26e78]: Insights
+          - listitem [ref=f26e79]:
+            - link "Reports" [ref=f26e80] [cursor=pointer]:
+              - /url: /reports
+        - list [ref=f26e84]:
+          - listitem [ref=f26e85]: Administration
+          - listitem [ref=f26e86]:
+            - link "People & Roles" [ref=f26e87] [cursor=pointer]:
+              - /url: /people
+          - listitem [ref=f26e91]:
+            - link "Audit" [ref=f26e92] [cursor=pointer]:
+              - /url: /audit
+          - listitem [ref=f26e96]:
+            - link "Configuration" [ref=f26e97] [cursor=pointer]:
+              - /url: /configuration
+      - button "naksh Owner Sign out" [ref=f26e103] [cursor=pointer]:
+        - generic [ref=f26e104]: "N"
+        - generic [ref=f26e105]:
+          - generic [ref=f26e106]: naksh
+          - generic [ref=f26e107]: Owner
+        - generic [ref=f26e110]: Sign out
+    - generic [ref=f26e111]:
+      - generic [ref=f26e112]:
+        - generic [ref=f26e113]:
+          - generic [ref=f26e114]: Search this page
+          - searchbox "Search this page" [ref=f26e115]
+        - generic [ref=f26e116]:
+          - generic [ref=f26e120]:
+            - generic [ref=f26e121]: Shri Ganesh HQ
+            - generic [ref=f26e122]: Shri Ganesh Timber Trading Co.
+          - link "Recent activity" [ref=f26e124] [cursor=pointer]:
+            - /url: /audit
+          - generic [ref=f26e128]: "N"
+      - main [ref=f26e129]:
+        - generic [ref=f26e131]:
+          - heading "Roles" [level=1] [ref=f26e132]
+          - paragraph [ref=f26e133]: What each role may do, written as business activities. Ticking one grants everything it needs — taking a sales order also needs to read the catalogue, the customer and the stock, and half a permission is an error message nobody can act on.
+        - generic [ref=f26e134]:
+          - button "New role" [ref=f26e136] [cursor=pointer]
+          - generic [ref=f26e137]:
+            - generic [ref=f26e138]:
+              - heading "Roles" [level=2] [ref=f26e140]
+              - list [ref=f26e142]:
+                - listitem [ref=f26e143]:
+                  - button "Owner 1 person · 22 activities" [ref=f26e144]:
+                    - generic [ref=f26e145]:
+                      - generic [ref=f26e146]: Owner
+                      - generic [ref=f26e147]: 1 person · 22 activities
+                - listitem [ref=f26e148]:
+                  - button "Verity Operator 1 person · 0 activities" [ref=f26e149]:
+                    - generic [ref=f26e150]:
+                      - generic [ref=f26e151]: Verity Operator
+                      - generic [ref=f26e152]: 1 person · 0 activities
+            - generic [ref=f26e153]:
+              - generic [ref=f26e154]:
+                - heading "Owner" [level=2] [ref=f26e156]
+                - generic [ref=f26e157]:
+                  - paragraph [ref=f26e158]:
+                    - text: 1 person holds this role.
+                    - link "Assign it under People" [ref=f26e159] [cursor=pointer]:
+                      - /url: /people
+                    - text: .
+                  - paragraph [ref=f26e160]: This role also holds 159 permission(s) that are not part of any activity listed here — granted directly, or by another capability.
+              - generic [ref=f26e162]:
+                - heading "Trade" [level=2] [ref=f26e164]
+                - generic [ref=f26e165]:
+                  - generic [ref=f26e167] [cursor=pointer]:
+                    - checkbox "View catalogue" [checked] [ref=f26e168]
+                    - generic [ref=f26e169]: View catalogue
+                  - generic [ref=f26e170]:
+                    - generic [ref=f26e171] [cursor=pointer]:
+                      - checkbox "Add and edit boards" [checked] [ref=f26e172]
+                      - generic [ref=f26e173]: Add and edit boards
+                    - paragraph [ref=f26e174]: Also allows withdrawing a board from trading
+                  - generic [ref=f26e176] [cursor=pointer]:
+                    - checkbox "View suppliers" [checked] [ref=f26e177]
+                    - generic [ref=f26e178]: View suppliers
+                  - generic [ref=f26e180] [cursor=pointer]:
+                    - checkbox "Add suppliers and set their prices" [checked] [ref=f26e181]
+                    - generic [ref=f26e182]: Add suppliers and set their prices
+                  - generic [ref=f26e184] [cursor=pointer]:
+                    - checkbox "View purchase orders" [checked] [ref=f26e185]
+                    - generic [ref=f26e186]: View purchase orders
+                  - generic [ref=f26e187]:
+                    - generic [ref=f26e188] [cursor=pointer]:
+                      - checkbox "Raise purchase orders" [checked] [ref=f26e189]
+                      - generic [ref=f26e190]: Raise purchase orders
+                    - paragraph [ref=f26e191]: Includes sending an order to the supplier
+                  - generic [ref=f26e193] [cursor=pointer]:
+                    - checkbox "View customers" [checked] [ref=f26e194]
+                    - generic [ref=f26e195]: View customers
+                  - generic [ref=f26e197] [cursor=pointer]:
+                    - checkbox "Add customers" [checked] [ref=f26e198]
+                    - generic [ref=f26e199]: Add customers
+                  - generic [ref=f26e201] [cursor=pointer]:
+                    - checkbox "Change customer pricing" [checked] [ref=f26e202]
+                    - generic [ref=f26e203]: Change customer pricing
+                  - generic [ref=f26e205] [cursor=pointer]:
+                    - checkbox "View sales orders" [checked] [ref=f26e206]
+                    - generic [ref=f26e207]: View sales orders
+                  - generic [ref=f26e209] [cursor=pointer]:
+                    - checkbox "Take sales orders" [checked] [ref=f26e210]
+                    - generic [ref=f26e211]: Take sales orders
+                  - generic [ref=f26e212]:
+                    - generic [ref=f26e213] [cursor=pointer]:
+                      - checkbox "View customer credit" [checked] [ref=f26e214]
+                      - generic [ref=f26e215]: View customer credit
+                    - paragraph [ref=f26e216]: Limit, exposure and how much more they may be sold
+                  - generic [ref=f26e217]:
+                    - generic [ref=f26e218] [cursor=pointer]:
+                      - checkbox "Approve credit overrides" [checked] [ref=f26e219]
+                      - generic [ref=f26e220]: Approve credit overrides
+                    - paragraph [ref=f26e221]: Lets an order go through above the customer's limit. Recorded with a reason.
+                  - generic [ref=f26e223] [cursor=pointer]:
+                    - checkbox "Set credit limits" [checked] [ref=f26e224]
+                    - generic [ref=f26e225]: Set credit limits
+              - generic [ref=f26e227]:
+                - heading "Inventory" [level=2] [ref=f26e229]
+                - generic [ref=f26e230]:
+                  - generic [ref=f26e232] [cursor=pointer]:
+                    - checkbox "View stock" [checked] [ref=f26e233]
+                    - generic [ref=f26e234]: View stock
+                  - generic [ref=f26e235]:
+                    - generic [ref=f26e236] [cursor=pointer]:
+                      - checkbox "Receive goods" [checked] [ref=f26e237]
+                      - generic [ref=f26e238]: Receive goods
+                    - paragraph [ref=f26e239]: Booking a delivery in against its purchase order. Moves the stock in the same step.
+                  - generic [ref=f26e240]:
+                    - generic [ref=f26e241] [cursor=pointer]:
+                      - checkbox "Issue goods" [checked] [ref=f26e242]
+                      - generic [ref=f26e243]: Issue goods
+                    - paragraph [ref=f26e244]: Handing material out against a sales order
+                  - generic [ref=f26e245]:
+                    - generic [ref=f26e246] [cursor=pointer]:
+                      - checkbox "Record damage and adjustments" [checked] [ref=f26e247]
+                      - generic [ref=f26e248]: Record damage and adjustments
+                    - paragraph [ref=f26e249]: Every adjustment records a reason and is permanent
+              - generic [ref=f26e251]:
+                - heading "Money" [level=2] [ref=f26e253]
+                - generic [ref=f26e254]:
+                  - generic [ref=f26e256] [cursor=pointer]:
+                    - checkbox "View invoices and balances" [checked] [ref=f26e257]
+                    - generic [ref=f26e258]: View invoices and balances
+                  - generic [ref=f26e260] [cursor=pointer]:
+                    - checkbox "Raise invoices" [checked] [ref=f26e261]
+                    - generic [ref=f26e262]: Raise invoices
+                  - generic [ref=f26e263]:
+                    - generic [ref=f26e264] [cursor=pointer]:
+                      - checkbox "Record payments" [checked] [ref=f26e265]
+                      - generic [ref=f26e266]: Record payments
+                    - paragraph [ref=f26e267]: Both money received from customers and money paid to suppliers
+                  - generic [ref=f26e268]:
+                    - generic [ref=f26e269] [cursor=pointer]:
+                      - checkbox "Issue credit and debit notes" [checked] [ref=f26e270]
+                      - generic [ref=f26e271]: Issue credit and debit notes
+                    - paragraph [ref=f26e272]: A finalised invoice is never edited; a note corrects it
+              - generic [ref=f26e274]:
+                - heading "Tax" [level=2] [ref=f26e276]
+                - generic [ref=f26e277]:
+                  - generic [ref=f26e279] [cursor=pointer]:
+                    - checkbox "View tax position and returns Partly granted" [ref=f26e280]
+                    - generic [ref=f26e281]:
+                      - text: View tax position and returns
+                      - generic [ref=f26e282]: Partly granted
+                  - generic [ref=f26e283]:
+                    - generic [ref=f26e284] [cursor=pointer]:
+                      - checkbox "Manage tax settings" [ref=f26e285]
+                      - generic [ref=f26e286]: Manage tax settings
+                    - paragraph [ref=f26e287]: The GSTIN, the invoice series, and the rate for each HSN
+                  - generic [ref=f26e288]:
+                    - generic [ref=f26e289] [cursor=pointer]:
+                      - checkbox "Close accounting periods Partly granted" [ref=f26e290]
+                      - generic [ref=f26e291]:
+                        - text: Close accounting periods
+                        - generic [ref=f26e292]: Partly granted
+                    - paragraph [ref=f26e293]: After closing, invoices in the period are permanently locked
+              - generic [ref=f26e295]:
+                - heading "Administration" [level=2] [ref=f26e297]
+                - generic [ref=f26e299]:
+                  - generic [ref=f26e300] [cursor=pointer]:
+                    - checkbox "Manage business settings" [ref=f26e301]
+                    - generic [ref=f26e302]: Manage business settings
+                  - paragraph [ref=f26e303]: Legal name, PAN, address, financial year
+  - button "Open Next.js Dev Tools" [ref=f26e309] [cursor=pointer]

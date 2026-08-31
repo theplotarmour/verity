@@ -1,0 +1,143 @@
+- generic [active] [ref=f16e1]:
+  - link "Skip to content" [ref=f16e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f16e3]:
+    - complementary [ref=f16e4]:
+      - link "Verity" [ref=f16e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f16e6]:
+          - generic [ref=f16e10]: verity
+          - generic [ref=f16e11]: Verity
+      - navigation "Platform" [ref=f16e13]:
+        - list [ref=f16e14]:
+          - listitem [ref=f16e15]: Overview
+          - listitem [ref=f16e16]:
+            - link "Overview" [ref=f16e17] [cursor=pointer]:
+              - /url: /overview
+        - list [ref=f16e21]:
+          - listitem [ref=f16e22]: Trade
+          - listitem [ref=f16e23]:
+            - link "Catalogue" [ref=f16e24] [cursor=pointer]:
+              - /url: /catalogue
+          - listitem [ref=f16e28]:
+            - link "Suppliers" [ref=f16e29] [cursor=pointer]:
+              - /url: /suppliers
+          - listitem [ref=f16e33]:
+            - link "Purchases" [ref=f16e34] [cursor=pointer]:
+              - /url: /purchases
+          - listitem [ref=f16e38]:
+            - link "Customers" [ref=f16e39] [cursor=pointer]:
+              - /url: /customers
+          - listitem [ref=f16e43]:
+            - link "Sales" [ref=f16e44] [cursor=pointer]:
+              - /url: /sales
+        - list [ref=f16e48]:
+          - listitem [ref=f16e49]: Inventory
+          - listitem [ref=f16e50]:
+            - link "Stock" [ref=f16e51] [cursor=pointer]:
+              - /url: /stock
+          - listitem [ref=f16e55]:
+            - link "Godowns" [ref=f16e56] [cursor=pointer]:
+              - /url: /godowns
+        - list [ref=f16e60]:
+          - listitem [ref=f16e61]: Money
+          - listitem [ref=f16e62]:
+            - link "Finance" [ref=f16e63] [cursor=pointer]:
+              - /url: /finance
+          - listitem [ref=f16e67]:
+            - link "Ledgers" [ref=f16e68] [cursor=pointer]:
+              - /url: /ledgers
+          - listitem [ref=f16e72]:
+            - link "Tax & Compliance" [ref=f16e73] [cursor=pointer]:
+              - /url: /tax
+        - list [ref=f16e77]:
+          - listitem [ref=f16e78]: Insights
+          - listitem [ref=f16e79]:
+            - link "Reports" [ref=f16e80] [cursor=pointer]:
+              - /url: /reports
+        - list [ref=f16e84]:
+          - listitem [ref=f16e85]: Administration
+          - listitem [ref=f16e86]:
+            - link "People & Roles" [ref=f16e87] [cursor=pointer]:
+              - /url: /people
+          - listitem [ref=f16e91]:
+            - link "Audit" [ref=f16e92] [cursor=pointer]:
+              - /url: /audit
+          - listitem [ref=f16e96]:
+            - link "Configuration" [ref=f16e97] [cursor=pointer]:
+              - /url: /configuration
+      - button "naksh Owner Sign out" [ref=f16e103] [cursor=pointer]:
+        - generic [ref=f16e104]: "N"
+        - generic [ref=f16e105]:
+          - generic [ref=f16e106]: naksh
+          - generic [ref=f16e107]: Owner
+        - generic [ref=f16e110]: Sign out
+    - generic [ref=f16e111]:
+      - generic [ref=f16e112]:
+        - generic [ref=f16e113]:
+          - generic [ref=f16e114]: Search this page
+          - searchbox "Search this page" [ref=f16e115]
+        - generic [ref=f16e116]:
+          - generic [ref=f16e120]:
+            - generic [ref=f16e121]: Shri Ganesh HQ
+            - generic [ref=f16e122]: Shri Ganesh Timber Trading Co.
+          - link "Recent activity" [ref=f16e124] [cursor=pointer]:
+            - /url: /audit
+          - generic [ref=f16e128]: "N"
+      - main [ref=f16e129]:
+        - generic [ref=f16e131]:
+          - heading "Sales" [level=1] [ref=f16e132]
+          - paragraph [ref=f16e133]: Orders taken from customers. Stock is held against an order before dispatch, so two representatives cannot promise the same sheets.
+        - generic [ref=f16e134]:
+          - button "New customer" [ref=f16e135] [cursor=pointer]
+          - button "Set a price" [ref=f16e136] [cursor=pointer]
+          - button "New order" [ref=f16e137] [cursor=pointer]
+        - generic [ref=f16e139]:
+          - heading "Open orders" [level=2] [ref=f16e141]
+          - table [ref=f16e143]:
+            - caption [ref=f16e144]: Open sales orders
+            - rowgroup [ref=f16e145]:
+              - row [ref=f16e146]:
+                - columnheader "Order" [ref=f16e147]
+                - columnheader "Board" [ref=f16e148]
+                - columnheader "Status" [ref=f16e149]
+                - columnheader "Ordered" [ref=f16e150]
+                - columnheader "Order value" [ref=f16e151]
+                - columnheader [ref=f16e152]
+            - rowgroup [ref=f16e153]:
+              - row [ref=f16e154]:
+                - cell [ref=f16e155]:
+                  - link "SO-2026-GANESH-01" [ref=f16e156] [cursor=pointer]:
+                    - /url: /sales/ffdbf16b-880b-4319-bd98-18ba8a845712
+                  - generic [ref=f16e157]:
+                    - link "Shree Ji Interior Decorators" [ref=f16e158] [cursor=pointer]:
+                      - /url: /customers/2e4a036a-5e70-4e03-8f0a-b8d3173464b6
+                    - text: · 29 Aug 2026
+                - cell "Century MR Commercial Plywood 19mm" [ref=f16e159]
+                - cell "Processing" [ref=f16e160]
+                - cell "50 sheets" [ref=f16e163]
+                - cell "₹82,500" [ref=f16e164]
+                - cell [ref=f16e165]:
+                  - button "Cancel order…" [ref=f16e167] [cursor=pointer]
+        - generic [ref=f16e168]:
+          - heading "Customers" [level=2] [ref=f16e170]
+          - table [ref=f16e172]:
+            - caption [ref=f16e173]: Customers and credit headroom
+            - rowgroup [ref=f16e174]:
+              - row [ref=f16e175]:
+                - columnheader "Customer" [ref=f16e176]
+                - columnheader "GSTIN" [ref=f16e177]
+                - columnheader "Limit" [ref=f16e178]
+                - columnheader "Exposure" [ref=f16e179]
+                - columnheader "Headroom" [ref=f16e180]
+                - columnheader [ref=f16e181]
+            - rowgroup [ref=f16e182]:
+              - row [ref=f16e183]:
+                - cell "Shree Ji Interior Decorators" [ref=f16e184]
+                - cell "07ABCFG1234H1Z5" [ref=f16e185]
+                - cell "₹10,00,000" [ref=f16e186]
+                - cell "₹1,80,780" [ref=f16e187]
+                - cell "₹8,19,220" [ref=f16e188]
+                - cell [ref=f16e189]:
+                  - button "Credit limit" [ref=f16e190] [cursor=pointer]
+  - button "Open Next.js Dev Tools" [ref=f16e196] [cursor=pointer]

@@ -1,0 +1,126 @@
+- generic [active] [ref=f19e1]:
+  - link "Skip to content" [ref=f19e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f19e3]:
+    - complementary [ref=f19e4]:
+      - link "Verity" [ref=f19e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f19e6]:
+          - generic [ref=f19e10]: verity
+          - generic [ref=f19e11]: Verity
+      - navigation "Platform" [ref=f19e13]:
+        - list [ref=f19e14]:
+          - listitem [ref=f19e15]: Overview
+          - listitem [ref=f19e16]:
+            - link "Overview" [ref=f19e17] [cursor=pointer]:
+              - /url: /overview
+        - list [ref=f19e21]:
+          - listitem [ref=f19e22]: Trade
+          - listitem [ref=f19e23]:
+            - link "Catalogue" [ref=f19e24] [cursor=pointer]:
+              - /url: /catalogue
+          - listitem [ref=f19e28]:
+            - link "Suppliers" [ref=f19e29] [cursor=pointer]:
+              - /url: /suppliers
+          - listitem [ref=f19e33]:
+            - link "Purchases" [ref=f19e34] [cursor=pointer]:
+              - /url: /purchases
+          - listitem [ref=f19e38]:
+            - link "Customers" [ref=f19e39] [cursor=pointer]:
+              - /url: /customers
+          - listitem [ref=f19e43]:
+            - link "Sales" [ref=f19e44] [cursor=pointer]:
+              - /url: /sales
+        - list [ref=f19e48]:
+          - listitem [ref=f19e49]: Inventory
+          - listitem [ref=f19e50]:
+            - link "Stock" [ref=f19e51] [cursor=pointer]:
+              - /url: /stock
+          - listitem [ref=f19e55]:
+            - link "Godowns" [ref=f19e56] [cursor=pointer]:
+              - /url: /godowns
+        - list [ref=f19e60]:
+          - listitem [ref=f19e61]: Money
+          - listitem [ref=f19e62]:
+            - link "Finance" [ref=f19e63] [cursor=pointer]:
+              - /url: /finance
+          - listitem [ref=f19e67]:
+            - link "Ledgers" [ref=f19e68] [cursor=pointer]:
+              - /url: /ledgers
+          - listitem [ref=f19e72]:
+            - link "Tax & Compliance" [ref=f19e73] [cursor=pointer]:
+              - /url: /tax
+        - list [ref=f19e77]:
+          - listitem [ref=f19e78]: Insights
+          - listitem [ref=f19e79]:
+            - link "Reports" [ref=f19e80] [cursor=pointer]:
+              - /url: /reports
+        - list [ref=f19e84]:
+          - listitem [ref=f19e85]: Administration
+          - listitem [ref=f19e86]:
+            - link "People & Roles" [ref=f19e87] [cursor=pointer]:
+              - /url: /people
+          - listitem [ref=f19e91]:
+            - link "Audit" [ref=f19e92] [cursor=pointer]:
+              - /url: /audit
+          - listitem [ref=f19e96]:
+            - link "Configuration" [ref=f19e97] [cursor=pointer]:
+              - /url: /configuration
+      - button "naksh Owner Sign out" [ref=f19e103] [cursor=pointer]:
+        - generic [ref=f19e104]: "N"
+        - generic [ref=f19e105]:
+          - generic [ref=f19e106]: naksh
+          - generic [ref=f19e107]: Owner
+        - generic [ref=f19e110]: Sign out
+    - generic [ref=f19e111]:
+      - generic [ref=f19e112]:
+        - generic [ref=f19e113]:
+          - generic [ref=f19e114]: Search this page
+          - searchbox "Search this page" [ref=f19e115]
+        - generic [ref=f19e116]:
+          - generic [ref=f19e120]:
+            - generic [ref=f19e121]: Shri Ganesh HQ
+            - generic [ref=f19e122]: Shri Ganesh Timber Trading Co.
+          - link "Recent activity" [ref=f19e124] [cursor=pointer]:
+            - /url: /audit
+          - generic [ref=f19e128]: "N"
+      - main [ref=f19e129]:
+        - generic [ref=f19e131]:
+          - heading "Customers" [level=1] [ref=f19e132]
+          - paragraph [ref=f19e133]: Everyone the business sells to. Exposure is what they owe plus what has been approved and not yet billed — the same figure the credit check uses, so the list and the block never disagree.
+        - generic [ref=f19e134]:
+          - generic [ref=f19e135]:
+            - generic [ref=f19e136]:
+              - generic [ref=f19e137]: "1"
+              - generic [ref=f19e138]: Customers
+            - generic [ref=f19e139]:
+              - generic [ref=f19e140]: ₹1.8L
+              - generic [ref=f19e141]: Exposure
+              - generic [ref=f19e142]: Owed plus committed
+            - generic [ref=f19e143]:
+              - generic [ref=f19e144]: ₹8.2L
+              - generic [ref=f19e145]: Headroom
+              - generic [ref=f19e146]: Credit still available
+            - generic [ref=f19e147]:
+              - generic [ref=f19e148]: "0"
+              - generic [ref=f19e149]: Over limit
+              - generic [ref=f19e150]: Nobody
+          - generic [ref=f19e151]:
+            - generic [ref=f19e152]:
+              - heading "All customers" [level=2] [ref=f19e153]
+              - textbox "Filter customers" [ref=f19e155]:
+                - /placeholder: Name or GSTIN
+            - list [ref=f19e157]:
+              - listitem [ref=f19e158]:
+                - generic [ref=f19e159]:
+                  - link "Shree Ji Interior Decorators" [ref=f19e160] [cursor=pointer]:
+                    - /url: /customers/2e4a036a-5e70-4e03-8f0a-b8d3173464b6
+                  - paragraph [ref=f19e161]: 07ABCFG1234H1Z5 · +919811223344
+                - generic [ref=f19e162]:
+                  - generic [ref=f19e163]:
+                    - paragraph [ref=f19e164]: ₹1,80,780
+                    - paragraph [ref=f19e165]: of ₹10,00,000
+                  - generic [ref=f19e166]:
+                    - paragraph [ref=f19e167]: ₹8,19,220
+                    - paragraph [ref=f19e168]: Available
+  - button "Open Next.js Dev Tools" [ref=f19e174] [cursor=pointer]

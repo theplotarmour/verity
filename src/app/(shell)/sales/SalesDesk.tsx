@@ -13,7 +13,7 @@ import {
   Select,
   StateBadge,
 } from "@/components/ui/primitives";
-import { day, sheets } from "@/components/ui/business/format";
+import { day } from "@/components/ui/business/format";
 import { NewSalesOrderForm, type SellableRow } from "./NewSalesOrderForm";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
@@ -431,134 +431,133 @@ export function SalesDesk({
               }
             />
           ) : (
-            <table className="w-full border-collapse">
-              <caption className="sr-only">Open sales orders</caption>
-              <thead>
-                <tr>
-                  {[
-                    "Order",
-                    "Board",
-                    "Status",
-                    "Ordered",
-                    "Order value",
-                    "",
-                  ].map((heading, index) => (
-                    <th
-                      key={heading || index}
-                      className={
-                        "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                        (index <= 1 ? "text-left" : "text-right")
-                      }
-                    >
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {orders.map((order) => (
-                  <tr key={order.id}>
-                    <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                      {/* The order is the record; the desk is only a way in.
+            <div className="-mx-3 overflow-x-auto px-3">
+              <table className="w-full min-w-[720px] border-collapse">
+                <caption className="sr-only">
+                  Open sales orders. Quantities in sheets.
+                </caption>
+                <thead>
+                  <tr>
+                    {["Order", "Board", "Status", "Ordered", "Value", ""].map(
+                      (heading, index) => (
+                        <th
+                          key={heading || index}
+                          className={
+                            "whitespace-nowrap border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
+                            (index <= 1 ? "text-left" : "text-right")
+                          }
+                        >
+                          {heading}
+                        </th>
+                      ),
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map((order) => (
+                    <tr key={order.id}>
+                      <td className="border-b border-line px-3 py-2 text-[14px] text-text">
+                        {/* The order is the record; the desk is only a way in.
                           Every action worth taking has more context on the
                           order's own page than a table row can carry. */}
-                      <Link
-                        href={`/sales/${order.id}`}
-                        className="text-text no-underline hover:underline"
-                      >
-                        {order.reference ?? `Order ${order.id.slice(0, 8)}`}
-                      </Link>
-                      <span className="mt-0.5 block text-[12px] text-text-tertiary">
                         <Link
-                          href={`/customers/${order.customerId}`}
-                          className="text-text-tertiary no-underline hover:underline"
+                          href={`/sales/${order.id}`}
+                          className="whitespace-nowrap text-text no-underline hover:underline"
                         >
-                          {order.customerName}
-                        </Link>{" "}
-                        · {day(order.raisedAt)}
-                      </span>
-                    </td>
-                    {/* U2-2: what the order is for. */}
-                    <td className="border-b border-line px-3 py-2 text-[14px] text-text-secondary">
-                      {order.summary}
-                    </td>
-                    <td className="border-b border-line px-3 py-2">
-                      <StateBadge
-                        category={STATE_CATEGORY[order.state] ?? "Pending"}
-                        label={STATE_LABEL[order.state] ?? order.state}
-                      />
-                    </td>
-                    <td className="tabular border-b border-line px-3 py-2 text-right text-[14px] text-text-secondary">
-                      {sheets(order.orderedUnits)}
-                    </td>
-                    <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                      {rupees(order.totalPricePaise)}
-                    </td>
-                    <td className="border-b border-line px-3 py-2 text-right">
-                      <div className="flex justify-end gap-2">
-                        {order.state === "pending_credit" && (
+                          {order.reference ?? `Order ${order.id.slice(0, 8)}`}
+                        </Link>
+                        <span className="mt-0.5 block text-[12px] text-text-tertiary">
+                          <Link
+                            href={`/customers/${order.customerId}`}
+                            className="text-text-tertiary no-underline hover:underline"
+                          >
+                            {order.customerName}
+                          </Link>{" "}
+                          · {day(order.raisedAt)}
+                        </span>
+                      </td>
+                      {/* U2-2: what the order is for. */}
+                      <td className="border-b border-line px-3 py-2 text-[14px] text-text-secondary">
+                        {order.summary}
+                      </td>
+                      <td className="border-b border-line px-3 py-2">
+                        <StateBadge
+                          category={STATE_CATEGORY[order.state] ?? "Pending"}
+                          label={STATE_LABEL[order.state] ?? order.state}
+                        />
+                      </td>
+                      <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] text-text-secondary">
+                        {order.orderedUnits.toLocaleString("en-IN")}
+                      </td>
+                      <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px]">
+                        {rupees(order.totalPricePaise)}
+                      </td>
+                      <td className="border-b border-line px-3 py-2 text-right">
+                        <div className="flex justify-end gap-2">
+                          {order.state === "pending_credit" && (
+                            <Button
+                              size="sm"
+                              disabled={pending}
+                              onClick={() =>
+                                setApproving(
+                                  approving === order.id ? null : order.id,
+                                )
+                              }
+                            >
+                              {approving === order.id
+                                ? "Close"
+                                : "Approve credit"}
+                            </Button>
+                          )}
+                          {order.state === "approved" && (
+                            <Button
+                              size="sm"
+                              disabled={pending}
+                              onClick={() =>
+                                run("verity.plywood.reserve_for_order", {
+                                  orderId: order.id,
+                                })
+                              }
+                            >
+                              Reserve stock
+                            </Button>
+                          )}
+                          {order.state === "dispatching" && (
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              disabled={pending}
+                              onClick={() =>
+                                run("verity.plywood.dispatch_order", {
+                                  orderId: order.id,
+                                })
+                              }
+                            >
+                              Dispatch
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             disabled={pending}
                             onClick={() =>
-                              setApproving(
-                                approving === order.id ? null : order.id,
+                              openPanel(() =>
+                                setCancelling(
+                                  cancelling === order.id ? null : order.id,
+                                ),
                               )
                             }
                           >
-                            {approving === order.id
-                              ? "Close"
-                              : "Approve credit"}
+                            {cancelling === order.id
+                              ? "Keep order"
+                              : "Cancel order…"}
                           </Button>
-                        )}
-                        {order.state === "approved" && (
-                          <Button
-                            size="sm"
-                            disabled={pending}
-                            onClick={() =>
-                              run("verity.plywood.reserve_for_order", {
-                                orderId: order.id,
-                              })
-                            }
-                          >
-                            Reserve stock
-                          </Button>
-                        )}
-                        {order.state === "dispatching" && (
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            disabled={pending}
-                            onClick={() =>
-                              run("verity.plywood.dispatch_order", {
-                                orderId: order.id,
-                              })
-                            }
-                          >
-                            Dispatch
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          disabled={pending}
-                          onClick={() =>
-                            openPanel(() =>
-                              setCancelling(
-                                cancelling === order.id ? null : order.id,
-                              ),
-                            )
-                          }
-                        >
-                          {cancelling === order.id
-                            ? "Keep order"
-                            : "Cancel order…"}
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
 
           {cancelling && (
@@ -646,73 +645,82 @@ export function SalesDesk({
 
       {customers.length > 0 && (
         <Panel title="Customers">
-          <table className="w-full border-collapse">
-            <caption className="sr-only">Customers and credit headroom</caption>
-            <thead>
-              <tr>
-                {["Customer", "GSTIN", "Limit", "Exposure", "Headroom", ""].map(
-                  (heading, index) => (
+          <div className="-mx-3 overflow-x-auto px-3">
+            <table className="w-full min-w-[720px] border-collapse">
+              <caption className="sr-only">
+                Customers and credit headroom
+              </caption>
+              <thead>
+                <tr>
+                  {[
+                    "Customer",
+                    "GSTIN",
+                    "Limit",
+                    "Exposure",
+                    "Headroom",
+                    "",
+                  ].map((heading, index) => (
                     <th
                       key={heading || index}
                       className={
-                        "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
+                        "whitespace-nowrap border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
                         (index === 0 ? "text-left" : "text-right")
                       }
                     >
                       {heading}
                     </th>
-                  ),
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {customers.map((customer) => {
-                const headroom =
-                  customer.creditLimitPaise - customer.exposurePaise;
-                return (
-                  <tr key={customer.id}>
-                    <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                      {customer.displayName}
-                    </td>
-                    <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                      {customer.gstin ?? "—"}
-                    </td>
-                    <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                      {customer.creditLimitPaise === 0
-                        ? "Cash only"
-                        : rupees(customer.creditLimitPaise)}
-                    </td>
-                    <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                      {rupees(customer.exposurePaise)}
-                    </td>
-                    {/* Headroom, not the ceiling: what a representative needs
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {customers.map((customer) => {
+                  const headroom =
+                    customer.creditLimitPaise - customer.exposurePaise;
+                  return (
+                    <tr key={customer.id}>
+                      <td className="border-b border-line px-3 py-2 text-[14px] text-text">
+                        {customer.displayName}
+                      </td>
+                      <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
+                        {customer.gstin ?? "—"}
+                      </td>
+                      <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
+                        {customer.creditLimitPaise === 0
+                          ? "Cash only"
+                          : rupees(customer.creditLimitPaise)}
+                      </td>
+                      <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
+                        {rupees(customer.exposurePaise)}
+                      </td>
+                      {/* Headroom, not the ceiling: what a representative needs
                         before promising anything is what is left. */}
-                    <td
-                      className={
-                        "tabular border-b border-line px-3 py-2 text-right text-[14px] " +
-                        (headroom < 0 ? "text-warning" : "")
-                      }
-                    >
-                      {rupees(headroom)}
-                    </td>
-                    <td className="border-b border-line px-3 py-2 text-right">
-                      <Button
-                        size="sm"
-                        disabled={pending}
-                        onClick={() =>
-                          setCreditFor(
-                            creditFor === customer.id ? null : customer.id,
-                          )
+                      <td
+                        className={
+                          "tabular border-b border-line px-3 py-2 text-right text-[14px] " +
+                          (headroom < 0 ? "text-warning" : "")
                         }
                       >
-                        {creditFor === customer.id ? "Close" : "Credit limit"}
-                      </Button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        {rupees(headroom)}
+                      </td>
+                      <td className="border-b border-line px-3 py-2 text-right">
+                        <Button
+                          size="sm"
+                          disabled={pending}
+                          onClick={() =>
+                            setCreditFor(
+                              creditFor === customer.id ? null : customer.id,
+                            )
+                          }
+                        >
+                          {creditFor === customer.id ? "Close" : "Credit limit"}
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
           {creditFor && (
             <form

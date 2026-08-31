@@ -13,7 +13,7 @@ import {
   Select,
   StateBadge,
 } from "@/components/ui/primitives";
-import { day, sheets } from "@/components/ui/business/format";
+import { day } from "@/components/ui/business/format";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -526,127 +526,133 @@ export function PurchaseDesk({
               }
             />
           ) : (
-            <table className="w-full border-collapse">
-              <caption className="sr-only">Open purchase orders</caption>
-              <thead>
-                <tr>
-                  {[
-                    "Order",
-                    "Board",
-                    "Status",
-                    "Ordered",
-                    "Still owed",
-                    "Order value",
-                    "",
-                  ].map((heading, index) => (
-                    <th
-                      key={heading || index}
-                      className={
-                        "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                        (index <= 2 ? "text-left" : "text-right")
-                      }
-                    >
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {orders.map((order) => (
-                  <tr key={order.id}>
-                    <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                      {/* The order is the record; the desk is only a way in.
+            <div className="-mx-3 overflow-x-auto px-3">
+              <table className="w-full min-w-[720px] border-collapse">
+                <caption className="sr-only">
+                  Open purchase orders. Quantities in sheets.
+                </caption>
+                <thead>
+                  <tr>
+                    {[
+                      "Order",
+                      "Board",
+                      "Status",
+                      "Ordered",
+                      "Still owed",
+                      "Value",
+                      "",
+                    ].map((heading, index) => (
+                      <th
+                        key={heading || index}
+                        className={
+                          "whitespace-nowrap border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
+                          (index <= 2 ? "text-left" : "text-right")
+                        }
+                      >
+                        {heading}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map((order) => (
+                    <tr key={order.id}>
+                      <td className="border-b border-line px-3 py-2 text-[14px] text-text">
+                        {/* The order is the record; the desk is only a way in.
                           Every action worth taking has more context on the
                           order's own page than a table row can carry. */}
-                      <Link
-                        href={`/purchases/${order.id}`}
-                        className="text-text no-underline hover:underline"
-                      >
-                        {order.reference ?? `Order ${order.id.slice(0, 8)}`}
-                      </Link>
-                      <span className="mt-0.5 block text-[12px] text-text-tertiary">
-                        {order.supplierName} · {day(order.raisedAt)}
-                      </span>
-                    </td>
-                    {/* U2-2: what the order is FOR. Without this the desk could
+                        <Link
+                          href={`/purchases/${order.id}`}
+                          className="whitespace-nowrap text-text no-underline hover:underline"
+                        >
+                          {order.reference ?? `Order ${order.id.slice(0, 8)}`}
+                        </Link>
+                        <span className="mt-0.5 block text-[12px] text-text-tertiary">
+                          {order.supplierName} · {day(order.raisedAt)}
+                        </span>
+                      </td>
+                      {/* U2-2: what the order is FOR. Without this the desk could
                         not tell a warehouse user which order they were looking
                         at, and neither could the receive form. */}
-                    <td className="border-b border-line px-3 py-2 text-[14px] text-text-secondary">
-                      {order.summary}
-                    </td>
-                    <td className="border-b border-line px-3 py-2">
-                      <StateBadge
-                        category={STATE_CATEGORY[order.state] ?? "Pending"}
-                        label={STATE_LABEL[order.state] ?? order.state}
-                      />
-                    </td>
-                    <td className="tabular border-b border-line px-3 py-2 text-right text-[14px] text-text-secondary">
-                      {sheets(order.orderedUnits)}
-                    </td>
-                    {/* U2-3: a bare number beside a rupee figure reads as money.
-                        These are sheets, and the column says so. */}
-                    <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                      {order.outstandingUnits === 0
-                        ? "—"
-                        : sheets(order.outstandingUnits)}
-                    </td>
-                    <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                      {rupees(order.totalCostPaise)}
-                    </td>
-                    <td className="border-b border-line px-3 py-2 text-right">
-                      <div className="flex justify-end gap-2">
-                        {order.state === "draft" && (
-                          <Button
-                            size="sm"
-                            disabled={pending}
-                            onClick={() =>
-                              run("verity.plywood.submit_purchase_order", {
-                                orderId: order.id,
-                              })
-                            }
-                          >
-                            Send to supplier
-                          </Button>
-                        )}
-                        {(order.state === "submitted" ||
-                          order.state === "receiving") && (
-                          <Button
-                            size="sm"
-                            disabled={pending}
-                            onClick={() =>
-                              openPanel(() =>
-                                setReceiving(
-                                  receiving === order.id ? null : order.id,
-                                ),
-                              )
-                            }
-                          >
-                            {receiving === order.id ? "Close" : "Receive…"}
-                          </Button>
-                        )}
-                        {order.state !== "completed" && (
-                          <Button
-                            size="sm"
-                            disabled={pending}
-                            onClick={() =>
-                              openPanel(() =>
-                                setCancelling(
-                                  cancelling === order.id ? null : order.id,
-                                ),
-                              )
-                            }
-                          >
-                            {cancelling === order.id
-                              ? "Keep order"
-                              : "Cancel order…"}
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      <td className="border-b border-line px-3 py-2 text-[14px] text-text-secondary">
+                        {order.summary}
+                      </td>
+                      <td className="border-b border-line px-3 py-2">
+                        <StateBadge
+                          category={STATE_CATEGORY[order.state] ?? "Pending"}
+                          label={STATE_LABEL[order.state] ?? order.state}
+                        />
+                      </td>
+                      <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] text-text-secondary">
+                        {order.orderedUnits.toLocaleString("en-IN")}
+                      </td>
+                      {/* U2-3: a bare number beside a rupee figure reads as
+                        money. The unit is carried by the caption once rather
+                        than repeated in every cell, where "300 sheets" wrapped
+                        to two lines in a column this narrow. */}
+                      <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px]">
+                        {order.outstandingUnits === 0
+                          ? "—"
+                          : order.outstandingUnits.toLocaleString("en-IN")}
+                      </td>
+                      <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px]">
+                        {rupees(order.totalCostPaise)}
+                      </td>
+                      <td className="border-b border-line px-3 py-2 text-right">
+                        <div className="flex justify-end gap-2">
+                          {order.state === "draft" && (
+                            <Button
+                              size="sm"
+                              disabled={pending}
+                              onClick={() =>
+                                run("verity.plywood.submit_purchase_order", {
+                                  orderId: order.id,
+                                })
+                              }
+                            >
+                              Send to supplier
+                            </Button>
+                          )}
+                          {(order.state === "submitted" ||
+                            order.state === "receiving") && (
+                            <Button
+                              size="sm"
+                              disabled={pending}
+                              onClick={() =>
+                                openPanel(() =>
+                                  setReceiving(
+                                    receiving === order.id ? null : order.id,
+                                  ),
+                                )
+                              }
+                            >
+                              {receiving === order.id ? "Close" : "Receive…"}
+                            </Button>
+                          )}
+                          {order.state !== "completed" && (
+                            <Button
+                              size="sm"
+                              disabled={pending}
+                              onClick={() =>
+                                openPanel(() =>
+                                  setCancelling(
+                                    cancelling === order.id ? null : order.id,
+                                  ),
+                                )
+                              }
+                            >
+                              {cancelling === order.id
+                                ? "Keep order"
+                                : "Cancel order…"}
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
 
           {cancelling && (
@@ -707,44 +713,46 @@ export function PurchaseDesk({
 
       {suppliers.length > 0 && (
         <Panel title="Suppliers">
-          <table className="w-full border-collapse">
-            <caption className="sr-only">Suppliers</caption>
-            <thead>
-              <tr>
-                {["Supplier", "GSTIN", "GST state", "Open orders"].map(
-                  (heading, index) => (
-                    <th
-                      key={heading}
-                      className={
-                        "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                        (index === 0 ? "text-left" : "text-right")
-                      }
-                    >
-                      {heading}
-                    </th>
-                  ),
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {suppliers.map((supplier) => (
-                <tr key={supplier.id}>
-                  <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                    {supplier.displayName}
-                  </td>
-                  <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                    {supplier.gstin ?? "—"}
-                  </td>
-                  <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                    {supplier.stateCode ?? "—"}
-                  </td>
-                  <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                    {supplier.openOrders === 0 ? "—" : supplier.openOrders}
-                  </td>
+          <div className="-mx-3 overflow-x-auto px-3">
+            <table className="w-full min-w-[720px] border-collapse">
+              <caption className="sr-only">Suppliers</caption>
+              <thead>
+                <tr>
+                  {["Supplier", "GSTIN", "GST state", "Open orders"].map(
+                    (heading, index) => (
+                      <th
+                        key={heading}
+                        className={
+                          "whitespace-nowrap border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
+                          (index === 0 ? "text-left" : "text-right")
+                        }
+                      >
+                        {heading}
+                      </th>
+                    ),
+                  )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {suppliers.map((supplier) => (
+                  <tr key={supplier.id}>
+                    <td className="border-b border-line px-3 py-2 text-[14px] text-text">
+                      {supplier.displayName}
+                    </td>
+                    <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
+                      {supplier.gstin ?? "—"}
+                    </td>
+                    <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
+                      {supplier.stateCode ?? "—"}
+                    </td>
+                    <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px]">
+                      {supplier.openOrders === 0 ? "—" : supplier.openOrders}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Panel>
       )}
     </>
