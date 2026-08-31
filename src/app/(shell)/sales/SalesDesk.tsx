@@ -434,7 +434,7 @@ export function SalesDesk({
             <div className="-mx-3 overflow-x-auto px-3">
               <table className="w-full min-w-[720px] border-collapse">
                 <caption className="sr-only">
-                  Open sales orders. Quantities in sheets.
+                  Open sales orders. Quantities are units ordered.
                 </caption>
                 <thead>
                   <tr>

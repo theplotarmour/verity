@@ -1,0 +1,184 @@
+- generic [active] [ref=f77e1]:
+  - link "Skip to content" [ref=f77e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f77e3]:
+    - complementary [ref=f77e4]:
+      - link "Verity" [ref=f77e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f77e6]:
+          - generic [ref=f77e10]: verity
+          - generic [ref=f77e11]: Verity
+      - navigation "Platform" [ref=f77e13]:
+        - list [ref=f77e14]:
+          - listitem [ref=f77e15]: Overview
+          - listitem [ref=f77e16]:
+            - link "Overview" [ref=f77e17] [cursor=pointer]:
+              - /url: /overview
+        - list [ref=f77e21]:
+          - listitem [ref=f77e22]: Trade
+          - listitem [ref=f77e23]:
+            - link "Catalogue" [ref=f77e24] [cursor=pointer]:
+              - /url: /catalogue
+          - listitem [ref=f77e28]:
+            - link "Suppliers" [ref=f77e29] [cursor=pointer]:
+              - /url: /suppliers
+          - listitem [ref=f77e33]:
+            - link "Purchases" [ref=f77e34] [cursor=pointer]:
+              - /url: /purchases
+          - listitem [ref=f77e38]:
+            - link "Customers" [ref=f77e39] [cursor=pointer]:
+              - /url: /customers
+          - listitem [ref=f77e43]:
+            - link "Sales" [ref=f77e44] [cursor=pointer]:
+              - /url: /sales
+        - list [ref=f77e48]:
+          - listitem [ref=f77e49]: Inventory
+          - listitem [ref=f77e50]:
+            - link "Stock" [ref=f77e51] [cursor=pointer]:
+              - /url: /stock
+          - listitem [ref=f77e55]:
+            - link "Godowns" [ref=f77e56] [cursor=pointer]:
+              - /url: /godowns
+        - list [ref=f77e60]:
+          - listitem [ref=f77e61]: Money
+          - listitem [ref=f77e62]:
+            - link "Finance" [ref=f77e63] [cursor=pointer]:
+              - /url: /finance
+          - listitem [ref=f77e67]:
+            - link "Ledgers" [ref=f77e68] [cursor=pointer]:
+              - /url: /ledgers
+          - listitem [ref=f77e72]:
+            - link "Tax & Compliance" [ref=f77e73] [cursor=pointer]:
+              - /url: /tax
+        - list [ref=f77e77]:
+          - listitem [ref=f77e78]: Insights
+          - listitem [ref=f77e79]:
+            - link "Reports" [ref=f77e80] [cursor=pointer]:
+              - /url: /reports
+        - list [ref=f77e84]:
+          - listitem [ref=f77e85]: Administration
+          - listitem [ref=f77e86]:
+            - link "People & Roles" [ref=f77e87] [cursor=pointer]:
+              - /url: /people
+          - listitem [ref=f77e91]:
+            - link "Audit" [ref=f77e92] [cursor=pointer]:
+              - /url: /audit
+          - listitem [ref=f77e96]:
+            - link "Configuration" [ref=f77e97] [cursor=pointer]:
+              - /url: /configuration
+      - button "naksh Owner Sign out" [ref=f77e103] [cursor=pointer]:
+        - generic [ref=f77e104]: "N"
+        - generic [ref=f77e105]:
+          - generic [ref=f77e106]: naksh
+          - generic [ref=f77e107]: Owner
+        - generic [ref=f77e110]: Sign out
+    - generic [ref=f77e111]:
+      - generic [ref=f77e112]:
+        - generic [ref=f77e113]:
+          - generic [ref=f77e114]: Search this page
+          - searchbox "Search this page" [ref=f77e115]
+        - generic [ref=f77e116]:
+          - generic [ref=f77e120]:
+            - generic [ref=f77e121]: Shri Ganesh HQ
+            - generic [ref=f77e122]: Shri Ganesh Timber Trading Co.
+          - 'button "Theme: Match system. Activate to switch to Light." [ref=f77e123] [cursor=pointer]'
+          - link "Recent activity" [ref=f77e127] [cursor=pointer]:
+            - /url: /audit
+          - generic [ref=f77e131]: "N"
+      - main [ref=f77e132]:
+        - generic [ref=f77e133]:
+          - generic [ref=f77e134]:
+            - heading "Tax & Compliance" [level=1] [ref=f77e135]
+            - paragraph [ref=f77e136]: August 2026. Every figure here is read from posted invoices and notes — nothing on this page is entered, and there is no field to enter it in.
+          - generic [ref=f77e138]:
+            - link "← July 2026" [ref=f77e139] [cursor=pointer]:
+              - /url: /tax?period=2026-07
+            - generic [ref=f77e140]: August 2026
+            - link "September 2026 →" [ref=f77e141] [cursor=pointer]:
+              - /url: /tax?period=2026-09
+        - generic [ref=f77e142]:
+          - generic [ref=f77e143]:
+            - link "₹0 Output GST 0 sales invoice(s)" [ref=f77e144] [cursor=pointer]:
+              - /url: /tax/gstr-1?period=2026-08
+              - generic [ref=f77e145]: ₹0
+              - generic [ref=f77e146]: Output GST
+              - generic [ref=f77e147]: 0 sales invoice(s)
+            - generic [ref=f77e148]:
+              - generic [ref=f77e149]: ₹0
+              - generic [ref=f77e150]: Input credit
+              - generic [ref=f77e151]: 2 purchase invoice(s)
+            - link "₹0 Net estimate Output less credit" [ref=f77e152] [cursor=pointer]:
+              - /url: /tax/gstr-3b?period=2026-08
+              - generic [ref=f77e153]: ₹0
+              - generic [ref=f77e154]: Net estimate
+              - generic [ref=f77e155]: Output less credit
+            - link "2 Exceptions Need attention" [ref=f77e156] [cursor=pointer]:
+              - /url: /tax/exceptions?period=2026-08
+              - generic [ref=f77e157]: "2"
+              - generic [ref=f77e158]: Exceptions
+              - generic [ref=f77e159]: Need attention
+          - generic [ref=f77e160]:
+            - generic [ref=f77e161]:
+              - heading "Returns" [level=2] [ref=f77e163]
+              - list [ref=f77e165]:
+                - listitem [ref=f77e166]:
+                  - generic [ref=f77e167]:
+                    - link "GSTR-1" [ref=f77e168] [cursor=pointer]:
+                      - /url: /tax/gstr-1?period=2026-08
+                    - paragraph [ref=f77e169]: Outward supplies, invoice by invoice
+                  - generic [ref=f77e170]: 0 invoice(s)
+                - listitem [ref=f77e171]:
+                  - generic [ref=f77e172]:
+                    - link "Input credit reconciliation" [ref=f77e173] [cursor=pointer]:
+                      - /url: /tax/itc?period=2026-08
+                    - paragraph [ref=f77e174]: Your purchase register against what suppliers filed
+                - listitem [ref=f77e175]:
+                  - generic [ref=f77e176]:
+                    - link "Purchase review" [ref=f77e177] [cursor=pointer]:
+                      - /url: /tax/purchases
+                    - paragraph [ref=f77e178]: Order, receipt and supplier invoice, compared
+                  - generic [ref=f77e179]: 2 invoice(s)
+                - listitem [ref=f77e180]:
+                  - generic [ref=f77e181]:
+                    - link "GSTR-3B" [ref=f77e182] [cursor=pointer]:
+                      - /url: /tax/gstr-3b?period=2026-08
+                    - paragraph [ref=f77e183]: The summary you pay from
+                  - generic [ref=f77e184]: 1 blocker(s)
+            - generic [ref=f77e185]:
+              - heading "Period close" [level=2] [ref=f77e187]
+              - generic [ref=f77e188]: You do not have access to the close checklist.
+          - generic [ref=f77e190]:
+            - generic [ref=f77e191]:
+              - heading "Needs attention" [level=2] [ref=f77e192]
+              - link "All exceptions →" [ref=f77e193] [cursor=pointer]:
+                - /url: /tax/exceptions?period=2026-08
+            - list [ref=f77e195]:
+              - listitem [ref=f77e196]:
+                - generic [ref=f77e197]:
+                  - paragraph [ref=f77e198]: Divyom Sharma invoice carries no tax split, so no input credit can be claimed against it
+                  - paragraph [ref=f77e199]: PURCHASE/2026-27/0002
+              - listitem [ref=f77e200]:
+                - generic [ref=f77e201]:
+                  - paragraph [ref=f77e202]: Indo-Burma Timber Exporters invoice carries no tax split, so no input credit can be claimed against it
+                  - paragraph [ref=f77e203]: PURCHASE/2026-27/0001
+          - generic [ref=f77e204]:
+            - heading "Related" [level=2] [ref=f77e206]
+            - list [ref=f77e208]:
+              - listitem [ref=f77e209]:
+                - link "Tax settings Registration and rates" [ref=f77e210] [cursor=pointer]:
+                  - /url: /settings/tax
+                  - generic [ref=f77e211]: Tax settings
+                  - generic [ref=f77e212]: Registration and rates
+              - listitem [ref=f77e213]:
+                - link "Finance Receivables and payables" [ref=f77e214] [cursor=pointer]:
+                  - /url: /finance
+                  - generic [ref=f77e215]: Finance
+                  - generic [ref=f77e216]: Receivables and payables
+              - listitem [ref=f77e217]:
+                - link "Ledgers" [ref=f77e218] [cursor=pointer]:
+                  - /url: /ledgers
+              - listitem [ref=f77e220]:
+                - link "Reports" [ref=f77e221] [cursor=pointer]:
+                  - /url: /reports
+  - button "Open Next.js Dev Tools" [ref=f77e228] [cursor=pointer]
+  - alert [ref=f77e232]

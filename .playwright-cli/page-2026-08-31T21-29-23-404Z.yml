@@ -1,0 +1,225 @@
+- generic [active] [ref=f78e1]:
+  - link "Skip to content" [ref=f78e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f78e3]:
+    - complementary [ref=f78e4]:
+      - link "Verity" [ref=f78e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f78e6]:
+          - generic [ref=f78e10]: verity
+          - generic [ref=f78e11]: Verity
+      - navigation "Platform" [ref=f78e13]:
+        - list [ref=f78e14]:
+          - listitem [ref=f78e15]: Overview
+          - listitem [ref=f78e16]:
+            - link "Overview" [ref=f78e17] [cursor=pointer]:
+              - /url: /overview
+        - list [ref=f78e21]:
+          - listitem [ref=f78e22]: Trade
+          - listitem [ref=f78e23]:
+            - link "Catalogue" [ref=f78e24] [cursor=pointer]:
+              - /url: /catalogue
+          - listitem [ref=f78e28]:
+            - link "Suppliers" [ref=f78e29] [cursor=pointer]:
+              - /url: /suppliers
+          - listitem [ref=f78e33]:
+            - link "Purchases" [ref=f78e34] [cursor=pointer]:
+              - /url: /purchases
+          - listitem [ref=f78e38]:
+            - link "Customers" [ref=f78e39] [cursor=pointer]:
+              - /url: /customers
+          - listitem [ref=f78e43]:
+            - link "Sales" [ref=f78e44] [cursor=pointer]:
+              - /url: /sales
+        - list [ref=f78e48]:
+          - listitem [ref=f78e49]: Inventory
+          - listitem [ref=f78e50]:
+            - link "Stock" [ref=f78e51] [cursor=pointer]:
+              - /url: /stock
+          - listitem [ref=f78e55]:
+            - link "Godowns" [ref=f78e56] [cursor=pointer]:
+              - /url: /godowns
+        - list [ref=f78e60]:
+          - listitem [ref=f78e61]: Money
+          - listitem [ref=f78e62]:
+            - link "Finance" [ref=f78e63] [cursor=pointer]:
+              - /url: /finance
+          - listitem [ref=f78e67]:
+            - link "Ledgers" [ref=f78e68] [cursor=pointer]:
+              - /url: /ledgers
+          - listitem [ref=f78e72]:
+            - link "Tax & Compliance" [ref=f78e73] [cursor=pointer]:
+              - /url: /tax
+        - list [ref=f78e77]:
+          - listitem [ref=f78e78]: Insights
+          - listitem [ref=f78e79]:
+            - link "Reports" [ref=f78e80] [cursor=pointer]:
+              - /url: /reports
+        - list [ref=f78e84]:
+          - listitem [ref=f78e85]: Administration
+          - listitem [ref=f78e86]:
+            - link "People & Roles" [ref=f78e87] [cursor=pointer]:
+              - /url: /people
+          - listitem [ref=f78e91]:
+            - link "Audit" [ref=f78e92] [cursor=pointer]:
+              - /url: /audit
+          - listitem [ref=f78e96]:
+            - link "Configuration" [ref=f78e97] [cursor=pointer]:
+              - /url: /configuration
+      - button "naksh Owner Sign out" [ref=f78e103] [cursor=pointer]:
+        - generic [ref=f78e104]: "N"
+        - generic [ref=f78e105]:
+          - generic [ref=f78e106]: naksh
+          - generic [ref=f78e107]: Owner
+        - generic [ref=f78e110]: Sign out
+    - generic [ref=f78e111]:
+      - generic [ref=f78e112]:
+        - generic [ref=f78e113]:
+          - generic [ref=f78e114]: Search this page
+          - searchbox "Search this page" [ref=f78e115]
+        - generic [ref=f78e116]:
+          - generic [ref=f78e120]:
+            - generic [ref=f78e121]: Shri Ganesh HQ
+            - generic [ref=f78e122]: Shri Ganesh Timber Trading Co.
+          - link "Recent activity" [ref=f78e124] [cursor=pointer]:
+            - /url: /audit
+          - generic [ref=f78e128]: "N"
+      - main [ref=f78e129]:
+        - generic [ref=f78e131]:
+          - heading "Stock" [level=1] [ref=f78e132]
+          - paragraph [ref=f78e133]: On hand by godown, valued at weighted average cost. Every figure here is the sum of movements that were recorded — nothing is typed in directly.
+        - generic [ref=f78e135]:
+          - generic [ref=f78e136]:
+            - generic [ref=f78e137]: ₹16,27,374
+            - generic [ref=f78e138]: Stock value
+            - generic [ref=f78e139]: At weighted average cost
+          - generic [ref=f78e140]:
+            - generic [ref=f78e141]: "2"
+            - generic [ref=f78e142]: Godowns holding stock
+          - generic [ref=f78e143]:
+            - generic [ref=f78e144]: "2"
+            - generic [ref=f78e145]: At or below reorder
+            - generic [ref=f78e146]: Needs a purchase or a transfer
+        - generic [ref=f78e147]:
+          - button "Receive" [ref=f78e148] [cursor=pointer]
+          - button "Issue" [ref=f78e149] [cursor=pointer]
+          - button "Transfer" [ref=f78e150] [cursor=pointer]
+        - generic [ref=f78e151]:
+          - button "Stock count" [ref=f78e152] [cursor=pointer]
+          - button "Damaged" [ref=f78e153] [cursor=pointer]
+          - button "Returned" [ref=f78e154] [cursor=pointer]
+        - generic [ref=f78e156]:
+          - heading "At or below reorder level" [level=2] [ref=f78e158]
+          - generic [ref=f78e159]:
+            - table [ref=f78e161]:
+              - caption [ref=f78e162]: Boards at or below their reorder level
+              - rowgroup [ref=f78e163]:
+                - row [ref=f78e164]:
+                  - columnheader "Board" [ref=f78e165]
+                  - columnheader "Available" [ref=f78e166]
+                  - columnheader "Reorder at" [ref=f78e167]
+                  - columnheader [ref=f78e168]
+              - rowgroup [ref=f78e169]:
+                - row [ref=f78e170]:
+                  - cell [ref=f78e171]:
+                    - link "CenturyPly · Century Lamilite High-Gloss Sunmica (1mm)" [ref=f78e172] [cursor=pointer]:
+                      - /url: /catalogue/00b27b5b-527a-474b-915f-5a31bf13e976
+                  - cell "0" [ref=f78e173]
+                  - cell "25" [ref=f78e174]
+                  - cell [ref=f78e175]:
+                    - link "Order more →" [ref=f78e176] [cursor=pointer]:
+                      - /url: /purchases
+                - row [ref=f78e177]:
+                  - cell [ref=f78e178]:
+                    - link "Hettich Fittings · Hettich Soft-Close Hydraulic Hinge (110 deg)" [ref=f78e179] [cursor=pointer]:
+                      - /url: /catalogue/cffe16cd-5fe4-424c-91d7-dbf8c4217577
+                  - cell "0" [ref=f78e180]
+                  - cell "200" [ref=f78e181]
+                  - cell [ref=f78e182]:
+                    - link "Order more →" [ref=f78e183] [cursor=pointer]:
+                      - /url: /purchases
+            - paragraph [ref=f78e184]: Counted across every godown. A board short in one and plentiful in another is a transfer, not a purchase.
+        - generic [ref=f78e185]:
+          - generic [ref=f78e186]:
+            - generic [ref=f78e187]:
+              - heading "Krishna Nagar Sawmill & Shop" [level=2] [ref=f78e188]
+              - generic [ref=f78e189]:
+                - generic [ref=f78e190]: ₹2,22,874
+                - link "Open godown →" [ref=f78e191] [cursor=pointer]:
+                  - /url: /godowns/be5f3794-2cf9-4a76-a3c5-38061fb42088
+            - table [ref=f78e194]:
+              - caption [ref=f78e195]: Stock in Krishna Nagar Sawmill & Shop
+              - rowgroup [ref=f78e196]:
+                - row [ref=f78e197]:
+                  - columnheader "Board" [ref=f78e198]
+                  - columnheader "Grade" [ref=f78e199]
+                  - columnheader "On hand" [ref=f78e200]
+                  - columnheader "Avg cost" [ref=f78e201]
+                  - columnheader "Value" [ref=f78e202]
+              - rowgroup [ref=f78e203]:
+                - row [ref=f78e204]:
+                  - cell [ref=f78e205]:
+                    - link "Action TESA · Action TESA HDHMR Water Resistant 18mm" [ref=f78e206] [cursor=pointer]:
+                      - /url: /stock/2603f40b-06ab-4394-ba9c-55fdee3081ff?godown=be5f3794-2cf9-4a76-a3c5-38061fb42088
+                  - cell "HDHMR" [ref=f78e207]
+                  - cell "255 sheets" [ref=f78e208]
+                  - cell "₹108.33" [ref=f78e209]
+                  - cell "₹27,624" [ref=f78e210]
+                - row [ref=f78e211]:
+                  - cell [ref=f78e212]:
+                    - link "Burma & Desi Teak · Natural Burma Teak Veneer Sheet (4mm)" [ref=f78e213] [cursor=pointer]:
+                      - /url: /stock/9eab021b-3cbd-4f1c-928b-e4a9c0bba34b?godown=be5f3794-2cf9-4a76-a3c5-38061fb42088
+                  - cell "Natural" [ref=f78e214]
+                  - cell "250 sheets" [ref=f78e215]
+                  - cell "₹300.00" [ref=f78e216]
+                  - cell "₹75,000" [ref=f78e217]
+                - row [ref=f78e218]:
+                  - cell [ref=f78e219]:
+                    - link "Imported Hardwoods · Marandi Wood Planks (2x3 Frames)" [ref=f78e220] [cursor=pointer]:
+                      - /url: /stock/ffff7e10-dded-4a75-9fe4-42441261e3c1?godown=be5f3794-2cf9-4a76-a3c5-38061fb42088
+                  - cell "Sawn Wood" [ref=f78e221]
+                  - cell "650 RFT" [ref=f78e222]
+                  - cell "₹185.00" [ref=f78e223]
+                  - cell "₹1,20,250" [ref=f78e224]
+          - generic [ref=f78e225]:
+            - generic [ref=f78e226]:
+              - heading "Okhla Storage Depot" [level=2] [ref=f78e227]
+              - generic [ref=f78e228]:
+                - generic [ref=f78e229]: ₹14,04,500
+                - link "Open godown →" [ref=f78e230] [cursor=pointer]:
+                  - /url: /godowns/ed6229cc-86b2-4f83-928c-39e220f73f28
+            - table [ref=f78e233]:
+              - caption [ref=f78e234]: Stock in Okhla Storage Depot
+              - rowgroup [ref=f78e235]:
+                - row [ref=f78e236]:
+                  - columnheader "Board" [ref=f78e237]
+                  - columnheader "Grade" [ref=f78e238]
+                  - columnheader "On hand" [ref=f78e239]
+                  - columnheader "Avg cost" [ref=f78e240]
+                  - columnheader "Value" [ref=f78e241]
+              - rowgroup [ref=f78e242]:
+                - row [ref=f78e243]:
+                  - cell [ref=f78e244]:
+                    - link "Burma & Desi Teak · Natural Burma Teak Veneer Sheet (4mm)" [ref=f78e245] [cursor=pointer]:
+                      - /url: /stock/9eab021b-3cbd-4f1c-928b-e4a9c0bba34b?godown=ed6229cc-86b2-4f83-928c-39e220f73f28
+                  - cell "Natural" [ref=f78e246]
+                  - cell "70 sheets" [ref=f78e247]
+                  - cell "₹800.00" [ref=f78e248]
+                  - cell "₹56,000" [ref=f78e249]
+                - row [ref=f78e250]:
+                  - cell [ref=f78e251]:
+                    - link "Burma & Desi Teak · Premium Burma Teak Logs (Select Grade)" [ref=f78e252] [cursor=pointer]:
+                      - /url: /stock/dc60ebc0-a210-44cc-bd01-d1b17ae9363f?godown=ed6229cc-86b2-4f83-928c-39e220f73f28
+                  - cell "Log/Export" [ref=f78e253]
+                  - cell "280 CFT" [ref=f78e254]
+                  - cell "₹4,200.00" [ref=f78e255]
+                  - cell "₹11,76,000" [ref=f78e256]
+                - row [ref=f78e257]:
+                  - cell [ref=f78e258]:
+                    - link "CenturyPly · Century MR Commercial Plywood 19mm" [ref=f78e259] [cursor=pointer]:
+                      - /url: /stock/20daf746-725c-4253-8280-50e47a44e769?godown=ed6229cc-86b2-4f83-928c-39e220f73f28
+                  - cell "MR Grade" [ref=f78e260]
+                  - cell "150 sheets" [ref=f78e261]
+                  - cell "₹1,150.00" [ref=f78e262]
+                  - cell "₹1,72,500" [ref=f78e263]
+  - button "Open Next.js Dev Tools" [ref=f78e269] [cursor=pointer]

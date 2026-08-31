@@ -529,7 +529,7 @@ export function PurchaseDesk({
             <div className="-mx-3 overflow-x-auto px-3">
               <table className="w-full min-w-[720px] border-collapse">
                 <caption className="sr-only">
-                  Open purchase orders. Quantities in sheets.
+                  Open purchase orders. Quantities are units ordered.
                 </caption>
                 <thead>
                   <tr>

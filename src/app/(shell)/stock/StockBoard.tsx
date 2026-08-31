@@ -285,7 +285,7 @@ export function StockBoard({
                           and "On hand 100" beside "Reorder at 25" reads as a
                           mistake. */}
                       <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] text-warning">
-                        {row.availableUnits}
+                        {row.availableUnits} {row.unitLabel}
                         {row.reservedUnits > 0 && (
                           <span className="ml-1 text-[12px] text-text-tertiary">
                             ({row.onHandUnits} on hand, {row.reservedUnits}{" "}
