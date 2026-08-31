@@ -2,11 +2,16 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/primitives";
+import { Related } from "@/components/ui/business/Related";
 
 type Invoice = {
   id: string;
   invoiceNumber: string;
   direction: "sales" | "purchase";
+  customerId: string | null;
+  supplierId: string | null;
+  salesOrderId: string | null;
+  purchaseOrderId: string | null;
   partyName: string;
   partyGstin: string | null;
   issuedAt: Date | string;
@@ -248,6 +253,38 @@ export function InvoiceView({
             : ` Central and State GST apply because the place of supply is within state ${invoice.supplyStateCode}.`}
         </p>
       </section>
+
+      {/* §70 — the Invoice's Related section: source order, party, ledger,
+          audit. `print:hidden`, like the toolbar above: this belongs to the
+          screen, and a printed tax invoice carrying a list of internal links
+          is not the document a customer should receive. */}
+      <div className="mt-5 print:hidden">
+        <Related
+          links={[
+            ...(invoice.salesOrderId
+              ? [{ href: `/sales/${invoice.salesOrderId}`, label: "Sales order", note: "What was sold" }]
+              : []),
+            ...(invoice.purchaseOrderId
+              ? [
+                  {
+                    href: `/purchases/${invoice.purchaseOrderId}`,
+                    label: "Purchase order",
+                    note: "What was bought",
+                  },
+                ]
+              : []),
+            ...(invoice.customerId
+              ? [{ href: `/customers/${invoice.customerId}`, label: "Customer", note: invoice.partyName }]
+              : []),
+            ...(invoice.supplierId
+              ? [{ href: `/suppliers/${invoice.supplierId}`, label: "Supplier", note: invoice.partyName }]
+              : []),
+            { href: "/ledgers", label: "Ledger", note: "Where this posted" },
+            { href: "/tax", label: "Tax", note: "How it reaches the return" },
+            { href: "/audit", label: "Audit", note: "Who did what" },
+          ]}
+        />
+      </div>
     </>
   );
 }

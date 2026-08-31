@@ -855,6 +855,13 @@ export const invoiceDetail: QueryDefinition<
     id: string;
     invoiceNumber: string;
     direction: "sales" | "purchase";
+    /// Carried so the document can link back to the records that produced it
+    /// (§70, §71). Without these the invoice is a dead end: the reader has the
+    /// figure and no way to reach the order or the party behind it.
+    customerId: string | null;
+    supplierId: string | null;
+    salesOrderId: string | null;
+    purchaseOrderId: string | null;
     partyName: string;
     /// Legally required on a tax invoice alongside the supplier's own.
     partyGstin: string | null;
@@ -910,6 +917,10 @@ export const invoiceDetail: QueryDefinition<
       id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
       direction: invoice.customerId ? ("sales" as const) : ("purchase" as const),
+      customerId: invoice.customerId,
+      supplierId: invoice.supplierId,
+      salesOrderId: invoice.salesOrderId,
+      purchaseOrderId: invoice.purchaseOrderId,
       partyName: invoice.customer?.displayName ?? invoice.supplier?.displayName ?? "—",
       partyGstin: invoice.customer?.gstin ?? invoice.supplier?.gstin ?? null,
       issuedAt: invoice.issuedAt,
