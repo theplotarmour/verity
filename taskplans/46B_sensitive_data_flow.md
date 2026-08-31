@@ -1,128 +1,116 @@
 # Task Plan 46B — Sensitive Data Flow
 
-This document is the sensitive-data flow companion to Task 46.
+Sensitive-data flow companion to Task 46, traced against the repository at
+`6604a30`. **Permanent reference artifact.**
 
-It must trace actual repository flows, not theoretical ones.
-
-## Required Flow Shape
-
-```text
-User input
-  -> API
-  -> Domain
-  -> Database
-  -> Storage
-  -> Logs
-  -> External systems
-```
-
-## Inventory
-
-### 1. Auth credentials
+Shape traced for each flow:
 
 ```text
-User input -> sign-in form -> server action -> Supabase auth -> session cookie
+Input -> API -> Domain -> Database -> Storage -> Logs -> External systems
 ```
 
-* Enters: `src/app/sign-in/SignInForm.tsx` through `FormData`
-* Persisted: Supabase session cookie, active-membership cookie
-* Access: browser session and server-side auth boundary
-* Logs: password is intentionally passed via `FormData` to avoid action-argument logging
-* External boundary: Supabase Auth
-* Deletion / retention: sign-out clears Supabase session; active-membership cookie is overwritten via `setActiveMembership`
+The last two columns are where this audit found its material issues. The first
+five are in good shape.
 
-### 2. Membership / tenant selection
+---
+
+## 1. Authentication credentials
 
 ```text
-User input -> membership id -> server action -> signed cookie -> database re-check -> tenant scope
+sign-in form -> signInWithPassword(FormData) -> Supabase Auth -> session cookie
 ```
 
-* Enters: `switchOrganization(membershipId)`
-* Persisted: `verity_active_membership` signed cookie
-* Access: current browser session; server re-validates membership against the authenticated user
-* Logs: not intentionally logged
-* External boundary: none
-* Deletion / retention: cookie expires after 30 days or is replaced
+- **Never touches our database.** No credential material is stored on `User`;
+  Supabase Auth owns it and `authUserId` references `auth.users`.
+- **Never reaches the log.** The action takes `FormData` precisely because
+  Next.js logs server-action arguments and the earlier positional signature
+  wrote plaintext passwords to the server log.
+- Failure responses do not distinguish "no such user" from "wrong password".
+- **Gap:** no rate limit in front of it (F-01).
 
-### 3. Cron secret
+## 2. Tenant business data
 
 ```text
-Environment -> `/api/scheduled` and `/api/metrics`
+form -> server action -> command (Zod) -> authorize() -> withTenant() -> Postgres (RLS)
 ```
 
-* Enters: `process.env.CRON_SECRET`
-* Persisted: process memory only
-* Access: scheduler route and metrics route in production
-* Logs: not intentionally logged; unauthorized responses reveal only status shape
-* External boundary: Vercel Cron / operator caller
-* Deletion / retention: redeploy / environment change
+- Tenant context comes from the authenticated actor, never from the payload
+  (PLA-TEN-006). Verified: no command reads a tenant id from input.
+- RLS is enabled **and forced** on tenant tables, and the runtime role
+  `verity_app` is `NOSUPERUSER NOBYPASSRLS` — re-verified live during this audit
+  (`rolsuper=f, rolbypassrls=f`).
+- `assertRlsEnforceable()` refuses a bypassing role at startup.
+- Reads apply three layers: verb×entity, row scope, field redaction.
 
-### 4. Database connection credentials
+## 3. Files and evidence
 
 ```text
-Environment -> runtimeConfig -> Prisma / Supabase / storage clients
+upload -> two-phase confirm -> Supabase Storage -> key/checksum/size frozen by trigger
 ```
 
-* Enters: `DATABASE_URL`, `DIRECT_URL`, Supabase auth variables, storage variables
-* Persisted: runtime memory only
-* Access: server process
-* Logs: config loader prints a structured invalid-config error; it does not print the secret values themselves
-* External boundary: database, Supabase Auth, storage provider
-* Deletion / retention: redeploy / environment rotation
+- A confirmed file's key, checksum and size are immutable by database trigger.
+- Storage driver is bound through the platform's extension point; nothing in
+  `src/server/platform/` knows the provider.
 
-### 5. File metadata
+## 4. Logs — **redacted, and correctly so**
 
 ```text
-User input -> reserveUpload / confirmUpload -> storedFile row -> storage key -> object store
+domain -> log() -> redactMessage + redactFieldsForLog -> JSON line -> stdout
 ```
 
-* Enters: file name, MIME type, size, checksum, entity association
-* Persisted: `storedFile` row, object-store key, object bytes in storage backend
-* Access: tenant-scoped database rows and short-lived signed URLs
-* Logs: no explicit logging in the inspected helper
-* External boundary: Supabase Storage or S3 driver when configured
-* Deletion / retention: delete is driver-backed; lifecycle policies are deployment-dependent
+`observability.ts` runs every log line through `redactMessage()` and every field
+through `redactFieldsForLog()`, which consults `isSensitiveField()` and replaces
+matches with `[redacted]`, recursing into nested objects. Values are truncated.
 
-### 6. Audit payloads
+Only two raw `console.*` calls exist in `src/server/`, both on failure paths
+that carry no business payload (`config.ts` invalid-configuration report, and a
+failure to record an `AuthSuccess` event).
+
+**This is the control that F-04 bypasses.**
+
+## 5. External systems — **the gap**
 
 ```text
-Mutation / security event -> audit helpers -> activity / security_audit_event / domain_event
+thrown Error -> Sentry SDK -> https://sentry.io  (NO redaction applied)
 ```
 
-* Enters: command runtime and security events
-* Persisted: append-only audit tables
-* Access: tenant-scoped readers, plus dedicated operator projections where defined
-* Logs: values are redacted by field name before write for sensitive fields
-* External boundary: none
-* Deletion / retention: operational stream is intended to be retained indefinitely; security stream is compliance-retained
+The platform's redaction lives in `log()`. **Sentry does not go through
+`log()`.** `withSentryConfig` auto-instruments the framework and captures thrown
+exceptions with their messages, and this codebase deliberately puts business
+detail into error messages so that operators get actionable failures. Examples
+from the current tree:
 
-### 7. Scheduled work and workflow payloads
+- `E_FORBIDDEN: godown <uuid> is outside this actor's scope for <verb> <entity>`
+- `E_FORBIDDEN: role <uuid> may not <verb> <entity>`
+- `E_VALIDATION: no price for <product name> for this customer, and none given`
+- `E_VALIDATION: <supplier invoice number> does not add up …`
+- `E_VALIDATION: <customer name> …` in credit paths
+
+Those are tenant business facts — product names, supplier document numbers,
+internal identifiers — leaving the deployment to a third-party SaaS with **no
+`beforeSend` hook and no scrubbing**. See F-04.
+
+Three further properties of the current Sentry setup, all read from
+`next.config.ts` and `sentry.*.config.ts`:
+
+- `tracesSampleRate: 1` — 100% of transactions traced, in every environment.
+- `org: "factory-qc"`, `project: "factory-qc-platform"` — **legacy VEDA-era
+  identifiers**. Verity's production errors report into a different product's
+  Sentry project.
+- `tunnelRoute: "/monitoring"` — an unauthenticated POST endpoint whose purpose
+  is to proxy payloads onward to Sentry's ingest, bypassing ad blockers.
+
+Sentry initialises **only when `NEXT_PUBLIC_SENTRY_DSN` is set**, so a
+deployment that leaves it unset has none of this exposure. That is the current
+mitigating fact, not a control.
+
+## 6. Encryption keys
 
 ```text
-Cron request -> scheduler -> tenant-scoped workflow execution -> database mutations
+caller-supplied key -> encrypt -> ciphertext column
 ```
 
-* Enters: `tenant`, `cadence`, and authenticated cron secret
-* Persisted: workflow and domain tables, audit tables
-* Access: scheduler route and internal tenant-scoped execution
-* Logs: returned errors are intended for the scheduler only
-* External boundary: scheduler caller
-* Deletion / retention: by the underlying domain tables and audit model
-
-### 8. Observability data
-
-```text
-Request/runtime -> metrics/logging helpers -> in-memory registry / logs / operator endpoints
-```
-
-* Enters: request context, timings, error fields
-* Persisted: in-memory metrics only; logs are process output / sink dependent
-* Access: operator or production-authenticated callers only for `/api/metrics`
-* Logs: explicitly redacted in the observability layer where sensitive fields are present
-* External boundary: metrics endpoint, external log sink if configured
-* Deletion / retention: metrics reset on restart; logs depend on sink retention
-
-## Notes
-
-* I did not find evidence of raw credential values being intentionally written to audit tables in the inspected helpers.
-* The dominant sensitive-data paths are auth/session, tenant selection, file metadata, cron secrets, and audit payloads.
+The credential-registry key is supplied per call from the application
+environment and never stored in the database, so a database dump yields
+ciphertext alone. A managed KMS remains an open platform decision (recorded in
+`CLAUDE.md`), unchanged by this audit.
