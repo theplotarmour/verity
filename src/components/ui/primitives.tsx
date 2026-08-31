@@ -624,6 +624,23 @@ export function EmptyState({
  * these several times a day, and a shouting red panel each time is exhausting
  * without being more informative.
  */
+/**
+ * Strips the platform's error code off a message bound for a person.
+ *
+ * Audit finding U1-6. Refusals reached the screen reading
+ * `E_VALIDATION: no price for Century MR Commercial Plywood 19mm for this
+ * customer, and none given`. The sentence after the colon is good writing; the
+ * prefix is platform vocabulary, which a client must never be shown (§0).
+ *
+ * Stripped HERE, at the presentation boundary, rather than at each of the
+ * fifteen call sites — and deliberately not in the errors themselves, because
+ * the code is genuinely useful in a log, in the audit trail and in a support
+ * ticket. It should leave the screen, not the system.
+ */
+function withoutErrorCode(message: string): string {
+  return message.replace(/^E_[A-Z_]+:\s*/, "");
+}
+
 export function ErrorState({
   title,
   message,
@@ -641,20 +658,26 @@ export function ErrorState({
         <span aria-hidden="true" className="size-[7px] shrink-0 rounded-full bg-danger" />
         {title}
       </p>
-      <p className="mb-0 mt-1.5 text-[13px] leading-relaxed text-text">{message}</p>
+      <p className="mb-0 mt-1.5 text-[13px] leading-relaxed text-text">
+        {withoutErrorCode(message)}
+      </p>
       {issues && issues.length > 0 && (
         <ul className="mb-0 mt-2 list-none p-0 text-[13px] text-text-secondary">
           {issues.map((issue) => (
             <li key={issue} className="before:mr-2 before:content-['—']">
-              {issue}
+              {withoutErrorCode(issue)}
             </li>
           ))}
         </ul>
       )}
       <p className="mb-0 mt-2.5 text-[12px] text-text-tertiary">
         {retryable
-          ? "The change was not applied. Retrying is safe."
-          : "The change was not applied. Retrying will not help until something changes."}
+          ? "Nothing was changed. Trying again is safe."
+          // U1-6: the old wording — "retrying will not help until something
+          // changes" — is true and tells the reader nothing. The message above
+          // is where the specific next step belongs, so this line stops
+          // pretending to be advice and just states the outcome.
+          : "Nothing was changed. Fix the point above and try again."}
       </p>
     </div>
   );

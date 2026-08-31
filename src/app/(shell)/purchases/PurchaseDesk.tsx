@@ -111,6 +111,22 @@ export function PurchaseDesk({
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  /**
+   * Opens or closes a panel, clearing any standing failure first.
+   *
+   * Audit finding U1-5: a refusal banner stayed on screen while the user
+   * cancelled, reopened a form and submitted again, so it described an action
+   * two steps back and read as though the new one had failed too.
+   */
+  // The order the cancel panel is for, so the panel can name it rather than
+  // appearing unattached below the table (U1-4).
+  const cancellingOrder = orders.find((order) => order.id === cancelling) ?? null;
+
+  function openPanel(change: () => void) {
+    setFailure(null);
+    change();
+  }
+
   function run(key: string, input: unknown, after?: () => void) {
     setFailure(null);
     startTransition(async () => {
@@ -480,10 +496,10 @@ export function PurchaseDesk({
                             size="sm"
                             disabled={pending}
                             onClick={() =>
-                              setReceiving(receiving === order.id ? null : order.id)
+                              openPanel(() => setReceiving(receiving === order.id ? null : order.id))
                             }
                           >
-                            {receiving === order.id ? "Close" : "Receive"}
+                            {receiving === order.id ? "Close" : "Receive…"}
                           </Button>
                         )}
                         {order.state !== "completed" && (
@@ -491,10 +507,10 @@ export function PurchaseDesk({
                             size="sm"
                             disabled={pending}
                             onClick={() =>
-                              setCancelling(cancelling === order.id ? null : order.id)
+                              openPanel(() => setCancelling(cancelling === order.id ? null : order.id))
                             }
                           >
-                            {cancelling === order.id ? "Close" : "Cancel"}
+                            {cancelling === order.id ? "Keep order" : "Cancel order…"}
                           </Button>
                         )}
                       </div>
@@ -517,7 +533,11 @@ export function PurchaseDesk({
               }
             >
               <div className="min-w-[320px] flex-1">
-                <Field label="Why is this order being cancelled?" htmlFor="cancel-po" required>
+                <Field
+                  label={`Why is ${cancellingOrder?.reference ?? "this order"} being cancelled?`}
+                  htmlFor="cancel-po"
+                  required
+                >
                   <Input
                     id="cancel-po"
                     name="reason"

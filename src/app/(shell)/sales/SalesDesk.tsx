@@ -115,6 +115,22 @@ export function SalesDesk({
   const [creditFor, setCreditFor] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  /**
+   * Opens or closes a panel, clearing any standing failure first.
+   *
+   * Audit finding U1-5: a refusal banner stayed on screen while the user
+   * cancelled, reopened a form and submitted again, so it described an action
+   * two steps back and read as though the new one had failed too.
+   */
+  // The order the cancel panel is for, so the panel can name it rather than
+  // appearing unattached below the table (U1-4).
+  const cancellingOrder = orders.find((order) => order.id === cancelling) ?? null;
+
+  function openPanel(change: () => void) {
+    setFailure(null);
+    change();
+  }
+
   function run(key: string, input: unknown, after?: () => void) {
     setFailure(null);
     startTransition(async () => {
@@ -420,9 +436,9 @@ export function SalesDesk({
                         <Button
                           size="sm"
                           disabled={pending}
-                          onClick={() => setCancelling(cancelling === order.id ? null : order.id)}
+                          onClick={() => openPanel(() => setCancelling(cancelling === order.id ? null : order.id))}
                         >
-                          {cancelling === order.id ? "Close" : "Cancel"}
+                          {cancelling === order.id ? "Keep order" : "Cancel order…"}
                         </Button>
                       </div>
                     </td>
@@ -444,7 +460,11 @@ export function SalesDesk({
               }
             >
               <div className="min-w-[320px] flex-1">
-                <Field label="Why is this order being cancelled?" htmlFor="cancel-so" required>
+                <Field
+                  label={`Why is ${cancellingOrder?.reference ?? "this order"} being cancelled?`}
+                  htmlFor="cancel-so"
+                  required
+                >
                   <Input
                     id="cancel-so"
                     name="reason"

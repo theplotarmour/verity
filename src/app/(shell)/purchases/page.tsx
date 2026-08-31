@@ -3,7 +3,11 @@ import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
 import { ForbiddenError } from "@/server/platform/authorization";
 import { listLocations } from "@/server/capabilities/location";
-import { listCatalogue, listSuppliers, openOrders } from "@/server/capabilities/plywood";
+import {
+  listCatalogue,
+  listSuppliers,
+  openOrders,
+} from "@/server/capabilities/plywood";
 import { PageHeader, PermissionDenied } from "@/components/ui/primitives";
 import { PurchaseDesk } from "./PurchaseDesk";
 
@@ -23,7 +27,8 @@ export default async function PurchasesPage() {
   try {
     orders = await executeQuery(actor, openOrders, {});
   } catch (error) {
-    if (error instanceof ForbiddenError) return <PermissionDenied what="purchase orders" />;
+    if (error instanceof ForbiddenError)
+      return <PermissionDenied what="purchase orders" />;
     throw error;
   }
 
@@ -61,14 +66,20 @@ export default async function PurchasesPage() {
           id: String(godown.id),
           name: String(godown.name),
         }))}
+        // U2-6: a dropdown labelled "Board" must not offer a service. A service
+        // is not held in a godown, cannot be received into one, and cannot be
+        // reserved — offering it invites an order that fails at the first step
+        // that touches stock.
         boards={catalogue.flatMap((brand) =>
-          brand.products.map((product) => ({
-            id: product.id,
-            label:
-              product.thicknessTenthMm == null
-                ? `${brand.brandName} · ${product.name}`
-                : `${brand.brandName} · ${product.name} · ${(product.thicknessTenthMm / 10).toFixed(1)} mm`,
-          })),
+          brand.products
+            .filter((product) => product.type === "PHYSICAL")
+            .map((product) => ({
+              id: product.id,
+              label:
+                product.thicknessTenthMm == null
+                  ? `${brand.brandName} · ${product.name}`
+                  : `${brand.brandName} · ${product.name} · ${(product.thicknessTenthMm / 10).toFixed(1)} mm`,
+            })),
         )}
       />
     </>

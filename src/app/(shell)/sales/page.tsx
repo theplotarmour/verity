@@ -29,7 +29,8 @@ export default async function SalesPage() {
   try {
     orders = await executeQuery(actor, openOrders, {});
   } catch (error) {
-    if (error instanceof ForbiddenError) return <PermissionDenied what="sales orders" />;
+    if (error instanceof ForbiddenError)
+      return <PermissionDenied what="sales orders" />;
     throw error;
   }
 
@@ -68,14 +69,20 @@ export default async function SalesPage() {
           id: String(godown.id),
           name: String(godown.name),
         }))}
+        // U2-6: a dropdown labelled "Board" must not offer a service. A service
+        // is not held in a godown, cannot be received into one, and cannot be
+        // reserved — offering it invites an order that fails at the first step
+        // that touches stock.
         boards={catalogue.flatMap((brand) =>
-          brand.products.map((product) => ({
-            id: product.id,
-            label:
-              product.thicknessTenthMm == null
-                ? `${brand.brandName} · ${product.name}`
-                : `${brand.brandName} · ${product.name} · ${(product.thicknessTenthMm / 10).toFixed(1)} mm`,
-          })),
+          brand.products
+            .filter((product) => product.type === "PHYSICAL")
+            .map((product) => ({
+              id: product.id,
+              label:
+                product.thicknessTenthMm == null
+                  ? `${brand.brandName} · ${product.name}`
+                  : `${brand.brandName} · ${product.name} · ${(product.thicknessTenthMm / 10).toFixed(1)} mm`,
+            })),
         )}
       />
     </>

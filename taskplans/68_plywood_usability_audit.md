@@ -163,11 +163,16 @@ The price field says *"Blank uses their price"* but never displays what that
 price is. When no agreed price exists, the user learns only by submitting and
 being refused. §38 expects the customer's price to prefill visibly.
 
-## U1-9 · Sign-in failed with no message
+## U1-9 · ~~Sign-in failed with no message~~ — **WITHDRAWN, not a defect**
 
-Signing in as `naksh@demo.verity.local` with a wrong password left the page
-unchanged — no error, no feedback. (The operator account signed in normally, so
-the form works; the failure path renders nothing.)
+Re-tested deliberately during remediation: submitting a wrong password renders
+*"Those credentials were not accepted."* in an `alert` region, exactly as it
+should, with no account-enumeration leak.
+
+The original observation was mine, not the app's — I read the page snapshot
+before React had committed the state update, and my search pattern missed the
+rendered text. Recorded rather than quietly deleted, because an audit that only
+ever accumulates findings is one nobody can trust the count of.
 
 ## U2-1 · Orders have no human-readable reference anywhere
 
