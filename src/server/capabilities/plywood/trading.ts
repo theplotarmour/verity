@@ -1796,7 +1796,13 @@ export const openOrders: QueryDefinition<
 
     const purchases = await ctx.tx.plywoodPurchaseOrder.findMany({
       where: {
-        state: { in: ["draft", "submitted", "receiving"] },
+        // Audit finding U0-2: select what is NOT finished, rather than what is
+        // on a known-open list. A hard-coded open list silently drops any row
+        // whose state it does not recognise — and a dropped order is invisible
+        // on every screen while still consuming the customer's credit. Failing
+        // toward "still open" is the safe direction: an order shown with an odd
+        // label can be dealt with; one that is not shown cannot.
+        state: { notIn: ["completed", "cancelled"] },
         locationId: { in: forPurchases },
       },
       include: { lines: true, supplier: { select: { displayName: true } } },
@@ -1804,7 +1810,8 @@ export const openOrders: QueryDefinition<
     });
     const sales = await ctx.tx.plywoodSalesOrder.findMany({
       where: {
-        state: { in: ["draft", "pending_credit", "approved", "dispatching"] },
+        // U0-2, selling side. See the note above.
+        state: { notIn: ["completed", "cancelled"] },
         locationId: { in: forSales },
       },
       include: { customer: { select: { displayName: true } } },
