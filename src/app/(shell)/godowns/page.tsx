@@ -3,6 +3,7 @@ import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
 import { ForbiddenError } from "@/server/platform/authorization";
 import { listLocations } from "@/server/capabilities/location";
+import { listOrganizations } from "@/server/platform/administration";
 import { listGodownRacks } from "@/server/capabilities/plywood";
 import { PageHeader, PermissionDenied } from "@/components/ui/primitives";
 import { GodownRacks } from "./GodownRacks";
@@ -40,6 +41,14 @@ export default async function GodownsPage() {
     if (!(error instanceof ForbiddenError)) throw error;
   }
 
+  // §0 — hiding the generic Locations entry is only honest if a godown can be
+  // created here. Otherwise onboarding step 3 leads to a menu item that no
+  // longer exists.
+  const organizations = await executeQuery(actor, listOrganizations, {}).catch((error) => {
+    if (error instanceof ForbiddenError) return [];
+    throw error;
+  });
+
   const racksByLocation = new Map(layout.map((entry) => [entry.locationId, entry.racks]));
   const godowns = locations.map((location) => ({
     id: String(location.id),
@@ -51,9 +60,15 @@ export default async function GodownsPage() {
     <>
       <PageHeader
         title="Godowns"
-        description="Where stock physically sits. A godown is a Location; a rack is a position inside it, and a retired rack keeps its history rather than disappearing."
+        description="Where stock physically sits. A rack is a position inside a godown, and a retired rack keeps its history rather than disappearing."
       />
-      <GodownRacks godowns={godowns} />
+      <GodownRacks
+        godowns={godowns}
+        organizations={organizations.map((organization) => ({
+          id: organization.id,
+          name: organization.name,
+        }))}
+      />
     </>
   );
 }

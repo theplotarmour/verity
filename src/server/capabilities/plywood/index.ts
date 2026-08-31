@@ -627,6 +627,12 @@ export function registerPlywoodCapability(): void {
         group: "Inventory",
         order: 32,
         icon: "locations",
+        // §0 — a plywood business has godowns, not "Locations" and not
+        // "Assets". Both generic entries present concepts this screen already
+        // covers in the client's own word, and showing all three is the
+        // foundation leaking into the product. The routes still exist and still
+        // authorize; only the menu entry is replaced.
+        supersedes: ["/locations", "/assets"],
         // Gated on CREATE rather than READ: rack layout is set up by whoever
         // shapes the godown, not by everyone who reads stock off it.
         requiresEntity: ENTITY_GODOWN_RACK,

@@ -317,7 +317,7 @@ export const onboardingChecklist: QueryDefinition<
         key: "godowns",
         label: "Godowns",
         description: "Where stock physically sits. Everything you hold is held somewhere.",
-        href: "/locations",
+        href: "/godowns",
         done: godowns > 0,
         blockedBy: null,
       },

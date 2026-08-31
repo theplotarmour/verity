@@ -1,4 +1,7 @@
+import { redirect } from "next/navigation";
 import { requireActor } from "@/server/platform/auth";
+import { installCapabilities } from "@/server/capabilities/registry";
+import { PLYWOOD_CAPABILITY, landingRouteFor } from "@/server/capabilities/plywood";
 import { withTenant } from "@/server/platform/tenancy";
 import { resolvePermissions } from "@/server/platform/authorization";
 import {
@@ -29,6 +32,28 @@ export const dynamic = "force-dynamic";
  */
 export default async function OverviewPage() {
   const actor = await requireActor();
+
+  // §1 — start each role where its work is.
+  //
+  // Only when the plywood capability is active for this tenant: this route is
+  // the platform's own overview and belongs to every tenant, so a pack must not
+  // redirect it for a tenant that never installed the pack.
+  //
+  // Derived from what the role can DO, never from its name — matching on
+  // "Accountant" breaks the moment a business calls the job something else,
+  // which they will. A null answer means leave them here, because a redirect
+  // guessed wrong puts someone on a screen they did not ask for and cannot
+  // explain.
+  installCapabilities();
+  const landing = await withTenant(actor.tenantId, async (tx) => {
+    const plywoodActive = await tx.tenantActivation.findFirst({
+      where: { capabilityId: PLYWOOD_CAPABILITY, status: "Active" },
+      select: { capabilityId: true },
+    });
+    if (!plywoodActive || !actor.roleId) return null;
+    return landingRouteFor(await resolvePermissions(tx, actor.roleId));
+  });
+  if (landing) redirect(landing);
 
   const data = await withTenant(actor.tenantId, async (tx) => {
     const [

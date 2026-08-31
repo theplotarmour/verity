@@ -3,7 +3,15 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Button, EmptyState, ErrorState, Field, Input, Panel } from "@/components/ui/primitives";
+import {
+  Button,
+  EmptyState,
+  ErrorState,
+  Field,
+  Input,
+  Panel,
+  Select,
+} from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -24,10 +32,19 @@ type Godown = {
  * A retired rack stays visible and dimmed. It is where stock once sat, and a
  * movement from last year still points at it.
  */
-export function GodownRacks({ godowns }: { godowns: Godown[] }) {
+export function GodownRacks({
+  godowns,
+  organizations,
+}: {
+  godowns: Godown[];
+  organizations: Array<{ id: string; name: string }>;
+}) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [addingTo, setAddingTo] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [godownName, setGodownName] = useState("");
+  const [organizationId, setOrganizationId] = useState("");
   const [pending, startTransition] = useTransition();
 
   function run(key: string, input: unknown, after?: () => void) {
@@ -43,20 +60,93 @@ export function GodownRacks({ godowns }: { godowns: Godown[] }) {
     });
   }
 
+  // §0 — creating a godown belongs here now that the generic Locations entry is
+  // superseded. It is still `verity.location.create_location` underneath: the
+  // pack supplies the word a plywood business uses, never a second way to
+  // write the record.
+  const createForm = creating && (
+    <Panel title="New godown">
+      <div className="flex flex-col gap-4">
+        <Field label="Name" htmlFor="godown-name" required hint="What the yard calls it">
+          <Input
+            id="godown-name"
+            value={godownName}
+            onChange={(event) => setGodownName(event.target.value)}
+            placeholder="Main Godown"
+          />
+        </Field>
+        <Field
+          label="Belongs to"
+          htmlFor="godown-org"
+          required
+          hint="Decides who can see and move its stock"
+        >
+          <Select
+            id="godown-org"
+            value={organizationId}
+            onChange={(event) => setOrganizationId(event.target.value)}
+          >
+            <option value="">Choose…</option>
+            {organizations.map((organization) => (
+              <option key={organization.id} value={organization.id}>
+                {organization.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <div className="flex gap-2">
+          <Button
+            variant="primary"
+            disabled={pending || godownName.trim().length === 0 || organizationId === ""}
+            onClick={() =>
+              run(
+                "verity.location.create_location",
+                { name: godownName.trim(), organizationId },
+                () => {
+                  setCreating(false);
+                  setGodownName("");
+                },
+              )
+            }
+          >
+            {pending ? "Creating…" : "Create godown"}
+          </Button>
+          <Button disabled={pending} onClick={() => setCreating(false)}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    </Panel>
+  );
+
   if (godowns.length === 0) {
     return (
-      <Panel flush>
-        <EmptyState
-          compact
-          title="No godowns yet"
-          description="A godown is a Location. Create one there first, then lay out its racks here."
-          action={
-            <Link href="/locations">
-              <Button variant="primary">Go to Locations</Button>
-            </Link>
-          }
-        />
-      </Panel>
+      <div className="flex flex-col gap-4">
+        {failure && (
+          <ErrorState
+            title="That change was refused"
+            message={failure.message}
+            issues={failure.issues}
+            retryable={failure.retryable}
+          />
+        )}
+        {createForm ?? (
+          <Panel flush>
+            <EmptyState
+              compact
+              title="No godowns yet"
+              description="Everything you hold is held somewhere. Create the first godown, then lay out its racks."
+              action={
+                organizations.length === 0 ? undefined : (
+                  <Button variant="primary" onClick={() => setCreating(true)}>
+                    Create a godown
+                  </Button>
+                )
+              }
+            />
+          </Panel>
+        )}
+      </div>
     );
   }
 
@@ -70,6 +160,18 @@ export function GodownRacks({ godowns }: { godowns: Godown[] }) {
             issues={failure.issues}
             retryable={failure.retryable}
           />
+        </div>
+      )}
+
+      {createForm ?? (
+        <div className="mb-4">
+          <Button
+            variant="primary"
+            disabled={organizations.length === 0}
+            onClick={() => setCreating(true)}
+          >
+            New godown
+          </Button>
         </div>
       )}
 

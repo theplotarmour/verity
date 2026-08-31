@@ -370,6 +370,56 @@ export function activitiesOf(resolved: Array<{ verb: string; entity: string }>):
   return { held, partial };
 }
 
+
+/**
+ * §1 — where a role's work actually starts.
+ *
+ * §1 gives a table of role to main workspace: an accountant lives in Finance
+ * and Tax, warehouse staff in Stock and Godowns, a salesperson in Customers and
+ * Sales. Landing every one of them on the owner's console means each begins the
+ * day one click from their job, looking at figures most of them cannot act on.
+ *
+ * DERIVED FROM ACTIVITIES, NOT FROM A ROLE NAME. Matching on the string
+ * "Accountant" would break the moment a business calls the job something else,
+ * which they will — and a role named in Hindi, or "Accounts & Tax", would land
+ * nowhere. What a role can DO is the thing the platform actually knows.
+ *
+ * ORDERED MOST SPECIFIC FIRST. Someone who can both approve credit and record
+ * payments is a manager, and the earlier entry wins; a role holding everything
+ * is an owner and falls through to the overview, which is the screen built for
+ * exactly that reader.
+ *
+ * Returns null when nothing fits, and the caller must treat that as "leave them
+ * where they are". A redirect guessed wrong is worse than no redirect: it puts
+ * someone on a screen they did not ask for and cannot explain.
+ */
+const LANDING_RULES: Array<{ href: string; needs: string[] }> = [
+  // Accountant — tax and money, and nothing operational.
+  { href: "/tax", needs: ["view_tax", "record_payments"] },
+  // Warehouse — moves material, does not price or bill it.
+  { href: "/stock", needs: ["view_stock", "receive_goods"] },
+  { href: "/stock", needs: ["view_stock", "issue_goods"] },
+  // Purchasing.
+  { href: "/purchases", needs: ["view_purchases", "create_purchases"] },
+  // Selling.
+  { href: "/sales", needs: ["view_sales", "create_sales"] },
+  // Sales management — pricing and credit, without necessarily taking orders.
+  { href: "/customers", needs: ["change_customer_pricing", "approve_credit"] },
+];
+
+export function landingRouteFor(resolved: Array<{ verb: string; entity: string }>): string | null {
+  const { held } = activitiesOf(resolved);
+  // An owner — someone who can do essentially everything — belongs on the
+  // overview, which exists to answer their question. Falling through to a
+  // narrower screen would demote the person the console was built for.
+  if (held.length >= BUSINESS_ACTIVITIES.length - 4) return null;
+
+  for (const rule of LANDING_RULES) {
+    if (rule.needs.every((key) => held.includes(key))) return rule.href;
+  }
+  return null;
+}
+
 /**
  * The activity catalogue, for the role editor.
  *

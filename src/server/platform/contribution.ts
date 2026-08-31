@@ -85,6 +85,27 @@ export type NavigationContribution = {
    * design-system concern rather than something each capability re-decides.
    */
   icon?: string;
+  /**
+   * Generic routes this entry presents in the capability's own vocabulary.
+   *
+   * WHY THE PLATFORM NEEDS THIS AT ALL. A shared capability contributes a
+   * generic entry — `/locations`, `/assets` — and a domain pack presents the
+   * same underlying concept under the word its client actually uses. A plywood
+   * business has godowns; it does not have "Locations", and showing both is
+   * the foundation leaking into the product (target user flow §0).
+   *
+   * The alternative was for the shared capability to know which packs might
+   * replace it, which inverts the dependency: `location` would have to name
+   * `plywood`, and every future pack after it. Declaring supersession from the
+   * side that has the better word keeps the shared capability ignorant, which
+   * is what lets it be reused by the next client.
+   *
+   * This hides a NAVIGATION ENTRY and nothing else. The route still exists,
+   * still authorizes, and is still reachable by anyone who has its link. It is
+   * a vocabulary decision, never a permission one — a capability must not be
+   * able to grant or remove access by contributing navigation.
+   */
+  supersedes?: string[];
 };
 
 /**
@@ -217,9 +238,24 @@ export function navigationFor(args: {
     }
   }
 
-  return items.sort(
-    (a, b) => (a.order ?? 100) - (b.order ?? 100) || a.label.localeCompare(b.label),
-  );
+  // Applied after collection, not during: an entry can be superseded by a
+  // capability that was iterated later, and resolving as we go would make the
+  // result depend on activation order.
+  //
+  // A capability cannot supersede its OWN entry. That would be a way to write
+  // navigation that is invisible for reasons nobody can see in the list, and
+  // the honest way to remove an entry is to stop contributing it.
+  const superseded = new Map<string, string>();
+  for (const item of items) {
+    for (const href of item.supersedes ?? []) superseded.set(href, item.capabilityId);
+  }
+
+  return items
+    .filter((item) => {
+      const by = superseded.get(item.href);
+      return by === undefined || by === item.capabilityId;
+    })
+    .sort((a, b) => (a.order ?? 100) - (b.order ?? 100) || a.label.localeCompare(b.label));
 }
 
 /** Workspace queue entries offered by the active capabilities. */
