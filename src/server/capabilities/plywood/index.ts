@@ -4,6 +4,7 @@ import { registerCommand, ValidationError, type CommandDefinition } from "@/serv
 import { registerBusinessIdentity } from "./business";
 import { registerTax } from "./tax";
 import { registerBusinessActivities } from "./activities";
+import { registerReports } from "./reports";
 import { registerPeriods } from "./period";
 import {
   goodsReceiptDetail,
@@ -122,6 +123,7 @@ export * from "./trading";
 export * from "./finance";
 export * from "./views";
 export * from "./activities";
+export * from "./reports";
 
 /* ================================= brands ================================= */
 
@@ -824,6 +826,7 @@ export function registerPlywoodCapability(): void {
   registerBusinessIdentity();
   registerTax();
   registerBusinessActivities();
+  registerReports();
   registerPeriods();
   registerCommand(createBrand);
   registerCommand(setBrandActive);

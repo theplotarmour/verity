@@ -1,6 +1,7 @@
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
+import { Related } from "@/components/ui/business/Related";
 import { ForbiddenError } from "@/server/platform/authorization";
 import {
   closeChecklist,
@@ -84,6 +85,20 @@ export default async function ReportsPage() {
         title="Reports"
         description="Every figure here is the same figure the desk that owns it shows. Nothing on this page computes its own version of a number."
       />
+
+      {/* §73 — the detailed reports, each of which drills into source records.
+          This page stays the summary; the depth lives behind these. */}
+      <div className="mb-5">
+        <Related
+          title="Detailed reports"
+          links={[
+            { href: "/reports/sales", label: "Sales", note: "By board and customer" },
+            { href: "/reports/purchases", label: "Purchases", note: "By supplier, and price movement" },
+            { href: "/reports/inventory", label: "Inventory", note: "Ageing, damage, adjustments" },
+            { href: "/reports/finance", label: "Ageing", note: "Receivable and payable" },
+          ]}
+        />
+      </div>
 
       {console_ && (
         <div className="mb-4">
