@@ -1,7 +1,15 @@
 import { z } from "zod";
+
+/**
+ * A uuid no godown will ever have, so `location_id = ANY(...)` on an empty
+ * reachable set matches nothing rather than being rendered as an empty array
+ * some driver might treat as unconstrained. Empty means NOTHING here, always.
+ */
+const NO_GODOWN = "00000000-0000-0000-0000-000000000000";
 import { sellerIdentity } from "./business";
 import { resolveTaxRate } from "./tax";
 import { assertPeriodOpen } from "./period";
+import { reachableGodownIds } from "./scope";
 import { ValidationError, type CommandDefinition } from "@/server/platform/command";
 import { type QueryDefinition } from "@/server/platform/query";
 import { resolveConfig } from "@/server/platform/capability";
@@ -15,6 +23,7 @@ import {
   ENTITY_LEDGER_ENTRY,
   ENTITY_PAYMENT,
   ENTITY_PURCHASE_ORDER,
+  ENTITY_STOCK_BALANCE,
 } from "./keys";
 
 /**
@@ -996,67 +1005,168 @@ export const listInvoices: QueryDefinition<
 export const ownerConsole: QueryDefinition<
   Record<string, never>,
   {
+    /* Sales (§7) */
+    salesThisMonthPaise: number;
     todaysSalesPaise: number;
-    todaysPurchasesPaise: number;
-    stockValuePaise: number;
-    receivablesPaise: number;
-    payablesPaise: number;
+    openSalesOrders: number;
+    awaitingCreditApproval: number;
     awaitingGoodsIssue: number;
+    /* Purchase */
+    openPurchaseOrders: number;
+    pendingReceipt: number;
+    incomingUnits: number;
+    todaysPurchasesPaise: number;
+    /* Inventory */
+    stockValuePaise: number;
     lowStockBoards: number;
+    reservedUnits: number;
+    /* Money */
+    receivablesPaise: number;
+    overdueReceivablesPaise: number;
+    payablesPaise: number;
+    collectionsTodayPaise: number;
+    /* Tax */
+    outputTaxPaise: number;
+    eligibleItcPaise: number;
   }
 > = {
   key: "verity.plywood.owner_console",
   entity: ENTITY_INVOICE,
   input: z.object({}),
   handler: async (ctx) => {
+    // §7 groups the owner's morning into Sales, Purchase, Inventory, Money and
+    // Tax, and every figure it names is here. One statement rather than
+    // eighteen: this is the first query of the day on the busiest screen, and
+    // eighteen round trips to a pooled connection is eighteen latencies.
+    //
+    // LAYER 2 ON THE STOCK FIGURES, which was missing.
+    // `stock_value`, `low_stock` and `reserved` read the physical inventory,
+    // and they read it through no godown filter at all — so a role restricted
+    // to one godown saw the whole business's inventory value on its home
+    // screen. The order and money figures are deliberately NOT filtered: an
+    // invoice is not anchored to a godown, and inventing a filter for it would
+    // be a scope rule with no basis in the model. The stock figures are, and
+    // now say so.
+    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_STOCK_BALANCE);
+    // An empty reachable set means nothing, never everything. Prisma renders an
+    // empty `IN ()` as false, which is the correct reading, but the array is
+    // passed explicitly so the intent survives a future refactor.
+    const godowns = reachable.length > 0 ? reachable : [NO_GODOWN];
+
     const rows = await ctx.tx.$queryRaw<
       Record<string, bigint | null>[]
     >`SELECT
+        (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
+          WHERE customer_id IS NOT NULL AND issued_at >= date_trunc('month', now()))::bigint
+          AS sales_this_month,
         (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
           WHERE customer_id IS NOT NULL AND issued_at >= date_trunc('day', now()))::bigint
           AS todays_sales,
         (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
           WHERE supplier_id IS NOT NULL AND issued_at >= date_trunc('day', now()))::bigint
           AS todays_purchases,
-        (SELECT COALESCE(SUM(qty_units * avg_unit_cost_paise), 0) FROM stock_balance)::bigint
+        (SELECT count(*) FROM plywood_sales_order
+          WHERE state IN ('draft', 'pending_credit', 'approved', 'dispatching'))::bigint
+          AS open_sales_orders,
+        (SELECT count(*) FROM plywood_sales_order WHERE state = 'pending_credit')::bigint
+          AS awaiting_credit,
+        (SELECT count(*) FROM plywood_sales_order
+          WHERE state IN ('approved', 'dispatching'))::bigint
+          AS awaiting_goods_issue,
+        (SELECT count(*) FROM plywood_purchase_order
+          WHERE state IN ('submitted', 'receiving'))::bigint
+          AS open_purchase_orders,
+        -- Orders with something still owed, which is not the same as orders
+        -- that are open: a fully received order stays open until it is closed
+        -- out, and counting it as "pending receipt" would send someone to the
+        -- gate for a lorry that already came.
+        (SELECT count(DISTINCT o.id) FROM plywood_purchase_order o
+           JOIN plywood_purchase_order_line l ON l.purchase_order_id = o.id
+          WHERE o.state IN ('submitted', 'receiving')
+            AND l.qty_ordered > l.qty_received)::bigint
+          AS pending_receipt,
+        (SELECT COALESCE(SUM(GREATEST(l.qty_ordered - l.qty_received, 0)), 0)
+           FROM plywood_purchase_order o
+           JOIN plywood_purchase_order_line l ON l.purchase_order_id = o.id
+          WHERE o.state IN ('submitted', 'receiving'))::bigint
+          AS incoming_units,
+        (SELECT COALESCE(SUM(qty_units * avg_unit_cost_paise), 0) FROM stock_balance
+          WHERE location_id = ANY(${godowns}::uuid[]))::bigint
           AS stock_value,
+        (SELECT COALESCE(SUM(r.qty_units), 0) FROM plywood_stock_reservation r
+          WHERE r.released_at IS NULL
+            AND r.location_id = ANY(${godowns}::uuid[]))::bigint
+          AS reserved_units,
         (SELECT COALESCE(SUM(i.total_paise), 0) - COALESCE((
            SELECT SUM(p.amount_paise) FROM plywood_payment p
             JOIN plywood_invoice pi ON pi.id = p.invoice_id
            WHERE pi.customer_id IS NOT NULL), 0)
            FROM plywood_invoice i WHERE i.customer_id IS NOT NULL)::bigint
           AS receivables,
+        -- Overdue is age, not a due-date column: this capability records no
+        -- payment terms, so "older than 30 days and not settled" is stated as
+        -- the rule rather than dressed up as a term the business never agreed.
+        (SELECT COALESCE(SUM(i.total_paise - COALESCE((
+             SELECT SUM(p.amount_paise) FROM plywood_payment p WHERE p.invoice_id = i.id
+           ), 0)), 0)
+           FROM plywood_invoice i
+          WHERE i.customer_id IS NOT NULL
+            AND i.issued_at < now() - interval '30 days'
+            AND i.total_paise > COALESCE((
+              SELECT SUM(p.amount_paise) FROM plywood_payment p WHERE p.invoice_id = i.id), 0))::bigint
+          AS overdue_receivables,
         (SELECT COALESCE(SUM(i.total_paise), 0) - COALESCE((
            SELECT SUM(p.amount_paise) FROM plywood_payment p
             JOIN plywood_invoice pi ON pi.id = p.invoice_id
            WHERE pi.supplier_id IS NOT NULL), 0)
            FROM plywood_invoice i WHERE i.supplier_id IS NOT NULL)::bigint
           AS payables,
-        (SELECT count(*) FROM plywood_sales_order
-          WHERE state IN ('approved', 'dispatching'))::bigint
-          AS awaiting_goods_issue,
+        (SELECT COALESCE(SUM(p.amount_paise), 0) FROM plywood_payment p
+           JOIN plywood_invoice i ON i.id = p.invoice_id
+          WHERE i.customer_id IS NOT NULL
+            AND p.received_at >= date_trunc('day', now()))::bigint
+          AS collections_today,
+        (SELECT COALESCE(SUM(cgst_paise + sgst_paise + igst_paise), 0) FROM plywood_invoice
+          WHERE customer_id IS NOT NULL AND issued_at >= date_trunc('month', now()))::bigint
+          AS output_tax,
+        (SELECT COALESCE(SUM(cgst_paise + sgst_paise + igst_paise), 0) FROM plywood_invoice
+          WHERE supplier_id IS NOT NULL AND issued_at >= date_trunc('month', now()))::bigint
+          AS eligible_itc,
         -- Available, not on hand (rule freeze §4.2). Counting on-hand reports
         -- plenty while every sheet is already reserved, and the buyer finds
         -- out at goods issue, which is too late to buy anything.
         (SELECT count(*) FROM plywood_product p
           WHERE p.active AND p.reorder_level_units > 0
             AND COALESCE((SELECT SUM(b.qty_units) FROM stock_balance b
-                           WHERE b.product_id = p.id), 0)
+                           WHERE b.product_id = p.id
+                             AND b.location_id = ANY(${godowns}::uuid[])), 0)
               - COALESCE((SELECT SUM(r.qty_units) FROM plywood_stock_reservation r
-                           WHERE r.product_id = p.id AND r.released_at IS NULL), 0)
+                           WHERE r.product_id = p.id AND r.released_at IS NULL
+                             AND r.location_id = ANY(${godowns}::uuid[])), 0)
               < p.reorder_level_units)::bigint
           AS low_stock`;
 
     const row = rows[0] ?? {};
     const n = (key: string) => Number(row[key] ?? 0);
     return {
+      salesThisMonthPaise: n("sales_this_month"),
       todaysSalesPaise: n("todays_sales"),
+      openSalesOrders: n("open_sales_orders"),
+      awaitingCreditApproval: n("awaiting_credit"),
+      awaitingGoodsIssue: n("awaiting_goods_issue"),
+      openPurchaseOrders: n("open_purchase_orders"),
+      pendingReceipt: n("pending_receipt"),
+      incomingUnits: n("incoming_units"),
       todaysPurchasesPaise: n("todays_purchases"),
       stockValuePaise: n("stock_value"),
-      receivablesPaise: n("receivables"),
-      payablesPaise: n("payables"),
-      awaitingGoodsIssue: n("awaiting_goods_issue"),
       lowStockBoards: n("low_stock"),
+      reservedUnits: n("reserved_units"),
+      receivablesPaise: n("receivables"),
+      overdueReceivablesPaise: n("overdue_receivables"),
+      payablesPaise: n("payables"),
+      collectionsTodayPaise: n("collections_today"),
+      outputTaxPaise: n("output_tax"),
+      eligibleItcPaise: n("eligible_itc"),
     };
   },
 };

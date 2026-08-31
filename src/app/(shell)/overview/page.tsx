@@ -9,6 +9,7 @@ import {
   marginReport,
   onboardingChecklist,
   ownerConsole,
+  taxSummary,
 } from "@/server/capabilities/plywood";
 import { SetupChecklist } from "./SetupChecklist";
 import {
@@ -16,6 +17,7 @@ import {
   PageHeader,
   Panel,
   PermissionDenied,
+  SectionHeading,
   Stat,
   StatRow,
 } from "@/components/ui/primitives";
@@ -49,7 +51,7 @@ export default async function OverviewPage() {
     throw error;
   }
 
-  const [margin, short, setup] = await Promise.all([
+  const [margin, short, setup, tax] = await Promise.all([
     executeQuery(actor, marginReport, { sinceDays: 30 }).catch((error) => {
       if (error instanceof ForbiddenError) return null;
       throw error;
@@ -65,7 +67,16 @@ export default async function OverviewPage() {
       if (error instanceof ForbiddenError) return null;
       throw error;
     }),
+    // Only the count is wanted here; the list itself lives on /tax/exceptions.
+    // Null rather than zero when the actor cannot read tax, because "no
+    // exceptions" and "you may not see them" are different facts and showing
+    // the first for the second is a false all-clear.
+    executeQuery(actor, taxSummary, {}).catch((error) => {
+      if (error instanceof ForbiddenError) return null;
+      throw error;
+    }),
   ]);
+  const taxExceptionCount = tax === null ? null : tax.exceptions.length;
 
   // The trade name if the business has set one, its legal name otherwise, and
   // the tenant's own name until either exists. Read here rather than passed
@@ -100,56 +111,148 @@ export default async function OverviewPage() {
         </div>
       )}
 
-      <div className="mb-4">
-        <StatRow>
-          <Stat
-            label="Today's sales"
-            value={rupees(console_.todaysSalesPaise)}
-            href="/finance"
-            hint="Invoiced today"
-          />
-          <Stat
-            label="Today's purchases"
-            value={rupees(console_.todaysPurchasesPaise)}
-            href="/purchases"
-            hint="Billed today"
-          />
-          <Stat
-            label="Stock value"
-            value={rupees(console_.stockValuePaise)}
-            href="/stock"
-            hint="At weighted average cost"
-          />
-          <Stat
-            label="Low stock"
-            value={String(console_.lowStockBoards)}
-            href="/stock"
-            hint={console_.lowStockBoards === 0 ? "Nothing to buy" : "At or below reorder"}
-          />
-        </StatRow>
-      </div>
+      {/* §7 — the owner's morning, in the five groups the specification
+          names. Every figure is a link, because the value of a dashboard
+          number is the screen it takes you to; a figure with no way through to
+          the records behind it is a number to worry about rather than act on.
+          Nothing here is entered anywhere — §8. */}
+      <div className="mb-6 flex flex-col gap-5">
+        <section aria-labelledby="ov-sales">
+          <SectionHeading>Sales</SectionHeading>
+          <StatRow>
+            <Stat
+              label="Sales this month"
+              value={rupees(console_.salesThisMonthPaise)}
+              href="/finance"
+              hint={`${rupees(console_.todaysSalesPaise)} today`}
+            />
+            <Stat
+              label="Open orders"
+              value={String(console_.openSalesOrders)}
+              href="/sales"
+              hint="Taken, not yet closed out"
+            />
+            <Stat
+              label="Awaiting credit approval"
+              value={String(console_.awaitingCreditApproval)}
+              href="/sales"
+              hint={console_.awaitingCreditApproval === 0 ? "Nothing held" : "Held until approved"}
+            />
+            <Stat
+              label="Awaiting goods issue"
+              value={String(console_.awaitingGoodsIssue)}
+              href="/sales"
+              hint="Approved, still in the godown"
+            />
+          </StatRow>
+        </section>
 
-      <div className="mb-6">
-        <StatRow>
-          <Stat
-            label="Receivables"
-            value={rupees(console_.receivablesPaise)}
-            href="/finance"
-            hint="Owed to us"
-          />
-          <Stat
-            label="Payables"
-            value={rupees(console_.payablesPaise)}
-            href="/finance"
-            hint="Owed by us"
-          />
-          <Stat
-            label="Awaiting goods issue"
-            value={String(console_.awaitingGoodsIssue)}
-            href="/sales"
-            hint="Approved, not yet issued"
-          />
-        </StatRow>
+        <section aria-labelledby="ov-purchase">
+          <SectionHeading>Purchase</SectionHeading>
+          <StatRow>
+            <Stat
+              label="Open purchase orders"
+              value={String(console_.openPurchaseOrders)}
+              href="/purchases"
+            />
+            <Stat
+              label="Pending receipt"
+              value={String(console_.pendingReceipt)}
+              href="/purchases"
+              hint="Something still owed"
+            />
+            <Stat
+              label="Incoming stock"
+              value={`${console_.incomingUnits.toLocaleString("en-IN")} sheets`}
+              href="/purchases"
+              hint="Ordered, not yet arrived"
+            />
+            <Stat
+              label="Today's purchases"
+              value={rupees(console_.todaysPurchasesPaise)}
+              href="/purchases"
+              hint="Billed today"
+            />
+          </StatRow>
+        </section>
+
+        <section aria-labelledby="ov-inventory">
+          <SectionHeading>Inventory</SectionHeading>
+          <StatRow cols={3}>
+            <Stat
+              label="Inventory value"
+              value={rupees(console_.stockValuePaise)}
+              href="/stock"
+              hint="At weighted average cost"
+            />
+            <Stat
+              label="Low stock"
+              value={String(console_.lowStockBoards)}
+              href="/stock"
+              hint={console_.lowStockBoards === 0 ? "Nothing to buy" : "At or below reorder"}
+            />
+            <Stat
+              label="Reserved"
+              value={`${console_.reservedUnits.toLocaleString("en-IN")} sheets`}
+              href="/sales"
+              hint="Held against orders"
+            />
+          </StatRow>
+        </section>
+
+        <section aria-labelledby="ov-money">
+          <SectionHeading>Money</SectionHeading>
+          <StatRow>
+            <Stat
+              label="Receivables"
+              value={rupees(console_.receivablesPaise)}
+              href="/finance"
+              hint="Owed to us"
+            />
+            <Stat
+              label="Overdue"
+              value={rupees(console_.overdueReceivablesPaise)}
+              href="/finance"
+              hint="Unsettled after 30 days"
+            />
+            <Stat
+              label="Payables"
+              value={rupees(console_.payablesPaise)}
+              href="/finance"
+              hint="Owed by us"
+            />
+            <Stat
+              label="Collections today"
+              value={rupees(console_.collectionsTodayPaise)}
+              href="/finance"
+              hint="Received from customers"
+            />
+          </StatRow>
+        </section>
+
+        <section aria-labelledby="ov-tax">
+          <SectionHeading>Tax</SectionHeading>
+          <StatRow cols={3}>
+            <Stat
+              label="Output GST"
+              value={rupees(console_.outputTaxPaise)}
+              href="/tax/gstr-1"
+              hint="Charged this month"
+            />
+            <Stat
+              label="Eligible ITC"
+              value={rupees(console_.eligibleItcPaise)}
+              href="/tax/gstr-3b"
+              hint="Evidenced on purchase invoices"
+            />
+            <Stat
+              label="Tax exceptions"
+              value={taxExceptionCount === null ? "—" : String(taxExceptionCount)}
+              href="/tax/exceptions"
+              hint={taxExceptionCount === 0 ? "Nothing to fix" : "Need attention"}
+            />
+          </StatRow>
+        </section>
       </div>
 
       {margin && (
