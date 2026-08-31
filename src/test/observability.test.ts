@@ -327,9 +327,14 @@ describe("infrastructure stays replaceable (AC-08)", () => {
   it("binds no vendor in the platform contract", () => {
     const source = codeOf("src/server/platform/observability.ts");
 
-    // Sentry, OpenTelemetry and PostHog are all present in package.json. None
-    // of them may be imported here: the platform owns the vocabulary, the
-    // destination is a deployment decision.
+    // Sentry and OpenTelemetry are present in package.json; none of these may
+    // be imported here — the platform owns the vocabulary and the destination
+    // is a deployment decision.
+    //
+    // PostHog is named too, though it is no longer a dependency: it was
+    // removed in Task 66 as unused, and it was the only path by which a
+    // browser-reachable advisory (dompurify) entered the tree. Keeping it in
+    // this assertion means re-adding it would have to pass this test again.
     expect(source).not.toMatch(/@sentry|@opentelemetry|posthog|datadog|newrelic/i);
   });
 

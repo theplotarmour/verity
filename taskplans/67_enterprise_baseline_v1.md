@@ -29,7 +29,7 @@ Repository state at the Phase 10A close commit. Evidence, not assertion:
 | Typecheck | clean |
 | Lint | clean (one pre-existing TanStack compiler warning) |
 | Build | clean; standalone `server.js` with the Prisma engine traced |
-| `npm audit` | 8 advisories, none direct, none in the request path without further analysis (F-08) |
+| `npm audit` | 7 advisories, every one build- or development-time; none reachable from a request (F-08) |
 | Migrations | 51, applied |
 | Open P0 | none |
 | Open P1 | none |
@@ -60,8 +60,10 @@ belong in a security questionnaire answer.
    middleware and is its own task. A report-only CSP was rejected as theatre.
 2. **Rate limiting is per process.** Across N instances the effective sign-in
    limit is N×. Sized accordingly; a shared-store limiter is Phase 13 work.
-3. **Six transitive advisories remain** (F-08), none direct, none yet shown
-   reachable from the request path. Reachability analysis is outstanding.
+3. **Seven transitive advisories remain** (F-08), every one traced to
+   build- or development-time tooling — eslint, postcss, ajv, minimatch, and the
+   Prisma CLI. None is reachable from a request. The one that was — `dompurify`,
+   via an unused `posthog-js` — was removed rather than accepted.
 4. **`/api/metrics` is unauthenticated outside production** (F-07). Deliberate,
    and staging environments often hold realistic data.
 5. **`Global` permission scope is defined but never granted.** Honouring it

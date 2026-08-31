@@ -23,7 +23,7 @@ Baseline Freeze. **P2** should be scheduled. **P3** is recorded, not urgent.
 | F-05 Sentry on a legacy VEDA project | P2 | **Resolved** — Task 66 |
 | F-06 unauthenticated `/monitoring` | P2 | **Resolved** — opt-in, Task 66 |
 | F-07 `/api/metrics` open outside production | P3 | Open — deliberate |
-| F-08 six transitive advisories | P2 | Open — needs per-package reachability analysis |
+| F-08 transitive advisories | P2 | **Resolved** — analysis done; browser-reachable one removed |
 | **F-09 Layer-2 sweep** | **P1** | **Resolved** — seven queries, Task 66 |
 
 Every P0 and P1 is closed. The two that remain are a P2 needing analysis before
@@ -157,16 +157,41 @@ severity because it is deliberate and documented in the route, recorded because
 "non-production" is doing more security work than it looks.
 → **Phase 10A, discretionary.**
 
-### F-08 · P2 · Two remaining `high` advisories with no clean upgrade path
+### F-08 · P2 · Transitive advisories — **reachability established**
 **Evidence.** `npm audit`: `brace-expansion` (DoS), `deepmerge-ts` (stack
 exhaustion), `fast-uri` (host confusion), `js-yaml` (quadratic CPU in `!!omap`,
 CVE-2026-59870 not backported), `nanoid` (infinite loop at size zero),
 `dompurify` (XSS via `IN_PLACE` hook removal). All transitive; several reachable
 only from build tooling rather than the request path.
 
-Reachability must be established per package before any is treated as
-exploitable here — that analysis is remediation work, not audit work.
-→ **Phase 10A, new task, after F-00.**
+**Reachability analysis (Task 66).** Each was traced to the dependency that
+pulls it in:
+
+| Advisory | Enters via | Reachable from a request? |
+|---|---|---|
+| `js-yaml` | `@eslint/eslintrc` | No — lint only, devDependency |
+| `fast-uri` | `ajv` | No — schema tooling, build time |
+| `brace-expansion` | `minimatch` | No — glob matching, tooling |
+| `nanoid` | `postcss` | No — build-time source-map ids |
+| `deepmerge-ts` | `@prisma/config` ← `prisma` | No — CLI, devDependency |
+| `prisma` / `@prisma/config` | direct devDependency | No — migrations, not runtime |
+| `dompurify` | **`posthog-js`** | **Yes — shipped to the browser** |
+
+Six are build- or development-time and never enter the request path. The
+seventh did.
+
+**`posthog-js` was a runtime dependency with zero references anywhere in the
+source.** An unused analytics SDK, shipping to the browser, in a system holding
+other businesses' books — and the only path by which a browser-reachable XSS
+advisory entered the tree. Removed. That is also the right outcome
+independently of the advisory: an analytics SDK nobody imports is egress no one
+decided to accept.
+
+Result: 8 advisories → 7, and the moderate `dompurify` is gone. Every remaining
+advisory is build- or development-time. The `posthog-js` name is deliberately
+kept in `observability.test.ts`'s forbidden-import assertion, so re-adding it
+would have to pass that test again.
+→ **Resolved in Task 66.**
 
 ---
 

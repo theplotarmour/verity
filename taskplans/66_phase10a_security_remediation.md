@@ -154,6 +154,8 @@ specific messages.
 
 - **CSP** (part of F-03) — needs nonce middleware; own task.
 - **F-07** `/api/metrics` open outside production — deliberate, P3.
-- **F-08** six transitive advisories with no clean upgrade path. Reachability
-  must be established per package before any is called exploitable here.
+- ~~**F-08**~~ **resolved.** Reachability traced per package: six are build- or
+  development-time. The seventh, `dompurify`, entered through `posthog-js` — a
+  runtime dependency with zero references anywhere in the source. Removed;
+  8 advisories → 7, all now build-time.
 - **Shared-store rate limiting** — Phase 13, with a known topology.
