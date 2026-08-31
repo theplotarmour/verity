@@ -329,7 +329,19 @@ describe("conformance: over-genericity (Phase G)", () => {
     // Not a hard architectural rule, but a tripwire: unchecked growth in the
     // platform layer is how capability logic ends up there. If this fails the
     // question to ask is whether the new module belongs in a capability.
-    const platformModules = sourceFiles(join(ROOT, "src/server/platform"));
+    // Tests are excluded, and that is not softening the tripwire.
+    //
+    // The guard asks one question — "does this new module belong in a
+    // capability?" — and a test file is not a module anyone could put in a
+    // capability. Counting tests would mean writing tests for platform code
+    // pushed the platform toward the cap, which is an incentive pointing
+    // exactly the wrong way: the honest response to that pressure would be to
+    // delete tests. Before Task 66 the directory happened to contain no
+    // colocated tests, so the two counts agreed and the difference was
+    // invisible.
+    const platformModules = sourceFiles(join(ROOT, "src/server/platform")).filter(
+      (file) => !/\.test\.tsx?$/.test(file),
+    );
     // 25: config.ts (Task 26) — a deployment-configuration boundary, not
     // capability logic, so it belongs here rather than in a capability.
     // 26: authProvider.ts (Task 28) — the neutral Principal/AuthProvider
@@ -351,7 +363,16 @@ describe("conformance: over-genericity (Phase G)", () => {
     // ambient request context. Platform because correlation and redaction are
     // platform rules; the destination (stdout, a collector, an APM) is a
     // deployment decision and no vendor is bound here.
-    expect(platformModules.length).toBeLessThanOrEqual(31);
+    // 32: rate-limit.ts (Task 66, audit finding F-01) — request throttling.
+    // Platform because the path it protects is authentication, which no
+    // capability owns, and because a limiter each caller reinvents is a
+    // limiter some caller forgets.
+    // 33: telemetry-scrub.ts (Task 66, audit finding F-04) — what may leave
+    // the deployment in a crash report. Same reasoning as observability.ts:
+    // redaction is a platform rule and the destination is a deployment
+    // decision. It binds no vendor — the Sentry config passes its event in
+    // against a structural type, so the platform never imports the SDK.
+    expect(platformModules.length).toBeLessThanOrEqual(33);
   });
 });
 
