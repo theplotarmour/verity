@@ -37,6 +37,8 @@ type ShortRow = {
   brandName: string;
   unitLabel: string;
   onHandUnits: number;
+  reservedUnits: number;
+  availableUnits: number;
   reorderLevelUnits: number;
 };
 
@@ -248,7 +250,7 @@ export function StockBoard({
                 </caption>
                 <thead>
                   <tr>
-                    {["Board", "On hand", "Reorder at"].map(
+                    {["Board", "Available", "Reorder at", ""].map(
                       (heading, index) => (
                         <th
                           key={heading}
@@ -276,11 +278,35 @@ export function StockBoard({
                           {row.brandName} · {row.productName}
                         </Link>
                       </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-right text-[14px] text-warning">
-                        {row.onHandUnits} {row.unitLabel}
+                      {/* AVAILABLE, not on hand — that is the figure the
+                          reorder rule actually tests, and a header naming the
+                          other one describes a number this row is not about.
+                          A board with 100 on hand and 100 reserved is short,
+                          and "On hand 100" beside "Reorder at 25" reads as a
+                          mistake. */}
+                      <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] text-warning">
+                        {row.availableUnits}
+                        {row.reservedUnits > 0 && (
+                          <span className="ml-1 text-[12px] text-text-tertiary">
+                            ({row.onHandUnits} on hand, {row.reservedUnits}{" "}
+                            reserved)
+                          </span>
+                        )}
                       </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
+                      <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
                         {row.reorderLevelUnits}
+                      </td>
+                      {/* §17: a low-stock row exists so somebody buys more.
+                          Without the action it is a notification that reports a
+                          problem and leaves the reader to go and find where to
+                          solve it. */}
+                      <td className="whitespace-nowrap border-b border-line px-3 py-2 text-right">
+                        <Link
+                          href="/purchases"
+                          className="text-[13px] text-accent-ink no-underline hover:underline"
+                        >
+                          Order more →
+                        </Link>
                       </td>
                     </tr>
                   ))}
