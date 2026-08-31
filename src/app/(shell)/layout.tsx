@@ -55,7 +55,13 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       capabilities: activations.map((a) => ({ id: a.capabilityId, name: a.capability.name })),
       grants: permissions.map((p) => ({ entity: p.entity, verb: p.verb })),
       canAudit: readable.size > 0,
-      canConfigure: permissions.some((p) => p.verb === "Edit"),
+      // Edit on the TENANT, not "holds any Edit at all". The old test let a
+      // salesperson who may edit a customer see a Configuration link, and §0
+      // is explicit that raw configuration keys are not a client surface. It
+      // now matches what the page and the write command both require.
+      canConfigure: permissions.some(
+        (p) => p.verb === "Edit" && p.entity === "verity.platform.tenant",
+      ),
     };
   });
 

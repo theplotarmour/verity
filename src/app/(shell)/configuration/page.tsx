@@ -1,6 +1,8 @@
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
-import { PageHeader, Panel, Stat, StatRow } from "@/components/ui/primitives";
+import { hasPermission } from "@/server/platform/authorization";
+import { ENTITY_TENANT } from "@/server/platform/administration";
+import { PageHeader, Panel, PermissionDenied, Stat, StatRow } from "@/components/ui/primitives";
 import { AppearanceControls } from "@/components/shell/AppearanceControls";
 import { ACCENT_PRESETS, DEFAULT_ACCENT } from "@/server/platform/accent";
 import { configKeyInfo, humanizeSegment } from "@/server/platform/label";
@@ -32,6 +34,23 @@ export const dynamic = "force-dynamic";
  */
 export default async function ConfigurationPage() {
   const actor = await requireActor();
+
+  // THE HOLE THIS CLOSES. This page had no authorization check of any kind. It
+  // called `requireActor()` — which only establishes *who* is asking — and then
+  // read every configuration parameter for the tenant. Writes went through
+  // `verity.platform.set_configuration`, which authorizes properly, so the gap
+  // was reads: any authenticated member of the tenant, with any role or none,
+  // could read the business's whole configuration by typing the URL. The nav
+  // link was hidden from most of them, which made it look controlled.
+  //
+  // Gated on the same Edit-on-Tenant the write command requires, deliberately:
+  // §0 says a normal client must never be shown raw configuration keys, so the
+  // set of people who may read them is the set who may change them, not a
+  // wider one invented here.
+  const permitted = await withTenant(actor.tenantId, (tx) =>
+    hasPermission(tx, actor.roleId, "Edit", ENTITY_TENANT),
+  );
+  if (!permitted) return <PermissionDenied what="configuration" />;
 
   const rows = await withTenant(actor.tenantId, async (tx) => {
     const [parameters, capabilities] = await Promise.all([
