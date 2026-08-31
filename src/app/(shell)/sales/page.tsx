@@ -3,7 +3,12 @@ import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
 import { ForbiddenError } from "@/server/platform/authorization";
 import { listLocations } from "@/server/capabilities/location";
-import { listCatalogue, listCustomers, openOrders } from "@/server/capabilities/plywood";
+import {
+  listCatalogue,
+  listCustomers,
+  openOrders,
+  sellableStock,
+} from "@/server/capabilities/plywood";
 import { PageHeader, PermissionDenied } from "@/components/ui/primitives";
 import { SalesDesk } from "./SalesDesk";
 
@@ -28,12 +33,18 @@ export default async function SalesPage() {
     throw error;
   }
 
-  const [customers, godowns, catalogue] = await Promise.all([
+  const [customers, godowns, sellable, catalogue] = await Promise.all([
     executeQuery(actor, listCustomers, {}).catch((error) => {
       if (error instanceof ForbiddenError) return [];
       throw error;
     }),
     executeQuery(actor, listLocations, {}).catch((error) => {
+      if (error instanceof ForbiddenError) return [];
+      throw error;
+    }),
+    // U0-1/U1-8: what is actually available, and what this customer has agreed
+    // to pay, so the form can say both before an order is taken.
+    executeQuery(actor, sellableStock, {}).catch((error) => {
       if (error instanceof ForbiddenError) return [];
       throw error;
     }),
@@ -50,6 +61,7 @@ export default async function SalesPage() {
         description="Orders taken from customers. Stock is held against an order before dispatch, so two representatives cannot promise the same sheets."
       />
       <SalesDesk
+        sellable={sellable}
         orders={orders.sales}
         customers={customers}
         godowns={godowns.map((godown) => ({

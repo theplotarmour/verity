@@ -14,7 +14,7 @@ import {
   purchaseReviewQueue,
   raiseInvoiceNote,
 } from "./finance";
-import { godownDetail, productDetail, stockLedger } from "./views";
+import { godownDetail, productDetail, sellableStock, stockLedger } from "./views";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import { diffFields, recordActivity } from "@/server/platform/audit";
 import { notify } from "@/server/platform/notification";
@@ -888,6 +888,7 @@ export function registerPlywoodCapability(): void {
   registerQuery(productDetail);
   registerQuery(godownDetail);
   registerQuery(stockLedger);
+  registerQuery(sellableStock);
   registerQuery(purchaseReviewQueue);
   registerQuery(purchaseOrderDetail);
   registerQuery(salesOrderDetail);

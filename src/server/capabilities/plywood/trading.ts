@@ -1059,11 +1059,42 @@ export const reserveForOrder: CommandDefinition<
         { forUpdate: true },
       );
       if (free < line.qtyOrdered) {
+        // Audit finding U0-1. The refusal used to stop at "0 available", and a
+        // salesperson reading that concluded the business had none — and
+        // declined an order it could have filled from the other godown. Where
+        // the sheets actually are is the one fact that changes what they do
+        // next, so the message carries it.
+        const reachableGodowns = await reachableGodownIds(
+          ctx.tx,
+          ctx.actor,
+          ENTITY_STOCK_BALANCE,
+        );
+        const elsewhere = await ctx.tx.stockBalance.findMany({
+          where: {
+            productId: line.productId,
+            locationId: {
+              in: reachableGodowns.filter((id: string) => id !== order.locationId),
+            },
+            qtyUnits: { gt: 0 },
+          },
+          include: { location: { select: { name: true } } },
+          orderBy: { qtyUnits: "desc" },
+        });
+        const here = await ctx.tx.location.findUnique({
+          where: { id: order.locationId },
+          select: { name: true },
+        });
+        const alsoAt = elsewhere
+          .map((balance) => `${balance.location.name} has ${balance.qtyUnits}`)
+          .join("; ");
+
         // The whole hold fails rather than reserving what it can. A partial
         // hold on a multi-line order is a promise the business cannot keep and
         // would discover at dispatch.
         throw new ValidationError(
-          `E_VALIDATION: ${line.productNameSnapshot} has ${free} available, cannot hold ${line.qtyOrdered}`,
+          `E_VALIDATION: ${line.productNameSnapshot} has ${free} available in ` +
+            `${here?.name ?? "this godown"}, so ${line.qtyOrdered} cannot be reserved.` +
+            (alsoAt ? ` ${alsoAt}. Transfer stock, or raise the order against that godown.` : ""),
         );
       }
       await ctx.tx.plywoodStockReservation.create({

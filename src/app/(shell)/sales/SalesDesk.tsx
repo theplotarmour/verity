@@ -14,6 +14,7 @@ import {
   StateBadge,
 } from "@/components/ui/primitives";
 import { day, sheets } from "@/components/ui/business/format";
+import { NewSalesOrderForm, type SellableRow } from "./NewSalesOrderForm";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -96,11 +97,13 @@ export function SalesDesk({
   customers,
   godowns,
   boards,
+  sellable,
 }: {
   orders: SalesOrder[];
   customers: Customer[];
   godowns: Array<{ id: string; name: string }>;
   boards: Array<{ id: string; label: string }>;
+  sellable: SellableRow[];
 }) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
@@ -295,102 +298,17 @@ export function SalesDesk({
 
       {newOrder && canOrder && (
         <div className="mb-6">
-          <Panel title="New sales order">
-            <form
-              className="flex flex-wrap items-end gap-3"
-              action={(formData) =>
-                run(
-                  "verity.plywood.create_sales_order",
-                  {
-                    customerId: String(formData.get("customerId") ?? ""),
-                    locationId: String(formData.get("locationId") ?? ""),
-                    ...(formData.get("reference")
-                      ? { reference: String(formData.get("reference")) }
-                      : {}),
-                    lines: [
-                      {
-                        productId: String(formData.get("productId") ?? ""),
-                        qtyOrdered: Number(formData.get("qty") ?? 0),
-                        ...(String(formData.get("price") ?? "") === ""
-                          ? {}
-                          : { unitPricePaise: Math.round(Number(formData.get("price")) * 100) }),
-                      },
-                    ],
-                  },
-                  () => setNewOrder(false),
-                )
-              }
-            >
-              <div className="min-w-[200px]">
-                <Field label="Customer" htmlFor="sale-customer" required>
-                  <Select id="sale-customer" name="customerId" required defaultValue="">
-                    <option value="" disabled>
-                      Choose a customer
-                    </option>
-                    {customers.map((customer) => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.displayName}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-              <div className="min-w-[170px]">
-                <Field label="From godown" htmlFor="sale-godown" required>
-                  <Select id="sale-godown" name="locationId" required defaultValue="">
-                    <option value="" disabled>
-                      Choose a godown
-                    </option>
-                    {godowns.map((godown) => (
-                      <option key={godown.id} value={godown.id}>
-                        {godown.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-              <div className="min-w-[240px] flex-1">
-                <Field label="Board" htmlFor="sale-board" required>
-                  <Select id="sale-board" name="productId" required defaultValue="">
-                    <option value="" disabled>
-                      Choose a board
-                    </option>
-                    {boards.map((board) => (
-                      <option key={board.id} value={board.id}>
-                        {board.label}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-              <div className="w-[120px]">
-                <Field label="Quantity" htmlFor="sale-qty" required>
-                  <Input id="sale-qty" name="qty" type="number" min="1" required />
-                </Field>
-              </div>
-              <div className="w-[160px]">
-                <Field
-                  label="Price per unit (₹)"
-                  htmlFor="sale-price"
-                  hint="Blank uses their price"
-                >
-                  <Input id="sale-price" name="price" type="number" step="0.01" min="0" />
-                </Field>
-              </div>
-              <div className="w-[140px]">
-                <Field label="Reference" htmlFor="sale-reference">
-                  <Input id="sale-reference" name="reference" />
-                </Field>
-              </div>
-              <Button type="submit" variant="primary" disabled={pending}>
-                Create
-              </Button>
-              <p className="m-0 w-full text-[12px] text-text-tertiary">
-                An order that takes the customer past their credit limit is held rather than
-                refused, and shows here for someone with authority to approve.
-              </p>
-            </form>
-          </Panel>
+          <NewSalesOrderForm
+            customers={customers.map((c) => ({ id: c.id, displayName: c.displayName }))}
+            godowns={godowns}
+            boards={boards}
+            sellable={sellable}
+            pending={pending}
+            onCancel={() => setNewOrder(false)}
+            onSubmit={(input) =>
+              run("verity.plywood.create_sales_order", input, () => setNewOrder(false))
+            }
+          />
         </div>
       )}
 

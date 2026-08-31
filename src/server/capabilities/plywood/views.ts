@@ -695,3 +695,90 @@ export const stockLedger: QueryDefinition<
     };
   },
 };
+
+/**
+ * What can actually be sold, per board, per godown, with the agreed price.
+ *
+ * Audit findings U0-1 and U1-8. The sales-order form asked for a godown and a
+ * board and told the salesperson nothing about either: not whether that godown
+ * held any, and not what the customer's agreed price was. The result was an
+ * order that could be created and APPROVED and then failed at reservation —
+ * after the customer had been told yes — with an error that named neither the
+ * quantity available elsewhere nor the missing price.
+ *
+ * Returned for every reachable godown at once rather than per selection, so the
+ * form can react as the user changes either dropdown without another round
+ * trip, and can show availability on the option itself.
+ */
+export const sellableStock: QueryDefinition<
+  { customerId?: string },
+  Array<{
+    productId: string;
+    productName: string;
+    brandName: string;
+    /// SERVICE products are excluded — they are not held in a godown.
+    locationId: string;
+    locationName: string;
+    onHandUnits: number;
+    reservedUnits: number;
+    availableUnits: number;
+    /// The customer's agreed price, when one was asked for and exists.
+    agreedPricePaise: number | null;
+  }>
+> = {
+  key: "verity.plywood.sellable_stock",
+  entity: ENTITY_STOCK_BALANCE,
+  input: z.object({ customerId: z.string().uuid().optional() }),
+  handler: async (ctx, input) => {
+    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_STOCK_BALANCE);
+
+    const [balances, reservations, prices] = await Promise.all([
+      ctx.tx.stockBalance.findMany({
+        where: { locationId: { in: reachable }, product: { active: true, type: "PHYSICAL" } },
+        include: {
+          product: { include: { brand: { select: { name: true } } } },
+          location: { select: { name: true } },
+        },
+      }),
+      ctx.tx.plywoodStockReservation.findMany({
+        where: { locationId: { in: reachable }, releasedAt: null },
+        select: { productId: true, locationId: true, qtyUnits: true },
+      }),
+      input.customerId
+        ? ctx.tx.plywoodCustomerPrice.findMany({
+            where: { customerId: input.customerId },
+            select: { productId: true, customPricePaise: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const reservedBy = new Map<string, number>();
+    for (const hold of reservations) {
+      const key = `${hold.productId}:${hold.locationId}`;
+      reservedBy.set(key, (reservedBy.get(key) ?? 0) + hold.qtyUnits);
+    }
+    const priceBy = new Map(prices.map((price) => [price.productId, price.customPricePaise]));
+
+    return balances
+      .map((balance) => {
+        const reserved = reservedBy.get(`${balance.productId}:${balance.locationId}`) ?? 0;
+        return {
+          productId: balance.productId,
+          productName: balance.product.name,
+          brandName: balance.product.brand.name,
+          locationId: balance.locationId,
+          locationName: balance.location.name,
+          onHandUnits: balance.qtyUnits,
+          reservedUnits: reserved,
+          availableUnits: balance.qtyUnits - reserved,
+          agreedPricePaise: priceBy.get(balance.productId) ?? null,
+        };
+      })
+      .sort(
+        (a, b) =>
+          a.locationName.localeCompare(b.locationName) ||
+          a.brandName.localeCompare(b.brandName) ||
+          a.productName.localeCompare(b.productName),
+      );
+  },
+};
