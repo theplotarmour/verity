@@ -3,6 +3,7 @@ import { registerContribution } from "@/server/platform/contribution";
 import { registerCommand, ValidationError, type CommandDefinition } from "@/server/platform/command";
 import { registerBusinessIdentity } from "./business";
 import { registerTax } from "./tax";
+import { registerBusinessActivities } from "./activities";
 import { registerPeriods } from "./period";
 import { goodsReceiptDetail, purchaseMatch, raiseInvoiceNote } from "./finance";
 import { godownDetail, productDetail, stockLedger } from "./views";
@@ -115,6 +116,7 @@ export * from "./stock";
 export * from "./trading";
 export * from "./finance";
 export * from "./views";
+export * from "./activities";
 
 /* ================================= brands ================================= */
 
@@ -672,6 +674,19 @@ export function registerPlywoodCapability(): void {
 
       /* ---- ADMINISTRATION ---- */
       {
+        href: "/people",
+        label: "People & Roles",
+        group: "Administration",
+        order: 58,
+        icon: "people",
+        // Gated on the platform's membership entity, not a plywood one: who
+        // works here is a platform fact, and the capability only supplies the
+        // vocabulary the role editor speaks.
+        requiresEntity: "verity.platform.membership",
+        requiresVerb: "Read",
+        shells: ["platform"],
+      },
+      {
         href: "/settings/tax",
         label: "Tax Settings",
         group: "Administration",
@@ -793,6 +808,7 @@ export function registerPlywoodCapability(): void {
 
   registerBusinessIdentity();
   registerTax();
+  registerBusinessActivities();
   registerPeriods();
   registerCommand(createBrand);
   registerCommand(setBrandActive);
