@@ -14,6 +14,7 @@ import {
   ENTITY_RESERVATION,
   ENTITY_SALES_ORDER,
   ENTITY_SUPPLIER,
+  ENTITY_STOCK_BALANCE,
   ENTITY_SUPPLIER_PRICE,
 } from "./keys";
 import { applyMovement, serviceProductIds } from "./stock";
@@ -1489,8 +1490,16 @@ export const purchaseOrderDetail: QueryDefinition<
   entity: ENTITY_PURCHASE_ORDER,
   input: z.object({ orderId: z.string().uuid() }),
   handler: async (ctx, input) => {
-    const order = await ctx.tx.plywoodPurchaseOrder.findUnique({
-      where: { id: input.orderId },
+    // Layer 2. Audit finding F-09: this read the order by id with no godown
+    // filter, so a warehouse role restricted to one godown could open another
+    // godown's purchase order — its supplier, its prices and its receipts —
+    // given only the id. Same shape as the productMovements hole (Task 55).
+    //
+    // Intersected with the reachable set rather than checked afterwards: a
+    // findUnique that returns the row and then refuses has already read it.
+    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_PURCHASE_ORDER);
+    const order = await ctx.tx.plywoodPurchaseOrder.findFirst({
+      where: { id: input.orderId, locationId: { in: reachable } },
       include: {
         lines: true,
         supplier: { select: { id: true, displayName: true } },
@@ -1637,8 +1646,11 @@ export const salesOrderDetail: QueryDefinition<
   entity: ENTITY_SALES_ORDER,
   input: z.object({ orderId: z.string().uuid() }),
   handler: async (ctx, input) => {
-    const order = await ctx.tx.plywoodSalesOrder.findUnique({
-      where: { id: input.orderId },
+    // Layer 2. Audit finding F-09, selling side: the credit position, the
+    // customer and the prices on another godown's order were readable by id.
+    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_SALES_ORDER);
+    const order = await ctx.tx.plywoodSalesOrder.findFirst({
+      where: { id: input.orderId, locationId: { in: reachable } },
       include: {
         lines: true,
         reservations: true,
@@ -1834,6 +1846,14 @@ export const stockAvailability: QueryDefinition<
   entity: ENTITY_RESERVATION,
   input: z.object({ locationId: z.string().uuid() }),
   handler: async (ctx, input) => {
+    // Layer 2. Audit finding F-09: the godown was taken straight from input, so
+    // naming another branch's godown returned its stock. Intersected rather
+    // than replaced, which is the pattern `stockOnHand` already uses — an
+    // empty result for an unreachable godown, not its contents.
+    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_STOCK_BALANCE);
+    if (!reachable.includes(input.locationId)) {
+      return [];
+    }
     const balances = await ctx.tx.stockBalance.findMany({
       where: { locationId: input.locationId },
       include: { product: { select: { name: true } } },

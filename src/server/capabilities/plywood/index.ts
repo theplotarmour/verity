@@ -6,6 +6,7 @@ import { registerTax } from "./tax";
 import { registerBusinessActivities } from "./activities";
 import { registerReports } from "./reports";
 import { registerItc } from "./itc";
+import { reachableGodownIds } from "./scope";
 import { registerPeriods } from "./period";
 import {
   goodsReceiptDetail,
@@ -511,8 +512,12 @@ export const listGodownRacks: QueryDefinition<
     includeInactive: z.boolean().optional(),
   }),
   handler: async (ctx, input) => {
+    // Layer 2. Audit finding F-09: rack layout is a map of another branch's
+    // godown, and it was readable tenant-wide.
+    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_GODOWN_RACK);
     const racks = await ctx.tx.godownRack.findMany({
       where: {
+        locationId: { in: reachable },
         ...(input.locationId ? { locationId: input.locationId } : {}),
         ...(input.includeInactive ? {} : { active: true }),
       },

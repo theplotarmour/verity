@@ -15,6 +15,7 @@ import {
   setActiveMembership,
 } from "@/server/platform/auth";
 import { recordSecurityEvent } from "@/server/platform/audit";
+import { SIGN_IN_LIMIT, rateLimit, signInKey } from "@/server/platform/rate-limit";
 import { withTenant } from "@/server/platform/tenancy";
 import { installCapabilities } from "@/server/capabilities/registry";
 import {
@@ -138,6 +139,24 @@ export async function switchOrganization(membershipId: string): Promise<ActionRe
 export async function signInWithPassword(formData: FormData): Promise<ActionFailure | never> {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
+
+  // Audit finding F-01. Counted BEFORE the credential is checked, so a refused
+  // attempt costs the attacker its slot whether or not the password was right.
+  // Counting only failures would let a correct-password probe run free.
+  const throttle = rateLimit(signInKey(email), SIGN_IN_LIMIT);
+  if (!throttle.allowed) {
+    return {
+      ok: false,
+      code: "E_VALIDATION",
+      // Deliberately the same shape as a wrong password and deliberately vague
+      // about which account is throttled. Saying "this account is locked" would
+      // reinstate the enumeration oracle the generic failure message exists to
+      // close — an attacker could learn an address is real by attacking it
+      // until the message changed.
+      message: `Too many sign-in attempts. Try again in ${throttle.retryAfterSeconds} seconds.`,
+      retryable: true,
+    };
+  }
 
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });

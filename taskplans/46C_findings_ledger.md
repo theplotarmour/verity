@@ -11,6 +11,51 @@ Baseline Freeze. **P2** should be scheduled. **P3** is recorded, not urgent.
 
 ---
 
+## Status at Phase 10A close
+
+| ID | Severity | Status |
+|---|---|---|
+| F-00 Next.js 16.2.10 | P1 | **Resolved** — 16.3.3 (Task 47) |
+| F-01 no rate limiting | P1 | **Resolved** — Task 66 |
+| F-02 15 MB action bodies | P2 | **Resolved** — 2 MB, Task 66 |
+| F-03 no security headers | P2 | **Partly resolved** — four headers shipped; **CSP still open** |
+| F-04 unredacted telemetry egress | P1 | **Resolved** — Task 66 |
+| F-05 Sentry on a legacy VEDA project | P2 | **Resolved** — Task 66 |
+| F-06 unauthenticated `/monitoring` | P2 | **Resolved** — opt-in, Task 66 |
+| F-07 `/api/metrics` open outside production | P3 | Open — deliberate |
+| F-08 six transitive advisories | P2 | Open — needs per-package reachability analysis |
+| **F-09 Layer-2 sweep** | **P1** | **Resolved** — seven queries, Task 66 |
+
+Every P0 and P1 is closed. The two that remain are a P2 needing analysis before
+it can be called exploitable, and a P3 that is deliberate.
+
+---
+
+## F-09 · P1 · Seven more queries missing Layer 2 (found by the sweep this ledger argued for)
+
+**Evidence.** Every plywood query was classified by whether it reads
+godown-anchored records. 27 of 36 applied no godown filter; most read records
+that are not anchored to a godown, where a filter would be a scope rule with no
+basis in the model. Seven were genuine holes:
+
+`purchaseOrderDetail`, `salesOrderDetail`, `purchaseMatch`,
+`goodsReceiptDetail`, `purchaseReviewQueue`, `listGodownRacks`,
+`stockAvailability`.
+
+**Why it matters.** A warehouse role restricted to one godown could open another
+godown's purchase or sales order by id — supplier, customer, prices, credit
+position, receipts — and read another branch's rack layout and stock. Identical
+in shape to the `productMovements` hole already fixed: Layer 1 passed, which is
+what made it look authorized.
+
+**This is the finding that justifies the sweep.** Five point fixes would have
+left these seven in place. The ledger's own observation — that four of five
+earlier defects shared one shape — was the reason to look, and looking found
+almost as many again.
+→ **Resolved in Task 66.**
+
+---
+
 ## Open findings
 
 ### F-00 · P1 · Next.js 16.2.10 carries known vulnerabilities

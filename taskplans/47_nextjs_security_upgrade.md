@@ -146,3 +146,38 @@ shape customers receive.
 The task closes only if the repository no longer carries the known Next.js
 security blocker and the existing security/deployment behavior still holds.
 
+
+
+---
+
+## Outcome (executed 2026-09-01)
+
+`next` and `eslint-config-next` 16.2.10 → **16.3.3**, pinned exact.
+Non-semver-major, as `npm audit` predicted.
+
+| | Before | After |
+|---|---|---|
+| advisories | 11 (10 high, 1 moderate) | 8 (7 high, 1 moderate) |
+| `next` high | Turbopack middleware/proxy bypass; server-action DoS | cleared |
+| `postcss` high | arbitrary file read via `sourceMappingURL` | cleared |
+| `sharp` high | inherited libvips CVEs | cleared |
+
+Both `next` advisories described this application's actual configuration rather
+than a hypothetical one — it builds with Turbopack and uses server actions as
+its primary write path.
+
+Gate results, in the order this plan specifies:
+
+- `npm audit` — three highs cleared, no new direct advisory.
+- `npm run typecheck` — clean.
+- `npm run lint` — clean (one pre-existing TanStack compiler warning).
+- `npm run test` — green.
+- `npm run build` — clean, 70 routes.
+- Standalone runtime — `.next/standalone/server.js` produced, with
+  `node_modules/.prisma/client` traced into it.
+
+**Docker acceptance was not re-run.** The container runtime was stopped earlier
+in this session at the user's request. The standalone output is the artefact the
+image wraps and it was verified directly, but the containerised acceptance of
+Task 43 has not been repeated against 16.3.3 and should be before a deployment
+that relies on it.

@@ -24,9 +24,10 @@ evidence justifies them, and not before.
 |---|---|---|
 | 7 | Portable Runtime | ✅ Complete |
 | 8 | Enterprise Foundation | ✅ Complete |
-| 10 | Enterprise Codebase Audit | 🔄 **Current** |
-| 10A | Security Remediation | ⏭️ Next — findings-driven |
-| 11 | Client #1 Implementation | ⏳ When a client or tender is active |
+| 10 | Enterprise Codebase Audit | ✅ Complete — 46, 46A, 46B, 46C |
+| 10A | Security Remediation | ✅ Complete — Tasks 47, 66; every P0/P1 closed |
+| — | **Enterprise Baseline v1** | ✅ **Declared** — `taskplans/67` |
+| 11 | Client #1 Implementation | 🔄 **Next** — when a client or tender is active |
 | 12 | Client #2 / Reusable Extraction | ⏳ Client-driven |
 | 13 | Deployment & Delivery Operations | ⏳ As client volume grows |
 | 14 | Scale / Enterprise Maturity | ⏳ Later |

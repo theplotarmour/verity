@@ -208,11 +208,11 @@ describeDb("plywood purchase chain (slice 3)", () => {
       const detail = await executeQuery(owner, goodsReceiptDetail, {
         receiptId: received.receiptId,
       });
-      expect(detail.supplierChallanNumber).toBe("CH-4471");
-      expect(detail.lines).toHaveLength(1);
-      expect(detail.lines[0]!.qtyReceived).toBe(96);
-      expect(detail.totalValuePaise).toBe(96 * 118_000);
-      expect(detail.locationName).toBe("Okhla");
+      expect(detail!.supplierChallanNumber).toBe("CH-4471");
+      expect(detail!.lines).toHaveLength(1);
+      expect(detail!.lines[0]!.qtyReceived).toBe(96);
+      expect(detail!.totalValuePaise).toBe(96 * 118_000);
+      expect(detail!.locationName).toBe("Okhla");
     });
 
     it("links the stock movement back to the receipt that caused it", async () => {
@@ -286,7 +286,10 @@ describeDb("plywood purchase chain (slice 3)", () => {
       expect(second.receiptNumber).not.toBe(first.receiptNumber);
 
       const match = await executeQuery(owner, purchaseMatch, { purchaseOrderId: order.id });
-      expect(match.receipts).toHaveLength(2);
+      // Non-null for an owner: `purchaseMatch` now returns null for an order
+      // outside the reader's godowns, and an owner reaches every godown.
+      expect(match).not.toBeNull();
+      expect(match!.receipts).toHaveLength(2);
     });
   });
 
@@ -306,11 +309,11 @@ describeDb("plywood purchase chain (slice 3)", () => {
       });
 
       const match = await executeQuery(owner, purchaseMatch, { purchaseOrderId: order.id });
-      expect(match.orderedTotalPaise).toBe(100 * 118_000);
-      expect(match.receivedTotalPaise).toBe(96 * 118_000);
-      expect(match.invoicedTotalPaise).toBe(0);
-      expect(match.lines[0]!.qtyOutstanding).toBe(4);
-      expect(match.exceptions.join(" ")).toMatch(/not fully received/);
+      expect(match!.orderedTotalPaise).toBe(100 * 118_000);
+      expect(match!.receivedTotalPaise).toBe(96 * 118_000);
+      expect(match!.invoicedTotalPaise).toBe(0);
+      expect(match!.lines[0]!.qtyOutstanding).toBe(4);
+      expect(match!.exceptions.join(" ")).toMatch(/not fully received/);
     });
 
     it("names an invoice that differs from what arrived, without refusing it", async () => {
@@ -334,8 +337,8 @@ describeDb("plywood purchase chain (slice 3)", () => {
       });
 
       const match = await executeQuery(owner, purchaseMatch, { purchaseOrderId: order.id });
-      expect(match.invoicedTotalPaise).toBe(12_000_000);
-      expect(match.exceptions.join(" ")).toMatch(/Invoiced more than received/);
+      expect(match!.invoicedTotalPaise).toBe(12_000_000);
+      expect(match!.exceptions.join(" ")).toMatch(/Invoiced more than received/);
     });
 
     it("refuses an invoice when nothing has been received at all", async () => {

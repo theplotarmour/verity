@@ -1273,16 +1273,26 @@ export const purchaseMatch: QueryDefinition<
       qtyOutstanding: number;
     }>;
     exceptions: string[];
-  }
+    /// Null when the order does not exist OR is outside the reader's godowns.
+    /// The two are deliberately indistinguishable: telling a warehouse operator
+    /// that an order they may not read nevertheless exists is the fact the
+    /// scope was there to withhold.
+  } | null
 > = {
   key: "verity.plywood.purchase_match",
   entity: ENTITY_PURCHASE_ORDER,
   input: z.object({ purchaseOrderId: z.string().uuid() }),
   handler: async (ctx, input) => {
-    const order = await ctx.tx.plywoodPurchaseOrder.findUniqueOrThrow({
-      where: { id: input.purchaseOrderId },
+    // Layer 2. Audit finding F-09.
+    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_PURCHASE_ORDER);
+    // findFirst with the scope in the predicate, not findUniqueOrThrow then a
+    // check: a read that returns the row and refuses afterwards has already
+    // read it, and the difference matters when the caller logs the error.
+    const order = await ctx.tx.plywoodPurchaseOrder.findFirst({
+      where: { id: input.purchaseOrderId, locationId: { in: reachable } },
       include: { lines: true, supplier: { select: { displayName: true } } },
     });
+    if (!order) return null;
 
     const receipts = await ctx.tx.plywoodGoodsReceipt.findMany({
       where: { purchaseOrderId: order.id },
@@ -1394,8 +1404,11 @@ export const purchaseReviewQueue: QueryDefinition<
     // Only orders with goods against them. An order nobody has delivered
     // against is the buyer's problem, not the accountant's, and putting it in
     // this queue would bury the invoices that genuinely need a decision.
+    // Layer 2. Audit finding F-09: the accountant's queue listed every
+    // godown's purchases regardless of the reader's scope.
+    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_PURCHASE_ORDER);
     const orders = await ctx.tx.plywoodPurchaseOrder.findMany({
-      where: { state: { in: ["receiving", "completed"] } },
+      where: { state: { in: ["receiving", "completed"] }, locationId: { in: reachable } },
       include: {
         lines: true,
         supplier: { select: { id: true, displayName: true } },
@@ -1478,20 +1491,30 @@ export const goodsReceiptDetail: QueryDefinition<
       lineValuePaise: number;
     }>;
     totalValuePaise: number;
-  }
+    /// Null when the receipt does not exist OR belongs to a godown outside the
+    /// reader's scope — indistinguishable on purpose.
+  } | null
 > = {
   key: "verity.plywood.goods_receipt_detail",
   entity: ENTITY_PURCHASE_ORDER,
   input: z.object({ receiptId: z.string().uuid() }),
   handler: async (ctx, input) => {
-    const receipt = await ctx.tx.plywoodGoodsReceipt.findUniqueOrThrow({
-      where: { id: input.receiptId },
+    // Layer 2. Audit finding F-09: a goods receipt names what arrived, at what
+    // cost, into which godown — readable by id from any godown before this.
+    // Scoped through its order, which is where the location lives.
+    const reachable = await reachableGodownIds(ctx.tx, ctx.actor, ENTITY_PURCHASE_ORDER);
+    const receipt = await ctx.tx.plywoodGoodsReceipt.findFirst({
+      where: {
+        id: input.receiptId,
+        purchaseOrder: { locationId: { in: reachable } },
+      },
       include: {
         lines: true,
         location: { select: { name: true } },
         purchaseOrder: { include: { supplier: { select: { displayName: true } } } },
       },
     });
+    if (!receipt) return null;
 
     const lines = receipt.lines.map((line) => ({
       productId: line.productId,
