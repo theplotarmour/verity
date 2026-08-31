@@ -137,3 +137,79 @@ Escalate rather than improvise if: a screen needs a fact no command records; the
 specification and an accepted ADR disagree; a projection would require storing a
 derived value; a client-visible screen cannot be built without exposing platform
 vocabulary.
+
+---
+
+## 8. Delivery record
+
+Slices 8–14 delivered as Tasks 54–60, one commit each.
+
+### Routes added
+
+```
+/suppliers            /suppliers/[supplierId]
+/customers            /customers/[customerId]
+/catalogue/[productId]
+/godowns/[locationId]
+/stock/[productId]            (?godown= to scope it)
+/purchases/[orderId]  /sales/[orderId]
+/tax  /tax/gstr-1  /tax/gstr-3b  /tax/exceptions
+/settings/tax
+/people  /roles
+```
+
+### Defects found and fixed while building
+
+Each was found by trying to render a screen the specification asked for, which
+is the argument for building the screens: none of these were visible from the
+write path alone.
+
+| Severity | Defect |
+|---|---|
+| P0 | `listCustomers` used a second definition of exposure — open orders only. It ignored invoiced-and-unpaid money and counted drafts, on the screen a sales manager decides the next order from. |
+| P0 | `productMovements` had no godown row scope, so a warehouse operator restricted to one godown could read every godown's movement history. |
+| P0 | Purchase invoices stored no tax split, so **input credit was structurally always nil** and the net GST estimate overstated what was payable by the entire input side. |
+| P1 | `ownerConsole` read stock tenant-wide, so a godown-scoped role saw the whole business's inventory value on its home screen. |
+| P1 | The configuration page had no authorization check; any authenticated member could read every configuration key by URL. |
+| P2 | Four navigation icons did not exist, so four client nav items drew no glyph. |
+| P2 | `authorization-layers.test.ts` went permanently red on any database it did not exclusively own, after a crashed run left an activation behind. |
+
+### Section coverage
+
+**Implemented:** 0 (navigation), 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
+36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 51, 52, 53, 54, 55, 56, 57,
+58, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 76, 77, 78, 79, 80, 81, 82,
+83, 84.
+
+**Not implemented, with the reason:**
+
+- **§59 — ITC reconciliation.** Escalated as **missing specification** in
+  taskplans/57 §5. Every bucket compares against GSTR-2B and this system has no
+  import path for it; the specification does not say how portal data arrives,
+  and that choice has security consequences. A screen built against absent data
+  would report every invoice as "missing in GST" and look like a finding.
+- **§60 — accountant's purchase review as its own screen.** The three-way match
+  it describes is on the purchase order (§29), and `purchaseMatch` exists. What
+  is missing is only the queue that lists every invoice needing review.
+- **§49/§50 — raising an invoice from the order.** The order pages link to
+  Finance rather than carrying the form. The invoice needs §50's tax checks, and
+  building half of them on the order would put the same rules in two places.
+- **§73 — reports.** `/reports` exists with margin and ageing. The
+  specification's fuller set (by salesperson, supplier price trends, stock
+  ageing, damage and adjustment reports) is not built.
+- **§1 — a default landing screen per role.** Navigation already filters by
+  permission, so this is a convenience rather than a control. Deferred.
+- **§0, partially — generic Locations and Assets.** Still visible to a client
+  whose tenant has those capabilities activated. Hiding them is not a plywood
+  decision to take unilaterally: `/locations` is where godowns are created, and
+  onboarding step 3 depends on it. Needs a decision about whether a shared
+  capability can be presented under a pack's own vocabulary.
+
+### The standard §84 sets
+
+> "I recorded what happened. Verity knows the consequences."
+
+§74's worked drill-down now runs end to end: receivables → an invoice → its
+sales order → the goods issue → the movement ledger, each hop a link that
+exists. That was the point of the program.
