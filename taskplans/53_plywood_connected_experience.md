@@ -1,0 +1,139 @@
+# Task 53 — Plywood Connected Experience (program)
+
+Authority: product-owner target user flow, 84 sections, supplied 2026-08-31.
+Predecessor: `taskplans/45_plywood_workflow_program.md` (slices 1–7, Tasks 45–52),
+which closed the ten release-blocking P0 findings of
+`PLYWOOD_TARGET_WORKFLOW_GAP_AUDIT.md`.
+
+## 1. What this program is, and what it is not
+
+Slices 1–7 built the **write path**: 36 commands, 23 queries, effective-dated tax
+rules, period close, returns and notes, weighted-average cost, credit exposure,
+reservation and goods issue. Those are correct and tested.
+
+What they did **not** build is the thing the target flow is actually about:
+
+> A business fact is entered once. Every affected screen updates automatically.
+
+The facts already propagate — the projections are derived, not stored. What is
+missing is the **screens that show the propagation**, and the links that let a
+person walk from a number to the record that caused it. Today a client can
+record a goods issue but cannot open the sales order it belongs to, cannot open
+the customer, cannot see the movement ledger that explains an on-hand figure.
+
+So this program is a **surface program**. It adds detail routes, Related
+sections, cross-links, role-shaped navigation and the accountant's tax
+projections. It adds backend only where a screen the specification names has no
+query to stand on.
+
+**Non-goals.** No Logistics, Shipment or Delivery concept — the specification
+removes them outright, and §45 is explicit that material leaving the godown is a
+Goods Issue and nothing more. No new platform primitive. No client-specific fork
+of a reusable capability.
+
+## 2. The rule this program is measured against
+
+§84 gives the acceptance standard, and it is a user-experience standard, not a
+feature checklist:
+
+> The user should never think "Where do I enter this again?"
+> They should think "I recorded what happened. Verity knows the consequences."
+
+Concretely, a slice is done when, for the records it touches:
+
+1. Every entity name rendered on a screen is a link to that entity (§71).
+2. Every detail screen carries a **Related** section naming its neighbours (§70).
+3. Every aggregate number drills to the records that compose it (§7, §74).
+4. Nothing on a projection screen is hand-entered (§8).
+5. No screen shows a platform-internal name — no permission verbs, no
+   configuration keys, no entity keys (§0, §6).
+
+## 3. Canonical relationships — frozen, restated from slice 1
+
+These already hold in the write path. Every screen this program adds must render
+them and must never recompute them differently.
+
+```
+available   = on_hand - reserved
+exposure    = unallocated_receivables + approved_uninvoiced_commitments
+on_hand     = sum(stock movements)          -- never hand-edited (§9, §64)
+avg_cost    = weighted average over receipts (§27)
+```
+
+A purchase order is **not** a payable (§20, §54). A sales order is **not** a
+receivable (§39). Commercial commitments are shown to the accountant in their
+own section, next to the financial ledger and never inside it (§54).
+
+## 4. Slices
+
+Each slice is one commit, one taskplan, one working flow end to end.
+
+| Slice | Task | Delivers | Specification sections |
+|---|---|---|---|
+| 8 | 54 | Party workspaces: `/suppliers`, `/suppliers/[id]`, `/customers`, `/customers/[id]` — tabbed operating accounts with pricing, orders, invoices, payments, ledger | 14, 15, 16, 34, 35, 36, 55, 56 |
+| 9 | 55 | Inventory drill-down: `/catalogue/[productId]`, `/godowns/[id]`, stock movement ledger | 10, 11, 12, 13, 17, 64, 65 |
+| 10 | 56 | Order lifecycle screens: `/purchases/[orderId]`, `/sales/[orderId]`, Related sections, cross-links everywhere | 18–26, 37–48, 68–71 |
+| 11 | 57 | Accountant's tax centre: `/tax`, `/settings/tax`, GSTR-1, GSTR-3B, ITC reconciliation, exceptions | 5, 29, 30, 58–63, 75 |
+| 12 | 58 | People & roles in business language: `/people`, `/roles` | 1, 6 |
+| 13 | 59 | Onboarding checklist, actionable notifications, readable audit | 2, 3, 72, 78 |
+
+## 5. Navigation, frozen
+
+§0 fixes the client's navigation. Order values leave gaps so a later slice drops
+in without renumbering.
+
+```
+Overview                  /overview
+
+TRADE
+  Catalogue               /catalogue
+  Suppliers               /suppliers
+  Purchases               /purchases
+  Customers               /customers
+  Sales                   /sales
+
+INVENTORY
+  Stock                   /stock
+  Godowns                 /godowns
+
+MONEY
+  Finance                 /finance
+  Ledgers                 /ledgers
+  Tax & Compliance        /tax
+
+INSIGHTS
+  Reports                 /reports
+
+ADMINISTRATION
+  People & Roles          /people
+  Business Settings       /settings/business
+  Audit                   /audit
+```
+
+Never shown to a normal client: Capability Registry, Configuration keys, generic
+Locations, generic Assets, platform operator settings, permission verbs, entity
+keys. Those are foundation vocabulary and a client seeing them is the platform
+leaking into the product.
+
+## 6. Where backend work is genuinely required
+
+The surface is the point, so backend is added only where a named screen has
+nothing to read. Anticipated:
+
+- `supplierDetail`, `customerDetail` — one round trip per party workspace
+  (slice 8).
+- `productDetail`, `godownDetail`, `stockLedger` (slice 9).
+- Purchase invoice **tax lines and ITC** — slice 6 built output tax only; §30
+  and §62 need input tax as a first-class fact, not a report-time inference
+  (slice 11).
+- `gstr3bWorking`, `itcReconciliation`, `taxExceptions` (slice 11).
+- Business-activity to permission mapping for the role editor (slice 12).
+
+Anything else discovered mid-slice is recorded here before it is written.
+
+## 7. Stop conditions
+
+Escalate rather than improvise if: a screen needs a fact no command records; the
+specification and an accepted ADR disagree; a projection would require storing a
+derived value; a client-visible screen cannot be built without exposing platform
+vocabulary.
