@@ -213,3 +213,44 @@ write path alone.
 §74's worked drill-down now runs end to end: receivables → an invoice → its
 sales order → the goods issue → the movement ledger, each hop a link that
 exists. That was the point of the program.
+
+
+---
+
+## 9. Closeout — the deferred list is empty
+
+Slices 15–18 (Tasks 61–64) cleared every item §8 listed as not implemented.
+
+| § | Was | Now |
+|---|---|---|
+| 49, 50 | Deferred — "the tax checks would end up in two places" | Built. The reasoning was wrong: `raiseSalesInvoice` takes only an order id and every §50 check runs inside the command, so the order needed a button, not a form. |
+| 60 | Not built | `purchaseReviewQueue` and `/tax/purchases`, sorted by what is blocking rather than by age. |
+| 73 | Margin and ageing only | `reports.ts` and four screens — sales by board and customer, purchases by supplier and board, price movement, stock ageing, damage, adjustments, receivable and payable ageing. |
+| 0 | Generic Locations and Assets still shown | `supersedes` added to the contribution contract; `/godowns` now creates a godown, so hiding them is honest. |
+| 1 | Deferred | `landingRouteFor` — derived from what a role can do, never from its name. |
+| 59 | Escalated as missing specification | Decision made and recorded: explicit import, never stored credentials. `plywood_gst_portal_record`, `importGstPortalRecords`, `itcReconciliation`, `/tax/itc`. |
+
+### One platform change, and why it was the right shape
+
+`NavigationContribution.supersedes` is the only addition to platform code in
+these four slices. A pack declares which generic routes its own vocabulary
+replaces.
+
+The alternative — the `location` capability knowing which packs might supersede
+it — inverts the dependency and would have `location` naming `plywood`, and
+every pack after it. Declaring from the side that has the better word keeps the
+shared capability reusable, which is the foundation-ready test in CLAUDE.md.
+
+It hides a navigation entry and nothing else. The route still exists and still
+authorizes: a capability must never be able to grant or remove access by
+contributing navigation.
+
+### Deviations that remain, by design
+
+- **Sales by salesperson** (§73) is not built and the page says so. An order
+  records who *entered* it, not who *sold* it. Attributing revenue to the wrong
+  person is worse than not attributing it; it needs a field on the order.
+- **Eligible ITC is not yet driven by the reconciliation** (§62). Wiring it
+  would mean a period with no import silently reports zero eligible credit,
+  which is a bigger change than it looks and needs an explicit decision about
+  what an un-imported period should claim.
