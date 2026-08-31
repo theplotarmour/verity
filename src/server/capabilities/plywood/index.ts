@@ -293,6 +293,7 @@ export const editProduct: CommandDefinition<
     sheetWeightGrams?: number | null;
     reorderLevelUnits?: number;
     unitLabel?: string;
+    type?: ProductType;
   },
   { id: string }
 > = {
@@ -307,11 +308,40 @@ export const editProduct: CommandDefinition<
     sheetWeightGrams: z.number().int().positive().nullable().optional(),
     reorderLevelUnits: z.number().int().min(0).optional(),
     unitLabel: z.string().min(1).max(30).optional(),
+    /**
+     * Correcting what a product IS.
+     *
+     * Audit finding U2-6b. `createProduct` takes a type and defaults to
+     * PHYSICAL; `editProduct` could not change it, so a service entered
+     * without ticking the box was permanently a board. It then appeared in
+     * every "Board" dropdown, could be ordered, and could be received into a
+     * godown — nonsense the business had no way to undo. A real example was
+     * found in a live tenant: "Custom Log Sawing & Sizing Service", PHYSICAL.
+     */
+    type: z.enum(PRODUCT_TYPES).optional(),
   }),
   handler: async (ctx, input) => {
     const before = await ctx.tx.plywoodProduct.findUniqueOrThrow({
       where: { id: input.productId },
     });
+
+    // A type change is only safe while the product has no stock history. Once
+    // sheets have moved, calling it a service would orphan those movements —
+    // the ledger would hold quantities for something the system says is not
+    // held in a godown. Correcting a data-entry slip is the use; rewriting the
+    // nature of a traded board is not.
+    if (input.type !== undefined && input.type !== before.type) {
+      const movements = await ctx.tx.stockLedgerEntry.count({
+        where: { productId: input.productId },
+      });
+      if (movements > 0) {
+        throw new ValidationError(
+          `E_VALIDATION: ${before.name} already has ${movements} stock movement(s), ` +
+            "so it cannot be reclassified. Withdraw it and add it again under the right type.",
+        );
+      }
+    }
+
     const after = await ctx.tx.plywoodProduct.update({
       where: { id: input.productId },
       data: {
@@ -327,6 +357,7 @@ export const editProduct: CommandDefinition<
         ...(input.unitLabel === undefined
           ? {}
           : { unitLabel: input.unitLabel }),
+        ...(input.type === undefined ? {} : { type: input.type }),
         version: { increment: 1 },
       },
     });
@@ -343,6 +374,7 @@ export const editProduct: CommandDefinition<
           hsnCode: before.hsnCode,
           grade: before.grade,
           reorderLevelUnits: before.reorderLevelUnits,
+          type: before.type,
         },
         {
           name: after.name,

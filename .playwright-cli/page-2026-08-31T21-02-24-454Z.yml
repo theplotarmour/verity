@@ -1,0 +1,96 @@
+- generic [active] [ref=f6e1]:
+  - link "Skip to content" [ref=f6e2] [cursor=pointer]:
+    - /url: "#main"
+  - button "Open Next.js Dev Tools" [ref=f6e35] [cursor=pointer]:
+    - generic [ref=f6e38]:
+      - text: Rendering
+      - generic [ref=f6e39]:
+        - generic [ref=f6e40]: .
+        - generic [ref=f6e41]: .
+        - generic [ref=f6e42]: .
+  - alert [ref=f6e34]
+  - generic [ref=f6e43]:
+    - complementary [ref=f6e44]:
+      - link "Verity" [ref=f6e45] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f6e46]:
+          - generic [ref=f6e50]: verity
+          - generic [ref=f6e51]: Verity
+      - navigation "Platform" [ref=f6e53]:
+        - list [ref=f6e54]:
+          - listitem [ref=f6e55]: Overview
+          - listitem [ref=f6e56]:
+            - link "Overview" [ref=f6e57] [cursor=pointer]:
+              - /url: /overview
+        - list [ref=f6e61]:
+          - listitem [ref=f6e62]: Trade
+          - listitem [ref=f6e63]:
+            - link "Catalogue" [ref=f6e64] [cursor=pointer]:
+              - /url: /catalogue
+          - listitem [ref=f6e68]:
+            - link "Suppliers" [ref=f6e69] [cursor=pointer]:
+              - /url: /suppliers
+          - listitem [ref=f6e73]:
+            - link "Purchases" [ref=f6e74] [cursor=pointer]:
+              - /url: /purchases
+          - listitem [ref=f6e78]:
+            - link "Customers" [ref=f6e79] [cursor=pointer]:
+              - /url: /customers
+          - listitem [ref=f6e83]:
+            - link "Sales" [ref=f6e84] [cursor=pointer]:
+              - /url: /sales
+        - list [ref=f6e88]:
+          - listitem [ref=f6e89]: Inventory
+          - listitem [ref=f6e90]:
+            - link "Stock" [ref=f6e91] [cursor=pointer]:
+              - /url: /stock
+          - listitem [ref=f6e95]:
+            - link "Godowns" [ref=f6e96] [cursor=pointer]:
+              - /url: /godowns
+        - list [ref=f6e100]:
+          - listitem [ref=f6e101]: Money
+          - listitem [ref=f6e102]:
+            - link "Finance" [ref=f6e103] [cursor=pointer]:
+              - /url: /finance
+          - listitem [ref=f6e107]:
+            - link "Ledgers" [ref=f6e108] [cursor=pointer]:
+              - /url: /ledgers
+          - listitem [ref=f6e112]:
+            - link "Tax & Compliance" [ref=f6e113] [cursor=pointer]:
+              - /url: /tax
+        - list [ref=f6e117]:
+          - listitem [ref=f6e118]: Insights
+          - listitem [ref=f6e119]:
+            - link "Reports" [ref=f6e120] [cursor=pointer]:
+              - /url: /reports
+        - list [ref=f6e124]:
+          - listitem [ref=f6e125]: Administration
+          - listitem [ref=f6e126]:
+            - link "People & Roles" [ref=f6e127] [cursor=pointer]:
+              - /url: /people
+          - listitem [ref=f6e131]:
+            - link "Audit" [ref=f6e132] [cursor=pointer]:
+              - /url: /audit
+          - listitem [ref=f6e136]:
+            - link "Configuration" [ref=f6e137] [cursor=pointer]:
+              - /url: /configuration
+      - button "naksh Owner Sign out" [ref=f6e143] [cursor=pointer]:
+        - generic [ref=f6e144]: "N"
+        - generic [ref=f6e145]:
+          - generic [ref=f6e146]: naksh
+          - generic [ref=f6e147]: Owner
+        - generic [ref=f6e150]: Sign out
+    - generic [ref=f6e151]:
+      - generic [ref=f6e152]:
+        - generic [ref=f6e153]:
+          - generic [ref=f6e154]: Search this page
+          - searchbox "Search this page" [ref=f6e155]
+        - generic [ref=f6e156]:
+          - generic [ref=f6e160]:
+            - generic [ref=f6e161]: Shri Ganesh HQ
+            - generic [ref=f6e162]: Shri Ganesh Timber Trading Co.
+          - 'button "Theme: Match system. Activate to switch to Light." [ref=f6e163] [cursor=pointer]'
+          - link "Recent activity" [ref=f6e167] [cursor=pointer]:
+            - /url: /audit
+          - generic [ref=f6e171]: "N"
+      - main [ref=f6e172]

@@ -1,0 +1,158 @@
+- generic [active] [ref=f7e1]:
+  - link "Skip to content" [ref=f7e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f7e3]:
+    - complementary [ref=f7e4]:
+      - link "Verity" [ref=f7e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f7e6]:
+          - generic [ref=f7e10]: verity
+          - generic [ref=f7e11]: Verity
+      - navigation "Platform" [ref=f7e13]:
+        - list [ref=f7e14]:
+          - listitem [ref=f7e15]: Overview
+          - listitem [ref=f7e16]:
+            - link "Overview" [ref=f7e17] [cursor=pointer]:
+              - /url: /overview
+        - list [ref=f7e21]:
+          - listitem [ref=f7e22]: Trade
+          - listitem [ref=f7e23]:
+            - link "Catalogue" [ref=f7e24] [cursor=pointer]:
+              - /url: /catalogue
+          - listitem [ref=f7e28]:
+            - link "Suppliers" [ref=f7e29] [cursor=pointer]:
+              - /url: /suppliers
+          - listitem [ref=f7e33]:
+            - link "Purchases" [ref=f7e34] [cursor=pointer]:
+              - /url: /purchases
+          - listitem [ref=f7e38]:
+            - link "Customers" [ref=f7e39] [cursor=pointer]:
+              - /url: /customers
+          - listitem [ref=f7e43]:
+            - link "Sales" [ref=f7e44] [cursor=pointer]:
+              - /url: /sales
+        - list [ref=f7e48]:
+          - listitem [ref=f7e49]: Inventory
+          - listitem [ref=f7e50]:
+            - link "Stock" [ref=f7e51] [cursor=pointer]:
+              - /url: /stock
+          - listitem [ref=f7e55]:
+            - link "Godowns" [ref=f7e56] [cursor=pointer]:
+              - /url: /godowns
+        - list [ref=f7e60]:
+          - listitem [ref=f7e61]: Money
+          - listitem [ref=f7e62]:
+            - link "Finance" [ref=f7e63] [cursor=pointer]:
+              - /url: /finance
+          - listitem [ref=f7e67]:
+            - link "Ledgers" [ref=f7e68] [cursor=pointer]:
+              - /url: /ledgers
+          - listitem [ref=f7e72]:
+            - link "Tax & Compliance" [ref=f7e73] [cursor=pointer]:
+              - /url: /tax
+        - list [ref=f7e77]:
+          - listitem [ref=f7e78]: Insights
+          - listitem [ref=f7e79]:
+            - link "Reports" [ref=f7e80] [cursor=pointer]:
+              - /url: /reports
+        - list [ref=f7e84]:
+          - listitem [ref=f7e85]: Administration
+          - listitem [ref=f7e86]:
+            - link "People & Roles" [ref=f7e87] [cursor=pointer]:
+              - /url: /people
+          - listitem [ref=f7e91]:
+            - link "Audit" [ref=f7e92] [cursor=pointer]:
+              - /url: /audit
+          - listitem [ref=f7e96]:
+            - link "Configuration" [ref=f7e97] [cursor=pointer]:
+              - /url: /configuration
+      - button "naksh Owner Sign out" [ref=f7e103] [cursor=pointer]:
+        - generic [ref=f7e104]: "N"
+        - generic [ref=f7e105]:
+          - generic [ref=f7e106]: naksh
+          - generic [ref=f7e107]: Owner
+        - generic [ref=f7e110]: Sign out
+    - generic [ref=f7e111]:
+      - generic [ref=f7e112]:
+        - generic [ref=f7e113]:
+          - generic [ref=f7e114]: Search this page
+          - searchbox "Search this page" [ref=f7e115]
+        - generic [ref=f7e116]:
+          - generic [ref=f7e120]:
+            - generic [ref=f7e121]: Shri Ganesh HQ
+            - generic [ref=f7e122]: Shri Ganesh Timber Trading Co.
+          - link "Recent activity" [ref=f7e124] [cursor=pointer]:
+            - /url: /audit
+          - generic [ref=f7e128]: "N"
+      - main [ref=f7e129]:
+        - generic [ref=f7e131]:
+          - heading "Purchases" [level=1] [ref=f7e132]
+          - paragraph [ref=f7e133]: Orders placed with suppliers, and what is still owed on each. Receiving against an order moves the stock in the same step — there is no separate goods-received entry to forget.
+        - generic [ref=f7e134]:
+          - button "New supplier" [ref=f7e135] [cursor=pointer]
+          - button "Agree a price" [ref=f7e136] [cursor=pointer]
+          - button "New order" [ref=f7e137] [cursor=pointer]
+        - generic [ref=f7e139]:
+          - heading "Open orders" [level=2] [ref=f7e141]
+          - table [ref=f7e143]:
+            - caption [ref=f7e144]: Open purchase orders
+            - rowgroup [ref=f7e145]:
+              - row [ref=f7e146]:
+                - columnheader "Order" [ref=f7e147]
+                - columnheader "Board" [ref=f7e148]
+                - columnheader "Status" [ref=f7e149]
+                - columnheader "Ordered" [ref=f7e150]
+                - columnheader "Still owed" [ref=f7e151]
+                - columnheader "Order value" [ref=f7e152]
+                - columnheader [ref=f7e153]
+            - rowgroup [ref=f7e154]:
+              - row [ref=f7e155]:
+                - cell "Order 462e7714 Divyom Sharma · 30 Aug 2026" [ref=f7e156]:
+                  - link "Order 462e7714" [ref=f7e157] [cursor=pointer]:
+                    - /url: /purchases/462e7714-8eb5-4419-bd80-654cc8ab7c40
+                  - generic [ref=f7e158]: Divyom Sharma · 30 Aug 2026
+                - cell "Natural Burma Teak Veneer Sheet (4mm)" [ref=f7e159]
+                - cell "Part delivered" [ref=f7e160]
+                - cell "300 sheets" [ref=f7e163]
+                - cell "50 sheets" [ref=f7e164]
+                - cell "₹90,000" [ref=f7e165]
+                - cell [ref=f7e166]:
+                  - generic [ref=f7e167]:
+                    - button "Receive…" [ref=f7e168] [cursor=pointer]
+                    - button "Cancel order…" [ref=f7e169] [cursor=pointer]
+              - row [ref=f7e170]:
+                - cell "Order 151ac8be Indo-Burma Timber Exporters · 29 Aug 2026" [ref=f7e171]:
+                  - link "Order 151ac8be" [ref=f7e172] [cursor=pointer]:
+                    - /url: /purchases/151ac8be-c11f-4463-be9a-b95fe639b555
+                  - generic [ref=f7e173]: Indo-Burma Timber Exporters · 29 Aug 2026
+                - cell "Natural Burma Teak Veneer Sheet (4mm)" [ref=f7e174]
+                - cell "Part delivered" [ref=f7e175]
+                - cell "100 sheets" [ref=f7e178]
+                - cell "30 sheets" [ref=f7e179]
+                - cell "₹80,000" [ref=f7e180]
+                - cell [ref=f7e181]:
+                  - generic [ref=f7e182]:
+                    - button "Receive…" [ref=f7e183] [cursor=pointer]
+                    - button "Cancel order…" [ref=f7e184] [cursor=pointer]
+        - generic [ref=f7e185]:
+          - heading "Suppliers" [level=2] [ref=f7e187]
+          - table [ref=f7e189]:
+            - caption [ref=f7e190]: Suppliers
+            - rowgroup [ref=f7e191]:
+              - row [ref=f7e192]:
+                - columnheader "Supplier" [ref=f7e193]
+                - columnheader "GSTIN" [ref=f7e194]
+                - columnheader "GST state" [ref=f7e195]
+                - columnheader "Open orders" [ref=f7e196]
+            - rowgroup [ref=f7e197]:
+              - row [ref=f7e198]:
+                - cell "Divyom Sharma" [ref=f7e199]
+                - cell "07TQDPS9711L1ZT" [ref=f7e200]
+                - cell "11" [ref=f7e201]
+                - cell "1" [ref=f7e202]
+              - row [ref=f7e203]:
+                - cell "Indo-Burma Timber Exporters" [ref=f7e204]
+                - cell "27AAACH9999J1Z9" [ref=f7e205]
+                - cell "27" [ref=f7e206]
+                - cell "1" [ref=f7e207]
+  - button "Open Next.js Dev Tools" [ref=f7e213] [cursor=pointer]
