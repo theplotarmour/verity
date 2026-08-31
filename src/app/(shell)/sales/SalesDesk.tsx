@@ -422,7 +422,15 @@ export function SalesDesk({
                 {orders.map((order) => (
                   <tr key={order.id}>
                     <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                      {order.customerName}
+                      {/* The order is the record; the desk is only a way in.
+                          Every action worth taking has more context on the
+                          order's own page than a table row can carry. */}
+                      <Link
+                        href={`/sales/${order.id}`}
+                        className="text-text no-underline hover:underline"
+                      >
+                        {order.customerName}
+                      </Link>
                     </td>
                     <td className="border-b border-line px-3 py-2">
                       <StateBadge

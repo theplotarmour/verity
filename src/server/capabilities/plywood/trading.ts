@@ -3,7 +3,7 @@ import { financialYearOf, nextDocumentNumber } from "./finance";
 import { assertGodownInScope, reachableGodownIds } from "./scope";
 import { ValidationError, type CommandDefinition } from "@/server/platform/command";
 import { type QueryDefinition } from "@/server/platform/query";
-import { diffFields, recordActivity } from "@/server/platform/audit";
+import { diffFields, recordActivity, reconstructHistory } from "@/server/platform/audit";
 import { transition } from "@/server/platform/state";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
 import {
@@ -1393,11 +1393,19 @@ export const purchaseOrderDetail: QueryDefinition<
   { orderId: string },
   {
     id: string;
+    /// Carried so the screen can link the supplier rather than print its name
+    /// as dead text (§71).
+    supplierId: string;
     supplierName: string;
+    locationId: string;
     locationName: string;
     reference: string | null;
     state: string;
     totalCostPaise: number;
+    createdAt: Date;
+    qtyOrdered: number;
+    qtyReceived: number;
+    qtyOutstanding: number;
     lines: Array<{
       productId: string;
       name: string;
@@ -1406,6 +1414,33 @@ export const purchaseOrderDetail: QueryDefinition<
       qtyReceived: number;
       qtyOutstanding: number;
       unitCostPaise: number;
+      lineTotalPaise: number;
+    }>;
+    /// §21 — the receipts already taken against this order.
+    receipts: Array<{
+      id: string;
+      receiptNumber: string;
+      receivedAt: Date;
+      qtyUnits: number;
+    }>;
+    /// §21 — the supplier invoice, if one has been recorded. A purchase order
+    /// is not a payable until this exists (§20).
+    invoices: Array<{
+      id: string;
+      invoiceNumber: string;
+      issuedAt: Date;
+      totalPaise: number;
+      paidPaise: number;
+      balancePaise: number;
+    }>;
+    /// §21 and §78 — who did what to this order, and when.
+    activity: Array<{
+      occurredAt: Date;
+      action: string;
+      before: string | null;
+      after: string | null;
+      actorUserId: string | null;
+      commandKey: string | null;
     }>;
   } | null
 > = {
@@ -1417,18 +1452,41 @@ export const purchaseOrderDetail: QueryDefinition<
       where: { id: input.orderId },
       include: {
         lines: true,
-        supplier: { select: { displayName: true } },
-        location: { select: { name: true } },
+        supplier: { select: { id: true, displayName: true } },
+        location: { select: { id: true, name: true } },
+        goodsReceipts: {
+          orderBy: { receivedAt: "desc" },
+          include: { lines: { select: { qtyReceived: true } } },
+        },
+        plywoodInvoices: {
+          orderBy: { issuedAt: "desc" },
+          include: {
+            payments: { select: { amountPaise: true } },
+            notes: { select: { noteType: true, totalPaise: true } },
+          },
+        },
       },
     });
     if (!order) return null;
+
+    const history = await reconstructHistory(ctx.tx, ENTITY_PURCHASE_ORDER, order.id);
+
+    const qtyOrdered = order.lines.reduce((sum, line) => sum + line.qtyOrdered, 0);
+    const qtyReceived = order.lines.reduce((sum, line) => sum + line.qtyReceived, 0);
+
     return {
       id: order.id,
+      supplierId: order.supplier.id,
       supplierName: order.supplier.displayName,
+      locationId: order.location.id,
       locationName: order.location.name,
       reference: order.reference,
       state: order.state,
       totalCostPaise: order.totalCostPaise,
+      createdAt: order.createdAt,
+      qtyOrdered,
+      qtyReceived,
+      qtyOutstanding: qtyOrdered - qtyReceived,
       lines: order.lines.map((line) => ({
         productId: line.productId,
         name: line.productNameSnapshot,
@@ -1439,7 +1497,45 @@ export const purchaseOrderDetail: QueryDefinition<
         // this order. A column, not an arithmetic exercise for the reader.
         qtyOutstanding: line.qtyOrdered - line.qtyReceived,
         unitCostPaise: line.unitCostPaise,
+        lineTotalPaise: line.qtyOrdered * line.unitCostPaise,
       })),
+      receipts: order.goodsReceipts.map((receipt) => ({
+        id: receipt.id,
+        receiptNumber: receipt.receiptNumber,
+        receivedAt: receipt.receivedAt,
+        qtyUnits: receipt.lines.reduce((sum, line) => sum + line.qtyReceived, 0),
+      })),
+      invoices: order.plywoodInvoices.map((invoice) => {
+        const paid = invoice.payments.reduce((sum, payment) => sum + payment.amountPaise, 0);
+        const credited = invoice.notes
+          .filter((note) => note.noteType === "credit")
+          .reduce((sum, note) => sum + note.totalPaise, 0);
+        const debited = invoice.notes
+          .filter((note) => note.noteType === "debit")
+          .reduce((sum, note) => sum + note.totalPaise, 0);
+        return {
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          issuedAt: invoice.issuedAt,
+          totalPaise: invoice.totalPaise,
+          paidPaise: paid,
+          balancePaise: Math.max(0, invoice.totalPaise + debited - paid - credited),
+        };
+      }),
+      // Newest first here, unlike `reconstructHistory`'s forward order: an
+      // activity panel on a live record answers "what just happened", and the
+      // reader should not scroll to the bottom to find out.
+      activity: history
+        .slice()
+        .reverse()
+        .map((entry) => ({
+          occurredAt: entry.occurredAt,
+          action: entry.action,
+          before: entry.before ?? null,
+          after: entry.after ?? null,
+          actorUserId: entry.actorUserId,
+          commandKey: entry.commandKey,
+        })),
     };
   },
 };
@@ -1448,20 +1544,52 @@ export const salesOrderDetail: QueryDefinition<
   { orderId: string },
   {
     id: string;
+    customerId: string;
     customerName: string;
+    /// §41 — the credit position at the moment this order is read, so the
+    /// approver sees what they are approving rather than a bare "blocked".
+    creditLimitPaise: number;
+    exposurePaise: number;
+    availableCreditPaise: number;
+    overLimitPaise: number;
+    locationId: string;
     locationName: string;
     reference: string | null;
     state: string;
     totalPricePaise: number;
+    createdAt: Date;
+    qtyOrdered: number;
+    qtyReserved: number;
+    qtyIssued: number;
     lines: Array<{
       productId: string;
       name: string;
       hsnCode: string;
       qtyOrdered: number;
       qtyShipped: number;
+      qtyReserved: number;
       unitPricePaise: number;
+      lineTotalPaise: number;
     }>;
     holds: Array<{ productId: string; qtyUnits: number; releasedAt: Date | null }>;
+    /// §47 — the goods that have physically left the godown.
+    issues: Array<{ id: string; issueNumber: string; issuedAt: Date; qtyUnits: number }>;
+    invoices: Array<{
+      id: string;
+      invoiceNumber: string;
+      issuedAt: Date;
+      totalPaise: number;
+      paidPaise: number;
+      balancePaise: number;
+    }>;
+    activity: Array<{
+      occurredAt: Date;
+      action: string;
+      before: string | null;
+      after: string | null;
+      actorUserId: string | null;
+      commandKey: string | null;
+    }>;
   } | null
 > = {
   key: "verity.plywood.sales_order_detail",
@@ -1473,31 +1601,113 @@ export const salesOrderDetail: QueryDefinition<
       include: {
         lines: true,
         reservations: true,
-        customer: { select: { displayName: true } },
-        location: { select: { name: true } },
+        customer: { select: { id: true, displayName: true, creditLimitPaise: true } },
+        location: { select: { id: true, name: true } },
+        goodsIssues: {
+          orderBy: { issuedAt: "desc" },
+          include: { lines: { select: { qtyIssued: true } } },
+        },
+        plywoodInvoices: {
+          orderBy: { issuedAt: "desc" },
+          include: {
+            payments: { select: { amountPaise: true } },
+            notes: { select: { noteType: true, totalPaise: true } },
+          },
+        },
       },
     });
     if (!order) return null;
+
+    // The canonical exposure, not a local recomputation. taskplans/45 §4.1 is
+    // explicit that a second definition anywhere in this capability is a
+    // defect, and an approval screen showing a different figure from the check
+    // that blocked the order would be the worst place to have one.
+    const exposurePaise = await customerExposurePaise(ctx.tx, order.customer.id);
+    const history = await reconstructHistory(ctx.tx, ENTITY_SALES_ORDER, order.id);
+
+    // Reservations are per product, and a line is per product, so the hold on
+    // a line is the sum of its unreleased reservations. Released ones are kept
+    // in `holds` because a cancellation that returned stock is history worth
+    // reading (§69), but they hold nothing now.
+    const reservedByProduct = new Map<string, number>();
+    for (const hold of order.reservations) {
+      if (hold.releasedAt !== null) continue;
+      reservedByProduct.set(
+        hold.productId,
+        (reservedByProduct.get(hold.productId) ?? 0) + hold.qtyUnits,
+      );
+    }
+
+    const qtyOrdered = order.lines.reduce((sum, line) => sum + line.qtyOrdered, 0);
+    const qtyIssued = order.lines.reduce((sum, line) => sum + line.qtyShipped, 0);
+    const qtyReserved = [...reservedByProduct.values()].reduce((sum, qty) => sum + qty, 0);
+
     return {
       id: order.id,
+      customerId: order.customer.id,
       customerName: order.customer.displayName,
+      creditLimitPaise: order.customer.creditLimitPaise,
+      exposurePaise,
+      availableCreditPaise: Math.max(0, order.customer.creditLimitPaise - exposurePaise),
+      overLimitPaise: Math.max(0, exposurePaise - order.customer.creditLimitPaise),
+      locationId: order.location.id,
       locationName: order.location.name,
       reference: order.reference,
       state: order.state,
       totalPricePaise: order.totalPricePaise,
+      createdAt: order.createdAt,
+      qtyOrdered,
+      qtyReserved,
+      qtyIssued,
       lines: order.lines.map((line) => ({
         productId: line.productId,
         name: line.productNameSnapshot,
         hsnCode: line.hsnCodeSnapshot,
         qtyOrdered: line.qtyOrdered,
         qtyShipped: line.qtyShipped,
+        qtyReserved: reservedByProduct.get(line.productId) ?? 0,
         unitPricePaise: line.unitPricePaise,
+        lineTotalPaise: line.qtyOrdered * line.unitPricePaise,
       })),
       holds: order.reservations.map((hold) => ({
         productId: hold.productId,
         qtyUnits: hold.qtyUnits,
         releasedAt: hold.releasedAt,
       })),
+      issues: order.goodsIssues.map((issue) => ({
+        id: issue.id,
+        issueNumber: issue.issueNumber,
+        issuedAt: issue.issuedAt,
+        qtyUnits: issue.lines.reduce((sum, line) => sum + line.qtyIssued, 0),
+      })),
+      invoices: order.plywoodInvoices.map((invoice) => {
+        const paid = invoice.payments.reduce((sum, payment) => sum + payment.amountPaise, 0);
+        const credited = invoice.notes
+          .filter((note) => note.noteType === "credit")
+          .reduce((sum, note) => sum + note.totalPaise, 0);
+        const debited = invoice.notes
+          .filter((note) => note.noteType === "debit")
+          .reduce((sum, note) => sum + note.totalPaise, 0);
+        return {
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          issuedAt: invoice.issuedAt,
+          totalPaise: invoice.totalPaise,
+          paidPaise: paid,
+          balancePaise: Math.max(0, invoice.totalPaise + debited - paid - credited),
+        };
+      }),
+      activity: history
+        .slice()
+        .reverse()
+        .map((entry) => ({
+          occurredAt: entry.occurredAt,
+          action: entry.action,
+          before: entry.before ?? null,
+          after: entry.after ?? null,
+          actorUserId: entry.actorUserId,
+          commandKey: entry.commandKey,
+        })),
     };
   },
 };
