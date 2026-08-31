@@ -17,8 +17,10 @@ import {
   ENTITY_PRODUCT,
   ENTITY_STOCK_BALANCE,
   ENTITY_STOCK_LEDGER,
+  ENTITY_CUSTOMER,
   ENTITY_PURCHASE_ORDER,
   ENTITY_SALES_ORDER,
+  ENTITY_SUPPLIER,
   ENTITY_INVOICE,
   ENTITY_LEDGER_ENTRY,
   HSN_CODE,
@@ -44,8 +46,10 @@ import {
   createSalesOrder,
   createSupplier,
   dispatchOrder,
+  customerDetail,
   listCustomers,
   listSuppliers,
+  supplierDetail,
   openOrders,
   purchaseOrderDetail,
   receiveGoods,
@@ -559,6 +563,15 @@ export function registerPlywoodCapability(): void {
         shells: ["platform"],
       },
       {
+        href: "/suppliers",
+        label: "Suppliers",
+        group: "Trade",
+        order: 21,
+        icon: "parties",
+        requiresEntity: ENTITY_SUPPLIER,
+        shells: ["platform"],
+      },
+      {
         href: "/purchases",
         label: "Purchases",
         group: "Trade",
@@ -566,6 +579,15 @@ export function registerPlywoodCapability(): void {
         icon: "purchases",
         requiresEntity: ENTITY_PURCHASE_ORDER,
         shells: ["platform", "operations"],
+      },
+      {
+        href: "/customers",
+        label: "Customers",
+        group: "Trade",
+        order: 23,
+        icon: "parties",
+        requiresEntity: ENTITY_CUSTOMER,
+        shells: ["platform"],
       },
       {
         href: "/sales",
@@ -784,7 +806,9 @@ export function registerPlywoodCapability(): void {
   registerQuery(purchaseMatch);
   registerQuery(goodsReceiptDetail);
   registerQuery(listSuppliers);
+  registerQuery(supplierDetail);
   registerQuery(listCustomers);
+  registerQuery(customerDetail);
   registerQuery(purchaseOrderDetail);
   registerQuery(salesOrderDetail);
   registerQuery(openOrders);

@@ -1,0 +1,1763 @@
+Yes. Below is the complete target user flow for the Plywood business, rewritten with no Logistics / Shipment / Delivery module at all.
+The product should feel like one connected business system:
+Buy → Receive → Stock → Sell → Reserve → Issue Goods → Invoice → Collect → Account → Tax → Close
+The most important rule across the entire app is:
+A business fact is entered once. Every affected screen updates automatically.
+
+0. Final client navigation
+The normal plywood client should see something close to:
+Overview
+
+TRADE
+Catalogue
+Suppliers
+Purchases
+Customers
+Sales
+
+INVENTORY
+Stock
+Godowns
+
+MONEY
+Finance
+Ledgers
+Tax & Compliance
+
+INSIGHTS
+Reports
+
+ADMINISTRATION
+People & Roles
+Business Settings
+Audit
+Do not expose normal clients to:
+Raw Capability Registry
+Raw Configuration Keys
+Generic Locations
+Generic Assets
+Platform Operator Settings
+Technical permission/entity names
+Those are implementation/platform concepts.
+
+1. WHO USES WHAT
+Role
+Main workspace
+Owner
+Overview, Reports, Finance
+Purchase Manager
+Suppliers, Purchases
+Warehouse Staff
+Stock, Godowns, Goods Receipt/Issue
+Salesperson
+Customers, Sales
+Sales Manager
+Pricing, Credit approvals
+Accountant
+Finance, Ledgers, Tax
+Client Admin
+People, Roles, Business Settings
+Verity Operator
+HQ only
+
+One system, but each role should see the pieces needed for their job.
+
+2. BUSINESS ONBOARDING
+Verity HQ operator
+Sign in
+→ HQ
+→ Create Client
+→ Naksh Plywood
+→ Activate Plywood capability
+→ Required shared capabilities activate
+→ Create initial client administrator
+→ Client workspace ready
+The operator should not manage the client's daily business.
+
+3. FIRST CLIENT LOGIN
+Do not drop them into an empty Overview.
+Show:
+Set up Naksh Plywood
+Progress:
+1. Business details
+2. Tax details
+3. Godowns
+4. Team & roles
+5. Catalogue
+6. Suppliers
+7. Customers
+8. Ready to trade
+Each completed step unlocks the next naturally.
+
+4. BUSINESS SETTINGS
+/settings/business
+Business admin enters:
+Legal Name
+Trade Name
+GSTIN
+PAN
+Registered State
+State Code
+Principal Address
+Financial Year
+Currency
+Timezone
+This becomes the master business identity.
+It should automatically feed:
+invoices
+tax calculations
+reports
+ledgers
+invoice numbering
+accounting periods
+The accountant should never enter Naksh's GSTIN again on individual invoices.
+
+5. TAX SETTINGS
+/settings/tax
+Friendly UI:
+GST Registration
+Regular
+
+Registered State
+Delhi
+
+GSTIN
+07XXXXXXXXXXXX
+
+Invoice Series
+NK/26-27/
+
+Financial Year
+2026-27
+Do not show:
+verity.plywood.tax.cgst_rate_bp
+Long-term tax rates should be driven by HSN/effective-dated tax rules rather than one global hardcoded rate.
+
+6. PEOPLE & ROLES
+/people
+Invite:
+Owner
+Purchase Manager
+Sales Manager
+Salesperson
+Warehouse Manager
+Warehouse Operator
+Accountant
+Auditor
+/roles
+Don't show:
+READ
+MANAGE
+DELETE
+Show business activities.
+Example:
+Sales Manager
+✓ View catalogue
+✓ View stock
+✓ Create sales orders
+✓ Change customer pricing
+✓ View customer credit
+✓ Request credit override
+✓ Approve credit override
+✕ Record supplier payment
+✕ Manage tax settings
+Underneath, Verity can still map this into the existing permission system.
+
+7. OVERVIEW
+This is where the owner starts every day.
+/overview
+Sales
+Sales this month
+₹18.4L
+
+Open Orders
+18
+
+Awaiting Credit Approval
+3
+
+Awaiting Goods Issue
+6
+Purchase
+Open Purchase Orders
+12
+
+Pending Receipt
+5
+
+Incoming Stock
+840 sheets
+Inventory
+Inventory Value
+₹42.8L
+
+Low Stock
+14 SKUs
+
+Reserved
+382 sheets
+Money
+Receivables
+₹11.6L
+
+Overdue
+₹3.2L
+
+Payables
+₹8.4L
+
+Collections Today
+₹1.7L
+Tax
+Output GST
+₹3.42L
+
+Eligible ITC
+₹2.81L
+
+Tax Exceptions
+4
+Every number is clickable.
+
+8. NOTHING ON OVERVIEW IS MANUALLY ENTERED
+Example:
+Warehouse receives 100 sheets.
+Overview automatically changes:
+Incoming stock       -100
+On-hand stock        +100
+Inventory value      changes
+Low-stock alert      may disappear
+Open receipt count   changes
+Accountant records customer payment.
+Overview:
+Receivables        ↓
+Collections Today  ↑
+Customer Exposure  ↓
+Overview is a projection of the business, not its own data source.
+
+9. CATALOGUE
+/catalogue
+This defines what the business trades.
+Hierarchy:
+Brand
+→ Product
+Example:
+Century Ply
+
+Club Prime 18mm
+2440 × 1220
+BWP
+HSN 4412
+Product identity:
+Brand
+Name
+HSN
+Thickness
+Width
+Height
+Grade
+Reorder level
+Active/Inactive
+Do not allow users to manually edit “current stock.”
+Stock comes from stock movements.
+
+10. PRODUCT DETAIL
+/catalogue/[productId]
+This page should connect everything.
+Top:
+Century Club Prime 18mm
+
+On Hand       324
+Reserved       42
+Available     282
+Incoming      100
+
+Avg Cost    ₹1,230
+Sell Price  ₹1,490
+Sections:
+Stock by Godown
+Main Godown       220
+Noida Godown      104
+Supplier Pricing
+Century Ply       ₹1,180
+Greenply          ₹1,205
+Customer Pricing
+Gupta Timber      ₹1,490
+Sharma Boards     ₹1,520
+Open Purchases
+PO-0042
+100 incoming
+Open Sales
+SO-0088
+20 reserved
+Movement History
++100 PO Receipt
+-20 Goods Issue
+-4 Damage
++3 Customer Return
+Everything is clickable.
+
+11. GODOWNS
+/godowns
+Example:
+Main Godown
+├─ A1
+├─ A2
+├─ B1
+└─ B2
+
+Noida Godown
+├─ R1
+└─ R2
+Godown detail:
+Stock Value
+₹18.4L
+
+On Hand
+8,420 sheets
+
+Reserved
+1,120
+
+Available
+7,300
+
+Incoming
+640
+Below:
+stock by SKU
+rack
+incoming purchases
+recent movements
+adjustments
+
+12. STOCK
+/stock
+This screen answers:
+What physically exists?
+Columns:
+Product
+Godown
+On Hand
+Reserved
+Available
+Incoming
+Avg Cost
+
+Canonical relationship:
+Available = On Hand - Reserved
+Never calculate it differently somewhere else.
+
+13. STOCK DETAIL / MOVEMENT LEDGER
+Clicking a quantity opens why that quantity exists:
+Century Club Prime 18mm
+Main Godown
+
+Opening                +100
+PO-0038 receipt         +60
+SO-0061 issue           -20
+Damage                   -2
+Customer return          +1
+Adjustment               +3
+────────────────────────────
+On Hand                 142
+This is critical for warehouse staff and accountants.
+
+14. SUPPLIERS
+/suppliers
+List:
+Century Ply
+
+Outstanding        ₹3.8L
+Open POs                3
+Incoming              420
+Current Club Prime   ₹1,180
+Click supplier.
+
+15. SUPPLIER DETAIL
+/suppliers/[supplierId]
+Top:
+Century Ply
+
+Outstanding       ₹3.8L
+Open Orders            3
+Incoming             420
+Last Purchase      ₹1,180
+Tabs:
+Overview
+Pricing
+Purchase Orders
+Receipts
+Invoices
+Payments
+Ledger
+Now a supplier becomes an operating account rather than a dropdown.
+
+16. SUPPLIER PRICE
+Purchase manager sets:
+Century Ply
+Club Prime 18mm
+₹1,180
+Effective 30 Aug
+That immediately affects:
+Product Detail
+Latest supplier price appears.
+New PO
+Price prefills.
+Supplier
+Price history updates.
+Reports
+Supplier price trends change.
+Existing historical orders remain unchanged.
+
+17. LOW STOCK
+Suppose:
+Available      7
+Reorder Level 20
+Overview:
+Century Club Prime is low
+7 available · reorder point 20
+Create Purchase Order →
+Product shows:
+Low Stock
+Purchase workspace gets:
+Needs Procurement
+Club Prime 18mm
+7 available
+20 reorder threshold
+
+18. PURCHASES HOME
+/purchases
+Tabs:
+Needs Procurement
+Draft
+Submitted
+Partially Received
+Received
+Cancelled
+Summary:
+Open Purchase Value
+₹12.4L
+
+Expected Stock
+2,430 sheets
+
+Due This Week
+7 orders
+
+19. CREATE PURCHASE ORDER
+Click:
+New Purchase Order
+Form:
+Supplier
+Century Ply
+
+Destination
+Main Godown
+
+Product
+Club Prime 18mm
+
+Quantity
+100
+
+Supplier Price
+₹1,180
+
+Expected Date
+05 Sep
+Supplier price prefills from pricing.
+User may override according to permission.
+
+20. PURCHASE ORDER — DRAFT
+Creates:
+PO-0042
+DRAFT
+Total:
+100 × ₹1,180
+₹118,000
+What changes?
+Purchases
+PO appears.
+Supplier
+Draft commercial activity appears.
+Finance
+Nothing.
+Financial Ledger
+Nothing.
+Stock
+Nothing incoming yet.
+Because:
+PO ≠ Payable
+
+21. PURCHASE ORDER DETAIL
+This page should be the central record.
+PO-0042
+
+Century Ply
+Main Godown
+
+Status
+Submitted
+
+100 × Club Prime
+₹118,000
+Sections:
+Receipt
+Ordered         100
+Received          0
+Remaining        100
+
+[ Receive Goods ]
+Finance
+Supplier Invoice
+Not received
+
+[ Record Supplier Invoice ]
+Related
+Supplier
+Stock Movements
+Invoice
+Payments
+Ledger
+Activity
+
+22. SUBMIT PO
+User:
+Submit Purchase Order
+State:
+Draft → Submitted
+Now the business has committed to buying.
+
+23. WHAT CHANGES ON SUBMIT
+Purchase Order
+Submitted.
+Product
+Incoming +100
+Stock
+Incoming +100.
+Godown
+Expected:
+PO-0042
+100 sheets incoming
+Supplier
+Open POs +1.
+Overview
+Incoming stock ↑.
+Finance
+Still nothing.
+
+24. GOODS ARRIVE
+Warehouse goes:
+Purchases
+→ PO-0042
+→ Receive Goods
+Screen:
+Ordered            100
+Received previously  0
+Remaining          100
+
+Receive now        [96]
+
+25. RECEIVE GOODS
+Warehouse confirms 96.
+This one action should cause:
+PO Receipt
+  ↓
+PO Received Qty +96
+  ↓
+Stock Movement +96
+  ↓
+Godown On Hand +96
+  ↓
+Incoming -96
+  ↓
+Weighted Average Cost recalculated
+
+26. CROSS-SCREEN EFFECT OF RECEIPT
+PO
+Ordered    100
+Received    96
+Remaining    4
+
+PARTIALLY RECEIVED
+Stock
+On Hand     +96
+Incoming    -96
+Available   +96
+Godown
++96 physical stock.
+Product
+Stock totals change.
+Supplier
+Receipt appears.
+Overview
+Inventory increases.
+Incoming decreases.
+Low-stock warning may clear.
+Finance
+Still no payable until supplier invoice exists.
+Audit
+96 Club Prime received
+PO-0042
+Main Godown
+By Amit
+14:32
+
+27. WEIGHTED AVERAGE COST
+Existing:
+100 × ₹1,000 = ₹100,000
+Receive:
+100 × ₹1,200 = ₹120,000
+New:
+200 units
+₹220,000
+
+Average Cost
+₹1,100
+Automatically updates:
+Stock
+Product
+Inventory valuation
+Margin reports
+
+28. SUPPLIER TAX INVOICE ARRIVES
+Accountant opens:
+PO-0042
+→ Finance
+→ Record Supplier Invoice
+Because opened through PO:
+Supplier and lines are already known.
+Do not make accountant retype them.
+
+29. THREE-WAY MATCH
+Verity compares:
+PURCHASE ORDER
+     ↕
+GOODS RECEIPT
+     ↕
+SUPPLIER INVOICE
+Example mismatch:
+Ordered       100 @ ₹1,180
+Received       96
+Invoiced      100 @ ₹1,200
+Show:
+⚠ Quantity Difference +4
+⚠ Price Difference ₹20/sheet
+Accountant reviews.
+Perfect case:
+✓ Quantity matched
+✓ Price matched
+✓ HSN present
+✓ GST identity valid
+✓ Tax maths valid
+
+30. PURCHASE INVOICE POSTING
+Suppose invoice:
+Taxable       ₹113,280
+GST            ₹20,390
+Total         ₹133,670
+Posting creates:
+Purchase Invoice
+→ Payable
+→ Supplier Ledger
+→ Expected ITC
+
+31. WHAT CHANGES AFTER PURCHASE INVOICE
+Finance
+Payables +₹133,670
+Supplier
+Outstanding +₹133,670
+Ledger
+CP-8291     +₹133,670
+Balance      ₹133,670
+PO
+Invoice appears under Related.
+Tax
+Expected Input GST:
+₹20,390
+Overview
+Payables increase.
+
+32. SUPPLIER PAYMENT
+Accountant opens invoice.
+Outstanding
+₹133,670
+Clicks:
+Record Payment
+Amount       ₹100,000
+Method       Bank
+Reference    UTR...
+Date
+
+33. PAYMENT CROSS-SCREEN EFFECT
+Invoice
+Total       ₹133,670
+Paid        ₹100,000
+Balance      ₹33,670
+Supplier
+Outstanding ↓.
+Supplier Ledger
+Invoice       +133,670
+Payment       -100,000
+──────────────────────
+Balance         33,670
+Finance
+Payables ↓.
+Overview
+Payables ↓.
+Reports
+Cash outflow updates.
+
+34. CUSTOMERS
+/customers
+List:
+Gupta Timber
+
+Outstanding       ₹2.1L
+Credit Limit        ₹5L
+Available Credit  ₹2.9L
+Open Orders            4
+
+35. CUSTOMER DETAIL
+/customers/[id]
+Tabs:
+Overview
+Pricing
+Sales Orders
+Invoices
+Payments
+Ledger
+Overview:
+Credit Limit       ₹500,000
+Exposure           ₹210,000
+Available          ₹290,000
+
+Outstanding        ₹210,000
+
+36. CUSTOMER PRICING
+Sales manager sets:
+Gupta Timber
+
+Century Club Prime
+₹1,500 / sheet
+New Sales Orders now prefill ₹1,500.
+Historical orders remain at their original price.
+
+37. SALES HOME
+/sales
+Tabs:
+Draft
+Credit Review
+Approved
+Reserved
+Awaiting Goods Issue
+Fulfilled
+Cancelled
+Summary:
+Open Order Value
+₹14.2L
+
+Awaiting Credit
+3
+
+Awaiting Issue
+7
+
+38. NEW SALES ORDER
+Customer calls.
+Salesperson:
+Sales
+→ New Sales Order
+Select:
+Customer
+Gupta Timber
+
+Godown
+Main Godown
+
+Product
+Club Prime
+
+Quantity
+40
+System prefills:
+Customer Price
+₹1,500
+
+39. DRAFT SALES ORDER
+Creates:
+SO-0082
+
+40 × ₹1,500
+₹60,000
+State:
+Draft
+Changes:
+Sales
+Appears.
+Customer
+Open Orders +1.
+Finance
+Nothing.
+Ledger
+No financial transaction.
+Stock
+Nothing reserved yet.
+
+40. CREDIT CHECK
+Current customer:
+Credit Limit       ₹500,000
+Exposure           ₹470,000
+Order:
+₹60,000
+Potential:
+₹530,000
+System moves:
+PENDING CREDIT
+
+41. CREDIT BLOCK EFFECT
+Sales
+Order blocked.
+Overview
+Credit approvals +1.
+Customer
+Exposure    ₹530k
+Limit       ₹500k
+Over        ₹30k
+Stock
+Not yet committed.
+Goods Issue
+Unavailable.
+Manager sees:
+Gupta Timber exceeds available credit by ₹30,000
+Review Order
+
+42. CREDIT APPROVAL
+Manager opens order.
+Can approve with reason:
+Reason:
+Owner approved temporary limit extension.
+Audit records:
+actor
+amount
+reason
+timestamp
+State:
+Pending Credit
+→ Approved
+
+43. RESERVE STOCK
+Now user clicks:
+Reserve Stock
+Before:
+On Hand      150
+Reserved      20
+Available    130
+Reserve 40:
+On Hand      150
+Reserved      60
+Available     90
+Physical stock has not left.
+
+44. WHAT RESERVATION CHANGES
+Sales Order
+Ordered     40
+Reserved    40
+Issued       0
+Stock
+Reserved ↑40.
+Available ↓40.
+Product
+Available stock ↓.
+Godown
+Allocation shown.
+Overview
+Reserved stock ↑.
+Awaiting Goods Issue ↑.
+
+45. GOODS ISSUE
+No Logistics module.
+No shipment.
+No delivery.
+When material physically leaves the godown:
+Sales Order:
+Issue Goods
+Warehouse enters:
+Quantity
+40
+
+46. GOODS ISSUE EFFECT
+Before:
+On Hand      150
+Reserved      40
+Available    110
+After:
+On Hand      110
+Reserved       0
+Available    110
+Creates stock movement:
+-40
+SO-0082
+Gupta Timber
+Main Godown
+
+47. OTHER SCREENS AFTER GOODS ISSUE
+Sales
+SO becomes Fulfilled when fully issued.
+Product
+On-hand ↓.
+Stock
+On-hand ↓.
+Godown
+Physical stock ↓.
+Customer
+Order shows Fulfilled.
+Overview
+Awaiting Goods Issue ↓.
+Reports
+Quantity sold/issued updates.
+Audit
+40 sheets issued
+SO-0082
+By Warehouse User
+
+48. SALES ORDER DETAIL
+This should show the full connected lifecycle.
+SO-0082
+
+Gupta Timber
+FULFILLED
+
+ORDER
+40 × Club Prime
+₹60,000
+
+STOCK
+Ordered       40
+Reserved       0
+Issued        40
+
+FINANCE
+Invoice       Not issued
+[ Raise Invoice ]
+
+RELATED
+Customer
+Stock movements
+Invoice
+Payments
+Ledger
+Activity
+
+49. SALES INVOICE
+Accountant/sales user:
+Raise Invoice
+Prefilled from the order:
+customer
+GSTIN
+state
+product
+HSN
+quantity
+snapshotted rate
+No duplicate typing.
+
+50. TAX CHECK
+Before issuing:
+✓ Customer tax identity
+✓ GSTIN format
+✓ HSN
+✓ Place of supply
+✓ Tax rule
+✓ Invoice series
+✓ Financial year
+✓ Tax calculation
+Determine:
+CGST + SGST
+or:
+IGST
+according to applicable tax treatment.
+
+51. SALES INVOICE ISSUED
+Suppose:
+Taxable       ₹60,000
+GST           ₹10,800
+Total         ₹70,800
+Now:
+Finance
+Receivable +₹70,800.
+Customer
+Outstanding +₹70,800.
+Ledger
+INV-0082
++₹70,800
+Sales Order
+Invoice linked.
+Tax
+Output GST +₹10,800.
+Overview
+Receivables ↑.
+Reports
+Revenue/margin update.
+
+52. CUSTOMER PAYMENT
+Customer pays:
+₹50,000
+Accountant:
+Finance
+→ Invoice
+→ Record Payment
+
+53. CUSTOMER PAYMENT PROPAGATION
+Invoice
+Total       ₹70,800
+Paid        ₹50,000
+Balance     ₹20,800
+Customer
+Outstanding ↓.
+Credit
+Exposure ↓.
+Available credit ↑.
+Ledger
+Invoice       +70,800
+Payment       -50,000
+─────────────────────
+Balance        20,800
+Finance
+Receivables ↓.
+Overview
+Collections ↑.
+
+54. LEDGERS
+/ledgers
+Very important distinction:
+Financial Ledger
+Actual money obligations:
+Invoice
+Payment
+Credit Note
+Debit Note
+Opening balance
+Commercial Commitments
+Separate section:
+Open Purchase Orders
+Open Sales Orders
+So a PO is visible to accountant without pretending it is a payable.
+
+55. SUPPLIER LEDGER
+Century Ply
+
+FINANCIAL
+
+CP-8291       +133,670
+PAY-0182      -100,000
+─────────────────────
+Balance         33,670
+Below:
+OPEN PURCHASES
+
+PO-0042
+₹118,000
+Partially Received
+
+56. CUSTOMER LEDGER
+Gupta Timber
+
+FINANCIAL
+
+INV-0082       +70,800
+PAY-0094       -50,000
+─────────────────────
+Balance         20,800
+Below:
+OPEN SALES
+
+SO-0088
+₹82,000
+Reserved
+
+57. FINANCE
+/finance
+Not another disconnected entry system.
+It is a financial projection.
+Receivables
+Outstanding
+Overdue
+Due this week
+Collections
+Payables
+Outstanding
+Overdue
+Due this week
+Payments
+Click any amount → invoices.
+Click invoice → source order.
+Click order → supplier/customer.
+
+58. ACCOUNTANT TAX CENTER
+/tax
+Accountant home:
+AUGUST 2026
+
+Output GST        ₹6,91,280
+Expected ITC      ₹5,12,840
+Eligible ITC      ₹4,82,410
+Net Estimate      ₹2,08,870
+
+GSTR-1
+1 exception
+
+GSTR-3B
+5 exceptions
+
+ITC
+121 matched
+5 need review
+The tax center should never become a second entry system.
+It derives from transactions.
+
+59. ITC RECONCILIATION
+/tax/itc
+Compare:
+Purchase Register
+↕
+GST Records / GSTR-2B
+Buckets:
+Matched
+Missing in GST
+Missing in Verity
+Amount Mismatch
+GSTIN Mismatch
+Pending
+Ineligible
+Reversal Required
+Accountant focuses only on exceptions.
+
+60. ACCOUNTANT PURCHASE REVIEW
+For every supplier invoice:
+PO
+↓
+Goods Receipt
+↓
+Invoice
+↓
+GST Match
+Ideal:
+✓ Ordered
+✓ Received
+✓ Invoice matched
+✓ GST matched
+✓ ITC eligible
+No Excel matching.
+
+61. GSTR-1
+/tax/gstr-1
+Generated from issued Sales Invoices.
+Shows:
+B2B
+relevant B2C
+HSN summary
+CGST
+SGST
+IGST
+credit/debit notes
+Validation:
+✓ Invoice sequence
+✓ HSN
+✓ Tax calculation
+✓ Dates
+⚠ 1 GSTIN issue
+
+62. GSTR-3B WORKING
+/tax/gstr-3b
+OUTPUT LIABILITY
+
+Taxable outward supplies
+CGST
+SGST
+IGST
+
+INPUT CREDIT
+
+Books ITC
+Matched ITC
+Eligible ITC
+Reversals
+
+NET TAX
+
+Output
+- ITC
+────────
+Cash requirement
+Every amount must drill down to invoices.
+
+63. TAX EXCEPTIONS
+/tax/exceptions
+Example:
+5 NEED ATTENTION
+
+Supplier invoice missing in GST data
+₹18,210 ITC
+[Review]
+
+PO / Invoice mismatch
+100 invoiced · 96 received
+[Compare]
+
+Customer GSTIN invalid
+INV-0082
+[Fix]
+Accountant works exceptions rather than re-keying transactions.
+
+64. STOCK DAMAGE
+Warehouse:
+Stock
+→ Record Damage
+Example:
+Club Prime
+Main Godown
+4 sheets
+Water damage
+Effects:
+on-hand ↓4
+available ↓4
+inventory value changes
+product changes
+godown changes
+overview exception increases
+audit records reason
+Never silently edit stock count.
+
+65. PHYSICAL STOCK ADJUSTMENT
+System:
+120
+Physical:
+116
+Record:
+Adjustment -4
+Reason: Physical count
+Movement ledger preserves why.
+
+66. CUSTOMER RETURN
+Customer returns 3 sheets.
+Operational action:
+Customer Return +3
+Effects:
+stock +3
+godown +3
+product +3
+customer/order activity updates
+Finance should not automatically refund.
+If money must be reversed:
+Create Credit Note separately.
+
+67. CREDIT / DEBIT NOTES
+Finalized invoice should not be edited.
+Use:
+Invoice
+↓
+Credit Note / Debit Note
+Then update:
+receivable/payable
+party ledger
+GST
+reports
+Historical invoice stays intact.
+
+68. PURCHASE CANCELLATION
+Before receipt:
+Cancel PO
+Then:
+incoming stock ↓
+supplier commitment ↓
+overview ↓
+finance unchanged
+After receipt:
+Do not erase historical goods receipt.
+
+69. SALES CANCELLATION
+Before reservation:
+Only order state changes.
+After reservation:
+Cancel
+→ Release Reservation
+Then:
+Reserved ↓
+Available ↑
+On-hand stays unchanged.
+After Goods Issue, don't undo physical stock by changing order status. Use return/reversal flow.
+
+70. RELATED RECORDS
+This is one of the most important improvements.
+Every major detail screen gets:
+Related
+Purchase Order
+Supplier
+Goods Receipts
+Purchase Invoice
+Payments
+Stock Movements
+Supplier Ledger
+Audit
+Sales Order
+Customer
+Reservation
+Goods Issue
+Sales Invoice
+Payments
+Customer Ledger
+Audit
+Invoice
+Source Order
+Party
+Payments
+Tax
+Ledger
+Audit
+Product
+Stock
+Purchases
+Sales
+Pricing
+Movements
+This makes Verity feel connected.
+
+71. CROSS-LINKS
+Every entity name should generally be clickable.
+Examples:
+Purchase Order
+→ Supplier
+
+Purchase Order
+→ Purchase Invoice
+
+Purchase Invoice
+→ Purchase Order
+
+Stock Movement
+→ Source Order
+
+Sales Order
+→ Customer
+
+Sales Invoice
+→ Sales Order
+
+Ledger Entry
+→ Invoice
+
+Low Stock
+→ Product
+→ New Purchase Order
+Never make a user search for context they were already looking at.
+
+72. NOTIFICATIONS
+Notifications should tell users what to do.
+Bad:
+Low stock.
+Good:
+Century Club Prime fell below reorder level
+7 available · threshold 20
+Create Purchase Order →
+Bad:
+Credit issue.
+Good:
+SO-0082 needs credit approval
+Gupta Timber · ₹30,000 above credit headroom
+Review Order →
+Bad:
+Tax mismatch.
+Good:
+Century Ply invoice differs from GST record
+ITC difference ₹2,410
+Compare →
+
+73. REPORTS
+/reports
+Sales
+revenue
+quantity
+product
+customer
+salesperson
+Purchases
+purchase value
+supplier
+product
+supplier price trends
+Inventory
+stock valuation
+stock quantity
+ageing
+low stock
+damage
+adjustments
+Margin
+Sales
+-
+Cost Basis
+=
+Gross Margin
+Finance
+receivable ageing
+payable ageing
+collections
+payments
+Tax
+output GST
+input GST
+eligible ITC
+exceptions
+Every report drills into source records.
+
+74. OWNER DRILL-DOWN
+Example:
+Owner sees:
+Receivables ₹11.6L
+Click.
+↓
+Customer ageing.
+Click Gupta Timber.
+↓
+Customer.
+Click ₹70,800.
+↓
+Invoice.
+Click SO-0082.
+↓
+Sales Order.
+Click stock movement.
+↓
+Goods Issue.
+That is the product experience we want.
+
+75. ACCOUNTANT DAILY WORKFLOW
+Instead of:
+Ask purchase team
+→ collect bills
+→ compare PO
+→ compare stock
+→ enter accounting software
+→ check GST
+→ Excel reconciliation
+Verity:
+Accountant logs in
+↓
+Tax/Finance Overview
+↓
+8 Exceptions
+↓
+Resolve exceptions
+↓
+Review Receivables
+↓
+Review Payables
+↓
+Review ITC
+↓
+Review GSTR-1
+↓
+Review GSTR-3B Draft
+Much lower manual effort.
+
+76. MONTH-END CLOSE
+/close
+Example:
+August 2026
+Sales
+✓ All issued invoices numbered
+✓ HSN complete
+⚠ 1 GSTIN issue
+Purchases
+✓ Purchase register complete
+⚠ 3 GST mismatches
+Stock
+✓ Stock ledger balanced
+⚠ 2 unexplained adjustments
+Receivables
+✓ Payments allocated
+Payables
+⚠ 1 invoice missing PO link
+Tax
+GSTR-1      READY
+ITC         3 EXCEPTIONS
+GSTR-3B     NOT READY
+
+77. PERIOD LOCK
+After accountant finishes:
+Close August
+Then:
+invoices immutable
+finalized tax facts immutable
+adjustments require controlled documents
+corrections use notes/reversals
+audit remains intact
+Do not simply edit history.
+
+78. AUDIT
+/audit
+Every important action:
+Who
+What
+When
+Previous state
+New state
+Reason
+Related document
+Example:
+SO-0082
+
+Credit Override
+
+By          Ravi
+At          15:42
+From        Pending Credit
+To          Approved
+Reason      Owner approved ₹30k excess
+
+79. FINAL PURCHASE FLOW
+Low Stock
+↓
+Supplier
+↓
+Purchase Order
+↓
+Submit
+↓
+Incoming Stock
+↓
+Receive Goods
+↓
+Stock + WAC
+↓
+Supplier Invoice
+↓
+3-Way Match
+↓
+Payable
+↓
+Expected ITC
+↓
+GST Reconciliation
+↓
+Supplier Payment
+↓
+Supplier Ledger
+↓
+Tax
+↓
+Reports
+
+80. FINAL SALES FLOW
+Customer
+↓
+Customer Price
+↓
+Sales Order
+↓
+Credit Check
+↓
+Approval if needed
+↓
+Reserve Stock
+↓
+Goods Issue
+↓
+Sales Invoice
+↓
+Receivable
+↓
+Output GST
+↓
+Customer Payment
+↓
+Customer Ledger
+↓
+Tax
+↓
+Reports
+
+81. FINAL INVENTORY FLOW
+Purchase Receipt
+      ↓
+    + Stock
+
+Sales Reservation
+      ↓
+Reserved Stock
+
+Goods Issue
+      ↓
+    - Stock
+
+Damage
+      ↓
+    - Stock
+
+Return
+      ↓
+    + Stock
+
+Adjustment
+      ↓
+  ± Stock
+
+Everything
+      ↓
+Stock Ledger
+      ↓
+Inventory Valuation
+
+82. FINAL ACCOUNTING FLOW
+Operational Events
+       ↓
+Invoices
+       ↓
+Receivables / Payables
+       ↓
+Payments
+       ↓
+Party Ledgers
+       ↓
+GST / ITC
+       ↓
+Tax Exceptions
+       ↓
+Return Working
+       ↓
+Month-End Close
+       ↓
+Reports / Exports
+
+83. CROSS-SCREEN EFFECT MATRIX
+Event
+Purchases
+Stock
+Sales
+Finance
+Ledger
+Tax
+Overview
+PO Draft
+Draft
+—
+—
+—
+Commitment
+—
+Draft PO
+PO Submitted
+Open
+Incoming ↑
+—
+—
+Commitment
+—
+Incoming ↑
+Goods Received
+Received ↑
+On Hand ↑
+—
+—
+Receipt history
+ITC condition
+Inventory ↑
+Purchase Invoice
+Linked
+—
+—
+Payable ↑
+Supplier balance ↑
+Expected ITC
+Payables ↑
+Supplier Payment
+Paid
+—
+—
+Payable ↓
+Balance ↓
+ageing updated
+Payables ↓
+Sales Order
+—
+—
+Draft
+—
+Commitment
+—
+Open Orders ↑
+Credit Block
+—
+unchanged
+Blocked
+exposure
+—
+—
+Alert ↑
+Reserve
+—
+Reserved ↑
+Reserved
+—
+—
+—
+Available ↓
+Goods Issue
+—
+On Hand ↓
+Fulfilled
+—
+—
+—
+Awaiting Issue ↓
+Sales Invoice
+—
+—
+Linked
+Receivable ↑
+Customer balance ↑
+Output GST ↑
+Receivables ↑
+Customer Payment
+—
+—
+Paid/Partial
+Receivable ↓
+Balance ↓
+—
+Collections ↑
+Damage
+—
+On Hand ↓
+—
+valuation
+—
+—
+Exception ↑
+Return
+—
+On Hand ↑
+history
+separate credit action
+activity
+possible adjustment
+Stock ↑
+Credit Note
+—
+if physical return
+linked
+Receivable ↓
+Balance ↓
+GST adjustment
+Revenue adjusts
+
+
+84. THE UX RULE THAT SHOULD GOVERN ALL FUTURE WORK
+The user should never think:
+“Where do I enter this again?”
+They should think:
+“I recorded what happened. Verity knows the consequences.”
+That's the standard I'd now use to audit every existing Plywood screen.
+And this gives us a very clear next implementation pass: stop adding isolated features and connect every existing record through state propagation, Related sections, drill-downs, role-aware actions, and accountant/tax projections.

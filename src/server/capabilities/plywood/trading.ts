@@ -1286,6 +1286,10 @@ export const listSuppliers: QueryDefinition<
     stateCode: string | null;
     active: boolean;
     openOrders: number;
+    /// What we owe this supplier, from the ledger (§14).
+    outstandingPaise: number;
+    /// Value of purchase orders still open. A commitment, never a payable (§54).
+    openCommitmentPaise: number;
   }>
 > = {
   key: "verity.plywood.list_suppliers",
@@ -1296,7 +1300,14 @@ export const listSuppliers: QueryDefinition<
       where: input.includeInactive ? {} : { active: true },
       orderBy: { displayName: "asc" },
       include: {
-        orders: { where: { state: { in: ["submitted", "receiving"] } }, select: { id: true } },
+        orders: {
+          where: { state: { in: ["submitted", "receiving"] } },
+          select: { id: true, totalCostPaise: true },
+        },
+        // Included rather than aggregated per supplier: the running balance is
+        // a sum over the party's own entries, and one pass beats one query
+        // per row on a list screen.
+        plywoodLedgerEntries: { select: { entryType: true, amountPaise: true } },
       },
     });
     return suppliers.map((supplier) => ({
@@ -1307,6 +1318,11 @@ export const listSuppliers: QueryDefinition<
       stateCode: supplier.stateCode,
       active: supplier.active,
       openOrders: supplier.orders.length,
+      outstandingPaise: supplier.plywoodLedgerEntries.reduce(
+        (sum, entry) => sum + (entry.entryType === "debit" ? entry.amountPaise : -entry.amountPaise),
+        0,
+      ),
+      openCommitmentPaise: supplier.orders.reduce((sum, order) => sum + order.totalCostPaise, 0),
     }));
   },
 };
@@ -1321,6 +1337,7 @@ export const listCustomers: QueryDefinition<
     stateCode: string | null;
     creditLimitPaise: number;
     exposurePaise: number;
+    availableCreditPaise: number;
     active: boolean;
   }>
 > = {
@@ -1331,23 +1348,44 @@ export const listCustomers: QueryDefinition<
     const customers = await ctx.tx.plywoodCustomer.findMany({
       where: input.includeInactive ? {} : { active: true },
       orderBy: { displayName: "asc" },
-      include: {
-        orders: {
-          where: { state: { notIn: ["cancelled", "completed"] } },
-          select: { totalPricePaise: true },
-        },
+      select: {
+        id: true,
+        displayName: true,
+        gstin: true,
+        phone: true,
+        stateCode: true,
+        creditLimitPaise: true,
+        active: true,
       },
     });
-    return customers.map((customer) => ({
-      id: customer.id,
-      displayName: customer.displayName,
-      gstin: customer.gstin,
-      phone: customer.phone,
-      stateCode: customer.stateCode,
-      creditLimitPaise: customer.creditLimitPaise,
-      exposurePaise: customer.orders.reduce((sum, order) => sum + order.totalPricePaise, 0),
-      active: customer.active,
-    }));
+
+    // Exposure comes from `customerExposurePaise` and from nowhere else.
+    //
+    // THE DEFECT THIS REPLACES. This list previously summed the customer's
+    // open orders, which is a SECOND definition of exposure sitting beside the
+    // canonical one — precisely what taskplans/45 §4.1 calls a defect. It
+    // disagreed with the credit check in two directions at once: it ignored
+    // invoiced-and-unpaid money entirely, so a customer who owed a lakh on an
+    // issued invoice showed zero here, and it counted draft orders, which
+    // commit the business to nothing. The list screen is where a sales manager
+    // decides whether to take the next order, so the number that is wrong here
+    // is the number the decision is made on.
+    //
+    // Sequential rather than concurrent: these share one tenant-scoped
+    // transaction, and issuing them in parallel on a single connection would
+    // interleave on the same session.
+    const rows = [];
+    for (const customer of customers) {
+      const exposurePaise = await customerExposurePaise(ctx.tx, customer.id);
+      rows.push({
+        ...customer,
+        exposurePaise,
+        // Clamped at zero: a customer over their limit has no credit
+        // available, and a negative headroom reads as a refund.
+        availableCreditPaise: Math.max(0, customer.creditLimitPaise - exposurePaise),
+      });
+    }
+    return rows;
   },
 };
 
@@ -1568,5 +1606,358 @@ export const stockAvailability: QueryDefinition<
         };
       })
       .sort((a, b) => a.productName.localeCompare(b.productName));
+  },
+};
+
+/* ========================== party workspaces (§14–16, §34–36, §55–56) ========================== */
+
+/** An invoice with what has actually been collected or paid against it. */
+type PartyInvoiceRow = {
+  id: string;
+  invoiceNumber: string;
+  issuedAt: Date;
+  totalPaise: number;
+  paidPaise: number;
+  balancePaise: number;
+  purchaseOrderId: string | null;
+  salesOrderId: string | null;
+};
+
+/**
+ * §15 and §35 — a trading partner as an operating account rather than a
+ * dropdown. One round trip fills every tab, because a person opening a supplier
+ * is going to read more than one of them and six sequential queries to render
+ * one page is six chances for the tabs to disagree with each other.
+ */
+export const supplierDetail: QueryDefinition<
+  { supplierId: string },
+  {
+    id: string;
+    displayName: string;
+    gstin: string | null;
+    phone: string | null;
+    email: string | null;
+    stateCode: string | null;
+    active: boolean;
+    /// What we owe, from the ledger.
+    outstandingPaise: number;
+    /// Value of purchase orders still open — a commitment, never a payable (§54).
+    openCommitmentPaise: number;
+    openOrders: number;
+    incomingUnits: number;
+    pricing: Array<{ productId: string; productName: string; negotiatedCostPaise: number }>;
+    orders: Array<{
+      id: string;
+      reference: string | null;
+      state: string;
+      totalCostPaise: number;
+      orderedUnits: number;
+      receivedUnits: number;
+      createdAt: Date;
+    }>;
+    invoices: PartyInvoiceRow[];
+    payments: Array<{
+      id: string;
+      invoiceId: string;
+      invoiceNumber: string;
+      method: string;
+      amountPaise: number;
+      reference: string | null;
+      receivedAt: Date;
+    }>;
+    ledger: Array<{
+      id: string;
+      entryType: string;
+      amountPaise: number;
+      narration: string | null;
+      occurredAt: Date;
+      invoiceId: string | null;
+      runningBalancePaise: number;
+    }>;
+  } | null
+> = {
+  key: "verity.plywood.supplier_detail",
+  entity: ENTITY_SUPPLIER,
+  input: z.object({ supplierId: z.string().uuid() }),
+  handler: async (ctx, input) => {
+    const supplier = await ctx.tx.plywoodSupplier.findUnique({
+      where: { id: input.supplierId },
+      include: {
+        pricing: { include: { product: { select: { name: true } } } },
+        orders: {
+          orderBy: { createdAt: "desc" },
+          include: { lines: { select: { qtyOrdered: true, qtyReceived: true } } },
+        },
+        plywoodInvoices: {
+          orderBy: { issuedAt: "desc" },
+          include: {
+            payments: { orderBy: { receivedAt: "desc" } },
+            notes: { select: { noteType: true, totalPaise: true } },
+          },
+        },
+        plywoodLedgerEntries: { orderBy: { occurredAt: "asc" } },
+      },
+    });
+    if (!supplier) return null;
+
+    const openOrders = supplier.orders.filter((order) =>
+      ["submitted", "receiving"].includes(order.state),
+    );
+
+    let running = 0;
+    return {
+      id: supplier.id,
+      displayName: supplier.displayName,
+      gstin: supplier.gstin,
+      phone: supplier.phone,
+      email: supplier.email,
+      stateCode: supplier.stateCode,
+      active: supplier.active,
+      outstandingPaise: supplier.plywoodLedgerEntries.reduce(
+        (sum, entry) => sum + (entry.entryType === "debit" ? entry.amountPaise : -entry.amountPaise),
+        0,
+      ),
+      openCommitmentPaise: openOrders.reduce((sum, order) => sum + order.totalCostPaise, 0),
+      openOrders: openOrders.length,
+      // What is still on its way: ordered minus received, on open orders only.
+      // A completed order has nothing incoming and a draft has not been placed.
+      incomingUnits: openOrders.reduce(
+        (sum, order) =>
+          sum + order.lines.reduce((u, line) => u + Math.max(0, line.qtyOrdered - line.qtyReceived), 0),
+        0,
+      ),
+      pricing: supplier.pricing
+        .map((price) => ({
+          productId: price.productId,
+          productName: price.product.name,
+          negotiatedCostPaise: price.negotiatedCostPaise,
+        }))
+        .sort((a, b) => a.productName.localeCompare(b.productName)),
+      orders: supplier.orders.map((order) => ({
+        id: order.id,
+        reference: order.reference,
+        state: order.state,
+        totalCostPaise: order.totalCostPaise,
+        orderedUnits: order.lines.reduce((u, line) => u + line.qtyOrdered, 0),
+        receivedUnits: order.lines.reduce((u, line) => u + line.qtyReceived, 0),
+        createdAt: order.createdAt,
+      })),
+      invoices: supplier.plywoodInvoices.map((invoice) => {
+        const paid = invoice.payments.reduce((p, payment) => p + payment.amountPaise, 0);
+        const credited = invoice.notes
+          .filter((note) => note.noteType === "credit")
+          .reduce((c, note) => c + note.totalPaise, 0);
+        const debited = invoice.notes
+          .filter((note) => note.noteType === "debit")
+          .reduce((d, note) => d + note.totalPaise, 0);
+        return {
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          issuedAt: invoice.issuedAt,
+          totalPaise: invoice.totalPaise,
+          paidPaise: paid,
+          balancePaise: Math.max(0, invoice.totalPaise + debited - paid - credited),
+          purchaseOrderId: invoice.purchaseOrderId,
+          salesOrderId: invoice.salesOrderId,
+        };
+      }),
+      payments: supplier.plywoodInvoices.flatMap((invoice) =>
+        invoice.payments.map((payment) => ({
+          id: payment.id,
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          method: payment.method,
+          amountPaise: payment.amountPaise,
+          reference: payment.reference,
+          receivedAt: payment.receivedAt,
+        })),
+      ),
+      ledger: supplier.plywoodLedgerEntries.map((entry) => {
+        running += entry.entryType === "debit" ? entry.amountPaise : -entry.amountPaise;
+        return {
+          id: entry.id,
+          entryType: entry.entryType,
+          amountPaise: entry.amountPaise,
+          narration: entry.narration,
+          occurredAt: entry.occurredAt,
+          invoiceId: entry.invoiceId,
+          runningBalancePaise: running,
+        };
+      }),
+    };
+  },
+};
+
+/**
+ * §35 — the customer's operating account, and the one screen where the credit
+ * decision is legible: limit, exposure, headroom, side by side.
+ *
+ * Exposure comes from `customerExposurePaise` and from nowhere else. The
+ * program plan is explicit that a second definition anywhere in this capability
+ * is a defect, and a screen that recomputed it would be exactly that.
+ */
+export const customerDetail: QueryDefinition<
+  { customerId: string },
+  {
+    id: string;
+    displayName: string;
+    gstin: string | null;
+    phone: string | null;
+    email: string | null;
+    stateCode: string | null;
+    active: boolean;
+    creditLimitPaise: number;
+    exposurePaise: number;
+    availableCreditPaise: number;
+    outstandingPaise: number;
+    openCommitmentPaise: number;
+    openOrders: number;
+    pricing: Array<{ productId: string; productName: string; customPricePaise: number }>;
+    orders: Array<{
+      id: string;
+      reference: string | null;
+      state: string;
+      totalPricePaise: number;
+      orderedUnits: number;
+      reservedUnits: number;
+      issuedUnits: number;
+      createdAt: Date;
+    }>;
+    invoices: PartyInvoiceRow[];
+    payments: Array<{
+      id: string;
+      invoiceId: string;
+      invoiceNumber: string;
+      method: string;
+      amountPaise: number;
+      reference: string | null;
+      receivedAt: Date;
+    }>;
+    ledger: Array<{
+      id: string;
+      entryType: string;
+      amountPaise: number;
+      narration: string | null;
+      occurredAt: Date;
+      invoiceId: string | null;
+      runningBalancePaise: number;
+    }>;
+  } | null
+> = {
+  key: "verity.plywood.customer_detail",
+  entity: ENTITY_CUSTOMER,
+  input: z.object({ customerId: z.string().uuid() }),
+  handler: async (ctx, input) => {
+    const customer = await ctx.tx.plywoodCustomer.findUnique({
+      where: { id: input.customerId },
+      include: {
+        pricing: { include: { product: { select: { name: true } } } },
+        orders: {
+          orderBy: { createdAt: "desc" },
+          include: {
+            lines: { select: { qtyOrdered: true, qtyShipped: true } },
+            // Reserved is NOT a column on the order line. A reservation is its
+            // own record with a release, which is what lets a cancellation
+            // return stock to available without rewriting the order (§69).
+            reservations: { where: { releasedAt: null }, select: { qtyUnits: true } },
+          },
+        },
+        plywoodInvoices: {
+          orderBy: { issuedAt: "desc" },
+          include: {
+            payments: { orderBy: { receivedAt: "desc" } },
+            notes: { select: { noteType: true, totalPaise: true } },
+          },
+        },
+        plywoodLedgerEntries: { orderBy: { occurredAt: "asc" } },
+      },
+    });
+    if (!customer) return null;
+
+    const exposurePaise = await customerExposurePaise(ctx.tx, customer.id);
+    const committed = customer.orders.filter((order) =>
+      COMMITTED_ORDER_STATES.includes(order.state as (typeof COMMITTED_ORDER_STATES)[number]),
+    );
+
+    let running = 0;
+    return {
+      id: customer.id,
+      displayName: customer.displayName,
+      gstin: customer.gstin,
+      phone: customer.phone,
+      email: customer.email,
+      stateCode: customer.stateCode,
+      active: customer.active,
+      creditLimitPaise: customer.creditLimitPaise,
+      exposurePaise,
+      // Clamped: a customer over their limit has no credit available, not a
+      // negative amount of it, and a negative headroom reads as a refund.
+      availableCreditPaise: Math.max(0, customer.creditLimitPaise - exposurePaise),
+      outstandingPaise: customer.plywoodLedgerEntries.reduce(
+        (sum, entry) => sum + (entry.entryType === "debit" ? entry.amountPaise : -entry.amountPaise),
+        0,
+      ),
+      openCommitmentPaise: committed.reduce((sum, order) => sum + order.totalPricePaise, 0),
+      openOrders: committed.length,
+      pricing: customer.pricing
+        .map((price) => ({
+          productId: price.productId,
+          productName: price.product.name,
+          customPricePaise: price.customPricePaise,
+        }))
+        .sort((a, b) => a.productName.localeCompare(b.productName)),
+      orders: customer.orders.map((order) => ({
+        id: order.id,
+        reference: order.reference,
+        state: order.state,
+        totalPricePaise: order.totalPricePaise,
+        orderedUnits: order.lines.reduce((u, line) => u + line.qtyOrdered, 0),
+        reservedUnits: order.reservations.reduce((u, r) => u + r.qtyUnits, 0),
+        issuedUnits: order.lines.reduce((u, line) => u + line.qtyShipped, 0),
+        createdAt: order.createdAt,
+      })),
+      invoices: customer.plywoodInvoices.map((invoice) => {
+        const paid = invoice.payments.reduce((p, payment) => p + payment.amountPaise, 0);
+        const credited = invoice.notes
+          .filter((note) => note.noteType === "credit")
+          .reduce((c, note) => c + note.totalPaise, 0);
+        const debited = invoice.notes
+          .filter((note) => note.noteType === "debit")
+          .reduce((d, note) => d + note.totalPaise, 0);
+        return {
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          issuedAt: invoice.issuedAt,
+          totalPaise: invoice.totalPaise,
+          paidPaise: paid,
+          balancePaise: Math.max(0, invoice.totalPaise + debited - paid - credited),
+          purchaseOrderId: invoice.purchaseOrderId,
+          salesOrderId: invoice.salesOrderId,
+        };
+      }),
+      payments: customer.plywoodInvoices.flatMap((invoice) =>
+        invoice.payments.map((payment) => ({
+          id: payment.id,
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          method: payment.method,
+          amountPaise: payment.amountPaise,
+          reference: payment.reference,
+          receivedAt: payment.receivedAt,
+        })),
+      ),
+      ledger: customer.plywoodLedgerEntries.map((entry) => {
+        running += entry.entryType === "debit" ? entry.amountPaise : -entry.amountPaise;
+        return {
+          id: entry.id,
+          entryType: entry.entryType,
+          amountPaise: entry.amountPaise,
+          narration: entry.narration,
+          occurredAt: entry.occurredAt,
+          invoiceId: entry.invoiceId,
+          runningBalancePaise: running,
+        };
+      }),
+    };
   },
 };

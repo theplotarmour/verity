@@ -30,6 +30,13 @@ export type IconName =
   | "capabilities"
   | "configuration"
   | "audit"
+  | "catalogue"
+  | "parties"
+  | "purchases"
+  | "sales"
+  | "stock"
+  | "tax"
+  | "people"
   | "search"
   | "bell"
   | "collapse"
@@ -61,6 +68,26 @@ const PATHS: Record<IconName, string> = {
   configuration:
     "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM4.5 12l-1-2 2-3 2.3.6 1.7-1L10 4h4l.5 2.6 1.7 1 2.3-.6 2 3-1 2 1 2-2 3-2.3-.6-1.7 1L14 20h-4l-.5-2.6-1.7-1L5.5 17l-2-3z",
   audit: "M5 19V9M10 19V5M15 19v-7M20 19v-3",
+
+  // Trading vocabulary. These were referenced by the plywood navigation before
+  // they existed here, and `isIconName` silently dropped them — the nav items
+  // rendered with no glyph at all. Thin outline, single stroke weight, matching
+  // the brand sheet.
+  //
+  // catalogue: stacked boards seen edge-on, which is what the product IS.
+  catalogue: "M4 7h16M4 12h16M4 17h16M7 5v14",
+  // parties: two figures. Supplier and customer are the same shape of record.
+  parties: "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20c0-3.3 2.7-5 6-5s6 1.7 6 5M17 10.5a2.5 2.5 0 1 0 0-5M18 20c0-2.4-.8-3.9-2-4.6",
+  // purchases: a box arriving — arrow pointing into the container.
+  purchases: "M20 8.5v9L12 21l-8-3.5v-9M4 8.5L12 5l8 3.5-8 3.5zM12 12v9",
+  // sales: a tag, which is the moment a price is attached to a board.
+  sales: "M4 4h7l9 9-7 7-9-9zM8.5 8.5h.01",
+  // stock: shelves. What physically exists, on racks, in a godown.
+  stock: "M4 5h16v5H4zM4 14h16v5H4zM8 5v5M16 14v5",
+  // tax: a document with a percentage on it.
+  tax: "M6 3h9l4 4v14H6zM14 3v5h5M10 11l4 6M10.5 11.5h.01M13.5 16.5h.01",
+  // people: a figure with a badge — identity plus what they may do.
+  people: "M12 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM5 21c0-3.9 3.1-6 7-6s7 2.1 7 6",
 
   // Chrome.
   search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM16.5 16.5L21 21",
