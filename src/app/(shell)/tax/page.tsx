@@ -106,6 +106,16 @@ export default async function TaxCentrePage() {
               </Row>
               <Row>
                 <div>
+                  <Link href="/tax/itc" className="text-[14px] text-text no-underline hover:underline">
+                    Input credit reconciliation
+                  </Link>
+                  <p className="m-0 mt-0.5 text-[12px] text-text-tertiary">
+                    Your purchase register against what suppliers filed
+                  </p>
+                </div>
+              </Row>
+              <Row>
+                <div>
                   <Link href="/tax/purchases" className="text-[14px] text-text no-underline hover:underline">
                     Purchase review
                   </Link>

@@ -5,6 +5,7 @@ import { registerBusinessIdentity } from "./business";
 import { registerTax } from "./tax";
 import { registerBusinessActivities } from "./activities";
 import { registerReports } from "./reports";
+import { registerItc } from "./itc";
 import { registerPeriods } from "./period";
 import {
   goodsReceiptDetail,
@@ -124,6 +125,7 @@ export * from "./finance";
 export * from "./views";
 export * from "./activities";
 export * from "./reports";
+export * from "./itc";
 
 /* ================================= brands ================================= */
 
@@ -833,6 +835,7 @@ export function registerPlywoodCapability(): void {
   registerTax();
   registerBusinessActivities();
   registerReports();
+  registerItc();
   registerPeriods();
   registerCommand(createBrand);
   registerCommand(setBrandActive);

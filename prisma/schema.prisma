@@ -130,6 +130,7 @@ model Tenant {
   plywoodInvoiceLines       PlywoodInvoiceLine[]
   plywoodPayments           PlywoodPayment[]
   plywoodLedgerEntries      PlywoodLedgerEntry[]
+  plywoodGstPortalRecords   PlywoodGstPortalRecord[]
 
   @@map("tenant")
 }
@@ -3072,4 +3073,37 @@ model PlywoodLedgerEntry {
   @@index([tenantId, customerId, occurredAt])
   @@index([tenantId, supplierId, occurredAt])
   @@map("plywood_ledger_entry")
+}
+
+/// What the GST portal reported for a period, as imported.
+///
+/// NOT a ledger. Nothing posts from this table: what the business owes is what
+/// its suppliers billed it, and the portal is a second opinion used to find
+/// disagreements (§59). Letting an outside file change the books would be the
+/// defect this shape exists to avoid.
+model PlywoodGstPortalRecord {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  periodKey      String   @map("period_key")
+  supplierGstin  String   @map("supplier_gstin") @db.VarChar(15)
+  supplierName   String?  @map("supplier_name")
+  /// The SUPPLIER's number, which is what the portal keys on. Ours is a
+  /// different number and conflating them matches nothing.
+  invoiceNumber  String   @map("invoice_number")
+  invoiceDate    DateTime @map("invoice_date")
+  taxablePaise   Int      @map("taxable_paise")
+  cgstPaise      Int      @default(0) @map("cgst_paise")
+  sgstPaise      Int      @default(0) @map("sgst_paise")
+  igstPaise      Int      @default(0) @map("igst_paise")
+  totalPaise     Int      @map("total_paise")
+  importedAt     DateTime @default(now()) @map("imported_at")
+  importedBy     String   @map("imported_by") @db.Uuid
+  sourceRef      String?  @map("source_ref")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, periodKey, supplierGstin, invoiceNumber])
+  @@unique([tenantId, id], name: "plywood_gst_portal_record_tenant_scoped_id")
+  @@index([tenantId, periodKey])
+  @@map("plywood_gst_portal_record")
 }
