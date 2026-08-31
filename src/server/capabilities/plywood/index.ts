@@ -19,6 +19,7 @@ import {
   ENTITY_STOCK_BALANCE,
   ENTITY_STOCK_LEDGER,
   ENTITY_CUSTOMER,
+  ENTITY_GST_REGISTRATION,
   ENTITY_PURCHASE_ORDER,
   ENTITY_SALES_ORDER,
   ENTITY_SUPPLIER,
@@ -645,12 +646,15 @@ export function registerPlywoodCapability(): void {
       },
 
       {
-        href: "/tax/close",
+        // The centre, not the close screen. Closing a period is one thing an
+        // accountant does at the end of a month; reading the position is what
+        // they do every day, and the nav should land on the second.
+        href: "/tax",
         label: "Tax & Compliance",
         group: "Money",
         order: 44,
-        icon: "audit",
-        requiresEntity: ENTITY_ACCOUNTING_PERIOD,
+        icon: "tax",
+        requiresEntity: ENTITY_INVOICE,
         requiresVerb: "Read",
         shells: ["platform"],
       },
@@ -667,6 +671,28 @@ export function registerPlywoodCapability(): void {
       },
 
       /* ---- ADMINISTRATION ---- */
+      {
+        href: "/settings/tax",
+        label: "Tax Settings",
+        group: "Administration",
+        order: 62,
+        icon: "tax",
+        // Edit on the registration: the people who may change a GSTIN or a
+        // rate are a much smaller set than those who read tax figures.
+        requiresEntity: ENTITY_GST_REGISTRATION,
+        requiresVerb: "Edit",
+        shells: ["platform"],
+      },
+      {
+        href: "/audit",
+        label: "Audit",
+        group: "Administration",
+        order: 64,
+        icon: "audit",
+        requiresEntity: ENTITY_INVOICE,
+        requiresVerb: "Read",
+        shells: ["platform"],
+      },
       {
         href: "/settings/business",
         label: "Business Settings",

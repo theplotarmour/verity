@@ -109,6 +109,17 @@ describeDb("authorization layers 2 and 3", () => {
   afterAll(async () => {
     const admin = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL });
     try {
+      // Every tenant holding this capability, not only the one this run made.
+      //
+      // A previous run that died between creating its tenant and reaching this
+      // block leaves an activation behind, and the capability delete below then
+      // fails on the foreign key forever after — the suite goes permanently red
+      // on a database it does not own, for a reason that has nothing to do with
+      // the code under test. The capability id is unique to this file, so
+      // anything activating it is this test's residue by definition.
+      await admin.$executeRaw`
+        DELETE FROM tenant
+         WHERE id IN (SELECT tenant_id FROM tenant_activation WHERE capability_id = ${CAPABILITY})`;
       await admin.$executeRaw`DELETE FROM tenant WHERE id = ${tenantA}::uuid`;
       await admin.$executeRaw`DELETE FROM entity_definition WHERE key = ${ENTITY}`;
       await admin.$executeRaw`DELETE FROM capability_definition WHERE id = ${CAPABILITY}`;

@@ -396,8 +396,239 @@ export const gstr1Working: QueryDefinition<
   },
 };
 
+
+/**
+ * GSTR-3B working: the summary return, from posted documents (§62).
+ *
+ * Where GSTR-1 lists outward supplies invoice by invoice, 3B is the summary a
+ * business actually pays from: output liability, input credit, and the cash
+ * required after one is set against the other.
+ *
+ * EVERY FIGURE HERE IS DERIVED. §58 is explicit that the tax centre must never
+ * become a second entry system, and this is the screen where the temptation is
+ * strongest — a person who can type into a 3B has produced a return that no
+ * longer agrees with the invoices behind it, and no way to tell which is right.
+ * So each amount is returned with the count of documents that compose it, and
+ * the screen drills into those documents rather than offering a field.
+ *
+ * ELIGIBLE IS NOT THE SAME AS BOOKED. Books ITC is what suppliers billed.
+ * Eligible ITC is what may actually be claimed. The two differ whenever a
+ * purchase invoice carries no tax split — the credit is not disallowed, it is
+ * unsubstantiated, and treating it as claimable is how a business claims credit
+ * it cannot evidence. The difference is reported as its own line rather than
+ * quietly folded into one number.
+ */
+export const gstr3bWorking: QueryDefinition<
+  { from?: string; to?: string },
+  {
+    from: string;
+    to: string;
+    outward: {
+      taxablePaise: number;
+      cgstPaise: number;
+      sgstPaise: number;
+      igstPaise: number;
+      invoiceCount: number;
+      /// Credit notes reduce outward liability; debit notes raise it.
+      creditNoteTaxPaise: number;
+      debitNoteTaxPaise: number;
+      netTaxPaise: number;
+    };
+    inward: {
+      taxablePaise: number;
+      cgstPaise: number;
+      sgstPaise: number;
+      igstPaise: number;
+      invoiceCount: number;
+      /// Everything suppliers billed as tax.
+      booksItcPaise: number;
+      /// What is substantiated by a tax split on the document.
+      eligibleItcPaise: number;
+      /// Booked but unsubstantiated, with the count of documents responsible.
+      unsubstantiatedItcPaise: number;
+      unsubstantiatedCount: number;
+    };
+    netCashRequiredPaise: number;
+    ready: boolean;
+    blockers: string[];
+  }
+> = {
+  key: "verity.plywood.gstr3b_working",
+  entity: ENTITY_INVOICE,
+  input: z.object({ from: z.string().datetime().optional(), to: z.string().datetime().optional() }),
+  handler: async (ctx, input) => {
+    const now = new Date();
+    const from = input.from
+      ? new Date(input.from)
+      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const to = input.to ? new Date(input.to) : now;
+
+    const invoices = await ctx.tx.plywoodInvoice.findMany({
+      where: { issuedAt: { gte: from, lte: to } },
+      include: { notes: true, customer: true, supplier: true },
+    });
+
+    const taxOf = (row: { cgstPaise: number; sgstPaise: number; igstPaise: number }) =>
+      row.cgstPaise + row.sgstPaise + row.igstPaise;
+
+    const sales = invoices.filter((invoice) => invoice.customerId !== null);
+    const purchases = invoices.filter((invoice) => invoice.supplierId !== null);
+
+    const creditNoteTaxPaise = sales.reduce(
+      (sum, invoice) =>
+        sum +
+        invoice.notes.filter((n) => n.noteType === "credit").reduce((t, n) => t + taxOf(n), 0),
+      0,
+    );
+    const debitNoteTaxPaise = sales.reduce(
+      (sum, invoice) =>
+        sum +
+        invoice.notes.filter((n) => n.noteType === "debit").reduce((t, n) => t + taxOf(n), 0),
+      0,
+    );
+
+    const outward = {
+      taxablePaise: sales.reduce((sum, i) => sum + i.taxablePaise, 0),
+      cgstPaise: sales.reduce((sum, i) => sum + i.cgstPaise, 0),
+      sgstPaise: sales.reduce((sum, i) => sum + i.sgstPaise, 0),
+      igstPaise: sales.reduce((sum, i) => sum + i.igstPaise, 0),
+      invoiceCount: sales.length,
+      creditNoteTaxPaise,
+      debitNoteTaxPaise,
+      netTaxPaise: sales.reduce((sum, i) => sum + taxOf(i), 0) + debitNoteTaxPaise - creditNoteTaxPaise,
+    };
+
+    const unsubstantiated = purchases.filter((invoice) => taxOf(invoice) === 0);
+    const booksItcPaise = purchases.reduce((sum, i) => sum + taxOf(i), 0);
+
+    const inward = {
+      taxablePaise: purchases.reduce((sum, i) => sum + i.taxablePaise, 0),
+      cgstPaise: purchases.reduce((sum, i) => sum + i.cgstPaise, 0),
+      sgstPaise: purchases.reduce((sum, i) => sum + i.sgstPaise, 0),
+      igstPaise: purchases.reduce((sum, i) => sum + i.igstPaise, 0),
+      invoiceCount: purchases.length,
+      booksItcPaise,
+      // Identical today, and deliberately two separate fields: the moment a
+      // GSTR-2B import exists, eligible becomes "matched with the portal" and
+      // only this line changes. A single number would have to be split then,
+      // and every reader of it re-checked.
+      eligibleItcPaise: booksItcPaise,
+      unsubstantiatedItcPaise: 0,
+      unsubstantiatedCount: unsubstantiated.length,
+    };
+
+    // A return is not ready while a figure on it is known to be wrong. Stated
+    // as blockers rather than as a silent flag, because the accountant has to
+    // go and fix each one and needs to be told which.
+    const blockers: string[] = [];
+    if (unsubstantiated.length > 0) {
+      blockers.push(
+        `${unsubstantiated.length} purchase invoice(s) carry no tax split, so no input ` +
+          "credit can be evidenced against them",
+      );
+    }
+    const missingPlaceOfSupply = sales.filter((invoice) => !invoice.customer?.stateCode).length;
+    if (missingPlaceOfSupply > 0) {
+      blockers.push(
+        `${missingPlaceOfSupply} sales invoice(s) have no place of supply, so the ` +
+          "CGST/SGST against IGST split cannot be relied on",
+      );
+    }
+
+    return {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      outward,
+      inward,
+      // Clamped at zero: a credit surplus carries forward, it is not a refund
+      // due this month, and showing it as negative cash reads as one.
+      netCashRequiredPaise: Math.max(0, outward.netTaxPaise - inward.eligibleItcPaise),
+      ready: blockers.length === 0,
+      blockers,
+    };
+  },
+};
+
+
+/**
+ * §5 — tax settings in a business's own words.
+ *
+ * The registration as a person describes it, and the rate rules behind it.
+ * Explicitly NOT a configuration-key screen: the specification names
+ * `verity.plywood.tax.cgst_rate_bp` as the thing a client must never be shown,
+ * because a rate is a business fact with a date, not a setting with a value.
+ *
+ * Rules are returned with their effective dates and their supersession state,
+ * because "18%" without "from when" is the answer to a different question than
+ * the one an accountant is asking when a rate has changed mid-year.
+ */
+export const taxSettings: QueryDefinition<
+  Record<string, never>,
+  {
+    registration: {
+      id: string;
+      gstin: string;
+      stateCode: string;
+      registrationType: string;
+      invoiceSeriesPrefix: string;
+      effectiveFrom: Date;
+    } | null;
+    rules: Array<{
+      id: string;
+      hsnCode: string;
+      cgstRateBp: number;
+      sgstRateBp: number;
+      igstRateBp: number;
+      effectiveFrom: Date;
+      effectiveTo: Date | null;
+      /// True when this rule governs supplies made today.
+      inForce: boolean;
+    }>;
+  }
+> = {
+  key: "verity.plywood.tax_settings",
+  entity: ENTITY_GST_REGISTRATION,
+  input: z.object({}),
+  handler: async (ctx) => {
+    const registration = await ctx.tx.plywoodGstRegistration.findFirst({
+      where: { active: true },
+    });
+    if (!registration) return { registration: null, rules: [] };
+
+    const rules = await ctx.tx.plywoodTaxRule.findMany({
+      where: { registrationId: registration.id },
+      orderBy: [{ hsnCode: "asc" }, { effectiveFrom: "desc" }],
+    });
+
+    const now = new Date();
+    return {
+      registration: {
+        id: registration.id,
+        gstin: registration.gstin,
+        stateCode: registration.stateCode,
+        registrationType: registration.registrationType,
+        invoiceSeriesPrefix: registration.invoiceSeriesPrefix,
+        effectiveFrom: registration.effectiveFrom,
+      },
+      rules: rules.map((rule) => ({
+        id: rule.id,
+        hsnCode: rule.hsnCode,
+        cgstRateBp: rule.cgstRateBp,
+        sgstRateBp: rule.sgstRateBp,
+        igstRateBp: rule.igstRateBp,
+        effectiveFrom: rule.effectiveFrom,
+        effectiveTo: rule.effectiveTo,
+        inForce:
+          rule.effectiveFrom <= now && (rule.effectiveTo === null || rule.effectiveTo > now),
+      })),
+    };
+  },
+};
+
 export function registerTax(): void {
   registerCommand(setTaxRule);
   registerQuery(taxSummary);
   registerQuery(gstr1Working);
+  registerQuery(gstr3bWorking);
+  registerQuery(taxSettings);
 }

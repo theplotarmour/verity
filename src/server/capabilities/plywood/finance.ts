@@ -432,8 +432,38 @@ export const raiseSalesInvoice: CommandDefinition<
   },
 };
 
+/**
+ * Records the supplier's invoice against a purchase order.
+ *
+ * THE DEFECT THIS CLOSES (specification 30, 62). A purchase invoice used to
+ * be stored with `taxablePaise = totalPaise` and every tax column at zero, on
+ * the reasoning that the split is the supplier's and not ours to compute. The
+ * reasoning is right and the conclusion was wrong: the consequence was that
+ * **input credit was structurally always nil**. `taxSummary` read those zeros,
+ * so eligible ITC came out at zero whatever the business had actually been
+ * charged, every purchase invoice raised a `no_input_credit` exception, and
+ * the net GST estimate overstated what was payable by the entire input side.
+ * A business filing from that number pays its tax twice.
+ *
+ * So the split is RECORDED, not computed. These are the supplier's figures,
+ * transcribed from their document. What is validated is only that the parts
+ * add up to the total and that IGST does not appear alongside CGST/SGST —
+ * both are transcription errors, and both belong on the exceptions list
+ * rather than in a return.
+ */
 export const raisePurchaseInvoice: CommandDefinition<
-  { purchaseOrderId: string; supplierInvoiceTotalPaise: number; seriesKey?: string },
+  {
+    purchaseOrderId: string;
+    supplierInvoiceTotalPaise: number;
+    /** The supplier's tax split, transcribed rather than computed. */
+    taxablePaise?: number;
+    cgstPaise?: number;
+    sgstPaise?: number;
+    igstPaise?: number;
+    /** The supplier's own invoice number, for matching against GST records. */
+    supplierInvoiceNumber?: string;
+    seriesKey?: string;
+  },
   { id: string; invoiceNumber: string }
 > = {
   key: "verity.plywood.raise_purchase_invoice",
@@ -445,6 +475,11 @@ export const raisePurchaseInvoice: CommandDefinition<
     // this business owes is what the supplier billed, and a mismatch with the
     // order is a conversation, not a silent correction.
     supplierInvoiceTotalPaise: z.number().int().min(0),
+    taxablePaise: z.number().int().min(0).optional(),
+    cgstPaise: z.number().int().min(0).optional(),
+    sgstPaise: z.number().int().min(0).optional(),
+    igstPaise: z.number().int().min(0).optional(),
+    supplierInvoiceNumber: z.string().max(60).optional(),
     seriesKey: z.string().min(1).max(20).optional(),
   }),
   handler: async (ctx, input) => {
@@ -502,9 +537,39 @@ export const raisePurchaseInvoice: CommandDefinition<
       financialYear,
     );
 
-    // A purchase invoice records what was billed; the tax split is the
-    // supplier's, not this business's to compute. Taxable equals total with no
-    // tax lines rather than a guessed breakdown that would be wrong on a filing.
+    // A purchase invoice records what was billed. The split is the supplier's,
+    // transcribed rather than computed — but it is RECORDED, because a tax
+    // column left at zero is not "unknown", it is a claim that no tax was
+    // charged, and the input-credit side of every return reads it as one.
+    const cgstPaise = input.cgstPaise ?? 0;
+    const sgstPaise = input.sgstPaise ?? 0;
+    const igstPaise = input.igstPaise ?? 0;
+    const taxPaise = cgstPaise + sgstPaise + igstPaise;
+    // Defaulted rather than required, so an invoice can still be recorded from
+    // a document whose split has not been read off yet. That case now surfaces
+    // as an exception instead of silently costing the business its credit.
+    const taxablePaise = input.taxablePaise ?? input.supplierInvoiceTotalPaise - taxPaise;
+
+    if (taxablePaise < 0) {
+      throw new ValidationError(
+        "E_VALIDATION: the tax on this invoice exceeds its total; check the figures",
+      );
+    }
+    if (taxablePaise + taxPaise !== input.supplierInvoiceTotalPaise) {
+      throw new ValidationError(
+        `E_VALIDATION: taxable ${taxablePaise} plus tax ${taxPaise} does not equal ` +
+          `the invoice total ${input.supplierInvoiceTotalPaise}`,
+      );
+    }
+    // Intra-state carries CGST and SGST; inter-state carries IGST. Both at once
+    // is not a rate question, it is a transcription error, and it must not
+    // reach a return.
+    if (igstPaise > 0 && (cgstPaise > 0 || sgstPaise > 0)) {
+      throw new ValidationError(
+        "E_VALIDATION: an invoice carries either IGST or CGST+SGST, never both",
+      );
+    }
+
     const invoice = await ctx.tx.plywoodInvoice.create({
       data: {
         tenantId: ctx.actor.tenantId,
@@ -516,11 +581,41 @@ export const raisePurchaseInvoice: CommandDefinition<
         financialYear,
         supplyStateCode,
         placeOfSupplyStateCode,
-        taxablePaise: input.supplierInvoiceTotalPaise,
+        taxablePaise,
+        cgstPaise,
+        sgstPaise,
+        igstPaise,
         totalPaise: input.supplierInvoiceTotalPaise,
         issuedAt,
+        // The supplier's own number, kept in custom fields rather than as a
+        // column: it identifies THEIR document, and this table's
+        // `invoiceNumber` is ours. Conflating the two would break our own
+        // sequence guarantee.
+        ...(input.supplierInvoiceNumber
+          ? { customFields: { supplierInvoiceNumber: input.supplierInvoiceNumber } }
+          : {}),
       },
     });
+
+    // Lines, so the purchase register has an HSN summary to file from (§60).
+    // Quantities are what was RECEIVED, not what was ordered: the invoice is
+    // for goods that arrived, and §29 wants an ordered-versus-received
+    // difference shown rather than hidden inside a line.
+    const receivedLines = order.lines.filter((line) => line.qtyReceived > 0);
+    if (receivedLines.length > 0) {
+      await ctx.tx.plywoodInvoiceLine.createMany({
+        data: receivedLines.map((line) => ({
+          tenantId: ctx.actor.tenantId,
+          invoiceId: invoice.id,
+          productId: line.productId,
+          productNameSnapshot: line.productNameSnapshot,
+          hsnCodeSnapshot: line.hsnCodeSnapshot,
+          qtyUnits: line.qtyReceived,
+          unitPricePaise: line.unitCostPaise,
+          lineTotalPaise: line.qtyReceived * line.unitCostPaise,
+        })),
+      });
+    }
 
     // This business now owes the supplier. Credit, from the same point of view.
     await ctx.tx.plywoodLedgerEntry.create({
