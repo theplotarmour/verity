@@ -13,6 +13,11 @@ import {
 } from "@/components/ui/primitives";
 import { rupees, rupeesShort } from "@/components/ui/business/format";
 import { Related } from "@/components/ui/business/Related";
+import {
+  PeriodSwitch,
+  periodFromParam,
+} from "@/components/ui/business/PeriodSwitch";
+import { monthKeyOf, monthWindow } from "@/components/ui/business/period";
 
 export const dynamic = "force-dynamic";
 
@@ -24,15 +29,24 @@ export const dynamic = "force-dynamic";
  * 3B has produced a return that no longer agrees with the invoices behind it,
  * and no way to say which is right.
  */
-export default async function Gstr3bPage() {
+export default async function Gstr3bPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string }>;
+}) {
   installCapabilities();
   const actor = await requireActor();
+  // Carried through from the tax centre, so stepping into a return does not
+  // silently jump back to the current month.
+  const chosen = periodFromParam((await searchParams).period);
+  const window = chosen ? monthWindow(chosen) : {};
 
   let working: Awaited<ReturnType<typeof gstr3bWorking.handler>>;
   try {
-    working = await executeQuery(actor, gstr3bWorking, {});
+    working = await executeQuery(actor, gstr3bWorking, window);
   } catch (error) {
-    if (error instanceof ForbiddenError) return <PermissionDenied what="the GSTR-3B working" />;
+    if (error instanceof ForbiddenError)
+      return <PermissionDenied what="the GSTR-3B working" />;
     throw error;
   }
 
@@ -41,9 +55,12 @@ export default async function Gstr3bPage() {
     year: "numeric",
   });
 
+  const periodKey = chosen ?? monthKeyOf(new Date());
+
   return (
     <>
       <PageHeader
+        actions={<PeriodSwitch basePath="/tax/gstr-3b" periodKey={periodKey} />}
         title="GSTR-3B working"
         description={`${period}. Derived from posted invoices and notes. Every amount below is the sum of documents you can open — nothing is entered here.`}
       />
@@ -86,13 +103,25 @@ export default async function Gstr3bPage() {
           <Panel title="Outward supplies">
             <DefinitionList
               items={[
-                { term: "Taxable value", value: rupees(working.outward.taxablePaise) },
+                {
+                  term: "Taxable value",
+                  value: rupees(working.outward.taxablePaise),
+                },
                 { term: "CGST", value: rupees(working.outward.cgstPaise) },
                 { term: "SGST", value: rupees(working.outward.sgstPaise) },
                 { term: "IGST", value: rupees(working.outward.igstPaise) },
-                { term: "Debit notes", value: `+ ${rupees(working.outward.debitNoteTaxPaise)}` },
-                { term: "Credit notes", value: `− ${rupees(working.outward.creditNoteTaxPaise)}` },
-                { term: "Net liability", value: rupees(working.outward.netTaxPaise) },
+                {
+                  term: "Debit notes",
+                  value: `+ ${rupees(working.outward.debitNoteTaxPaise)}`,
+                },
+                {
+                  term: "Credit notes",
+                  value: `− ${rupees(working.outward.creditNoteTaxPaise)}`,
+                },
+                {
+                  term: "Net liability",
+                  value: rupees(working.outward.netTaxPaise),
+                },
               ]}
             />
           </Panel>
@@ -100,12 +129,21 @@ export default async function Gstr3bPage() {
           <Panel title="Input credit">
             <DefinitionList
               items={[
-                { term: "Taxable value", value: rupees(working.inward.taxablePaise) },
+                {
+                  term: "Taxable value",
+                  value: rupees(working.inward.taxablePaise),
+                },
                 { term: "CGST", value: rupees(working.inward.cgstPaise) },
                 { term: "SGST", value: rupees(working.inward.sgstPaise) },
                 { term: "IGST", value: rupees(working.inward.igstPaise) },
-                { term: "Credit in books", value: rupees(working.inward.booksItcPaise) },
-                { term: "Eligible credit", value: rupees(working.inward.eligibleItcPaise) },
+                {
+                  term: "Credit in books",
+                  value: rupees(working.inward.booksItcPaise),
+                },
+                {
+                  term: "Eligible credit",
+                  value: rupees(working.inward.eligibleItcPaise),
+                },
                 {
                   term: "Unsubstantiated",
                   value:
@@ -120,9 +158,10 @@ export default async function Gstr3bPage() {
                 changes meaning, and a single merged number would have to be
                 split then with every reader of it re-checked. */}
             <p className="m-0 mt-3 text-[12px] text-text-tertiary">
-              Credit in books is what suppliers billed. Eligible is what can be evidenced. An
-              invoice recorded without its tax split is not disallowed — it is unproven, and it is
-              listed under exceptions until the split is entered.
+              Credit in books is what suppliers billed. Eligible is what can be
+              evidenced. An invoice recorded without its tax split is not
+              disallowed — it is unproven, and it is listed under exceptions
+              until the split is entered.
             </p>
           </Panel>
         </div>
@@ -130,22 +169,38 @@ export default async function Gstr3bPage() {
         <Panel title="Net tax">
           <DefinitionList
             items={[
-              { term: "Output liability", value: rupees(working.outward.netTaxPaise) },
-              { term: "Less eligible credit", value: `− ${rupees(working.inward.eligibleItcPaise)}` },
-              { term: "Cash required", value: rupees(working.netCashRequiredPaise) },
+              {
+                term: "Output liability",
+                value: rupees(working.outward.netTaxPaise),
+              },
+              {
+                term: "Less eligible credit",
+                value: `− ${rupees(working.inward.eligibleItcPaise)}`,
+              },
+              {
+                term: "Cash required",
+                value: rupees(working.netCashRequiredPaise),
+              },
             ]}
           />
           <p className="m-0 mt-3 text-[12px] text-text-tertiary">
-            A credit surplus carries forward rather than becoming a refund, so this figure never
-            goes below zero.
+            A credit surplus carries forward rather than becoming a refund, so
+            this figure never goes below zero.
           </p>
         </Panel>
 
         <Related
           links={[
-            { href: "/tax", label: "Tax & Compliance" },
-            { href: "/tax/gstr-1", label: "GSTR-1", note: "Outward supplies" },
-            { href: "/tax/exceptions", label: "Exceptions" },
+            { href: `/tax?period=${periodKey}`, label: "Tax & Compliance" },
+            {
+              href: `/tax/gstr-1?period=${periodKey}`,
+              label: "GSTR-1",
+              note: "Outward supplies",
+            },
+            {
+              href: `/tax/exceptions?period=${periodKey}`,
+              label: "Exceptions",
+            },
             { href: "/finance", label: "Invoices" },
           ]}
         />

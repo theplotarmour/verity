@@ -1,0 +1,198 @@
+- generic [active] [ref=f73e1]:
+  - link "Skip to content" [ref=f73e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f73e3]:
+    - complementary [ref=f73e4]:
+      - link "Verity" [ref=f73e5] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f73e6]:
+          - generic [ref=f73e10]: verity
+          - generic [ref=f73e11]: Verity
+      - navigation "Platform" [ref=f73e13]:
+        - list [ref=f73e14]:
+          - listitem [ref=f73e15]: Overview
+          - listitem [ref=f73e16]:
+            - link "Overview" [ref=f73e17] [cursor=pointer]:
+              - /url: /overview
+        - list [ref=f73e21]:
+          - listitem [ref=f73e22]: Trade
+          - listitem [ref=f73e23]:
+            - link "Catalogue" [ref=f73e24] [cursor=pointer]:
+              - /url: /catalogue
+          - listitem [ref=f73e28]:
+            - link "Suppliers" [ref=f73e29] [cursor=pointer]:
+              - /url: /suppliers
+          - listitem [ref=f73e33]:
+            - link "Purchases" [ref=f73e34] [cursor=pointer]:
+              - /url: /purchases
+          - listitem [ref=f73e38]:
+            - link "Customers" [ref=f73e39] [cursor=pointer]:
+              - /url: /customers
+          - listitem [ref=f73e43]:
+            - link "Sales" [ref=f73e44] [cursor=pointer]:
+              - /url: /sales
+        - list [ref=f73e48]:
+          - listitem [ref=f73e49]: Inventory
+          - listitem [ref=f73e50]:
+            - link "Stock" [ref=f73e51] [cursor=pointer]:
+              - /url: /stock
+          - listitem [ref=f73e55]:
+            - link "Godowns" [ref=f73e56] [cursor=pointer]:
+              - /url: /godowns
+        - list [ref=f73e60]:
+          - listitem [ref=f73e61]: Money
+          - listitem [ref=f73e62]:
+            - link "Finance" [ref=f73e63] [cursor=pointer]:
+              - /url: /finance
+          - listitem [ref=f73e67]:
+            - link "Ledgers" [ref=f73e68] [cursor=pointer]:
+              - /url: /ledgers
+          - listitem [ref=f73e72]:
+            - link "Tax & Compliance" [ref=f73e73] [cursor=pointer]:
+              - /url: /tax
+        - list [ref=f73e77]:
+          - listitem [ref=f73e78]: Insights
+          - listitem [ref=f73e79]:
+            - link "Reports" [ref=f73e80] [cursor=pointer]:
+              - /url: /reports
+        - list [ref=f73e84]:
+          - listitem [ref=f73e85]: Administration
+          - listitem [ref=f73e86]:
+            - link "People & Roles" [ref=f73e87] [cursor=pointer]:
+              - /url: /people
+          - listitem [ref=f73e91]:
+            - link "Audit" [ref=f73e92] [cursor=pointer]:
+              - /url: /audit
+          - listitem [ref=f73e96]:
+            - link "Configuration" [ref=f73e97] [cursor=pointer]:
+              - /url: /configuration
+      - button "naksh Owner Sign out" [ref=f73e103] [cursor=pointer]:
+        - generic [ref=f73e104]: "N"
+        - generic [ref=f73e105]:
+          - generic [ref=f73e106]: naksh
+          - generic [ref=f73e107]: Owner
+        - generic [ref=f73e110]: Sign out
+    - generic [ref=f73e111]:
+      - generic [ref=f73e112]:
+        - generic [ref=f73e113]:
+          - generic [ref=f73e114]: Search this page
+          - searchbox "Search this page" [ref=f73e115]
+        - generic [ref=f73e116]:
+          - generic [ref=f73e120]:
+            - generic [ref=f73e121]: Shri Ganesh HQ
+            - generic [ref=f73e122]: Shri Ganesh Timber Trading Co.
+          - link "Recent activity" [ref=f73e124] [cursor=pointer]:
+            - /url: /audit
+          - generic [ref=f73e128]: "N"
+      - main [ref=f73e129]:
+        - generic [ref=f73e130]:
+          - generic [ref=f73e131]:
+            - heading "GSTR-3B working" [level=1] [ref=f73e132]
+            - paragraph [ref=f73e133]: August 2026. Derived from posted invoices and notes. Every amount below is the sum of documents you can open — nothing is entered here.
+          - generic [ref=f73e135]:
+            - link "← July 2026" [ref=f73e136] [cursor=pointer]:
+              - /url: /tax/gstr-3b?period=2026-07
+            - generic [ref=f73e137]: August 2026
+            - link "September 2026 →" [ref=f73e138] [cursor=pointer]:
+              - /url: /tax/gstr-3b?period=2026-09
+        - generic [ref=f73e139]:
+          - generic [ref=f73e140]:
+            - generic [ref=f73e141]:
+              - generic [ref=f73e142]: ₹0
+              - generic [ref=f73e143]: Output liability
+              - generic [ref=f73e144]: 0 invoice(s)
+            - generic [ref=f73e145]:
+              - generic [ref=f73e146]: ₹0
+              - generic [ref=f73e147]: Eligible credit
+              - generic [ref=f73e148]: 2 purchase invoice(s)
+            - generic [ref=f73e149]:
+              - generic [ref=f73e150]: ₹0
+              - generic [ref=f73e151]: Cash required
+              - generic [ref=f73e152]: Not ready
+          - generic [ref=f73e153]:
+            - paragraph [ref=f73e154]: This return is not ready to file.
+            - list [ref=f73e155]:
+              - listitem [ref=f73e156]: 2 purchase invoice(s) carry no tax split, so no input credit can be evidenced against them
+          - generic [ref=f73e157]:
+            - generic [ref=f73e158]:
+              - heading "Outward supplies" [level=2] [ref=f73e160]
+              - generic [ref=f73e162]:
+                - generic [ref=f73e163]:
+                  - term [ref=f73e164]: Taxable value
+                  - definition [ref=f73e165]: ₹0
+                - generic [ref=f73e166]:
+                  - term [ref=f73e167]: CGST
+                  - definition [ref=f73e168]: ₹0
+                - generic [ref=f73e169]:
+                  - term [ref=f73e170]: SGST
+                  - definition [ref=f73e171]: ₹0
+                - generic [ref=f73e172]:
+                  - term [ref=f73e173]: IGST
+                  - definition [ref=f73e174]: ₹0
+                - generic [ref=f73e175]:
+                  - term [ref=f73e176]: Debit notes
+                  - definition [ref=f73e177]: + ₹0
+                - generic [ref=f73e178]:
+                  - term [ref=f73e179]: Credit notes
+                  - definition [ref=f73e180]: − ₹0
+                - generic [ref=f73e181]:
+                  - term [ref=f73e182]: Net liability
+                  - definition [ref=f73e183]: ₹0
+            - generic [ref=f73e184]:
+              - heading "Input credit" [level=2] [ref=f73e186]
+              - generic [ref=f73e187]:
+                - generic [ref=f73e188]:
+                  - generic [ref=f73e189]:
+                    - term [ref=f73e190]: Taxable value
+                    - definition [ref=f73e191]: ₹1,00,000
+                  - generic [ref=f73e192]:
+                    - term [ref=f73e193]: CGST
+                    - definition [ref=f73e194]: ₹0
+                  - generic [ref=f73e195]:
+                    - term [ref=f73e196]: SGST
+                    - definition [ref=f73e197]: ₹0
+                  - generic [ref=f73e198]:
+                    - term [ref=f73e199]: IGST
+                    - definition [ref=f73e200]: ₹0
+                  - generic [ref=f73e201]:
+                    - term [ref=f73e202]: Credit in books
+                    - definition [ref=f73e203]: ₹0
+                  - generic [ref=f73e204]:
+                    - term [ref=f73e205]: Eligible credit
+                    - definition [ref=f73e206]: ₹0
+                  - generic [ref=f73e207]:
+                    - term [ref=f73e208]: Unsubstantiated
+                    - definition [ref=f73e209]: 2 invoice(s) with no tax split
+                - paragraph [ref=f73e210]: Credit in books is what suppliers billed. Eligible is what can be evidenced. An invoice recorded without its tax split is not disallowed — it is unproven, and it is listed under exceptions until the split is entered.
+          - generic [ref=f73e211]:
+            - heading "Net tax" [level=2] [ref=f73e213]
+            - generic [ref=f73e214]:
+              - generic [ref=f73e215]:
+                - generic [ref=f73e216]:
+                  - term [ref=f73e217]: Output liability
+                  - definition [ref=f73e218]: ₹0
+                - generic [ref=f73e219]:
+                  - term [ref=f73e220]: Less eligible credit
+                  - definition [ref=f73e221]: − ₹0
+                - generic [ref=f73e222]:
+                  - term [ref=f73e223]: Cash required
+                  - definition [ref=f73e224]: ₹0
+              - paragraph [ref=f73e225]: A credit surplus carries forward rather than becoming a refund, so this figure never goes below zero.
+          - generic [ref=f73e226]:
+            - heading "Related" [level=2] [ref=f73e228]
+            - list [ref=f73e230]:
+              - listitem [ref=f73e231]:
+                - link "Tax & Compliance" [ref=f73e232] [cursor=pointer]:
+                  - /url: /tax?period=2026-08
+              - listitem [ref=f73e234]:
+                - link "GSTR-1 Outward supplies" [ref=f73e235] [cursor=pointer]:
+                  - /url: /tax/gstr-1?period=2026-08
+                  - generic [ref=f73e236]: GSTR-1
+                  - generic [ref=f73e237]: Outward supplies
+              - listitem [ref=f73e238]:
+                - link "Exceptions" [ref=f73e239] [cursor=pointer]:
+                  - /url: /tax/exceptions?period=2026-08
+              - listitem [ref=f73e241]:
+                - link "Invoices" [ref=f73e242] [cursor=pointer]:
+                  - /url: /finance
+  - button "Open Next.js Dev Tools" [ref=f73e249] [cursor=pointer]

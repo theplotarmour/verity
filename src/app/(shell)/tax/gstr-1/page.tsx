@@ -15,6 +15,11 @@ import {
 } from "@/components/ui/primitives";
 import { rupees, rupeesShort } from "@/components/ui/business/format";
 import { Related } from "@/components/ui/business/Related";
+import {
+  PeriodSwitch,
+  periodFromParam,
+} from "@/components/ui/business/PeriodSwitch";
+import { monthKeyOf, monthWindow } from "@/components/ui/business/period";
 
 export const dynamic = "force-dynamic";
 
@@ -24,15 +29,24 @@ export const dynamic = "force-dynamic";
  * B2B and B2C split on whether the buyer holds a GSTIN and on nothing else,
  * plus the HSN summary the return actually asks for. Generated, never typed.
  */
-export default async function Gstr1Page() {
+export default async function Gstr1Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string }>;
+}) {
   installCapabilities();
   const actor = await requireActor();
+  // Carried through from the tax centre, so stepping into a return does not
+  // silently jump back to the current month.
+  const chosen = periodFromParam((await searchParams).period);
+  const window = chosen ? monthWindow(chosen) : {};
 
   let working: Awaited<ReturnType<typeof gstr1Working.handler>>;
   try {
-    working = await executeQuery(actor, gstr1Working, {});
+    working = await executeQuery(actor, gstr1Working, window);
   } catch (error) {
-    if (error instanceof ForbiddenError) return <PermissionDenied what="the GSTR-1 working" />;
+    if (error instanceof ForbiddenError)
+      return <PermissionDenied what="the GSTR-1 working" />;
     throw error;
   }
 
@@ -43,9 +57,12 @@ export default async function Gstr1Page() {
     working.b2b.reduce((sum, row) => sum + row.taxPaise, 0) +
     working.b2c.reduce((sum, row) => sum + row.taxPaise, 0);
 
+  const periodKey = chosen ?? monthKeyOf(new Date());
+
   return (
     <>
       <PageHeader
+        actions={<PeriodSwitch basePath="/tax/gstr-1" periodKey={periodKey} />}
         title="GSTR-1 working"
         description="Outward supplies, read from issued tax invoices. A buyer with a GSTIN is B2B and one without is B2C — that is the whole distinction."
       />
@@ -60,7 +77,9 @@ export default async function Gstr1Page() {
 
         {working.validations.length > 0 && (
           <div className="rounded-lg border border-warning/25 bg-warning-subtle px-5 py-4">
-            <p className="m-0 text-[14px] text-text">Check these before filing.</p>
+            <p className="m-0 text-[14px] text-text">
+              Check these before filing.
+            </p>
             <ul className="m-0 mt-2 list-disc pl-5 text-[13px] text-text-secondary">
               {working.validations.map((issue) => (
                 <li key={issue}>{issue}</li>
@@ -72,25 +91,37 @@ export default async function Gstr1Page() {
         <Panel flush title="B2B">
           {working.b2b.length === 0 ? (
             <div className="px-5 py-6">
-              <EmptyState compact title="No registered-buyer supplies this period" />
+              <EmptyState
+                compact
+                title="No registered-buyer supplies this period"
+              />
             </div>
           ) : (
             <RowList>
               {working.b2b.map((row) => (
                 <Row key={row.invoiceNumber}>
                   <div className="min-w-0">
-                    <p className="m-0 text-[14px] text-text">{row.invoiceNumber}</p>
+                    <p className="m-0 text-[14px] text-text">
+                      {row.invoiceNumber}
+                    </p>
                     <p className="m-0 mt-0.5 text-[12px] text-text-tertiary">
-                      {row.customerName} · {row.gstin} · place of supply {row.placeOfSupply}
+                      {row.customerName} · {row.gstin} · place of supply{" "}
+                      {row.placeOfSupply}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-8 text-right">
                     <div>
-                      <p className="tabular m-0 text-[14px] text-text">{rupees(row.taxablePaise)}</p>
-                      <p className="m-0 text-[12px] text-text-tertiary">Taxable</p>
+                      <p className="tabular m-0 text-[14px] text-text">
+                        {rupees(row.taxablePaise)}
+                      </p>
+                      <p className="m-0 text-[12px] text-text-tertiary">
+                        Taxable
+                      </p>
                     </div>
                     <div className="w-24">
-                      <p className="tabular m-0 text-[14px] text-text">{rupees(row.taxPaise)}</p>
+                      <p className="tabular m-0 text-[14px] text-text">
+                        {rupees(row.taxPaise)}
+                      </p>
                       <p className="m-0 text-[12px] text-text-tertiary">Tax</p>
                     </div>
                   </div>
@@ -103,25 +134,36 @@ export default async function Gstr1Page() {
         <Panel flush title="B2C">
           {working.b2c.length === 0 ? (
             <div className="px-5 py-6">
-              <EmptyState compact title="No unregistered-buyer supplies this period" />
+              <EmptyState
+                compact
+                title="No unregistered-buyer supplies this period"
+              />
             </div>
           ) : (
             <RowList>
               {working.b2c.map((row) => (
                 <Row key={row.invoiceNumber}>
                   <div className="min-w-0">
-                    <p className="m-0 text-[14px] text-text">{row.invoiceNumber}</p>
+                    <p className="m-0 text-[14px] text-text">
+                      {row.invoiceNumber}
+                    </p>
                     <p className="m-0 mt-0.5 text-[12px] text-text-tertiary">
                       Place of supply {row.placeOfSupply}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-8 text-right">
                     <div>
-                      <p className="tabular m-0 text-[14px] text-text">{rupees(row.taxablePaise)}</p>
-                      <p className="m-0 text-[12px] text-text-tertiary">Taxable</p>
+                      <p className="tabular m-0 text-[14px] text-text">
+                        {rupees(row.taxablePaise)}
+                      </p>
+                      <p className="m-0 text-[12px] text-text-tertiary">
+                        Taxable
+                      </p>
                     </div>
                     <div className="w-24">
-                      <p className="tabular m-0 text-[14px] text-text">{rupees(row.taxPaise)}</p>
+                      <p className="tabular m-0 text-[14px] text-text">
+                        {rupees(row.taxPaise)}
+                      </p>
                       <p className="m-0 text-[12px] text-text-tertiary">Tax</p>
                     </div>
                   </div>
@@ -141,18 +183,26 @@ export default async function Gstr1Page() {
               {working.hsnSummary.map((row) => (
                 <Row key={row.hsnCode}>
                   <div>
-                    <p className="m-0 text-[14px] text-text">HSN {row.hsnCode}</p>
+                    <p className="m-0 text-[14px] text-text">
+                      HSN {row.hsnCode}
+                    </p>
                     <p className="m-0 mt-0.5 text-[12px] text-text-tertiary">
                       {row.qtyUnits.toLocaleString("en-IN")} sheets
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-8 text-right">
                     <div>
-                      <p className="tabular m-0 text-[14px] text-text">{rupees(row.taxablePaise)}</p>
-                      <p className="m-0 text-[12px] text-text-tertiary">Taxable</p>
+                      <p className="tabular m-0 text-[14px] text-text">
+                        {rupees(row.taxablePaise)}
+                      </p>
+                      <p className="m-0 text-[12px] text-text-tertiary">
+                        Taxable
+                      </p>
                     </div>
                     <div className="w-24">
-                      <p className="tabular m-0 text-[14px] text-text">{rupees(row.taxPaise)}</p>
+                      <p className="tabular m-0 text-[14px] text-text">
+                        {rupees(row.taxPaise)}
+                      </p>
                       <p className="m-0 text-[12px] text-text-tertiary">Tax</p>
                     </div>
                   </div>
@@ -164,9 +214,16 @@ export default async function Gstr1Page() {
 
         <Related
           links={[
-            { href: "/tax", label: "Tax & Compliance" },
-            { href: "/tax/gstr-3b", label: "GSTR-3B", note: "The summary return" },
-            { href: "/tax/exceptions", label: "Exceptions" },
+            { href: `/tax?period=${periodKey}`, label: "Tax & Compliance" },
+            {
+              href: `/tax/gstr-3b?period=${periodKey}`,
+              label: "GSTR-3B",
+              note: "The summary return",
+            },
+            {
+              href: `/tax/exceptions?period=${periodKey}`,
+              label: "Exceptions",
+            },
             { href: "/finance", label: "Invoices" },
           ]}
         />

@@ -3,7 +3,11 @@ import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
 import { ForbiddenError } from "@/server/platform/authorization";
-import { closeChecklist, gstr3bWorking, taxSummary } from "@/server/capabilities/plywood";
+import {
+  closeChecklist,
+  gstr3bWorking,
+  taxSummary,
+} from "@/server/capabilities/plywood";
 import {
   PageHeader,
   Panel,
@@ -14,6 +18,11 @@ import {
   StatRow,
 } from "@/components/ui/primitives";
 import { rupees, rupeesShort } from "@/components/ui/business/format";
+import {
+  PeriodSwitch,
+  periodFromParam,
+} from "@/components/ui/business/PeriodSwitch";
+import { monthKeyOf, monthWindow } from "@/components/ui/business/period";
 import { Related } from "@/components/ui/business/Related";
 
 export const dynamic = "force-dynamic";
@@ -26,20 +35,28 @@ export const dynamic = "force-dynamic";
  * documents; there is deliberately no field on this page, because §58 is
  * explicit that the tax centre must never become a second entry system.
  */
-export default async function TaxCentrePage() {
+export default async function TaxCentrePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string }>;
+}) {
   installCapabilities();
   const actor = await requireActor();
+  // An accountant in the first week of a month is working on the month that
+  // just ended. The screen defaults to now and lets them step back.
+  const chosen = periodFromParam((await searchParams).period);
+  const window = chosen ? monthWindow(chosen) : {};
 
   let summary: Awaited<ReturnType<typeof taxSummary.handler>>;
   try {
-    summary = await executeQuery(actor, taxSummary, {});
+    summary = await executeQuery(actor, taxSummary, window);
   } catch (error) {
     if (error instanceof ForbiddenError) return <PermissionDenied what="tax" />;
     throw error;
   }
 
   const [threeB, close] = await Promise.all([
-    executeQuery(actor, gstr3bWorking, {}).catch((error) => {
+    executeQuery(actor, gstr3bWorking, window).catch((error) => {
       if (error instanceof ForbiddenError) return null;
       throw error;
     }),
@@ -49,14 +66,19 @@ export default async function TaxCentrePage() {
     }),
   ]);
 
+  // Named from the window that was actually queried, so the heading and the
+  // figures below it can never describe different months.
+  const periodKey = chosen ?? monthKeyOf(new Date(summary.from));
   const period = new Date(summary.from).toLocaleDateString("en-IN", {
     month: "long",
     year: "numeric",
+    timeZone: "UTC",
   });
 
   return (
     <>
       <PageHeader
+        actions={<PeriodSwitch basePath="/tax" periodKey={periodKey} />}
         title="Tax & Compliance"
         description={`${period}. Every figure here is read from posted invoices and notes — nothing on this page is entered, and there is no field to enter it in.`}
       />
@@ -67,7 +89,7 @@ export default async function TaxCentrePage() {
             label="Output GST"
             value={rupeesShort(summary.outputTaxPaise)}
             hint={`${summary.salesInvoiceCount} sales invoice(s)`}
-            href="/tax/gstr-1"
+            href={`/tax/gstr-1?period=${periodKey}`}
           />
           <Stat
             label="Input credit"
@@ -78,13 +100,17 @@ export default async function TaxCentrePage() {
             label="Net estimate"
             value={rupeesShort(summary.netPayablePaise)}
             hint="Output less credit"
-            href="/tax/gstr-3b"
+            href={`/tax/gstr-3b?period=${periodKey}`}
           />
           <Stat
             label="Exceptions"
             value={summary.exceptions.length}
-            hint={summary.exceptions.length === 0 ? "Nothing to fix" : "Need attention"}
-            href="/tax/exceptions"
+            hint={
+              summary.exceptions.length === 0
+                ? "Nothing to fix"
+                : "Need attention"
+            }
+            href={`/tax/exceptions?period=${periodKey}`}
           />
         </StatRow>
 
@@ -93,7 +119,10 @@ export default async function TaxCentrePage() {
             <RowList>
               <Row>
                 <div>
-                  <Link href="/tax/gstr-1" className="text-[14px] text-text no-underline hover:underline">
+                  <Link
+                    href={`/tax/gstr-1?period=${periodKey}`}
+                    className="text-[14px] text-text no-underline hover:underline"
+                  >
                     GSTR-1
                   </Link>
                   <p className="m-0 mt-0.5 text-[12px] text-text-tertiary">
@@ -106,7 +135,10 @@ export default async function TaxCentrePage() {
               </Row>
               <Row>
                 <div>
-                  <Link href="/tax/itc" className="text-[14px] text-text no-underline hover:underline">
+                  <Link
+                    href={`/tax/itc?period=${periodKey}`}
+                    className="text-[14px] text-text no-underline hover:underline"
+                  >
                     Input credit reconciliation
                   </Link>
                   <p className="m-0 mt-0.5 text-[12px] text-text-tertiary">
@@ -116,7 +148,10 @@ export default async function TaxCentrePage() {
               </Row>
               <Row>
                 <div>
-                  <Link href="/tax/purchases" className="text-[14px] text-text no-underline hover:underline">
+                  <Link
+                    href="/tax/purchases"
+                    className="text-[14px] text-text no-underline hover:underline"
+                  >
                     Purchase review
                   </Link>
                   <p className="m-0 mt-0.5 text-[12px] text-text-tertiary">
@@ -129,7 +164,10 @@ export default async function TaxCentrePage() {
               </Row>
               <Row>
                 <div>
-                  <Link href="/tax/gstr-3b" className="text-[14px] text-text no-underline hover:underline">
+                  <Link
+                    href={`/tax/gstr-3b?period=${periodKey}`}
+                    className="text-[14px] text-text no-underline hover:underline"
+                  >
                     GSTR-3B
                   </Link>
                   <p className="m-0 mt-0.5 text-[12px] text-text-tertiary">
@@ -178,7 +216,7 @@ export default async function TaxCentrePage() {
             title="Needs attention"
             action={
               <Link
-                href="/tax/exceptions"
+                href={`/tax/exceptions?period=${periodKey}`}
                 className="text-[13px] text-accent-ink no-underline hover:underline"
               >
                 All exceptions →
@@ -189,7 +227,9 @@ export default async function TaxCentrePage() {
               {summary.exceptions.slice(0, 5).map((exception, index) => (
                 <Row key={`${exception.documentNumber}-${index}`}>
                   <div className="min-w-0">
-                    <p className="m-0 text-[14px] text-text">{exception.detail}</p>
+                    <p className="m-0 text-[14px] text-text">
+                      {exception.detail}
+                    </p>
                     <p className="m-0 mt-0.5 text-[12px] text-text-tertiary">
                       {exception.documentNumber}
                     </p>
@@ -202,8 +242,16 @@ export default async function TaxCentrePage() {
 
         <Related
           links={[
-            { href: "/settings/tax", label: "Tax settings", note: "Registration and rates" },
-            { href: "/finance", label: "Finance", note: "Receivables and payables" },
+            {
+              href: "/settings/tax",
+              label: "Tax settings",
+              note: "Registration and rates",
+            },
+            {
+              href: "/finance",
+              label: "Finance",
+              note: "Receivables and payables",
+            },
             { href: "/ledgers", label: "Ledgers" },
             { href: "/reports", label: "Reports" },
           ]}

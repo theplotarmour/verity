@@ -13,6 +13,11 @@ import {
   RowList,
 } from "@/components/ui/primitives";
 import { Related } from "@/components/ui/business/Related";
+import {
+  PeriodSwitch,
+  periodFromParam,
+} from "@/components/ui/business/PeriodSwitch";
+import { monthKeyOf, monthWindow } from "@/components/ui/business/period";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +31,10 @@ export const dynamic = "force-dynamic";
  */
 
 /** What each exception kind means, and the action that clears it. */
-const EXCEPTION: Record<string, { title: string; action: string; href: string }> = {
+const EXCEPTION: Record<
+  string,
+  { title: string; action: string; href: string }
+> = {
   missing_place_of_supply: {
     title: "Place of supply missing",
     action: "Set the customer's state so CGST/SGST against IGST can be decided",
@@ -39,25 +47,36 @@ const EXCEPTION: Record<string, { title: string; action: string; href: string }>
   },
   zero_tax: {
     title: "No tax charged",
-    action: "Confirm the supply is genuinely exempt, or add the rate under Tax settings",
+    action:
+      "Confirm the supply is genuinely exempt, or add the rate under Tax settings",
     href: "/settings/tax",
   },
   no_input_credit: {
     title: "Purchase invoice has no tax split",
-    action: "Enter the supplier's CGST/SGST/IGST so the credit can be evidenced",
+    action:
+      "Enter the supplier's CGST/SGST/IGST so the credit can be evidenced",
     href: "/finance",
   },
 };
 
-export default async function TaxExceptionsPage() {
+export default async function TaxExceptionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string }>;
+}) {
   installCapabilities();
   const actor = await requireActor();
+  // Carried through from the tax centre, so stepping into a return does not
+  // silently jump back to the current month.
+  const chosen = periodFromParam((await searchParams).period);
+  const window = chosen ? monthWindow(chosen) : {};
 
   let summary: Awaited<ReturnType<typeof taxSummary.handler>>;
   try {
-    summary = await executeQuery(actor, taxSummary, {});
+    summary = await executeQuery(actor, taxSummary, window);
   } catch (error) {
-    if (error instanceof ForbiddenError) return <PermissionDenied what="tax exceptions" />;
+    if (error instanceof ForbiddenError)
+      return <PermissionDenied what="tax exceptions" />;
     throw error;
   }
 
@@ -65,12 +84,20 @@ export default async function TaxExceptionsPage() {
   // adding HSN codes is in the catalogue and should stay there.
   const grouped = new Map<string, typeof summary.exceptions>();
   for (const exception of summary.exceptions) {
-    grouped.set(exception.kind, [...(grouped.get(exception.kind) ?? []), exception]);
+    grouped.set(exception.kind, [
+      ...(grouped.get(exception.kind) ?? []),
+      exception,
+    ]);
   }
+
+  const periodKey = chosen ?? monthKeyOf(new Date());
 
   return (
     <>
       <PageHeader
+        actions={
+          <PeriodSwitch basePath="/tax/exceptions" periodKey={periodKey} />
+        }
         title="Tax exceptions"
         description="Everything standing between the posted documents and a filing. Each one is a thing to fix on a record, not a number to correct on a return."
       />
@@ -101,13 +128,17 @@ export default async function TaxExceptionsPage() {
                 }
               >
                 {meta && (
-                  <p className="m-0 px-5 pb-3 pt-0 text-[13px] text-text-secondary">{meta.action}</p>
+                  <p className="m-0 px-5 pb-3 pt-0 text-[13px] text-text-secondary">
+                    {meta.action}
+                  </p>
                 )}
                 <RowList>
                   {rows.map((exception, index) => (
                     <Row key={`${exception.documentNumber}-${index}`}>
                       <div className="min-w-0">
-                        <p className="m-0 text-[14px] text-text">{exception.documentNumber}</p>
+                        <p className="m-0 text-[14px] text-text">
+                          {exception.documentNumber}
+                        </p>
                         <p className="m-0 mt-0.5 text-[12px] text-text-tertiary">
                           {exception.detail}
                         </p>
@@ -122,9 +153,9 @@ export default async function TaxExceptionsPage() {
 
         <Related
           links={[
-            { href: "/tax", label: "Tax & Compliance" },
-            { href: "/tax/gstr-1", label: "GSTR-1" },
-            { href: "/tax/gstr-3b", label: "GSTR-3B" },
+            { href: `/tax?period=${periodKey}`, label: "Tax & Compliance" },
+            { href: `/tax/gstr-1?period=${periodKey}`, label: "GSTR-1" },
+            { href: `/tax/gstr-3b?period=${periodKey}`, label: "GSTR-3B" },
             { href: "/settings/tax", label: "Tax settings" },
           ]}
         />
