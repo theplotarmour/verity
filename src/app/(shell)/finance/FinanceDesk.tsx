@@ -48,7 +48,11 @@ function daysSince(value: Date | string | null): number | null {
 
 function shortDate(value: Date | string): string {
   const date = typeof value === "string" ? new Date(value) : value;
-  return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "2-digit",
+  });
 }
 
 /**
@@ -67,8 +71,16 @@ export function FinanceDesk({
 }: {
   invoices: Invoice[];
   receivables: Receivable[];
-  invoiceableOrders: Array<{ id: string; customerName: string; totalPricePaise: number }>;
-  invoiceablePurchases: Array<{ id: string; supplierName: string; totalCostPaise: number }>;
+  invoiceableOrders: Array<{
+    id: string;
+    customerName: string;
+    totalPricePaise: number;
+  }>;
+  invoiceablePurchases: Array<{
+    id: string;
+    supplierName: string;
+    totalCostPaise: number;
+  }>;
 }) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
@@ -79,7 +91,10 @@ export function FinanceDesk({
   const [pending, startTransition] = useTransition();
 
   const totals = useMemo(() => {
-    const owedToUs = receivables.reduce((sum, row) => sum + row.outstandingPaise, 0);
+    const owedToUs = receivables.reduce(
+      (sum, row) => sum + row.outstandingPaise,
+      0,
+    );
     const owedByUs = invoices
       .filter((invoice) => invoice.direction === "purchase")
       .reduce((sum, invoice) => sum + invoice.outstandingPaise, 0);
@@ -118,12 +133,24 @@ export function FinanceDesk({
 
       <div className="mb-6">
         <StatRow cols={3}>
-          <Stat label="Owed to us" value={rupees(totals.owedToUs)} hint="Receivables" />
-          <Stat label="Owed by us" value={rupees(totals.owedByUs)} hint="Payables" />
+          <Stat
+            label="Owed to us"
+            value={rupees(totals.owedToUs)}
+            hint="Receivables"
+          />
+          <Stat
+            label="Owed by us"
+            value={rupees(totals.owedByUs)}
+            hint="Payables"
+          />
           <Stat
             label="Oldest unpaid"
             value={totals.oldest === null ? "—" : `${totals.oldest}d`}
-            hint={totals.oldest === null ? "Nothing outstanding" : "Since the invoice was raised"}
+            hint={
+              totals.oldest === null
+                ? "Nothing outstanding"
+                : "Since the invoice was raised"
+            }
           />
         </StatRow>
       </div>
@@ -153,22 +180,36 @@ export function FinanceDesk({
                 run(
                   "verity.plywood.raise_purchase_invoice",
                   {
-                    purchaseOrderId: String(formData.get("purchaseOrderId") ?? ""),
-                    supplierInvoiceTotalPaise: Math.round(Number(formData.get("total") ?? 0) * 100),
+                    purchaseOrderId: String(
+                      formData.get("purchaseOrderId") ?? "",
+                    ),
+                    supplierInvoiceTotalPaise: Math.round(
+                      Number(formData.get("total") ?? 0) * 100,
+                    ),
                   },
                   () => setRaisingPurchase(false),
                 )
               }
             >
               <div className="min-w-[300px] flex-1">
-                <Field label="Purchase order" htmlFor="purchase-invoice-order" required>
-                  <Select id="purchase-invoice-order" name="purchaseOrderId" required defaultValue="">
+                <Field
+                  label="Purchase order"
+                  htmlFor="purchase-invoice-order"
+                  required
+                >
+                  <Select
+                    id="purchase-invoice-order"
+                    name="purchaseOrderId"
+                    required
+                    defaultValue=""
+                  >
                     <option value="" disabled>
                       Choose an order
                     </option>
                     {invoiceablePurchases.map((order) => (
                       <option key={order.id} value={order.id}>
-                        {order.supplierName} — {rupees(order.totalCostPaise)} ordered
+                        {order.supplierName} — {rupees(order.totalCostPaise)}{" "}
+                        ordered
                       </option>
                     ))}
                   </Select>
@@ -195,9 +236,10 @@ export function FinanceDesk({
                 Record
               </Button>
               <p className="m-0 w-full text-[12px] text-text-tertiary">
-                Recorded as given rather than recomputed from the order. What this business owes is
-                what the supplier billed, and a disagreement with the order is a conversation to
-                have — not a correction to make silently.
+                Recorded as given rather than recomputed from the order. What
+                this business owes is what the supplier billed, and a
+                disagreement with the order is a conversation to have — not a
+                correction to make silently.
               </p>
             </form>
           </Panel>
@@ -219,7 +261,12 @@ export function FinanceDesk({
             >
               <div className="min-w-[320px] flex-1">
                 <Field label="Order" htmlFor="invoice-order" required>
-                  <Select id="invoice-order" name="salesOrderId" required defaultValue="">
+                  <Select
+                    id="invoice-order"
+                    name="salesOrderId"
+                    required
+                    defaultValue=""
+                  >
                     <option value="" disabled>
                       Choose an order
                     </option>
@@ -235,9 +282,10 @@ export function FinanceDesk({
                 Raise
               </Button>
               <p className="m-0 w-full text-[12px] text-text-tertiary">
-                The number is taken from the series counter inside the same transaction, so a
-                failure returns it rather than leaving a gap. Tax is decided by the customer&apos;s
-                state against this business&apos;s — CGST and SGST at home, IGST across a border.
+                The number is taken from the series counter inside the same
+                transaction, so a failure returns it rather than leaving a gap.
+                Tax is decided by the customer&apos;s state against this
+                business&apos;s — CGST and SGST at home, IGST across a border.
               </p>
             </form>
           </Panel>
@@ -247,12 +295,20 @@ export function FinanceDesk({
       {receivables.length > 0 && (
         <div className="mb-4">
           <Panel title="Outstanding">
-            <table className="w-full border-collapse">
-              <caption className="sr-only">Outstanding receivables by customer</caption>
-              <thead>
-                <tr>
-                  {["Customer", "Invoiced", "Received", "Outstanding", "Oldest"].map(
-                    (heading, index) => (
+            <div className="-mx-3 overflow-x-auto px-3">
+              <table className="w-full min-w-[600px] border-collapse">
+                <caption className="sr-only">
+                  Outstanding receivables by customer
+                </caption>
+                <thead>
+                  <tr>
+                    {[
+                      "Customer",
+                      "Invoiced",
+                      "Received",
+                      "Outstanding",
+                      "Oldest",
+                    ].map((heading, index) => (
                       <th
                         key={heading}
                         className={
@@ -262,47 +318,49 @@ export function FinanceDesk({
                       >
                         {heading}
                       </th>
-                    ),
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {receivables.map((row) => {
-                  const age = daysSince(row.oldestUnpaidAt);
-                  return (
-                    <tr key={row.customerId}>
-                      <td className="border-b border-line px-3 py-2 text-[14px]">
-                        <Link
-                          href={`/ledgers?customer=${row.customerId}`}
-                          className="text-text no-underline hover:underline"
-                        >
-                          {row.customerName}
-                        </Link>
-                      </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                        {rupees(row.invoicedPaise)}
-                      </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                        {rupees(row.receivedPaise)}
-                      </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                        {rupees(row.outstandingPaise)}
-                      </td>
-                      {/* Age, not date: how long it has been owed is what decides
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {receivables.map((row) => {
+                    const age = daysSince(row.oldestUnpaidAt);
+                    return (
+                      <tr key={row.customerId}>
+                        <td className="border-b border-line px-3 py-2 text-[14px]">
+                          <Link
+                            href={`/ledgers?customer=${row.customerId}`}
+                            className="text-text no-underline hover:underline"
+                          >
+                            {row.customerName}
+                          </Link>
+                        </td>
+                        <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
+                          {rupees(row.invoicedPaise)}
+                        </td>
+                        <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
+                          {rupees(row.receivedPaise)}
+                        </td>
+                        <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
+                          {rupees(row.outstandingPaise)}
+                        </td>
+                        {/* Age, not date: how long it has been owed is what decides
                           whether the call happens this week. */}
-                      <td
-                        className={
-                          "tabular border-b border-line px-3 py-2 text-right text-[13px] " +
-                          (age !== null && age > 30 ? "text-warning" : "text-text-secondary")
-                        }
-                      >
-                        {age === null ? "—" : `${age}d`}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        <td
+                          className={
+                            "tabular border-b border-line px-3 py-2 text-right text-[13px] " +
+                            (age !== null && age > 30
+                              ? "text-warning"
+                              : "text-text-secondary")
+                          }
+                        >
+                          {age === null ? "—" : `${age}d`}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </Panel>
         </div>
       )}
@@ -315,84 +373,101 @@ export function FinanceDesk({
             description="Raise one against an approved order and it appears here."
           />
         ) : (
-          <table className="w-full border-collapse">
-            <caption className="sr-only">Invoices</caption>
-            <thead>
-              <tr>
-                {["Number", "Party", "Issued", "Total", "Outstanding", ""].map((heading, index) => (
-                  <th
-                    key={heading || index}
-                    className={
-                      "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                      (index <= 1 ? "text-left" : "text-right")
-                    }
-                  >
-                    {heading}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map((invoice) => (
-                <tr key={invoice.id}>
-                  <td className="tabular border-b border-line px-3 py-2 text-[14px]">
-                    <Link
-                      href={`/finance/${invoice.id}`}
-                      className="text-text no-underline hover:underline"
+          <div className="-mx-3 overflow-x-auto px-3">
+            <table className="w-full min-w-[600px] border-collapse">
+              <caption className="sr-only">Invoices</caption>
+              <thead>
+                <tr>
+                  {[
+                    "Number",
+                    "Party",
+                    "Issued",
+                    "Total",
+                    "Outstanding",
+                    "",
+                  ].map((heading, index) => (
+                    <th
+                      key={heading || index}
+                      className={
+                        "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
+                        (index <= 1 ? "text-left" : "text-right")
+                      }
                     >
-                      {invoice.invoiceNumber}
-                    </Link>
-                  </td>
-                  <td className="border-b border-line px-3 py-2 text-[14px] text-text-secondary">
-                    {invoice.partyName}
-                    <span className="ml-2 text-[12px] text-text-tertiary">
-                      {invoice.direction === "sales" ? "sale" : "purchase"}
-                    </span>
-                  </td>
-                  <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                    {shortDate(invoice.issuedAt)}
-                  </td>
-                  <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                    {rupees(invoice.totalPaise)}
-                  </td>
-                  <td
-                    className={
-                      "tabular border-b border-line px-3 py-2 text-right text-[14px] " +
-                      (invoice.outstandingPaise === 0 ? "text-success" : "")
-                    }
-                  >
-                    {invoice.outstandingPaise === 0 ? "Paid" : rupees(invoice.outstandingPaise)}
-                  </td>
-                  <td className="flex justify-end gap-2 border-b border-line px-3 py-2 text-right">
-                    {invoice.outstandingPaise > 0 && (
-                      <Button
-                        size="sm"
-                        disabled={pending}
-                        onClick={() => setPaying(paying === invoice.id ? null : invoice.id)}
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map((invoice) => (
+                  <tr key={invoice.id}>
+                    <td className="tabular border-b border-line px-3 py-2 text-[14px]">
+                      <Link
+                        href={`/finance/${invoice.id}`}
+                        className="text-text no-underline hover:underline"
                       >
-                        {paying === invoice.id ? "Close" : "Record payment"}
-                      </Button>
-                    )}
-                    {/*
+                        {invoice.invoiceNumber}
+                      </Link>
+                    </td>
+                    <td className="border-b border-line px-3 py-2 text-[14px] text-text-secondary">
+                      {invoice.partyName}
+                      <span className="ml-2 text-[12px] text-text-tertiary">
+                        {invoice.direction === "sales" ? "sale" : "purchase"}
+                      </span>
+                    </td>
+                    <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
+                      {shortDate(invoice.issuedAt)}
+                    </td>
+                    <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
+                      {rupees(invoice.totalPaise)}
+                    </td>
+                    <td
+                      className={
+                        "tabular border-b border-line px-3 py-2 text-right text-[14px] " +
+                        (invoice.outstandingPaise === 0 ? "text-success" : "")
+                      }
+                    >
+                      {invoice.outstandingPaise === 0
+                        ? "Paid"
+                        : rupees(invoice.outstandingPaise)}
+                    </td>
+                    <td className="flex justify-end gap-2 border-b border-line px-3 py-2 text-right">
+                      {invoice.outstandingPaise > 0 && (
+                        <Button
+                          size="sm"
+                          disabled={pending}
+                          onClick={() =>
+                            setPaying(paying === invoice.id ? null : invoice.id)
+                          }
+                        >
+                          {paying === invoice.id ? "Close" : "Record payment"}
+                        </Button>
+                      )}
+                      {/*
                       A posted invoice cannot be edited (slice 1), so the only
                       way to correct one is a note. Offered beside the payment
                       rather than hidden on a detail page, because the moment
                       somebody notices an invoice is wrong is the moment they
                       are looking at this list.
                     */}
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={pending}
-                      onClick={() => setCrediting(crediting === invoice.id ? null : invoice.id)}
-                    >
-                      {crediting === invoice.id ? "Close" : "Credit note"}
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={pending}
+                        onClick={() =>
+                          setCrediting(
+                            crediting === invoice.id ? null : invoice.id,
+                          )
+                        }
+                      >
+                        {crediting === invoice.id ? "Close" : "Credit note"}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
 
         {paying && (
@@ -410,7 +485,9 @@ export function FinanceDesk({
             invoice={invoices.find((invoice) => invoice.id === crediting)!}
             pending={pending}
             onSubmit={(input) =>
-              run("verity.plywood.raise_invoice_note", input, () => setCrediting(null))
+              run("verity.plywood.raise_invoice_note", input, () =>
+                setCrediting(null),
+              )
             }
           />
         )}
@@ -445,7 +522,9 @@ function PaymentForm({
           // Rupees in, paise out. The server never sees a decimal amount.
           amountPaise: Math.round(Number(formData.get("amount") ?? 0) * 100),
           method: String(formData.get("method") ?? "cash"),
-          ...(formData.get("reference") ? { reference: String(formData.get("reference")) } : {}),
+          ...(formData.get("reference")
+            ? { reference: String(formData.get("reference")) }
+            : {}),
         })
       }
     >
@@ -465,7 +544,12 @@ function PaymentForm({
       </div>
       <div className="w-[150px]">
         <Field label="Method" htmlFor={`pay-method-${invoice.id}`} required>
-          <Select id={`pay-method-${invoice.id}`} name="method" required defaultValue="bank">
+          <Select
+            id={`pay-method-${invoice.id}`}
+            name="method"
+            required
+            defaultValue="bank"
+          >
             <option value="cash">Cash</option>
             <option value="bank">Bank transfer</option>
             <option value="upi">UPI</option>
@@ -486,9 +570,10 @@ function PaymentForm({
         Record
       </Button>
       <p className="m-0 w-full text-[12px] text-text-tertiary">
-        {rupees(invoice.outstandingPaise)} outstanding on {invoice.invoiceNumber}. More than that is
-        refused — an overpayment is an advance or a refund, and absorbing it here would leave money
-        the ledger cannot explain.
+        {rupees(invoice.outstandingPaise)} outstanding on{" "}
+        {invoice.invoiceNumber}. More than that is refused — an overpayment is
+        an advance or a refund, and absorbing it here would leave money the
+        ledger cannot explain.
       </p>
     </form>
   );
@@ -533,11 +618,28 @@ function NoteForm({
           <option value="debit">Debit note — increases what they owe</option>
         </Select>
       </Field>
-      <Field htmlFor="taxableRupees" label="Taxable amount" hint="Tax follows the invoice's own rates.">
-        <Input id="taxableRupees" name="taxableRupees" type="number" min="1" step="0.01" required />
+      <Field
+        htmlFor="taxableRupees"
+        label="Taxable amount"
+        hint="Tax follows the invoice's own rates."
+      >
+        <Input
+          id="taxableRupees"
+          name="taxableRupees"
+          type="number"
+          min="1"
+          step="0.01"
+          required
+        />
       </Field>
       <Field htmlFor="reason" label="Reason">
-        <Input id="reason" name="reason" required minLength={3} placeholder="Short-supplied 4 sheets" />
+        <Input
+          id="reason"
+          name="reason"
+          required
+          minLength={3}
+          placeholder="Short-supplied 4 sheets"
+        />
       </Field>
       <Button type="submit" disabled={pending}>
         Raise against {invoice.invoiceNumber}

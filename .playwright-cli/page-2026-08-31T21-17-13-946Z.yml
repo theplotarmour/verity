@@ -1,0 +1,55 @@
+- generic [active] [ref=f44e1]:
+  - link "Skip to content" [ref=f44e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f44e4]:
+    - generic [ref=f44e5]:
+      - link "Verity" [ref=f44e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f44e7]:
+          - generic [ref=f44e11]: verity
+          - generic [ref=f44e12]: Verity
+      - button "Menu" [ref=f44e15] [cursor=pointer]
+    - main [ref=f44e16]:
+      - generic [ref=f44e18]:
+        - heading "Suppliers" [level=1] [ref=f44e19]
+        - paragraph [ref=f44e20]: Everyone the business buys from. Outstanding is money owed on invoices received; committed is the value of orders placed and not yet billed — they are different obligations and are never added together.
+      - generic [ref=f44e21]:
+        - generic [ref=f44e22]:
+          - generic [ref=f44e23]:
+            - generic [ref=f44e24]: "2"
+            - generic [ref=f44e25]: Suppliers
+          - generic [ref=f44e26]:
+            - generic [ref=f44e27]: ₹0
+            - generic [ref=f44e28]: Payable
+            - generic [ref=f44e29]: Invoices received, unpaid
+          - generic [ref=f44e30]:
+            - generic [ref=f44e31]: ₹1.7L
+            - generic [ref=f44e32]: Committed
+            - generic [ref=f44e33]: Ordered, not yet billed
+          - link "2 Open orders" [ref=f44e34] [cursor=pointer]:
+            - /url: /purchases
+            - generic [ref=f44e35]: "2"
+            - generic [ref=f44e36]: Open orders
+        - generic [ref=f44e37]:
+          - generic [ref=f44e38]:
+            - heading "All suppliers" [level=2] [ref=f44e39]
+            - textbox "Filter suppliers" [ref=f44e41]:
+              - /placeholder: Name or GSTIN
+          - list [ref=f44e43]:
+            - listitem [ref=f44e44]:
+              - generic [ref=f44e45]:
+                - link "Divyom Sharma" [ref=f44e46] [cursor=pointer]:
+                  - /url: /suppliers/9a0e4ce5-0ed1-4aac-b538-785cec8c5d07
+                - paragraph [ref=f44e47]: 07TQDPS9711L1ZT · 7011440350
+              - generic [ref=f44e49]:
+                - paragraph [ref=f44e50]: ₹0
+                - paragraph [ref=f44e51]: Outstanding
+            - listitem [ref=f44e52]:
+              - generic [ref=f44e53]:
+                - link "Indo-Burma Timber Exporters" [ref=f44e54] [cursor=pointer]:
+                  - /url: /suppliers/fe07e11a-c084-4ccd-850d-55baaeee8112
+                - paragraph [ref=f44e55]: 27AAACH9999J1Z9 · +912239485740
+              - generic [ref=f44e57]:
+                - paragraph [ref=f44e58]: ₹0
+                - paragraph [ref=f44e59]: Outstanding
+  - button "Open Next.js Dev Tools" [ref=f44e65] [cursor=pointer]

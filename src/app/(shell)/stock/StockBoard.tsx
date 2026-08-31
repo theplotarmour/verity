@@ -92,7 +92,10 @@ export function StockBoard({
     [onHand],
   );
   const byGodown = useMemo(() => {
-    const grouped = new Map<string, { name: string; rows: OnHandRow[]; valuePaise: number }>();
+    const grouped = new Map<
+      string,
+      { name: string; rows: OnHandRow[]; valuePaise: number }
+    >();
     for (const row of onHand) {
       const existing = grouped.get(row.locationId) ?? {
         name: row.locationName,
@@ -146,7 +149,11 @@ export function StockBoard({
           <Stat
             label="At or below reorder"
             value={String(short.length)}
-            hint={short.length === 0 ? "Nothing to buy" : "Needs a purchase or a transfer"}
+            hint={
+              short.length === 0
+                ? "Nothing to buy"
+                : "Needs a purchase or a transfer"
+            }
           />
         </StatRow>
       </div>
@@ -159,7 +166,11 @@ export function StockBoard({
               variant={movement === kind ? "primary" : "secondary"}
               onClick={() => setMovement(movement === kind ? null : kind)}
             >
-              {kind === "receive" ? "Receive" : kind === "issue" ? "Issue" : "Transfer"}
+              {kind === "receive"
+                ? "Receive"
+                : kind === "issue"
+                  ? "Issue"
+                  : "Transfer"}
             </Button>
           ))}
         </div>
@@ -230,49 +241,55 @@ export function StockBoard({
       {short.length > 0 && (
         <div className="mb-4">
           <Panel title="At or below reorder level">
-            <table className="w-full border-collapse">
-              <caption className="sr-only">Boards at or below their reorder level</caption>
-              <thead>
-                <tr>
-                  {["Board", "On hand", "Reorder at"].map((heading, index) => (
-                    <th
-                      key={heading}
-                      className={
-                        "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                        (index === 0 ? "text-left" : "text-right")
-                      }
-                    >
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {short.map((row) => (
-                  <tr key={row.productId}>
-                    <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                      {/* §71 — the name is the way in. Low stock leads to the
-                          product, where the reorder decision has its context. */}
-                      <Link
-                        href={`/catalogue/${row.productId}`}
-                        className="text-text no-underline hover:underline"
-                      >
-                        {row.brandName} · {row.productName}
-                      </Link>
-                    </td>
-                    <td className="tabular border-b border-line px-3 py-2 text-right text-[14px] text-warning">
-                      {row.onHandUnits} {row.unitLabel}
-                    </td>
-                    <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                      {row.reorderLevelUnits}
-                    </td>
+            <div className="-mx-3 overflow-x-auto px-3">
+              <table className="w-full min-w-[560px] border-collapse">
+                <caption className="sr-only">
+                  Boards at or below their reorder level
+                </caption>
+                <thead>
+                  <tr>
+                    {["Board", "On hand", "Reorder at"].map(
+                      (heading, index) => (
+                        <th
+                          key={heading}
+                          className={
+                            "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
+                            (index === 0 ? "text-left" : "text-right")
+                          }
+                        >
+                          {heading}
+                        </th>
+                      ),
+                    )}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {short.map((row) => (
+                    <tr key={row.productId}>
+                      <td className="border-b border-line px-3 py-2 text-[14px] text-text">
+                        {/* §71 — the name is the way in. Low stock leads to the
+                          product, where the reorder decision has its context. */}
+                        <Link
+                          href={`/catalogue/${row.productId}`}
+                          className="text-text no-underline hover:underline"
+                        >
+                          {row.brandName} · {row.productName}
+                        </Link>
+                      </td>
+                      <td className="tabular border-b border-line px-3 py-2 text-right text-[14px] text-warning">
+                        {row.onHandUnits} {row.unitLabel}
+                      </td>
+                      <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
+                        {row.reorderLevelUnits}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <p className="mb-0 mt-3 text-[12px] text-text-tertiary">
-              Counted across every godown. A board short in one and plentiful in another is a
-              transfer, not a purchase.
+              Counted across every godown. A board short in one and plentiful in
+              another is a transfer, not a purchase.
             </p>
           </Panel>
         </div>
@@ -310,52 +327,56 @@ export function StockBoard({
                 </div>
               }
             >
-              <table className="w-full border-collapse">
-                <caption className="sr-only">Stock in {godown.name}</caption>
-                <thead>
-                  <tr>
-                    {["Board", "Grade", "On hand", "Avg cost", "Value"].map((heading, index) => (
-                      <th
-                        key={heading}
-                        className={
-                          "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                          (index <= 1 ? "text-left" : "text-right")
-                        }
-                      >
-                        {heading}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {godown.rows.map((row) => (
-                    <tr key={`${row.productId}-${row.locationId}`}>
-                      <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                        {/* §13 — clicking a quantity opens why that quantity
-                            exists, scoped to the godown of this row. */}
-                        <Link
-                          href={`/stock/${row.productId}?godown=${row.locationId}`}
-                          className="text-text no-underline hover:underline"
-                        >
-                          {row.brandName} · {row.productName}
-                        </Link>
-                      </td>
-                      <td className="border-b border-line px-3 py-2 text-[13px] text-text-secondary">
-                        {row.grade}
-                      </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                        {row.qtyUnits} {row.unitLabel}
-                      </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                        {rupees(row.avgUnitCostPaise)}
-                      </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                        {rupeesRound(row.valuePaise)}
-                      </td>
+              <div className="-mx-3 overflow-x-auto px-3">
+                <table className="w-full min-w-[560px] border-collapse">
+                  <caption className="sr-only">Stock in {godown.name}</caption>
+                  <thead>
+                    <tr>
+                      {["Board", "Grade", "On hand", "Avg cost", "Value"].map(
+                        (heading, index) => (
+                          <th
+                            key={heading}
+                            className={
+                              "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
+                              (index <= 1 ? "text-left" : "text-right")
+                            }
+                          >
+                            {heading}
+                          </th>
+                        ),
+                      )}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {godown.rows.map((row) => (
+                      <tr key={`${row.productId}-${row.locationId}`}>
+                        <td className="border-b border-line px-3 py-2 text-[14px] text-text">
+                          {/* §13 — clicking a quantity opens why that quantity
+                            exists, scoped to the godown of this row. */}
+                          <Link
+                            href={`/stock/${row.productId}?godown=${row.locationId}`}
+                            className="text-text no-underline hover:underline"
+                          >
+                            {row.brandName} · {row.productName}
+                          </Link>
+                        </td>
+                        <td className="border-b border-line px-3 py-2 text-[13px] text-text-secondary">
+                          {row.grade}
+                        </td>
+                        <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
+                          {row.qtyUnits} {row.unitLabel}
+                        </td>
+                        <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
+                          {rupees(row.avgUnitCostPaise)}
+                        </td>
+                        <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
+                          {rupeesRound(row.valuePaise)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </Panel>
           ))}
         </div>
@@ -418,7 +439,12 @@ function MovementForm({
     >
       <div className="min-w-[260px] flex-1">
         <Field label="Board" htmlFor="movement-product" required>
-          <Select id="movement-product" name="productId" required defaultValue="">
+          <Select
+            id="movement-product"
+            name="productId"
+            required
+            defaultValue=""
+          >
             <option value="" disabled>
               Choose a board
             </option>
@@ -437,7 +463,12 @@ function MovementForm({
           htmlFor="movement-location"
           required
         >
-          <Select id="movement-location" name="locationId" required defaultValue="">
+          <Select
+            id="movement-location"
+            name="locationId"
+            required
+            defaultValue=""
+          >
             <option value="" disabled>
               Choose a godown
             </option>
@@ -453,7 +484,12 @@ function MovementForm({
       {movement === "transfer" && (
         <div className="min-w-[180px]">
           <Field label="To godown" htmlFor="movement-to-location" required>
-            <Select id="movement-to-location" name="toLocationId" required defaultValue="">
+            <Select
+              id="movement-to-location"
+              name="toLocationId"
+              required
+              defaultValue=""
+            >
               <option value="" disabled>
                 Choose a godown
               </option>
@@ -469,20 +505,38 @@ function MovementForm({
 
       <div className="w-[130px]">
         <Field label="Quantity" htmlFor="movement-qty" required>
-          <Input id="movement-qty" name="qty" type="number" min="1" step="1" required />
+          <Input
+            id="movement-qty"
+            name="qty"
+            type="number"
+            min="1"
+            step="1"
+            required
+          />
         </Field>
       </div>
 
       {movement === "receive" && (
         <div className="w-[160px]">
           <Field label="Cost per unit (₹)" htmlFor="movement-cost" required>
-            <Input id="movement-cost" name="cost" type="number" step="0.01" min="0" required />
+            <Input
+              id="movement-cost"
+              name="cost"
+              type="number"
+              step="0.01"
+              min="0"
+              required
+            />
           </Field>
         </div>
       )}
 
       <Button type="submit" variant="primary" disabled={pending}>
-        {movement === "receive" ? "Receive" : movement === "issue" ? "Issue" : "Transfer"}
+        {movement === "receive"
+          ? "Receive"
+          : movement === "issue"
+            ? "Issue"
+            : "Transfer"}
       </Button>
 
       {movement !== "receive" && (
@@ -545,7 +599,12 @@ function CorrectionForm({
     >
       <div className="min-w-[240px] flex-1">
         <Field label="Board" htmlFor="correction-product" required>
-          <Select id="correction-product" name="productId" required defaultValue="">
+          <Select
+            id="correction-product"
+            name="productId"
+            required
+            defaultValue=""
+          >
             <option value="" disabled>
               Choose a board
             </option>
@@ -560,7 +619,12 @@ function CorrectionForm({
 
       <div className="min-w-[170px]">
         <Field label="Godown" htmlFor="correction-location" required>
-          <Select id="correction-location" name="locationId" required defaultValue="">
+          <Select
+            id="correction-location"
+            name="locationId"
+            required
+            defaultValue=""
+          >
             <option value="" disabled>
               Choose a godown
             </option>
@@ -576,7 +640,12 @@ function CorrectionForm({
       {correction === "adjust" && (
         <div className="w-[150px]">
           <Field label="Direction" htmlFor="correction-direction" required>
-            <Select id="correction-direction" name="direction" required defaultValue="out">
+            <Select
+              id="correction-direction"
+              name="direction"
+              required
+              defaultValue="out"
+            >
               <option value="out">Short — remove</option>
               <option value="in">Found — add</option>
             </Select>
@@ -586,7 +655,14 @@ function CorrectionForm({
 
       <div className="w-[120px]">
         <Field label="Quantity" htmlFor="correction-qty" required>
-          <Input id="correction-qty" name="qty" type="number" min="1" step="1" required />
+          <Input
+            id="correction-qty"
+            name="qty"
+            type="number"
+            min="1"
+            step="1"
+            required
+          />
         </Field>
       </div>
 

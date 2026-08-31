@@ -50,10 +50,12 @@ export default async function ReportsPage() {
 
   let console_: Awaited<ReturnType<typeof ownerConsole.handler>> | null = null;
   let margin: Awaited<ReturnType<typeof marginReport.handler>> | null = null;
-  let receivables: Awaited<ReturnType<typeof outstandingReceivables.handler>> = [];
+  let receivables: Awaited<ReturnType<typeof outstandingReceivables.handler>> =
+    [];
   let low: Awaited<ReturnType<typeof lowStock.handler>> = [];
   let tax: Awaited<ReturnType<typeof taxSummary.handler>> | null = null;
-  let checklist: Awaited<ReturnType<typeof closeChecklist.handler>> | null = null;
+  let checklist: Awaited<ReturnType<typeof closeChecklist.handler>> | null =
+    null;
 
   // Each section is fetched independently and each failure is swallowed
   // separately. A reader who may see stock but not money gets the stock
@@ -70,12 +72,20 @@ export default async function ReportsPage() {
 
   console_ = await attempt(() => executeQuery(actor, ownerConsole, {}));
   margin = await attempt(() => executeQuery(actor, marginReport, {}));
-  receivables = (await attempt(() => executeQuery(actor, outstandingReceivables, {}))) ?? [];
+  receivables =
+    (await attempt(() => executeQuery(actor, outstandingReceivables, {}))) ??
+    [];
   low = (await attempt(() => executeQuery(actor, lowStock, {}))) ?? [];
   tax = await attempt(() => executeQuery(actor, taxSummary, {}));
   checklist = await attempt(() => executeQuery(actor, closeChecklist, {}));
 
-  if (!console_ && !margin && receivables.length === 0 && low.length === 0 && !tax) {
+  if (
+    !console_ &&
+    !margin &&
+    receivables.length === 0 &&
+    low.length === 0 &&
+    !tax
+  ) {
     return <PermissionDenied what="reports" />;
   }
 
@@ -92,10 +102,26 @@ export default async function ReportsPage() {
         <Related
           title="Detailed reports"
           links={[
-            { href: "/reports/sales", label: "Sales", note: "By board and customer" },
-            { href: "/reports/purchases", label: "Purchases", note: "By supplier, and price movement" },
-            { href: "/reports/inventory", label: "Inventory", note: "Ageing, damage, adjustments" },
-            { href: "/reports/finance", label: "Ageing", note: "Receivable and payable" },
+            {
+              href: "/reports/sales",
+              label: "Sales",
+              note: "By board and customer",
+            },
+            {
+              href: "/reports/purchases",
+              label: "Purchases",
+              note: "By supplier, and price movement",
+            },
+            {
+              href: "/reports/inventory",
+              label: "Inventory",
+              note: "Ageing, damage, adjustments",
+            },
+            {
+              href: "/reports/finance",
+              label: "Ageing",
+              note: "Receivable and payable",
+            },
           ]}
         />
       </div>
@@ -104,7 +130,11 @@ export default async function ReportsPage() {
         <div className="mb-4">
           <Panel title="Trade">
             <StatRow>
-              <Stat label="Sales today" value={rupees(console_.todaysSalesPaise)} href="/finance" />
+              <Stat
+                label="Sales today"
+                value={rupees(console_.todaysSalesPaise)}
+                href="/finance"
+              />
               <Stat
                 label="Purchases today"
                 value={rupees(console_.todaysPurchasesPaise)}
@@ -125,15 +155,27 @@ export default async function ReportsPage() {
         <div className="mb-4">
           <Panel title="Inventory and money">
             <StatRow>
-              <Stat label="Stock value" value={rupees(console_.stockValuePaise)} href="/stock" />
+              <Stat
+                label="Stock value"
+                value={rupees(console_.stockValuePaise)}
+                href="/stock"
+              />
               <Stat
                 label="Low stock"
                 value={String(console_.lowStockBoards)}
                 href="/stock"
                 hint="Available below reorder level"
               />
-              <Stat label="Receivables" value={rupees(console_.receivablesPaise)} href="/finance" />
-              <Stat label="Payables" value={rupees(console_.payablesPaise)} href="/finance" />
+              <Stat
+                label="Receivables"
+                value={rupees(console_.receivablesPaise)}
+                href="/finance"
+              />
+              <Stat
+                label="Payables"
+                value={rupees(console_.payablesPaise)}
+                href="/finance"
+              />
             </StatRow>
           </Panel>
         </div>
@@ -144,7 +186,10 @@ export default async function ReportsPage() {
           <Panel title="Margin, last 30 days">
             <StatRow>
               <Stat label="Revenue" value={rupees(margin.revenuePaise)} />
-              <Stat label="Cost of goods sold" value={rupees(margin.costOfGoodsSoldPaise)} />
+              <Stat
+                label="Cost of goods sold"
+                value={rupees(margin.costOfGoodsSoldPaise)}
+              />
               <Stat
                 label="Gross margin"
                 value={rupees(margin.marginPaise)}
@@ -159,9 +204,21 @@ export default async function ReportsPage() {
         <div className="mb-4">
           <Panel title="Tax this period">
             <StatRow>
-              <Stat label="Output GST" value={rupees(tax.outputTaxPaise)} href="/tax/close" />
-              <Stat label="Input GST" value={rupees(tax.inputTaxPaise)} href="/tax/close" />
-              <Stat label="Net payable" value={rupees(tax.netPayablePaise)} href="/tax/close" />
+              <Stat
+                label="Output GST"
+                value={rupees(tax.outputTaxPaise)}
+                href="/tax/close"
+              />
+              <Stat
+                label="Input GST"
+                value={rupees(tax.inputTaxPaise)}
+                href="/tax/close"
+              />
+              <Stat
+                label="Net payable"
+                value={rupees(tax.netPayablePaise)}
+                href="/tax/close"
+              />
               <Stat
                 label="Exceptions"
                 value={String(tax.exceptions.length)}
@@ -176,38 +233,57 @@ export default async function ReportsPage() {
       <div className="mb-4">
         <Panel title="Boards below reorder level">
           {low.length === 0 ? (
-            <EmptyState title="Nothing to reorder" description="Every board is above its reorder level." />
+            <EmptyState
+              title="Nothing to reorder"
+              description="Every board is above its reorder level."
+            />
           ) : (
-            <table className="w-full border-collapse text-[14px]">
-              <thead>
-                <tr>
-                  <th className="border-b border-line px-3 py-2 text-left font-medium">Board</th>
-                  <th className="border-b border-line px-3 py-2 text-right font-medium">On hand</th>
-                  <th className="border-b border-line px-3 py-2 text-right font-medium">Reserved</th>
-                  <th className="border-b border-line px-3 py-2 text-right font-medium">Available</th>
-                  <th className="border-b border-line px-3 py-2 text-right font-medium">Reorder at</th>
-                </tr>
-              </thead>
-              <tbody>
-                {low.map((row) => (
-                  <tr key={row.productId}>
-                    <td className="border-b border-line px-3 py-2">
-                      {row.brandName} {row.productName}
-                    </td>
-                    <td className="tabular border-b border-line px-3 py-2 text-right">{row.onHandUnits}</td>
-                    <td className="tabular border-b border-line px-3 py-2 text-right">{row.reservedUnits}</td>
-                    {/* Available is what can be sold. On hand looks healthy
-                        while every sheet is already promised to somebody. */}
-                    <td className="tabular border-b border-line px-3 py-2 text-right font-medium">
-                      {row.availableUnits}
-                    </td>
-                    <td className="tabular border-b border-line px-3 py-2 text-right text-text-tertiary">
-                      {row.reorderLevelUnits}
-                    </td>
+            <div className="-mx-3 overflow-x-auto px-3">
+              <table className="w-full min-w-[560px] border-collapse text-[14px]">
+                <thead>
+                  <tr>
+                    <th className="border-b border-line px-3 py-2 text-left font-medium">
+                      Board
+                    </th>
+                    <th className="border-b border-line px-3 py-2 text-right font-medium">
+                      On hand
+                    </th>
+                    <th className="border-b border-line px-3 py-2 text-right font-medium">
+                      Reserved
+                    </th>
+                    <th className="border-b border-line px-3 py-2 text-right font-medium">
+                      Available
+                    </th>
+                    <th className="border-b border-line px-3 py-2 text-right font-medium">
+                      Reorder at
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {low.map((row) => (
+                    <tr key={row.productId}>
+                      <td className="border-b border-line px-3 py-2">
+                        {row.brandName} {row.productName}
+                      </td>
+                      <td className="tabular border-b border-line px-3 py-2 text-right">
+                        {row.onHandUnits}
+                      </td>
+                      <td className="tabular border-b border-line px-3 py-2 text-right">
+                        {row.reservedUnits}
+                      </td>
+                      {/* Available is what can be sold. On hand looks healthy
+                        while every sheet is already promised to somebody. */}
+                      <td className="tabular border-b border-line px-3 py-2 text-right font-medium">
+                        {row.availableUnits}
+                      </td>
+                      <td className="tabular border-b border-line px-3 py-2 text-right text-text-tertiary">
+                        {row.reorderLevelUnits}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Panel>
       </div>
@@ -215,24 +291,32 @@ export default async function ReportsPage() {
       {receivables.length > 0 && (
         <div className="mb-4">
           <Panel title="Who owes what">
-            <table className="w-full border-collapse text-[14px]">
-              <thead>
-                <tr>
-                  <th className="border-b border-line px-3 py-2 text-left font-medium">Customer</th>
-                  <th className="border-b border-line px-3 py-2 text-right font-medium">Outstanding</th>
-                </tr>
-              </thead>
-              <tbody>
-                {receivables.map((row) => (
-                  <tr key={row.customerId}>
-                    <td className="border-b border-line px-3 py-2">{row.customerName}</td>
-                    <td className="tabular border-b border-line px-3 py-2 text-right">
-                      {rupees(row.outstandingPaise)}
-                    </td>
+            <div className="-mx-3 overflow-x-auto px-3">
+              <table className="w-full min-w-[560px] border-collapse text-[14px]">
+                <thead>
+                  <tr>
+                    <th className="border-b border-line px-3 py-2 text-left font-medium">
+                      Customer
+                    </th>
+                    <th className="border-b border-line px-3 py-2 text-right font-medium">
+                      Outstanding
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {receivables.map((row) => (
+                    <tr key={row.customerId}>
+                      <td className="border-b border-line px-3 py-2">
+                        {row.customerName}
+                      </td>
+                      <td className="tabular border-b border-line px-3 py-2 text-right">
+                        {rupees(row.outstandingPaise)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </Panel>
         </div>
       )}
@@ -240,11 +324,16 @@ export default async function ReportsPage() {
       {checklist && (
         <Panel title={`Close readiness — ${checklist.periodKey}`}>
           {checklist.ready ? (
-            <p className="m-0 text-[15px] text-success">Nothing outstanding for this period.</p>
+            <p className="m-0 text-[15px] text-success">
+              Nothing outstanding for this period.
+            </p>
           ) : (
             <ul className="m-0 flex list-none flex-col gap-2 p-0">
               {checklist.blockers.map((blocker) => (
-                <li key={blocker.kind} className="flex items-baseline gap-3 text-[15px]">
+                <li
+                  key={blocker.kind}
+                  className="flex items-baseline gap-3 text-[15px]"
+                >
                   <span className="tabular font-medium">{blocker.count}</span>
                   <span className="text-text-secondary">{blocker.detail}</span>
                 </li>

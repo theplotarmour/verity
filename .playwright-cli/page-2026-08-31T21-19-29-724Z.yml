@@ -1,0 +1,134 @@
+- generic [active] [ref=f53e1]:
+  - link "Skip to content" [ref=f53e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f53e4]:
+    - generic [ref=f53e5]:
+      - link "Verity" [ref=f53e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f53e7]:
+          - generic [ref=f53e11]: verity
+          - generic [ref=f53e12]: Verity
+      - generic [ref=f53e13]:
+        - 'button "Theme: Match system. Activate to switch to Light." [ref=f53e14] [cursor=pointer]'
+        - button "Menu" [ref=f53e18] [cursor=pointer]
+    - main [ref=f53e19]:
+      - generic [ref=f53e21]:
+        - heading "Reports" [level=1] [ref=f53e22]
+        - paragraph [ref=f53e23]: Every figure here is the same figure the desk that owns it shows. Nothing on this page computes its own version of a number.
+      - generic [ref=f53e25]:
+        - heading "Detailed reports" [level=2] [ref=f53e27]
+        - list [ref=f53e29]:
+          - listitem [ref=f53e30]:
+            - link "Sales By board and customer" [ref=f53e31] [cursor=pointer]:
+              - /url: /reports/sales
+              - generic [ref=f53e32]: Sales
+              - generic [ref=f53e33]: By board and customer
+          - listitem [ref=f53e34]:
+            - link "Purchases By supplier, and price movement" [ref=f53e35] [cursor=pointer]:
+              - /url: /reports/purchases
+              - generic [ref=f53e36]: Purchases
+              - generic [ref=f53e37]: By supplier, and price movement
+          - listitem [ref=f53e38]:
+            - link "Inventory Ageing, damage, adjustments" [ref=f53e39] [cursor=pointer]:
+              - /url: /reports/inventory
+              - generic [ref=f53e40]: Inventory
+              - generic [ref=f53e41]: Ageing, damage, adjustments
+          - listitem [ref=f53e42]:
+            - link "Ageing Receivable and payable" [ref=f53e43] [cursor=pointer]:
+              - /url: /reports/finance
+              - generic [ref=f53e44]: Ageing
+              - generic [ref=f53e45]: Receivable and payable
+      - generic [ref=f53e47]:
+        - heading "Trade" [level=2] [ref=f53e49]
+        - generic [ref=f53e51]:
+          - link "₹0 Sales today" [ref=f53e52] [cursor=pointer]:
+            - /url: /finance
+            - generic [ref=f53e53]: ₹0
+            - generic [ref=f53e54]: Sales today
+          - link "₹0 Purchases today" [ref=f53e55] [cursor=pointer]:
+            - /url: /purchases
+            - generic [ref=f53e56]: ₹0
+            - generic [ref=f53e57]: Purchases today
+          - link "0 Awaiting goods issue Approved, not yet issued" [ref=f53e58] [cursor=pointer]:
+            - /url: /sales
+            - generic [ref=f53e59]: "0"
+            - generic [ref=f53e60]: Awaiting goods issue
+            - generic [ref=f53e61]: Approved, not yet issued
+      - generic [ref=f53e63]:
+        - heading "Inventory and money" [level=2] [ref=f53e65]
+        - generic [ref=f53e67]:
+          - link "₹16,27,374 Stock value" [ref=f53e68] [cursor=pointer]:
+            - /url: /stock
+            - generic [ref=f53e69]: ₹16,27,374
+            - generic [ref=f53e70]: Stock value
+          - link "2 Low stock Available below reorder level" [ref=f53e71] [cursor=pointer]:
+            - /url: /stock
+            - generic [ref=f53e72]: "2"
+            - generic [ref=f53e73]: Low stock
+            - generic [ref=f53e74]: Available below reorder level
+          - link "₹0 Receivables" [ref=f53e75] [cursor=pointer]:
+            - /url: /finance
+            - generic [ref=f53e76]: ₹0
+            - generic [ref=f53e77]: Receivables
+          - link "₹0 Payables" [ref=f53e78] [cursor=pointer]:
+            - /url: /finance
+            - generic [ref=f53e79]: ₹0
+            - generic [ref=f53e80]: Payables
+      - generic [ref=f53e82]:
+        - heading "Margin, last 30 days" [level=2] [ref=f53e84]
+        - generic [ref=f53e86]:
+          - generic [ref=f53e87]:
+            - generic [ref=f53e88]: ₹0
+            - generic [ref=f53e89]: Revenue
+          - generic [ref=f53e90]:
+            - generic [ref=f53e91]: ₹37,374
+            - generic [ref=f53e92]: Cost of goods sold
+          - generic [ref=f53e93]:
+            - generic [ref=f53e94]: ₹-37,374
+            - generic [ref=f53e95]: Gross margin
+            - generic [ref=f53e96]: 0.0% · Weighted average cost
+      - generic [ref=f53e98]:
+        - heading "Tax this period" [level=2] [ref=f53e100]
+        - generic [ref=f53e102]:
+          - link "₹0 Output GST" [ref=f53e103] [cursor=pointer]:
+            - /url: /tax/close
+            - generic [ref=f53e104]: ₹0
+            - generic [ref=f53e105]: Output GST
+          - link "₹0 Input GST" [ref=f53e106] [cursor=pointer]:
+            - /url: /tax/close
+            - generic [ref=f53e107]: ₹0
+            - generic [ref=f53e108]: Input GST
+          - link "₹0 Net payable" [ref=f53e109] [cursor=pointer]:
+            - /url: /tax/close
+            - generic [ref=f53e110]: ₹0
+            - generic [ref=f53e111]: Net payable
+          - link "0 Exceptions Documents needing attention" [ref=f53e112] [cursor=pointer]:
+            - /url: /tax/close
+            - generic [ref=f53e113]: "0"
+            - generic [ref=f53e114]: Exceptions
+            - generic [ref=f53e115]: Documents needing attention
+      - generic [ref=f53e117]:
+        - heading "Boards below reorder level" [level=2] [ref=f53e119]
+        - table [ref=f53e122]:
+          - rowgroup [ref=f53e123]:
+            - row [ref=f53e124]:
+              - columnheader "Board" [ref=f53e125]
+              - columnheader "On hand" [ref=f53e126]
+              - columnheader "Reserved" [ref=f53e127]
+              - columnheader "Available" [ref=f53e128]
+              - columnheader "Reorder at" [ref=f53e129]
+          - rowgroup [ref=f53e130]:
+            - row [ref=f53e131]:
+              - cell "CenturyPly Century Lamilite High-Gloss Sunmica (1mm)" [ref=f53e132]
+              - cell "0" [ref=f53e133]
+              - cell "0" [ref=f53e134]
+              - cell "0" [ref=f53e135]
+              - cell "25" [ref=f53e136]
+            - row [ref=f53e137]:
+              - cell "Hettich Fittings Hettich Soft-Close Hydraulic Hinge (110 deg)" [ref=f53e138]
+              - cell "0" [ref=f53e139]
+              - cell "0" [ref=f53e140]
+              - cell "0" [ref=f53e141]
+              - cell "200" [ref=f53e142]
+  - button "Open Next.js Dev Tools" [ref=f53e148] [cursor=pointer]
+  - alert [ref=f53e152]

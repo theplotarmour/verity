@@ -1,0 +1,152 @@
+- generic [active] [ref=f50e1]:
+  - link "Skip to content" [ref=f50e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f50e4]:
+    - generic [ref=f50e5]:
+      - link "Verity" [ref=f50e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f50e7]:
+          - generic [ref=f50e11]: verity
+          - generic [ref=f50e12]: Verity
+      - button "Menu" [ref=f50e15] [cursor=pointer]
+    - main [ref=f50e16]:
+      - generic [ref=f50e18]:
+        - heading "Business Overview" [level=1] [ref=f50e19]
+        - paragraph [ref=f50e20]: Today's trade, what the godowns hold, and what is owed in each direction. Every figure is the sum of records — follow any of them through to the screen it came from.
+      - generic [ref=f50e21]:
+        - region [ref=f50e22]:
+          - heading "Sales" [level=2] [ref=f50e24]
+          - generic [ref=f50e25]:
+            - link "₹0 Sales this month ₹0 today" [ref=f50e26] [cursor=pointer]:
+              - /url: /finance
+              - generic [ref=f50e27]: ₹0
+              - generic [ref=f50e28]: Sales this month
+              - generic [ref=f50e29]: ₹0 today
+            - link "0 Open orders Taken, not yet closed out" [ref=f50e30] [cursor=pointer]:
+              - /url: /sales
+              - generic [ref=f50e31]: "0"
+              - generic [ref=f50e32]: Open orders
+              - generic [ref=f50e33]: Taken, not yet closed out
+            - link "0 Awaiting credit approval Nothing held" [ref=f50e34] [cursor=pointer]:
+              - /url: /sales
+              - generic [ref=f50e35]: "0"
+              - generic [ref=f50e36]: Awaiting credit approval
+              - generic [ref=f50e37]: Nothing held
+            - link "0 Awaiting goods issue Approved, still in the godown" [ref=f50e38] [cursor=pointer]:
+              - /url: /sales
+              - generic [ref=f50e39]: "0"
+              - generic [ref=f50e40]: Awaiting goods issue
+              - generic [ref=f50e41]: Approved, still in the godown
+        - region [ref=f50e42]:
+          - heading "Purchase" [level=2] [ref=f50e44]
+          - generic [ref=f50e45]:
+            - link "2 Open purchase orders" [ref=f50e46] [cursor=pointer]:
+              - /url: /purchases
+              - generic [ref=f50e47]: "2"
+              - generic [ref=f50e48]: Open purchase orders
+            - link "2 Pending receipt Something still owed" [ref=f50e49] [cursor=pointer]:
+              - /url: /purchases
+              - generic [ref=f50e50]: "2"
+              - generic [ref=f50e51]: Pending receipt
+              - generic [ref=f50e52]: Something still owed
+            - link "80 sheets Incoming stock Ordered, not yet arrived" [ref=f50e53] [cursor=pointer]:
+              - /url: /purchases
+              - generic [ref=f50e54]: 80 sheets
+              - generic [ref=f50e55]: Incoming stock
+              - generic [ref=f50e56]: Ordered, not yet arrived
+            - link "₹0 Today's purchases Billed today" [ref=f50e57] [cursor=pointer]:
+              - /url: /purchases
+              - generic [ref=f50e58]: ₹0
+              - generic [ref=f50e59]: Today's purchases
+              - generic [ref=f50e60]: Billed today
+        - region [ref=f50e61]:
+          - heading "Inventory" [level=2] [ref=f50e63]
+          - generic [ref=f50e64]:
+            - link "₹16,27,374 Inventory value At weighted average cost" [ref=f50e65] [cursor=pointer]:
+              - /url: /stock
+              - generic [ref=f50e66]: ₹16,27,374
+              - generic [ref=f50e67]: Inventory value
+              - generic [ref=f50e68]: At weighted average cost
+            - link "2 Low stock At or below reorder" [ref=f50e69] [cursor=pointer]:
+              - /url: /stock
+              - generic [ref=f50e70]: "2"
+              - generic [ref=f50e71]: Low stock
+              - generic [ref=f50e72]: At or below reorder
+            - link "0 sheets Reserved Held against orders" [ref=f50e73] [cursor=pointer]:
+              - /url: /sales
+              - generic [ref=f50e74]: 0 sheets
+              - generic [ref=f50e75]: Reserved
+              - generic [ref=f50e76]: Held against orders
+        - region [ref=f50e77]:
+          - heading "Money" [level=2] [ref=f50e79]
+          - generic [ref=f50e80]:
+            - link "₹0 Receivables Owed to us" [ref=f50e81] [cursor=pointer]:
+              - /url: /finance
+              - generic [ref=f50e82]: ₹0
+              - generic [ref=f50e83]: Receivables
+              - generic [ref=f50e84]: Owed to us
+            - link "₹0 Overdue Unsettled after 30 days" [ref=f50e85] [cursor=pointer]:
+              - /url: /finance
+              - generic [ref=f50e86]: ₹0
+              - generic [ref=f50e87]: Overdue
+              - generic [ref=f50e88]: Unsettled after 30 days
+            - link "₹0 Payables Owed by us" [ref=f50e89] [cursor=pointer]:
+              - /url: /finance
+              - generic [ref=f50e90]: ₹0
+              - generic [ref=f50e91]: Payables
+              - generic [ref=f50e92]: Owed by us
+            - link "₹0 Collections today Received from customers" [ref=f50e93] [cursor=pointer]:
+              - /url: /finance
+              - generic [ref=f50e94]: ₹0
+              - generic [ref=f50e95]: Collections today
+              - generic [ref=f50e96]: Received from customers
+        - region [ref=f50e97]:
+          - heading "Tax" [level=2] [ref=f50e99]
+          - generic [ref=f50e100]:
+            - link "₹0 Output GST Charged this month" [ref=f50e101] [cursor=pointer]:
+              - /url: /tax/gstr-1
+              - generic [ref=f50e102]: ₹0
+              - generic [ref=f50e103]: Output GST
+              - generic [ref=f50e104]: Charged this month
+            - link "₹0 Eligible ITC Evidenced on purchase invoices" [ref=f50e105] [cursor=pointer]:
+              - /url: /tax/gstr-3b
+              - generic [ref=f50e106]: ₹0
+              - generic [ref=f50e107]: Eligible ITC
+              - generic [ref=f50e108]: Evidenced on purchase invoices
+            - link "0 Tax exceptions Nothing to fix" [ref=f50e109] [cursor=pointer]:
+              - /url: /tax/exceptions
+              - generic [ref=f50e110]: "0"
+              - generic [ref=f50e111]: Tax exceptions
+              - generic [ref=f50e112]: Nothing to fix
+      - generic [ref=f50e114]:
+        - heading "Margin, last 30 days" [level=2] [ref=f50e116]
+        - generic [ref=f50e118]:
+          - generic [ref=f50e119]:
+            - paragraph [ref=f50e120]: ₹-37,374
+            - paragraph [ref=f50e121]:
+              - text: ₹0 sold, ₹37,374 cost —
+              - generic [ref=f50e122]: 0.0%
+          - paragraph [ref=f50e123]: Costed by weighted average cost. Revenue excludes tax collected — tax is not income. Cost is what the stock ledger recorded as consumed at the moment each sale happened, so a later purchase cannot restate a past margin.
+      - generic [ref=f50e124]:
+        - generic [ref=f50e125]:
+          - heading "Needs buying" [level=2] [ref=f50e126]
+          - link [ref=f50e127] [cursor=pointer]:
+            - /url: /purchases
+            - button "Raise an order" [ref=f50e128]
+        - table [ref=f50e130]:
+          - caption [ref=f50e131]: Boards at or below their reorder level
+          - rowgroup [ref=f50e132]:
+            - row [ref=f50e133]:
+              - columnheader "Board" [ref=f50e134]
+              - columnheader "On hand" [ref=f50e135]
+              - columnheader "Reorder at" [ref=f50e136]
+          - rowgroup [ref=f50e137]:
+            - row [ref=f50e138]:
+              - cell "CenturyPly · Century Lamilite High-Gloss Sunmica (1mm)" [ref=f50e139]
+              - cell "0 sheets" [ref=f50e140]
+              - cell "25" [ref=f50e141]
+            - row [ref=f50e142]:
+              - cell "Hettich Fittings · Hettich Soft-Close Hydraulic Hinge (110 deg)" [ref=f50e143]
+              - cell "0 pairs" [ref=f50e144]
+              - cell "200" [ref=f50e145]
+  - button "Open Next.js Dev Tools" [ref=f50e151] [cursor=pointer]

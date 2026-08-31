@@ -1,0 +1,35 @@
+- generic [active] [ref=f64e1]:
+  - link "Skip to content" [ref=f64e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f64e4]:
+    - generic [ref=f64e5]:
+      - link "Verity" [ref=f64e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f64e7]:
+          - generic [ref=f64e11]: verity
+          - generic [ref=f64e12]: Verity
+      - button "Menu" [ref=f64e15] [cursor=pointer]
+    - main [ref=f64e16]:
+      - generic [ref=f64e18]:
+        - heading "Ledgers" [level=1] [ref=f64e19]
+        - paragraph [ref=f64e20]: Every movement of money against one party, oldest first. The balance is the sum of these entries — nothing caches it, so nothing can disagree with it.
+      - generic [ref=f64e22]:
+        - heading "Choose a party" [level=2] [ref=f64e24]
+        - generic [ref=f64e25]:
+          - generic [ref=f64e26]:
+            - generic [ref=f64e28]:
+              - generic [ref=f64e29]: Customer
+              - combobox "Customer" [ref=f64e30] [cursor=pointer]:
+                - option "—" [selected]
+                - option "Shree Ji Interior Decorators"
+            - generic [ref=f64e32]:
+              - generic [ref=f64e33]: Supplier
+              - combobox "Supplier" [ref=f64e34] [cursor=pointer]:
+                - option "—" [selected]
+                - option "Divyom Sharma"
+                - option "Indo-Burma Timber Exporters"
+          - paragraph [ref=f64e35]: One party at a time. A ledger of everybody at once is a journal, and answers a different question.
+      - generic [ref=f64e38]:
+        - paragraph [ref=f64e42]: No party chosen
+        - paragraph [ref=f64e43]: Pick a customer or a supplier to see every movement of money against them.
+  - button "Open Next.js Dev Tools" [ref=f64e49] [cursor=pointer]

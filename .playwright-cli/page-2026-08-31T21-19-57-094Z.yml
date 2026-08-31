@@ -1,0 +1,258 @@
+- generic [active] [ref=f58e1]:
+  - link "Skip to content" [ref=f58e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f58e4]:
+    - generic [ref=f58e5]:
+      - link "Verity" [ref=f58e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f58e7]:
+          - generic [ref=f58e11]: verity
+          - generic [ref=f58e12]: Verity
+      - button "Menu" [ref=f58e15] [cursor=pointer]
+    - main [ref=f58e16]:
+      - generic [ref=f58e18]:
+        - heading "Catalogue" [level=1] [ref=f58e19]
+        - paragraph [ref=f58e20]: Every board this business trades, by brand. A size is fixed at creation — an 18 mm board and a 12 mm board are two products, not one that was corrected.
+      - button "New brand" [ref=f58e22] [cursor=pointer]
+      - generic [ref=f58e23]:
+        - generic [ref=f58e24]:
+          - generic [ref=f58e25]:
+            - heading "Action TESA" [level=2] [ref=f58e26]
+            - generic [ref=f58e27]:
+              - button "Withdraw brand" [ref=f58e28] [cursor=pointer]
+              - button "Add board" [ref=f58e29] [cursor=pointer]
+          - table [ref=f58e32]:
+            - caption [ref=f58e33]: Action TESA boards
+            - rowgroup [ref=f58e34]:
+              - row [ref=f58e35]:
+                - columnheader "Board" [ref=f58e36]
+                - columnheader "Type" [ref=f58e37]
+                - columnheader "Grade" [ref=f58e38]
+                - columnheader "Thickness" [ref=f58e39]
+                - columnheader "Sheet (mm)" [ref=f58e40]
+                - columnheader "HSN" [ref=f58e41]
+                - columnheader "Reorder" [ref=f58e42]
+                - columnheader "State" [ref=f58e43]
+                - columnheader [ref=f58e44]
+            - rowgroup [ref=f58e45]:
+              - row [ref=f58e46]:
+                - cell [ref=f58e47]:
+                  - link "Action TESA HDHMR Water Resistant 18mm" [ref=f58e48] [cursor=pointer]:
+                    - /url: /catalogue/2603f40b-06ab-4394-ba9c-55fdee3081ff
+                - cell "Physical" [ref=f58e49]
+                - cell "HDHMR" [ref=f58e50]
+                - cell "18.0 mm" [ref=f58e51]
+                - cell "1220 × 2440" [ref=f58e52]
+                - cell "441114" [ref=f58e53]
+                - cell "30 sheets" [ref=f58e54]
+                - cell "Trading" [ref=f58e55]
+                - cell [ref=f58e56]:
+                  - generic [ref=f58e57]:
+                    - button "Edit" [ref=f58e58] [cursor=pointer]
+                    - button "Withdraw board" [ref=f58e59] [cursor=pointer]
+        - generic [ref=f58e60]:
+          - generic [ref=f58e61]:
+            - heading "Burma & Desi Teak" [level=2] [ref=f58e62]
+            - generic [ref=f58e63]:
+              - button "Withdraw brand" [ref=f58e64] [cursor=pointer]
+              - button "Add board" [ref=f58e65] [cursor=pointer]
+          - table [ref=f58e68]:
+            - caption [ref=f58e69]: Burma & Desi Teak boards
+            - rowgroup [ref=f58e70]:
+              - row [ref=f58e71]:
+                - columnheader "Board" [ref=f58e72]
+                - columnheader "Type" [ref=f58e73]
+                - columnheader "Grade" [ref=f58e74]
+                - columnheader "Thickness" [ref=f58e75]
+                - columnheader "Sheet (mm)" [ref=f58e76]
+                - columnheader "HSN" [ref=f58e77]
+                - columnheader "Reorder" [ref=f58e78]
+                - columnheader "State" [ref=f58e79]
+                - columnheader [ref=f58e80]
+            - rowgroup [ref=f58e81]:
+              - row [ref=f58e82]:
+                - cell [ref=f58e83]:
+                  - link "Natural Burma Teak Veneer Sheet (4mm)" [ref=f58e84] [cursor=pointer]:
+                    - /url: /catalogue/9eab021b-3cbd-4f1c-928b-e4a9c0bba34b
+                - cell "Physical" [ref=f58e85]
+                - cell "Natural" [ref=f58e86]
+                - cell "4.0 mm" [ref=f58e87]
+                - cell "1220 × 2440" [ref=f58e88]
+                - cell "440800" [ref=f58e89]
+                - cell "10 sheets" [ref=f58e90]
+                - cell "Trading" [ref=f58e91]
+                - cell [ref=f58e92]:
+                  - generic [ref=f58e93]:
+                    - button "Edit" [ref=f58e94] [cursor=pointer]
+                    - button "Withdraw board" [ref=f58e95] [cursor=pointer]
+              - row [ref=f58e96]:
+                - cell [ref=f58e97]:
+                  - link "Premium Burma Teak Logs (Select Grade)" [ref=f58e98] [cursor=pointer]:
+                    - /url: /catalogue/dc60ebc0-a210-44cc-bd01-d1b17ae9363f
+                - cell "Physical" [ref=f58e99]
+                - cell "Log/Export" [ref=f58e100]
+                - cell "0.1 mm" [ref=f58e101]
+                - cell "1 × 1" [ref=f58e102]
+                - cell "440300" [ref=f58e103]
+                - cell "15 CFT" [ref=f58e104]
+                - cell "Trading" [ref=f58e105]
+                - cell [ref=f58e106]:
+                  - generic [ref=f58e107]:
+                    - button "Edit" [ref=f58e108] [cursor=pointer]
+                    - button "Withdraw board" [ref=f58e109] [cursor=pointer]
+        - generic [ref=f58e110]:
+          - generic [ref=f58e111]:
+            - heading "CenturyPly" [level=2] [ref=f58e112]
+            - generic [ref=f58e113]:
+              - button "Withdraw brand" [ref=f58e114] [cursor=pointer]
+              - button "Add board" [ref=f58e115] [cursor=pointer]
+          - table [ref=f58e118]:
+            - caption [ref=f58e119]: CenturyPly boards
+            - rowgroup [ref=f58e120]:
+              - row [ref=f58e121]:
+                - columnheader "Board" [ref=f58e122]
+                - columnheader "Type" [ref=f58e123]
+                - columnheader "Grade" [ref=f58e124]
+                - columnheader "Thickness" [ref=f58e125]
+                - columnheader "Sheet (mm)" [ref=f58e126]
+                - columnheader "HSN" [ref=f58e127]
+                - columnheader "Reorder" [ref=f58e128]
+                - columnheader "State" [ref=f58e129]
+                - columnheader [ref=f58e130]
+            - rowgroup [ref=f58e131]:
+              - row [ref=f58e132]:
+                - cell [ref=f58e133]:
+                  - link "Century Lamilite High-Gloss Sunmica (1mm)" [ref=f58e134] [cursor=pointer]:
+                    - /url: /catalogue/00b27b5b-527a-474b-915f-5a31bf13e976
+                - cell "Physical" [ref=f58e135]
+                - cell "High-Gloss" [ref=f58e136]
+                - cell "1.0 mm" [ref=f58e137]
+                - cell "1220 × 2440" [ref=f58e138]
+                - cell "392000" [ref=f58e139]
+                - cell "25 sheets" [ref=f58e140]
+                - cell "Trading" [ref=f58e141]
+                - cell [ref=f58e142]:
+                  - generic [ref=f58e143]:
+                    - button "Edit" [ref=f58e144] [cursor=pointer]
+                    - button "Withdraw board" [ref=f58e145] [cursor=pointer]
+              - row [ref=f58e146]:
+                - cell [ref=f58e147]:
+                  - link "Century MR Commercial Plywood 19mm" [ref=f58e148] [cursor=pointer]:
+                    - /url: /catalogue/20daf746-725c-4253-8280-50e47a44e769
+                - cell "Physical" [ref=f58e149]
+                - cell "MR Grade" [ref=f58e150]
+                - cell "19.0 mm" [ref=f58e151]
+                - cell "1220 × 2440" [ref=f58e152]
+                - cell "441231" [ref=f58e153]
+                - cell "50 sheets" [ref=f58e154]
+                - cell "Trading" [ref=f58e155]
+                - cell [ref=f58e156]:
+                  - generic [ref=f58e157]:
+                    - button "Edit" [ref=f58e158] [cursor=pointer]
+                    - button "Withdraw board" [ref=f58e159] [cursor=pointer]
+        - generic [ref=f58e160]:
+          - generic [ref=f58e161]:
+            - heading "Custom Sawing & Estimation" [level=2] [ref=f58e162]
+            - generic [ref=f58e163]:
+              - button "Withdraw brand" [ref=f58e164] [cursor=pointer]
+              - button "Add board" [ref=f58e165] [cursor=pointer]
+          - table [ref=f58e168]:
+            - caption [ref=f58e169]: Custom Sawing & Estimation boards
+            - rowgroup [ref=f58e170]:
+              - row [ref=f58e171]:
+                - columnheader "Board" [ref=f58e172]
+                - columnheader "Type" [ref=f58e173]
+                - columnheader "Grade" [ref=f58e174]
+                - columnheader "Thickness" [ref=f58e175]
+                - columnheader "Sheet (mm)" [ref=f58e176]
+                - columnheader "HSN" [ref=f58e177]
+                - columnheader "Reorder" [ref=f58e178]
+                - columnheader "State" [ref=f58e179]
+                - columnheader [ref=f58e180]
+            - rowgroup [ref=f58e181]:
+              - row [ref=f58e182]:
+                - cell [ref=f58e183]:
+                  - link "Custom Log Sawing & Sizing Service" [ref=f58e184] [cursor=pointer]:
+                    - /url: /catalogue/c6a29a1d-222f-4721-94ff-2a7a598e75a8
+                - cell "Physical" [ref=f58e185]
+                - cell "Service Item" [ref=f58e186]
+                - cell "0.1 mm" [ref=f58e187]
+                - cell "1 × 1" [ref=f58e188]
+                - cell "998800" [ref=f58e189]
+                - cell "—" [ref=f58e190]
+                - cell "Trading" [ref=f58e191]
+                - cell [ref=f58e192]:
+                  - generic [ref=f58e193]:
+                    - button "Edit" [ref=f58e194] [cursor=pointer]
+                    - button "Withdraw board" [ref=f58e195] [cursor=pointer]
+        - generic [ref=f58e196]:
+          - generic [ref=f58e197]:
+            - heading "Hettich Fittings" [level=2] [ref=f58e198]
+            - generic [ref=f58e199]:
+              - button "Withdraw brand" [ref=f58e200] [cursor=pointer]
+              - button "Add board" [ref=f58e201] [cursor=pointer]
+          - table [ref=f58e204]:
+            - caption [ref=f58e205]: Hettich Fittings boards
+            - rowgroup [ref=f58e206]:
+              - row [ref=f58e207]:
+                - columnheader "Board" [ref=f58e208]
+                - columnheader "Type" [ref=f58e209]
+                - columnheader "Grade" [ref=f58e210]
+                - columnheader "Thickness" [ref=f58e211]
+                - columnheader "Sheet (mm)" [ref=f58e212]
+                - columnheader "HSN" [ref=f58e213]
+                - columnheader "Reorder" [ref=f58e214]
+                - columnheader "State" [ref=f58e215]
+                - columnheader [ref=f58e216]
+            - rowgroup [ref=f58e217]:
+              - row [ref=f58e218]:
+                - cell [ref=f58e219]:
+                  - link "Hettich Soft-Close Hydraulic Hinge (110 deg)" [ref=f58e220] [cursor=pointer]:
+                    - /url: /catalogue/cffe16cd-5fe4-424c-91d7-dbf8c4217577
+                - cell "Physical" [ref=f58e221]
+                - cell "Heavy Duty" [ref=f58e222]
+                - cell "0.1 mm" [ref=f58e223]
+                - cell "1 × 1" [ref=f58e224]
+                - cell "830200" [ref=f58e225]
+                - cell "200 pairs" [ref=f58e226]
+                - cell "Trading" [ref=f58e227]
+                - cell [ref=f58e228]:
+                  - generic [ref=f58e229]:
+                    - button "Edit" [ref=f58e230] [cursor=pointer]
+                    - button "Withdraw board" [ref=f58e231] [cursor=pointer]
+        - generic [ref=f58e232]:
+          - generic [ref=f58e233]:
+            - heading "Imported Hardwoods" [level=2] [ref=f58e234]
+            - generic [ref=f58e235]:
+              - button "Withdraw brand" [ref=f58e236] [cursor=pointer]
+              - button "Add board" [ref=f58e237] [cursor=pointer]
+          - table [ref=f58e240]:
+            - caption [ref=f58e241]: Imported Hardwoods boards
+            - rowgroup [ref=f58e242]:
+              - row [ref=f58e243]:
+                - columnheader "Board" [ref=f58e244]
+                - columnheader "Type" [ref=f58e245]
+                - columnheader "Grade" [ref=f58e246]
+                - columnheader "Thickness" [ref=f58e247]
+                - columnheader "Sheet (mm)" [ref=f58e248]
+                - columnheader "HSN" [ref=f58e249]
+                - columnheader "Reorder" [ref=f58e250]
+                - columnheader "State" [ref=f58e251]
+                - columnheader [ref=f58e252]
+            - rowgroup [ref=f58e253]:
+              - row [ref=f58e254]:
+                - cell [ref=f58e255]:
+                  - link "Marandi Wood Planks (2x3 Frames)" [ref=f58e256] [cursor=pointer]:
+                    - /url: /catalogue/ffff7e10-dded-4a75-9fe4-42441261e3c1
+                - cell "Physical" [ref=f58e257]
+                - cell "Sawn Wood" [ref=f58e258]
+                - cell "50.8 mm" [ref=f58e259]
+                - cell "762 × 2133" [ref=f58e260]
+                - cell "440700" [ref=f58e261]
+                - cell "100 RFT" [ref=f58e262]
+                - cell "Trading" [ref=f58e263]
+                - cell [ref=f58e264]:
+                  - generic [ref=f58e265]:
+                    - button "Edit" [ref=f58e266] [cursor=pointer]
+                    - button "Withdraw board" [ref=f58e267] [cursor=pointer]
+  - button "Open Next.js Dev Tools" [ref=f58e273] [cursor=pointer]

@@ -370,115 +370,119 @@ export function CatalogueAdmin({ catalogue }: { catalogue: Brand[] }) {
                   No boards under this brand yet.
                 </p>
               ) : (
-                <table className="w-full border-collapse">
-                  <caption className="sr-only">
-                    {brand.brandName} boards
-                  </caption>
-                  <thead>
-                    <tr>
-                      {[
-                        "Board",
-                        "Type",
-                        "Grade",
-                        "Thickness",
-                        "Sheet (mm)",
-                        "HSN",
-                        "Reorder",
-                        "State",
-                        "",
-                      ].map((heading, index) => (
-                        <th
-                          key={heading || index}
-                          className={
-                            "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                            (index <= 1 ? "text-left" : "text-right")
-                          }
-                        >
-                          {heading}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {brand.products.map((product) => (
-                      <tr key={product.id}>
-                        <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                          {/* §10 — the product page connects everything about
-                              this board: stock by godown, both sides of its
-                              pricing, open orders, and every movement. */}
-                          <Link
-                            href={`/catalogue/${product.id}`}
-                            className="text-text no-underline hover:underline"
-                          >
-                            {product.name}
-                          </Link>
-                        </td>
-                        <td className="border-b border-line px-3 py-2 text-[13px] text-text-secondary">
-                          {product.type === "SERVICE" ? "Service" : "Physical"}
-                        </td>
-                        <td className="border-b border-line px-3 py-2 text-[13px] text-text-secondary">
-                          {product.grade}
-                        </td>
-                        {/* Tabular numerals so thickness and size read down the
-                            column — this is the scan the trade actually does. */}
-                        <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                          {thickness(product.thicknessTenthMm)}
-                        </td>
-                        <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                          {sheetSize(product.widthMm, product.heightMm)}
-                        </td>
-                        <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                          {product.hsnCode}
-                        </td>
-                        <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                          {product.reorderLevelUnits === 0
-                            ? "—"
-                            : `${product.reorderLevelUnits} ${product.unitLabel}`}
-                        </td>
-                        <td className="border-b border-line px-3 py-2 text-right text-[13px]">
-                          <span
+                <div className="-mx-3 overflow-x-auto px-3">
+                  <table className="w-full min-w-[700px] border-collapse">
+                    <caption className="sr-only">
+                      {brand.brandName} boards
+                    </caption>
+                    <thead>
+                      <tr>
+                        {[
+                          "Board",
+                          "Type",
+                          "Grade",
+                          "Thickness",
+                          "Sheet (mm)",
+                          "HSN",
+                          "Reorder",
+                          "State",
+                          "",
+                        ].map((heading, index) => (
+                          <th
+                            key={heading || index}
                             className={
-                              product.active
-                                ? "text-success"
-                                : "text-text-tertiary"
+                              "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
+                              (index <= 1 ? "text-left" : "text-right")
                             }
                           >
-                            {product.active ? "Trading" : "Withdrawn"}
-                          </span>
-                        </td>
-                        <td className="border-b border-line px-3 py-2 text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              size="sm"
-                              disabled={pending}
-                              onClick={() =>
-                                setEditing(
-                                  editing === product.id ? null : product.id,
-                                )
-                              }
-                            >
-                              {editing === product.id ? "Close" : "Edit"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              disabled={pending}
-                              onClick={() =>
-                                run("verity.plywood.set_product_active", {
-                                  productId: product.id,
-                                  active: !product.active,
-                                })
-                              }
-                            >
-                              {product.active
-                                ? "Withdraw board"
-                                : "Trade again"}
-                            </Button>
-                          </div>
-                        </td>
+                            {heading}
+                          </th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {brand.products.map((product) => (
+                        <tr key={product.id}>
+                          <td className="border-b border-line px-3 py-2 text-[14px] text-text">
+                            {/* §10 — the product page connects everything about
+                              this board: stock by godown, both sides of its
+                              pricing, open orders, and every movement. */}
+                            <Link
+                              href={`/catalogue/${product.id}`}
+                              className="text-text no-underline hover:underline"
+                            >
+                              {product.name}
+                            </Link>
+                          </td>
+                          <td className="border-b border-line px-3 py-2 text-[13px] text-text-secondary">
+                            {product.type === "SERVICE"
+                              ? "Service"
+                              : "Physical"}
+                          </td>
+                          <td className="border-b border-line px-3 py-2 text-[13px] text-text-secondary">
+                            {product.grade}
+                          </td>
+                          {/* Tabular numerals so thickness and size read down the
+                            column — this is the scan the trade actually does. */}
+                          <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
+                            {thickness(product.thicknessTenthMm)}
+                          </td>
+                          <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
+                            {sheetSize(product.widthMm, product.heightMm)}
+                          </td>
+                          <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
+                            {product.hsnCode}
+                          </td>
+                          <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
+                            {product.reorderLevelUnits === 0
+                              ? "—"
+                              : `${product.reorderLevelUnits} ${product.unitLabel}`}
+                          </td>
+                          <td className="border-b border-line px-3 py-2 text-right text-[13px]">
+                            <span
+                              className={
+                                product.active
+                                  ? "text-success"
+                                  : "text-text-tertiary"
+                              }
+                            >
+                              {product.active ? "Trading" : "Withdrawn"}
+                            </span>
+                          </td>
+                          <td className="border-b border-line px-3 py-2 text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                size="sm"
+                                disabled={pending}
+                                onClick={() =>
+                                  setEditing(
+                                    editing === product.id ? null : product.id,
+                                  )
+                                }
+                              >
+                                {editing === product.id ? "Close" : "Edit"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                disabled={pending}
+                                onClick={() =>
+                                  run("verity.plywood.set_product_active", {
+                                    productId: product.id,
+                                    active: !product.active,
+                                  })
+                                }
+                              >
+                                {product.active
+                                  ? "Withdraw board"
+                                  : "Trade again"}
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
 
               {editing &&

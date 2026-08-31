@@ -1,0 +1,86 @@
+- generic [active] [ref=f51e1]:
+  - link "Skip to content" [ref=f51e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f51e4]:
+    - generic [ref=f51e5]:
+      - link "Verity" [ref=f51e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f51e7]:
+          - generic [ref=f51e11]: verity
+          - generic [ref=f51e12]: Verity
+      - button "Menu" [ref=f51e15] [cursor=pointer]
+    - main [ref=f51e16]:
+      - generic [ref=f51e18]:
+        - heading "Tax & Compliance" [level=1] [ref=f51e19]
+        - paragraph [ref=f51e20]: September 2026. Every figure here is read from posted invoices and notes — nothing on this page is entered, and there is no field to enter it in.
+      - generic [ref=f51e21]:
+        - generic [ref=f51e22]:
+          - link "₹0 Output GST 0 sales invoice(s)" [ref=f51e23] [cursor=pointer]:
+            - /url: /tax/gstr-1
+            - generic [ref=f51e24]: ₹0
+            - generic [ref=f51e25]: Output GST
+            - generic [ref=f51e26]: 0 sales invoice(s)
+          - generic [ref=f51e27]:
+            - generic [ref=f51e28]: ₹0
+            - generic [ref=f51e29]: Input credit
+            - generic [ref=f51e30]: 0 purchase invoice(s)
+          - link "₹0 Net estimate Output less credit" [ref=f51e31] [cursor=pointer]:
+            - /url: /tax/gstr-3b
+            - generic [ref=f51e32]: ₹0
+            - generic [ref=f51e33]: Net estimate
+            - generic [ref=f51e34]: Output less credit
+          - link "0 Exceptions Nothing to fix" [ref=f51e35] [cursor=pointer]:
+            - /url: /tax/exceptions
+            - generic [ref=f51e36]: "0"
+            - generic [ref=f51e37]: Exceptions
+            - generic [ref=f51e38]: Nothing to fix
+        - generic [ref=f51e39]:
+          - generic [ref=f51e40]:
+            - heading "Returns" [level=2] [ref=f51e42]
+            - list [ref=f51e44]:
+              - listitem [ref=f51e45]:
+                - generic [ref=f51e46]:
+                  - link "GSTR-1" [ref=f51e47] [cursor=pointer]:
+                    - /url: /tax/gstr-1
+                  - paragraph [ref=f51e48]: Outward supplies, invoice by invoice
+                - generic [ref=f51e49]: 0 invoice(s)
+              - listitem [ref=f51e50]:
+                - generic [ref=f51e51]:
+                  - link "Input credit reconciliation" [ref=f51e52] [cursor=pointer]:
+                    - /url: /tax/itc
+                  - paragraph [ref=f51e53]: Your purchase register against what suppliers filed
+              - listitem [ref=f51e54]:
+                - generic [ref=f51e55]:
+                  - link "Purchase review" [ref=f51e56] [cursor=pointer]:
+                    - /url: /tax/purchases
+                  - paragraph [ref=f51e57]: Order, receipt and supplier invoice, compared
+                - generic [ref=f51e58]: 0 invoice(s)
+              - listitem [ref=f51e59]:
+                - generic [ref=f51e60]:
+                  - link "GSTR-3B" [ref=f51e61] [cursor=pointer]:
+                    - /url: /tax/gstr-3b
+                  - paragraph [ref=f51e62]: The summary you pay from
+                - generic [ref=f51e63]: Ready
+          - generic [ref=f51e64]:
+            - heading "Period close" [level=2] [ref=f51e66]
+            - generic [ref=f51e67]: You do not have access to the close checklist.
+        - generic [ref=f51e69]:
+          - heading "Related" [level=2] [ref=f51e71]
+          - list [ref=f51e73]:
+            - listitem [ref=f51e74]:
+              - link "Tax settings Registration and rates" [ref=f51e75] [cursor=pointer]:
+                - /url: /settings/tax
+                - generic [ref=f51e76]: Tax settings
+                - generic [ref=f51e77]: Registration and rates
+            - listitem [ref=f51e78]:
+              - link "Finance Receivables and payables" [ref=f51e79] [cursor=pointer]:
+                - /url: /finance
+                - generic [ref=f51e80]: Finance
+                - generic [ref=f51e81]: Receivables and payables
+            - listitem [ref=f51e82]:
+              - link "Ledgers" [ref=f51e83] [cursor=pointer]:
+                - /url: /ledgers
+            - listitem [ref=f51e85]:
+              - link "Reports" [ref=f51e86] [cursor=pointer]:
+                - /url: /reports
+  - button "Open Next.js Dev Tools" [ref=f51e93] [cursor=pointer]

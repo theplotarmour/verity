@@ -1,0 +1,51 @@
+- generic [active] [ref=f43e1]:
+  - link "Skip to content" [ref=f43e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f43e4]:
+    - generic [ref=f43e5]:
+      - link "Verity" [ref=f43e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f43e7]:
+          - generic [ref=f43e11]: verity
+          - generic [ref=f43e12]: Verity
+      - button "Menu" [ref=f43e15] [cursor=pointer]
+    - main [ref=f43e16]:
+      - generic [ref=f43e18]:
+        - heading "Customers" [level=1] [ref=f43e19]
+        - paragraph [ref=f43e20]: Everyone the business sells to. Exposure is what they owe plus what has been approved and not yet billed — the same figure the credit check uses, so the list and the block never disagree.
+      - generic [ref=f43e21]:
+        - generic [ref=f43e22]:
+          - generic [ref=f43e23]:
+            - generic [ref=f43e24]: "1"
+            - generic [ref=f43e25]: Customers
+          - generic [ref=f43e26]:
+            - generic [ref=f43e27]: ₹1.8L
+            - generic [ref=f43e28]: Exposure
+            - generic [ref=f43e29]: Owed plus committed
+          - generic [ref=f43e30]:
+            - generic [ref=f43e31]: ₹8.2L
+            - generic [ref=f43e32]: Headroom
+            - generic [ref=f43e33]: Credit still available
+          - generic [ref=f43e34]:
+            - generic [ref=f43e35]: "0"
+            - generic [ref=f43e36]: Over limit
+            - generic [ref=f43e37]: Nobody
+        - generic [ref=f43e38]:
+          - generic [ref=f43e39]:
+            - heading "All customers" [level=2] [ref=f43e40]
+            - textbox "Filter customers" [ref=f43e42]:
+              - /placeholder: Name or GSTIN
+          - list [ref=f43e44]:
+            - listitem [ref=f43e45]:
+              - generic [ref=f43e46]:
+                - link "Shree Ji Interior Decorators" [ref=f43e47] [cursor=pointer]:
+                  - /url: /customers/2e4a036a-5e70-4e03-8f0a-b8d3173464b6
+                - paragraph [ref=f43e48]: 07ABCFG1234H1Z5 · +919811223344
+              - generic [ref=f43e49]:
+                - generic [ref=f43e50]:
+                  - paragraph [ref=f43e51]: ₹1,80,780
+                  - paragraph [ref=f43e52]: of ₹10,00,000
+                - generic [ref=f43e53]:
+                  - paragraph [ref=f43e54]: ₹8,19,220
+                  - paragraph [ref=f43e55]: Available
+  - button "Open Next.js Dev Tools" [ref=f43e61] [cursor=pointer]

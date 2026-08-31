@@ -1,0 +1,68 @@
+- generic [active] [ref=f39e1]:
+  - link "Skip to content" [ref=f39e2] [cursor=pointer]:
+    - /url: "#main"
+  - generic [ref=f39e4]:
+    - generic [ref=f39e5]:
+      - link "Verity" [ref=f39e6] [cursor=pointer]:
+        - /url: /
+        - generic [ref=f39e7]:
+          - generic [ref=f39e11]: verity
+          - generic [ref=f39e12]: Verity
+      - button "Menu" [ref=f39e15] [cursor=pointer]
+    - main [ref=f39e16]:
+      - generic [ref=f39e18]:
+        - heading "Finance" [level=1] [ref=f39e19]
+        - paragraph [ref=f39e20]: Tax invoices, payments received, and what each customer still owes. Invoice numbers are sequential and gapless within a financial year, which is a legal requirement rather than a convention.
+      - generic [ref=f39e22]:
+        - generic [ref=f39e23]:
+          - generic [ref=f39e24]: ₹0
+          - generic [ref=f39e25]: Owed to us
+          - generic [ref=f39e26]: Receivables
+        - generic [ref=f39e27]:
+          - generic [ref=f39e28]: ₹0
+          - generic [ref=f39e29]: Owed by us
+          - generic [ref=f39e30]: Payables
+        - generic [ref=f39e31]:
+          - generic [ref=f39e32]: —
+          - generic [ref=f39e33]: Oldest unpaid
+          - generic [ref=f39e34]: Nothing outstanding
+      - generic [ref=f39e35]:
+        - link [ref=f39e36] [cursor=pointer]:
+          - /url: /ledgers
+          - button "Ledgers" [ref=f39e37]
+        - button "Record supplier bill" [ref=f39e38] [cursor=pointer]
+        - button "Raise invoice" [ref=f39e39] [cursor=pointer]
+      - generic [ref=f39e40]:
+        - heading "Invoices" [level=2] [ref=f39e42]
+        - table [ref=f39e44]:
+          - caption [ref=f39e45]: Invoices
+          - rowgroup [ref=f39e46]:
+            - row [ref=f39e47]:
+              - columnheader "Number" [ref=f39e48]
+              - columnheader "Party" [ref=f39e49]
+              - columnheader "Issued" [ref=f39e50]
+              - columnheader "Total" [ref=f39e51]
+              - columnheader "Outstanding" [ref=f39e52]
+              - columnheader [ref=f39e53]
+          - rowgroup [ref=f39e54]:
+            - row [ref=f39e55]:
+              - cell [ref=f39e56]:
+                - link "PURCHASE/2026-27/0002" [ref=f39e57] [cursor=pointer]:
+                  - /url: /finance/e05211a8-8988-416c-ba4c-ea5216e1cbd8
+              - cell "Divyom Sharmapurchase" [ref=f39e58]
+              - cell "30 Aug 26" [ref=f39e59]
+              - cell "₹70,000" [ref=f39e60]
+              - cell "Paid" [ref=f39e61]
+              - cell [ref=f39e62]:
+                - button "Credit note" [ref=f39e63] [cursor=pointer]
+            - row [ref=f39e64]:
+              - cell [ref=f39e65]:
+                - link "PURCHASE/2026-27/0001" [ref=f39e66] [cursor=pointer]:
+                  - /url: /finance/7b2e6eae-12b5-46e8-acb7-848899ef9e1d
+              - cell "Indo-Burma Timber Exporterspurchase" [ref=f39e67]
+              - cell "29 Aug 26" [ref=f39e68]
+              - cell "₹30,000" [ref=f39e69]
+              - cell "Paid" [ref=f39e70]
+              - cell [ref=f39e71]:
+                - button "Credit note" [ref=f39e72] [cursor=pointer]
+  - button "Open Next.js Dev Tools" [ref=f39e78] [cursor=pointer]
