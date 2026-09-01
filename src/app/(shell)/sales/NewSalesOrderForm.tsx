@@ -1,7 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Button, Field, FormRow, Input } from "@/components/ui/primitives";
+import {
+  Button,
+  Checkbox,
+  Field,
+  FormRow,
+  Input,
+} from "@/components/ui/primitives";
 import { Combobox } from "@/components/ui/Combobox";
 import { Modal, ModalCancel } from "@/components/ui/Modal";
 import { rupees, sheets } from "@/components/ui/business/format";
@@ -37,6 +43,8 @@ export type SellableRow = {
   locationName: string;
   availableUnits: number;
   agreedPricePaise: number | null;
+  /** Combined GST rate in basis points, or null when no rule covers the HSN. */
+  taxRateBp: number | null;
 };
 
 type Line = { productId: string; qty: string; price: string; discount: string };
@@ -75,6 +83,12 @@ export function NewSalesOrderForm({
   const [locationId, setLocationId] = useState("");
   const [reference, setReference] = useState("");
   const [lines, setLines] = useState<Line[]>([{ ...EMPTY_LINE }]);
+  // Requested: an option to remove GST on a specific order. The reason is
+  // required, because a zero-tax invoice with no stated ground cannot be told
+  // apart later from an under-declared one — the command and the database
+  // enforce that too, not just this form.
+  const [taxExempt, setTaxExempt] = useState(false);
+  const [exemptReason, setExemptReason] = useState("");
 
   /** Availability and agreed price for the chosen godown, by product. */
   const inGodown = useMemo(() => {
@@ -124,16 +138,41 @@ export function NewSalesOrderForm({
     );
   }
 
-  const total = lines.reduce((sum, line) => {
-    const qty = Number.parseFloat(line.qty);
-    return sum + (Number.isFinite(qty) ? qty * netPrice(line) : 0);
-  }, 0);
+  // Requested: show the order total INCLUDING tax while it is being written.
+  //
+  // Per line, because a mixed-rate order is possible in principle and averaging
+  // would quietly misstate it. `unknownRate` is tracked separately so a board
+  // with no tax rule produces "tax unknown" rather than a total that is short
+  // by the tax nobody noticed was missing.
+  const totals = useMemo(() => {
+    let net = 0;
+    let tax = 0;
+    let unknownRate = false;
+    for (const line of lines) {
+      const qty = Number.parseFloat(line.qty);
+      if (!Number.isFinite(qty)) continue;
+      const lineNet = qty * netPrice(line);
+      net += lineNet;
+      if (taxExempt) continue;
+      const rate = inGodown.get(line.productId)?.taxRateBp ?? null;
+      if (line.productId !== "" && rate === null) {
+        unknownRate = true;
+        continue;
+      }
+      tax += (lineNet * (rate ?? 0)) / 10_000;
+    }
+    return { net, tax, gross: net + tax, unknownRate };
+  }, [lines, inGodown, taxExempt]);
+  const total = totals.net;
 
   const complete = lines.filter(
     (line) => line.productId !== "" && Number.parseInt(line.qty, 10) > 0,
   );
   const canSubmit =
-    customerId !== "" && locationId !== "" && complete.length > 0;
+    customerId !== "" &&
+    locationId !== "" &&
+    complete.length > 0 &&
+    (!taxExempt || exemptReason.trim().length >= 3);
 
   const boardOptions = boards.map((board) => ({
     value: board.id,
@@ -154,8 +193,22 @@ export function NewSalesOrderForm({
       footer={
         <>
           {total > 0 && (
-            <span className="tabular mr-auto text-[13px] text-text-secondary">
-              Order total {rupees(Math.round(total * 100))}
+            <span className="mr-auto text-[13px] text-text-secondary">
+              <span className="tabular text-[15px] text-text">
+                {rupees(Math.round(totals.gross * 100))}
+              </span>{" "}
+              {taxExempt ? (
+                "total · no GST on this order"
+              ) : totals.unknownRate ? (
+                <span className="text-warning">
+                  plus tax — no GST rule for one of these boards
+                </span>
+              ) : (
+                <>
+                  total · {rupees(Math.round(totals.net * 100))} goods +{" "}
+                  {rupees(Math.round(totals.tax * 100))} GST
+                </>
+              )}
             </span>
           )}
           <ModalCancel onClose={onCancel} disabled={pending} />
@@ -186,6 +239,9 @@ export function NewSalesOrderForm({
                       : {}),
                   };
                 }),
+                ...(taxExempt
+                  ? { taxExempt: true, taxExemptReason: exemptReason.trim() }
+                  : {}),
               })
             }
           >
@@ -377,6 +433,30 @@ export function NewSalesOrderForm({
               Add another board
             </Button>
           </div>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-line pt-4">
+          <Checkbox
+            checked={taxExempt}
+            onChange={(event) => setTaxExempt(event.target.checked)}
+            label="No GST on this order"
+          />
+          {taxExempt && (
+            <Field
+              label="Why is this supply exempt?"
+              htmlFor="sale-exempt-reason"
+              required
+              hint="Printed on the invoice and listed on the tax page. An exempt sale is more visible, not less."
+            >
+              <Input
+                id="sale-exempt-reason"
+                value={exemptReason}
+                onChange={(event) => setExemptReason(event.target.value)}
+                placeholder="Exempt supply under Notification 2/2017"
+                minLength={3}
+              />
+            </Field>
+          )}
         </div>
       </div>
     </Modal>

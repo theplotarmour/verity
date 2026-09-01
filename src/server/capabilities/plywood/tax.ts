@@ -308,13 +308,24 @@ export const taxSummary: QueryDefinition<
         });
       }
       if (taxOf(invoice) === 0) {
-        // Zero tax is legitimate for an exempt supply and is a defect
-        // everywhere else. It is surfaced rather than assumed either way.
-        exceptions.push({
-          kind: "zero_tax",
-          detail: "No tax was charged; confirm the supply is exempt",
-          documentNumber: invoice.invoiceNumber,
-        });
+        // Zero tax is legitimate for an exempt supply and a defect everywhere
+        // else, so the two are named differently rather than both reported as
+        // "check this". An exemption still appears — deciding not to charge tax
+        // is exactly the kind of decision a return should be able to point at —
+        // but it appears as a recorded reason, not as a question.
+        exceptions.push(
+          invoice.taxExemptReason
+            ? {
+                kind: "tax_exempt",
+                detail: `No GST, recorded reason: ${invoice.taxExemptReason}`,
+                documentNumber: invoice.invoiceNumber,
+              }
+            : {
+                kind: "zero_tax",
+                detail: "No tax was charged and no exemption was recorded",
+                documentNumber: invoice.invoiceNumber,
+              },
+        );
       }
       for (const line of invoice.lines) {
         if (!line.hsnCodeSnapshot) {

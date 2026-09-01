@@ -2452,6 +2452,15 @@ model PlywoodPurchaseOrderLine {
 model PlywoodSalesOrder {
   id              String   @id @default(uuid()) @db.Uuid
   tenantId        String   @map("tenant_id") @db.Uuid
+  /// This supply carries no GST, and why.
+  ///
+  /// Not a discount and not a switch to make a total look better: an exempt or
+  /// nil-rated supply is a real category, and the REASON is required because a
+  /// zero-tax invoice with no stated ground is indistinguishable from an
+  /// under-declared one. It is snapshotted onto the invoice and listed on the
+  /// tax exceptions page, so exempting a sale makes it more visible, not less.
+  taxExempt       Boolean  @default(false) @map("tax_exempt")
+  taxExemptReason String?  @map("tax_exempt_reason")
   customerId      String   @map("customer_id") @db.Uuid
   /// Which godown fulfils it. Reservations are held there.
   locationId      String   @map("location_id") @db.Uuid
@@ -2860,6 +2869,12 @@ model PlywoodInvoice {
   sgstPaise    Int @default(0) @map("sgst_paise")
   igstPaise    Int @default(0) @map("igst_paise")
   totalPaise   Int @map("total_paise")
+
+  /// Why this document carries no tax, when it carries none. Snapshotted from
+  /// the order: the ground for an exemption is part of the document, and a
+  /// reader asked about it a year later cannot go and look at an order that may
+  /// since have been amended.
+  taxExemptReason String? @map("tax_exempt_reason")
 
   issuedAt     DateTime @default(now()) @map("issued_at")
   createdAt    DateTime @default(now()) @map("created_at")

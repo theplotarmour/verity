@@ -1,15 +1,23 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Button,
   EmptyState,
+  ErrorState,
   Field,
+  FormRow,
+  Input,
   Panel,
   Stat,
   StatRow,
 } from "@/components/ui/primitives";
 import { Combobox } from "@/components/ui/Combobox";
+import { Modal, ModalCancel } from "@/components/ui/Modal";
+import { runCommand } from "@/server/actions/platform";
+import type { ActionFailure } from "@/server/platform/action-error";
 
 type Entry = {
   id: string;
@@ -314,6 +322,15 @@ export function LedgerView({
  * have to send" are different jobs on different days, and interleaving them
  * makes each harder to work through.
  */
+type Settling = {
+  partyId: string;
+  partyName: string;
+  side: "customer" | "supplier";
+  /** `in` when they owe us, `out` when we owe them. */
+  direction: "in" | "out";
+  outstandingPaise: number;
+};
+
 function OwedOverview({ balances }: { balances: Balance[] }) {
   // A firm we both buy from and sell to appears twice, once on each side. The
   // two rows are shown as one line with a note, because "they need to send us
@@ -338,6 +355,28 @@ function OwedOverview({ balances }: { balances: Balance[] }) {
 
   const owedToUs = lines.filter((row) => net(row) > 0);
   const weOwe = lines.filter((row) => net(row) <= 0);
+
+  const router = useRouter();
+  const [settling, setSettling] = useState<Settling | null>(null);
+  const [failure, setFailure] = useState<ActionFailure | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function record(input: unknown) {
+    setFailure(null);
+    startTransition(async () => {
+      const result = await runCommand(
+        "verity.plywood.record_party_payment",
+        input,
+        "/ledgers",
+      );
+      if (result.ok) {
+        setSettling(null);
+        router.refresh();
+      } else {
+        setFailure(result);
+      }
+    });
+  }
 
   const totalIn = owedToUs.reduce((sum, row) => sum + net(row), 0);
   const totalOut = weOwe.reduce((sum, row) => sum + Math.abs(net(row)), 0);
@@ -371,14 +410,190 @@ function OwedOverview({ balances }: { balances: Balance[] }) {
         empty="Nobody owes the business anything."
         rows={owedToUs}
         lead={(row) => `${row.partyName} needs to send us`}
+        actionLabel="Record money received"
+        pending={pending}
+        onSettle={(row) =>
+          setSettling({
+            partyId: row.partyId,
+            partyName: row.partyName,
+            side: row.side,
+            direction: "in",
+            outstandingPaise: Math.abs(net(row)),
+          })
+        }
       />
       <OwedTable
         title="We need to send them"
         empty="The business owes nobody anything."
         rows={weOwe}
         lead={(row) => `We need to send ${row.partyName}`}
+        actionLabel="Record payment sent"
+        pending={pending}
+        onSettle={(row) =>
+          setSettling({
+            partyId: row.partyId,
+            partyName: row.partyName,
+            side: row.side,
+            direction: "out",
+            outstandingPaise: Math.abs(net(row)),
+          })
+        }
+      />
+
+      <SettleModal
+        settling={settling}
+        pending={pending}
+        onClose={() => setSettling(null)}
+        onSubmit={record}
       />
     </div>
+  );
+}
+
+/**
+ * Recording a payment against one party, from the row that says what they owe.
+ *
+ * Requested: an option in front of each row, both directions, for the full
+ * amount or part of it. The party and the direction come from the row, so the
+ * only decision left is how much — which is the only thing that was ever
+ * genuinely in question.
+ *
+ * The amount starts at the full balance because settling in full is the common
+ * case, and "Part payment" clears it rather than making someone select and
+ * retype a five-digit figure to change one digit of it.
+ *
+ * This is not the automatic recording that was deliberately confined to the
+ * Transactions page. Nothing here records itself: a person is looking at a
+ * balance and saying what moved. Transactions remains the full cash book and
+ * the place to record a payment that settles nothing.
+ */
+function SettleModal({
+  settling,
+  pending,
+  onClose,
+  onSubmit,
+}: {
+  settling: Settling | null;
+  pending: boolean;
+  onClose: () => void;
+  onSubmit: (input: unknown) => void;
+}) {
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState("bank");
+  const [reference, setReference] = useState("");
+  const [openFor, setOpenFor] = useState<string | null>(null);
+
+  // Seeded from the row each time the modal opens, so it always starts at that
+  // party's own balance rather than the last one's.
+  if (settling && openFor !== settling.partyId) {
+    setOpenFor(settling.partyId);
+    setAmount(String(settling.outstandingPaise / 100));
+  }
+
+  const parsed = Number.parseFloat(amount);
+  const valid = Number.isFinite(parsed) && parsed > 0;
+  const full = settling
+    ? Math.round(parsed * 100) === settling.outstandingPaise
+    : false;
+
+  return (
+    <Modal
+      open={settling !== null}
+      onClose={onClose}
+      title={
+        settling?.direction === "in"
+          ? `Money received from ${settling?.partyName}`
+          : `Payment sent to ${settling?.partyName ?? ""}`
+      }
+      description={
+        settling?.direction === "in"
+          ? "It clears their oldest open invoices first. Anything more than they owe stays on their account as an advance."
+          : "It clears the oldest bills we owe them first."
+      }
+      footer={
+        <>
+          <span className="mr-auto text-[12px] text-text-tertiary">
+            {settling && valid && !full
+              ? Math.round(parsed * 100) > settling.outstandingPaise
+                ? `${rupees(Math.round(parsed * 100) - settling.outstandingPaise)} more than owed — the rest stays on account`
+                : `Part payment — ${rupees(settling.outstandingPaise - Math.round(parsed * 100))} would remain`
+              : "Settles it in full"}
+          </span>
+          <ModalCancel onClose={onClose} disabled={pending} />
+          <Button
+            variant="primary"
+            disabled={pending || !valid}
+            onClick={() =>
+              onSubmit({
+                party:
+                  settling!.side === "customer"
+                    ? { customerId: settling!.partyId }
+                    : { supplierId: settling!.partyId },
+                direction: settling!.direction,
+                amountPaise: Math.round(parsed * 100),
+                method,
+                ...(reference.trim() ? { reference: reference.trim() } : {}),
+              })
+            }
+          >
+            {pending ? "Recording…" : "Record"}
+          </Button>
+        </>
+      }
+    >
+      <FormRow columns="minmax(0,1fr) 160px minmax(0,1fr)">
+        <Field
+          label="Amount (₹)"
+          htmlFor="settle-amount"
+          required
+          hint={
+            // Direction-aware. "They owe ..." on the side where WE owe them is
+            // the sentence pointing the wrong way, on the one screen whose
+            // whole job is saying which way the money goes.
+            settling
+              ? settling.direction === "in"
+                ? `They owe ${rupees(settling.outstandingPaise)}`
+                : `We owe them ${rupees(settling.outstandingPaise)}`
+              : undefined
+          }
+        >
+          <Input
+            id="settle-amount"
+            type="number"
+            min="0"
+            step="0.01"
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
+            autoFocus
+          />
+        </Field>
+        <Field label="How" htmlFor="settle-method" required>
+          <Combobox
+            id="settle-method"
+            value={method}
+            onChange={setMethod}
+            required
+            options={[
+              { value: "cash", label: "Cash" },
+              { value: "bank", label: "Bank transfer" },
+              { value: "upi", label: "UPI" },
+              { value: "cheque", label: "Cheque" },
+            ]}
+          />
+        </Field>
+        <Field
+          label="Reference"
+          htmlFor="settle-reference"
+          hint="UTR, UPI id or cheque number"
+        >
+          <Input
+            id="settle-reference"
+            value={reference}
+            onChange={(event) => setReference(event.target.value)}
+          />
+        </Field>
+      </FormRow>
+    </Modal>
   );
 }
 
@@ -387,11 +602,17 @@ function OwedTable({
   empty,
   rows,
   lead,
+  actionLabel,
+  pending,
+  onSettle,
 }: {
   title: string;
   empty: string;
   rows: Balance[];
   lead: (row: Balance) => string;
+  actionLabel: string;
+  pending: boolean;
+  onSettle: (row: Balance) => void;
 }) {
   return (
     <Panel title={title} flush={rows.length === 0}>
@@ -442,6 +663,15 @@ function OwedTable({
                       </td>
                       <td className="tabular whitespace-nowrap border-b border-line px-3 py-2.5 text-right text-[15px] text-text">
                         {rupees(amount)}
+                      </td>
+                      <td className="whitespace-nowrap border-b border-line px-3 py-2.5 text-right">
+                        <Button
+                          size="sm"
+                          disabled={pending}
+                          onClick={() => onSettle(row)}
+                        >
+                          {actionLabel}
+                        </Button>
                       </td>
                     </tr>
                   );

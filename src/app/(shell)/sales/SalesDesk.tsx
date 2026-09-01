@@ -145,12 +145,16 @@ export function SalesDesk({
     change();
   }
 
-  function run(key: string, input: unknown, after?: () => void) {
+  function run(
+    key: string,
+    input: unknown,
+    after?: (data: unknown) => void,
+  ) {
     setFailure(null);
     startTransition(async () => {
       const result = await runCommand(key, input, "/sales");
       if (result.ok) {
-        after?.();
+        after?.(result.data);
         router.refresh();
       } else {
         setFailure(result);
@@ -518,9 +522,31 @@ export function SalesDesk({
                               variant="primary"
                               disabled={pending}
                               onClick={() =>
-                                run("verity.plywood.dispatch_order", {
-                                  orderId: order.id,
-                                })
+                                run(
+                                  "verity.plywood.dispatch_order",
+                                  { orderId: order.id },
+                                  (data) => {
+                                    // Requested: go straight to the invoice
+                                    // this raised. The point of handing goods
+                                    // over is the document that comes out of
+                                    // it, and making someone find it again on
+                                    // another screen is a step with no purpose.
+                                    //
+                                    // Only when one was actually raised: a
+                                    // refused invoice — a customer with no
+                                    // state code, a closed period — leaves the
+                                    // desk where it is, with the refusal shown,
+                                    // rather than navigating to nothing.
+                                    const invoiceId = (
+                                      data as {
+                                        invoicing?: { id?: string } | null;
+                                      } | null
+                                    )?.invoicing?.id;
+                                    if (invoiceId) {
+                                      router.push(`/finance/${invoiceId}`);
+                                    }
+                                  },
+                                )
                               }
                             >
                               Hand over &amp; invoice

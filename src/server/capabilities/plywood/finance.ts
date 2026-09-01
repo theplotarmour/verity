@@ -397,13 +397,21 @@ export async function issueSalesInvoice(
       (sum, line) => sum + line.qtyShipped * line.unitPricePaise,
       0,
     );
+    // AN EXEMPT SUPPLY CARRIES NO TAX, and says why on its face.
+    //
+    // The rates are zeroed here rather than the resolution above being skipped,
+    // so the reason this invoice has no tax is a recorded decision on the order
+    // and not an accident of a missing rule. `interState` is still resolved
+    // correctly, because place of supply matters to the return even when the
+    // rate is nil.
+    const exempt = order.taxExempt;
     const tax = computeInvoiceTax({
       taxablePaise,
       supplyStateCode,
       placeOfSupplyStateCode,
-      cgstRateBp: cgstRateBp ?? 0,
-      sgstRateBp: sgstRateBp ?? 0,
-      igstRateBp: igstRateBp ?? 0,
+      cgstRateBp: exempt ? 0 : (cgstRateBp ?? 0),
+      sgstRateBp: exempt ? 0 : (sgstRateBp ?? 0),
+      igstRateBp: exempt ? 0 : (igstRateBp ?? 0),
     });
 
     const financialYear = financialYearOf(issuedAt);
@@ -430,14 +438,17 @@ export async function issueSalesInvoice(
         // invoice it has already given to a customer and reported.
         sellerLegalNameSnapshot: seller.legalName,
         sellerGstinSnapshot: seller.gstin,
-        cgstRateBp: tax.interState ? 0 : (cgstRateBp ?? 0),
-        sgstRateBp: tax.interState ? 0 : (sgstRateBp ?? 0),
-        igstRateBp: tax.interState ? (igstRateBp ?? 0) : 0,
+        cgstRateBp: exempt || tax.interState ? 0 : (cgstRateBp ?? 0),
+        sgstRateBp: exempt || tax.interState ? 0 : (sgstRateBp ?? 0),
+        igstRateBp: !exempt && tax.interState ? (igstRateBp ?? 0) : 0,
         taxablePaise,
         cgstPaise: tax.cgstPaise,
         sgstPaise: tax.sgstPaise,
         igstPaise: tax.igstPaise,
         totalPaise: tax.totalPaise,
+        // Snapshotted with the document: a reader asked about this invoice in a
+        // year cannot go and look at an order that may since have been amended.
+        taxExemptReason: exempt ? order.taxExemptReason : null,
         issuedAt,
       },
     });

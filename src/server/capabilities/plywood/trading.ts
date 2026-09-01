@@ -1167,6 +1167,9 @@ export const createSalesOrder: CommandDefinition<
       unitPricePaise?: number;
       discountBps?: number;
     }>;
+    /** No GST on this supply, with the ground for it. */
+    taxExempt?: boolean;
+    taxExemptReason?: string;
   },
   { id: string; totalPricePaise: number; state: string }
 > = {
@@ -1188,8 +1191,18 @@ export const createSalesOrder: CommandDefinition<
         }),
       )
       .min(1),
+    taxExempt: z.boolean().optional(),
+    // Three characters is not a justification, but it stops an empty box being
+    // submitted out of habit; the rest is a judgement no schema can make.
+    taxExemptReason: z.string().min(3).max(200).optional(),
   }),
   preconditions: async (ctx, input) => {
+    if (input.taxExempt && !input.taxExemptReason?.trim()) {
+      throw new ValidationError(
+        "E_VALIDATION: an order with no GST needs a reason — a zero-tax invoice " +
+          "with no stated ground cannot be told apart from an under-declared one",
+      );
+    }
     const customer = await ctx.tx.plywoodCustomer.findUnique({
       where: { id: input.customerId },
     });
@@ -1295,6 +1308,10 @@ export const createSalesOrder: CommandDefinition<
           input.reference ??
           (await orderNumber(ctx.tx, ctx.actor.tenantId, "SO", new Date())),
         totalPricePaise,
+        taxExempt: input.taxExempt ?? false,
+        taxExemptReason: input.taxExempt
+          ? (input.taxExemptReason?.trim() ?? null)
+          : null,
       },
     });
 

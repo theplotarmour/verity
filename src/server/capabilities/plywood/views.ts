@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { reachableGodownIds } from "./scope";
+import { resolveTaxRate } from "./tax";
 import { type QueryDefinition } from "@/server/platform/query";
 import {
   ENTITY_PRODUCT,
@@ -799,6 +800,18 @@ export const sellableStock: QueryDefinition<
     availableUnits: number;
     /// The customer's agreed price, when one was asked for and exists.
     agreedPricePaise: number | null;
+    /**
+     * The GST rate in force for this board's HSN today, in basis points —
+     * 1800 for 18%.
+     *
+     * The COMBINED rate, deliberately, not a CGST/SGST/IGST split. The form
+     * needs it to show an order total including tax before the order is placed,
+     * and 18% is 18% whether it is collected as 9+9 within the state or as 18
+     * across a border, so the split would be three numbers the form could get
+     * wrong for no gain. Null when no rule covers the HSN — the form then says
+     * the tax is unknown rather than showing a total that is short.
+     */
+    taxRateBp: number | null;
   }>
 > = {
   key: "verity.plywood.sellable_stock",
@@ -834,6 +847,32 @@ export const sellableStock: QueryDefinition<
         : Promise.resolve([]),
     ]);
 
+    // The rate in force today for every HSN on the shelf, resolved once rather
+    // than per row: a catalogue of four hundred boards shares a handful of HSN
+    // codes between them.
+    const registration = await ctx.tx.plywoodGstRegistration.findFirst({
+      where: { active: true },
+    });
+    const rateByHsn = new Map<string, number>();
+    if (registration) {
+      const now = new Date();
+      for (const hsn of new Set(balances.map((b) => b.product.hsnCode))) {
+        if (!hsn) continue;
+        try {
+          const rate = await resolveTaxRate(ctx.tx, {
+            registrationId: registration.id,
+            hsnCode: hsn,
+            on: now,
+          });
+          rateByHsn.set(hsn, rate.cgstRateBp + rate.sgstRateBp);
+        } catch {
+          // No rule for this HSN. Left absent so the form can say the tax is
+          // unknown; guessing a rate here would show a total that is wrong in
+          // the direction nobody checks.
+        }
+      }
+    }
+
     const reservedBy = new Map<string, number>();
     for (const hold of reservations) {
       const key = `${hold.productId}:${hold.locationId}`;
@@ -857,6 +896,7 @@ export const sellableStock: QueryDefinition<
           reservedUnits: reserved,
           availableUnits: balance.qtyUnits - reserved,
           agreedPricePaise: priceBy.get(balance.productId) ?? null,
+          taxRateBp: rateByHsn.get(balance.product.hsnCode) ?? null,
         };
       })
       .sort(

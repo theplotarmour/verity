@@ -49,12 +49,16 @@ export function SalesOrderView({
   const state = present(SALES_STATE, order.state);
   const title = order.reference ?? `Sales order ${order.id.slice(0, 8)}`;
 
-  function run(key: string, input: unknown, after?: () => void) {
+  function run(
+    key: string,
+    input: unknown,
+    after?: (data: unknown) => void,
+  ) {
     setFailure(null);
     startTransition(async () => {
       const result = await runCommand(key, input, `/sales/${order.id}`);
       if (result.ok) {
-        after?.();
+        after?.(result.data);
         router.refresh();
       } else {
         setFailure(result);
@@ -264,9 +268,17 @@ export function SalesOrderView({
                         ...(rackId ? { rackId } : {}),
                         ...(collectedBy.trim() ? { collectedBy: collectedBy.trim() } : {}),
                       },
-                      () => {
+                      (data) => {
                         setIssuing(false);
                         setCollectedBy("");
+                        // Straight to the invoice this raised, when it raised
+                        // one. A refused invoice leaves the page where it is,
+                        // with the reason on screen, rather than navigating to
+                        // a document that does not exist.
+                        const invoiceId = (
+                          data as { invoicing?: { id?: string } | null } | null
+                        )?.invoicing?.id;
+                        if (invoiceId) router.push(`/finance/${invoiceId}`);
                       },
                     )
                   }
