@@ -3,10 +3,17 @@
 | | |
 |---|---|
 | **Client profile** | One salon/spa outlet — hair, beauty and wellness services with retail shelf, prepaid packages and memberships. |
-| **Document status** | **DEMONSTRATED** — a hypothetical capability modelled on the foundation, on paper. Nothing in this document is BUILT. Per the reporting vocabulary, no part of it may be reported as implemented functionality until it exists in `src/server/capabilities/` behind passing tests. |
+| **Document status** | **DEMONSTRATED / NOT YET BUILT** — this is a salon capability design on top of the shipped platform. No `verity.capability.salon` implementation exists until there is code in `src/server/capabilities/salon/`, additive schema/migrations, registry activation, and passing tests. |
 | **Proposed capability id** | `verity.capability.salon` |
 | **Proposed pack framing** | None. One purpose-built reusable capability, not an industry pack. The spec's industry packs (`13_industry_packs/`) cover Facilities, Field Service, Maintenance, Professional Services, Security Operations, Staffing — personal care is absent from the corpus, so this document invents no "salon pack". |
-| **Platform state at writing** | Foundation frozen at 2026-08-24 milestone (`implementation/PLATFORM-FREEZE.md`). Five platform-proving capabilities exist: Location, Asset, Evidence, Scheduling, Approval. No client system exists yet. |
+| **Platform state at 2026-09-01 update** | Foundation frozen at 2026-08-24 milestone (`implementation/PLATFORM-FREEZE.md`). Shipped capabilities now include Location, Asset, Evidence, Scheduling, Approval, Dine-in, and Plywood. No salon capability exists yet. |
+
+### 0.1 Architecture update from the last 3-4 days of commits
+
+- **Current:** this remains a design-only client capability. There is no `src/server/capabilities/salon/` implementation.
+- **Architecture carried forward:** build salon as one capability-private client system with additive schema, registry registration, command/query surfaces, workspace contributions, and no platform broadening unless a requirement forces a written decision.
+- **UI carried forward:** the current accent-driven glass material is available, but floor boards, waitlists, invoices, commission tables, stock tables, and destructive confirmations should stay solid/legible as already specified.
+- **Boundary unchanged:** no consumer app, payment gateway, payroll engine, loyalty-points framework, supplier purchasing workflow, or multi-outlet product pack is created by the recent plywood/dine-in work.
 
 ---
 

@@ -3,10 +3,18 @@
 | | |
 |---|---|
 | **Client** | Kent's Restaurant, Defence Colony, New Delhi |
-| **Document status** | **DEMONSTRATED** — a hypothetical capability modelled on the foundation, on paper. Nothing in this document is BUILT. Per the reporting vocabulary, no part of it may be reported as implemented functionality until it exists in `src/server/capabilities/` behind passing tests. |
+| **Document status** | **BUILT BASELINE / DESIGN AUTHORITY** — the dine-in capability now exists in `src/server/capabilities/dinein/`, is registered from `src/server/capabilities/registry.ts`, and has Prisma models for menu, floor, order, bill, and payment flows. This document remains the target design; built, provisional, and planned claims must still be checked against the code before reporting. |
 | **Proposed capability id** | `verity.capability.dinein` |
 | **Proposed pack framing** | None. This is one purpose-built reusable capability, not an industry pack (see §2.3). |
-| **Platform state at writing** | Foundation frozen at 2026-08-24 milestone (`implementation/PLATFORM-FREEZE.md`). Five platform-proving capabilities exist: Location, Asset, Evidence, Scheduling, Approval. No Work capability, no client, no pack exists yet — **Kent's is the first real client requirement the freeze is waiting for.** |
+| **Platform state at 2026-09-01 update** | Foundation frozen at 2026-08-24 milestone (`implementation/PLATFORM-FREEZE.md`). Shipped capabilities now include Location, Asset, Evidence, Scheduling, Approval, Dine-in, and Plywood. Kent's is no longer only a proving requirement; its dine-in baseline is implemented as a capability-private client system. |
+
+### 0.1 Architecture update from the last 3-4 days of commits
+
+- **Current / built:** `verity.capability.dinein` ships as a capability-private implementation, not a platform kitchen/POS module.
+- **Current / built:** menu categories/items/variants, zones/tables, dining orders/order lines, bills, payments, kitchen queue, open bills, and sales summary queries are registered commands/queries.
+- **Current / built:** the latest platform registry installs both Dine-in and Plywood after the shared foundation capabilities.
+- **Current / inherited UI architecture:** the accent-driven glass material and semantic token work applies to Kent's screens as well; dense bill and kitchen views should remain solid/legible where the design already requires it.
+- **Still planned / target:** the ADR clarification around DEC-001 should still be retained as governance context: dine-in kitchen screens are allowed because they are client capability code, not a core KDS product.
 
 ---
 
@@ -75,8 +83,8 @@ No legacy-VEDA vocabulary appears anywhere in this design (no `factoryId`, no Sa
 | Tenant isolation for one restaurant | Tenant + RLS via `withTenant()`; fail-closed GUC | BUILT / PROVEN |
 | Staff logins | Supabase Auth + Party/User/TenantMembership via `provisionIdentity()` | BUILT / PROVEN |
 | Waiter / Cook / Cashier / Manager roles | Role + Permission (Verb+Entity+Scope), `verity.resolve_permissions`, RoleComposition | BUILT / PROVEN |
-| Menu items, zones, tables, orders as first-class data | Capability-owned Prisma tables registered in `EntityDefinition` (MET-ENT-001..005) | Mechanism PROVEN (Location exemplar); entities DEMONSTRATED |
-| Order taking, state moves | Command pipeline MET-ACT-001..004 (`executeCommand`) | BUILT / PROVEN |
+| Menu items, zones, tables, orders as first-class data | Capability-owned Prisma tables registered in `EntityDefinition` (MET-ENT-001..005) | BUILT |
+| Order taking, kitchen progress, billing, payment settlement | Command pipeline MET-ACT-001..004 (`executeCommand`) | BUILT |
 | Table/order lifecycles | StateDefinition / TransitionDefinition / StateCategory (ADR-009), `assertMutable` INV-002 lock | BUILT / PROVEN |
 | Audit of every change | Activity stream + DomainEvent outbox, append-only triggers | BUILT / PROVEN |
 | Kitchen prep-time discipline | SLA substrate: SlaPolicy/SlaClock driven by StateCategory, `urgencyFor()` | BUILT (sweep needs scheduler binding — §17-D2) |

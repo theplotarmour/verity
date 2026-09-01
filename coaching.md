@@ -3,10 +3,17 @@
 | | |
 |---|---|
 | **Client profile** | Single-location or multi-branch test-preparation and tutoring coaching institute. Manages students, batches, teachers, class scheduling, attendance, fee collection, test marks, study material, and parent communications. |
-| **Document status** | **DEMONSTRATED** — a hypothetical capability modelled on the foundation, on paper. Nothing in this document is BUILT. Per the reporting vocabulary, no part of it may be reported as implemented functionality until it exists in `src/server/capabilities/` behind passing tests. |
+| **Document status** | **DEMONSTRATED / NOT YET BUILT** — this is a coaching capability design on top of the shipped platform. No `verity.capability.coaching` implementation exists until there is code in `src/server/capabilities/coaching/`, additive schema/migrations, registry activation, and passing tests. |
 | **Proposed capability id** | `verity.capability.coaching` |
 | **Proposed pack framing** | None. One purpose-built reusable capability, not an industry pack. |
-| **Platform state at writing** | Foundation frozen at 2026-08-24 milestone (`implementation/PLATFORM-FREEZE.md`). Five platform-proving capabilities exist: Location, Asset, Evidence, Scheduling, Approval. |
+| **Platform state at 2026-09-01 update** | Foundation frozen at 2026-08-24 milestone (`implementation/PLATFORM-FREEZE.md`). Shipped capabilities now include Location, Asset, Evidence, Scheduling, Approval, Dine-in, and Plywood. No coaching capability exists yet. |
+
+### 0.1 Architecture update from the last 3-4 days of commits
+
+- **Current:** this remains a design-only client capability. There is no `src/server/capabilities/coaching/` implementation.
+- **Architecture carried forward:** coaching should be built as capability-private schema/code, registered through the capability registry, with command/query surfaces and workspace contributions. Recent client work reinforces this composition model rather than creating a school/ERP platform layer.
+- **UI carried forward:** use the current semantic token and accent-driven glass system, but attendance grids, marks tables, fee ledgers, receipt print views, and parent/student data surfaces must remain dense and legible.
+- **Boundary unchanged:** no LMS, online test platform, payment gateway, biometric integration, or franchise/multi-brand product pack is implied by the recent plywood/dine-in work.
 
 ---
 

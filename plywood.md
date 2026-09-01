@@ -3,10 +3,23 @@
 | | |
 |---|---|
 | **Client profile** | Plywood, laminate, MDF, and board trading business with multiple godowns, transport tracking, sales & purchases, ledger accounts, and GST invoicing. |
-| **Document status** | **DEMONSTRATED** — a hypothetical capability modelled on the foundation, on paper. Nothing in this document is BUILT. Per the reporting vocabulary, no part of it may be reported as implemented functionality until it exists in `src/server/capabilities/` behind passing tests. |
+| **Document status** | **PARTIALLY BUILT / ACTIVE CLIENT CAPABILITY** — the plywood capability now exists in `src/server/capabilities/plywood/`, is registered from `src/server/capabilities/registry.ts`, and has additive Prisma tables/migrations. This document remains the design authority for target behaviour; each section below distinguishes built behaviour from remaining target/planned behaviour. |
 | **Proposed capability id** | `verity.capability.plywood` |
 | **Proposed pack framing** | None. One purpose-built reusable capability, not an industry pack. |
-| **Platform state at writing** | Foundation frozen at 2026-08-24 milestone (`implementation/PLATFORM-FREEZE.md`). Five platform-proving capabilities exist: Location, Asset, Evidence, Scheduling, Approval. |
+| **Platform state at 2026-09-01 update** | Foundation frozen at 2026-08-24 milestone (`implementation/PLATFORM-FREEZE.md`). Shipped capabilities now include Location, Asset, Evidence, Scheduling, Approval, Dine-in, and Plywood. Runtime storage binding is installed through the registry bootstrap. |
+
+### 0.1 Architecture update from the last 3-4 days of commits
+
+This document was originally written before the plywood build-out. The current implementation has moved beyond a paper model:
+
+- **Current / built:** `verity.capability.plywood` is a shipped capability with catalog, party, godown/rack, purchase, sales, stock, invoice, payment, ledger, GST/tax, price-sheet, people, and workspace surfaces.
+- **Current / built:** suppliers are always linked to a customer-side record; an explicit "also a customer" choice is gone. The link uses GSTIN matching when available and otherwise creates the paired customer record.
+- **Current / built:** the sales desk now uses the business terms **Paid now** and **Owed** instead of a generic credit-approval framing. Orders can create a receivable immediately, and payments can settle invoice balances or sit as customer/supplier balance for later allocation.
+- **Current / built:** sales and purchase orders can be edited while still legally mutable, and customers, suppliers, godowns, racks, and orders can be retired/removed through commands instead of direct deletion.
+- **Current / built:** order lines snapshot product specifications, agreed prices, discounts up to 100%, GST exemption, tax-inclusive totals, and generated invoice/tax lines in plain business language.
+- **Current / built:** stock operations have one **Update stock** control with six operational tabs behind it, while rack withdrawal is now supported from godowns without erasing stock history.
+- **Current / built:** the shell and operational surfaces use the current accent-driven glass material system and semantic dark-mode tokens; recent UI work corrected table clipping, dropdown layering, mobile reach, and balance wording.
+- **Still planned / target:** transporter handoffs, LR evidence, e-way bill automation, rental-contract ledgers, and deeper logistics tracking remain target behaviours unless a matching implementation is added under the plywood capability.
 
 ---
 
@@ -129,8 +142,9 @@ All names respect GOV-TER-001..017.
 | Godowns / Warehouses | `Location` primitive (Place + Address) | BUILT / PROVEN |
 | Delivery Vehicles | `Asset` primitive | BUILT / PROVEN |
 | LR documents, confirmation signatures | `Evidence` (checksum-frozen `StoredFile` references) | BUILT / PROVEN |
-| Sales Orders, POs, Shipments | Capability-owned entities; state machines via `StateDefinition` / `TransitionDefinition` | Runtime BUILT / PROVEN; entities DEMONSTRATED |
-| Stock / Financial Ledgers | Capability-owned append-only tables | DEMONSTRATED |
+| Sales Orders and Purchase Orders | Capability-owned entities; state machines via `StateDefinition` / `TransitionDefinition`; editable only before irreversible receipt/issue/invoice effects | BUILT |
+| Shipments / transporter handoffs | Capability-owned target entities; LR/evidence linkage remains planned | DEMONSTRATED / PLANNED |
+| Stock / Financial Ledgers | Capability-owned stock balances, stock ledger entries, invoice/payment allocation, and plywood ledger entries | BUILT |
 | GST Invoice PDFs | `Evidence` / `StoredFile` two-phase contract | BUILT / PROVEN |
 | Owner Alerts (Low Stock, Exceeded Credit) | Notification substrate (`notify()`, templates, suppressions) | BUILT |
 | Dashboard KPI statistics | Server components + chart primitives (`Donut`, `BarStrip`), workspace contributions | BUILT |
@@ -205,8 +219,11 @@ Every model carries the base-entity shape (`id, tenantId, createdAt, updatedAt, 
   Typed columns give the same expressiveness with real referential integrity, and a check constraint
   enforces that at most one is set.
 
+  Implementation update: current stock screens expose one **Update stock** control whose tabs cover the day-to-day stock actions. Godown racks can be withdrawn through the godown UI; withdrawal is a lifecycle/action result, not a history rewrite.
+
 ### Module M3 — Purchase & Supplier Management (`verity.plywood.supplier`, `verity.plywood.purchase_order`, `verity.plywood.supplier_pricing`)
-- **Supplier**: `displayName`, `gstin String?`, `phone String?`, `email String?`, `outstandingBalancePaise Int`.
+- **Supplier**: `displayName`, `gstin String?`, `phone String?`, `email String?`, `linkedCustomerId FK`, `outstandingBalancePaise Int`.
+  Every supplier now has a customer-side identity as well. The system links by GSTIN when that customer already exists; otherwise supplier creation creates the paired customer record automatically.
 - **PurchaseOrder**: `supplierId FK`, `state` (`draft | pending | active | completed | cancelled`),
   `totalCostPaise Int`.
 - **PurchaseOrderLine**: `purchaseOrderId FK`, `productId FK`, `productNameSnapshot String`,
@@ -226,6 +243,8 @@ Every model carries the base-entity shape (`id, tenantId, createdAt, updatedAt, 
   A table for the same reasons as `PurchaseOrderLine`, and it snapshots name, HSN and price so a
   later catalogue edit never rewrites a completed order.
 - **CustomerPricing**: `customerId FK`, `productId FK`, `customPricePaise Int`.
+
+Implementation update: the current sales flow no longer presents the owner's decision as "credit approval" by default. It asks how much is **paid now** and how much is **owed**, then writes the correct receivable/payment/ledger effects. Credit-style holds still exist as control states, but the primary user language is cash-now versus balance-due.
 
 ### Module M5 — Logistics & Shipment Tracking (`verity.plywood.transporter`, `verity.plywood.shipment`)
 Tracks: Supplier/Godown → Transport → Godown/Customer.
@@ -257,6 +276,8 @@ Tracks: Supplier/Godown → Transport → Godown/Customer.
   `implementation/plywood-gap-analysis.md` decide their behaviour; the columns exist either way.
 - **PaymentEntry**: `invoiceId FK`, `partyType` (`customer | supplier`), `partyId Uuid`, `method` (`bank | upi | cash`), `amountPaise Int`, `reference String?` (UTR/UPI TxId), `paymentDate DateTime`.
 - **FinanceLedger**: `partyType` (`customer | supplier`), `partyId Uuid`, `entryType` (`debit | credit`), `amountPaise Int`, `invoiceId FK?`, `paymentEntryId FK?`, `runningBalancePaise Int`, `createdAt DateTime`. **Append-only.**
+
+Implementation update: payments can settle generated invoices or remain on the party balance for later settlement. Ledger and party-list screens now say the balance direction in words instead of relying on a negative sign.
 
 ---
 

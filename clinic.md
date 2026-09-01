@@ -3,10 +3,17 @@
 | | |
 |---|---|
 | **Client profile** | One small clinic, single location. Outpatient care with in-house pharmacy and sample-collection laboratory. |
-| **Document status** | **DEMONSTRATED** — a hypothetical capability modelled on the foundation, on paper. Nothing in this document is BUILT. Per the reporting vocabulary, no part of it may be reported as implemented functionality until it exists in `src/server/capabilities/` behind passing tests. |
+| **Document status** | **DEMONSTRATED / NOT YET BUILT** — this is a clinic capability design on top of the shipped platform. No `verity.capability.clinic` implementation exists until there is code in `src/server/capabilities/clinic/`, additive schema/migrations, registry activation, and passing tests. |
 | **Proposed capability id** | `verity.capability.clinic` |
 | **Proposed pack framing** | None. This is one purpose-built reusable capability, not an industry pack. The spec's industry packs (`13_industry_packs/`) cover Facilities, Field Service, Maintenance, Professional Services, Security Operations, Staffing — healthcare delivery is absent from the corpus, so this document invents no "clinic pack". |
-| **Platform state at writing** | Foundation frozen at 2026-08-24 milestone (`implementation/PLATFORM-FREEZE.md`). Five platform-proving capabilities exist: Location, Asset, Evidence, Scheduling, Approval. No client system exists yet. |
+| **Platform state at 2026-09-01 update** | Foundation frozen at 2026-08-24 milestone (`implementation/PLATFORM-FREEZE.md`). Shipped capabilities now include Location, Asset, Evidence, Scheduling, Approval, Dine-in, and Plywood. No clinic capability exists yet. |
+
+### 0.1 Architecture update from the last 3-4 days of commits
+
+- **Current:** this remains a design-only client capability. There is no `src/server/capabilities/clinic/` implementation.
+- **Architecture carried forward:** the current client-system pattern is capability-private code plus additive Prisma models/migrations, registry registration, workspace contributions, and command/query surfaces. Clinic should follow that pattern exactly when built.
+- **UI carried forward:** use the current semantic token and accent-driven glass architecture, but keep clinical notes, lab grids, invoices, queue boards, destructive confirmations, and dense tables on solid legible surfaces.
+- **Boundary unchanged:** no patient portal, telemedicine, payment-gateway, insurance, ABDM/ABHA, or generic EHR platform layer is implied by the recent plywood/dine-in work.
 
 ---
 
