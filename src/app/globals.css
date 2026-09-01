@@ -384,7 +384,7 @@
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  filter: blur(46px);
+  filter: blur(64px);
   /**
    * Two stops per shape, not seven. Every extra hand-placed stop is a point
    * where the RATE of change changes — continuous in colour, but not in
@@ -394,26 +394,53 @@
    * Size, position and blur radius do the shaping instead — that is what
    * "smooth" actually means for a gradient, not more control points.
    *
-   * Same reasoning kept the vignette a second, correctly-nested
-   * radial-gradient sharing this shape's own centre rather than a
+   * Same reasoning kept the vignette a third, correctly-nested
+   * radial-gradient sharing the primary shape's own centre rather than a
    * `box-shadow` (which falls off from the box's straight edges, not
    * radially, and printed its own soft rectangle here) or an independently
    * placed radial (which beat against this one as two different circular
    * maths overlapping).
+   *
+   * DUOTONE, not one hue repeated. `hsl(from var(--accent-seed) …)` rotates
+   * the seed's own hue by 42° for the second source rather than reusing it —
+   * a single colour glowing from two corners still reads as one flat mood;
+   * a second, related hue is what stops the screen feeling monotone. It
+   * stays a relative of the seed (same lightness, hue offset) so a custom
+   * accent still produces a coherent pair instead of an arbitrary second
+   * colour fighting it — except saturation, damped to 60% of the seed's own:
+   * at full saturation a warm accent (Gold, Champagne) rotated 42° lands in
+   * olive/khaki, which reads muddy at this size in a way the same rotation
+   * on a cool accent does not. Toning the SECOND source down is enough —
+   * the primary source keeps the seed's true colour untouched.
+   *
+   * Both sources turned WAY down (34%/22% peak in dark, 12%/7% in light) and
+   * blurred harder than before — "glow" is not the goal here, "the glass in
+   * front of the screen is tinted and frosted" is. Consistent over bright:
+   * the vignette is correspondingly deeper in dark mode so the whole frame
+   * settles to one dark, quiet field rather than a hot spot fading to a
+   * lighter one.
    */
   background:
     radial-gradient(
       1300px 1000px at 50% -12%,
       light-dark(
-        rgb(from var(--accent-seed) r g b / 30%),
-        rgb(from var(--accent-seed) r g b / 62%)
+        rgb(from var(--accent-seed) r g b / 12%),
+        rgb(from var(--accent-seed) r g b / 34%)
       ) 0%,
       rgb(from var(--accent-seed) r g b / 0%) 85%
     ),
     radial-gradient(
+      1100px 900px at 8% 108%,
+      light-dark(
+        hsl(from var(--accent-seed) calc(h + 42) calc(s * 0.6) l / 7%),
+        hsl(from var(--accent-seed) calc(h + 42) calc(s * 0.6) l / 20%)
+      ) 0%,
+      hsl(from var(--accent-seed) calc(h + 42) calc(s * 0.6) l / 0%) 80%
+    ),
+    radial-gradient(
       1300px 1000px at 50% -12%,
       transparent 0%,
-      light-dark(rgba(15, 17, 21, 0.015), rgba(0, 0, 0, 0.3)) 100%
+      light-dark(rgba(15, 17, 21, 0.02), rgba(0, 0, 0, 0.46)) 100%
     );
 }
 
