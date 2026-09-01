@@ -55,10 +55,10 @@
    * read on it, and dialogs are thickest because they must stay legible over
    * arbitrary content.
    */
-  --color-glass-1: light-dark(rgb(255 255 255 / 0.30), rgb(28 28 32 / 0.30));
-  --color-glass-2: light-dark(rgb(255 255 255 / 0.42), rgb(30 32 36 / 0.38));
-  --color-glass-3: light-dark(rgb(255 255 255 / 0.60), rgb(38 40 45 / 0.55));
-  --color-glass-4: light-dark(rgb(255 255 255 / 0.82), rgb(44 47 52 / 0.78));
+  --color-glass-1: light-dark(rgb(255 255 255 / 0.16), rgb(255 255 255 / 0.045));
+  --color-glass-2: light-dark(rgb(255 255 255 / 0.20), rgb(255 255 255 / 0.055));
+  --color-glass-3: light-dark(rgb(255 255 255 / 0.38), rgb(255 255 255 / 0.09));
+  --color-glass-4: light-dark(rgb(255 255 255 / 0.72), rgb(30 34 40 / 0.62));
 
   /* Solid surfaces — level 5. Dense tables, long-form text, forms and
      destructive confirmation live here, per ADR-011. */
@@ -184,8 +184,20 @@
   --shadow-lg: 0 2px 6px light-dark(rgb(18 18 21 / 0.05), rgb(0 0 0 / 0.45)),
                0 44px 90px -28px light-dark(rgb(18 18 21 / 0.32), rgb(0 0 0 / 0.9));
 
-  --blur-glass: 26px;
-  --blur-glass-strong: 30px;
+  --blur-glass: 30px;
+  --blur-glass-strong: 44px;
+  /**
+   * LIQUID GLASS OPTICS.
+   *
+   * The material reads grey when it lays a neutral veil over the colour behind
+   * it — the veil desaturates whatever it covers, and a desaturated tint IS
+   * grey. Apple's glass does the opposite: it barely tints, and instead
+   * AMPLIFIES the ground, pushing saturation well past 1 and lifting brightness
+   * so the surface reads as lit rather than filmed. These are the amounts that
+   * do it; the fill alphas above are deliberately tiny so these can work.
+   */
+  --glass-optics: saturate(2) brightness(1.06);
+  --glass-optics-strong: saturate(2.2) brightness(1.08);
 
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   /* Container Slide, Out-Expo (Verity_Motion_Architecture.md §2) — context
@@ -411,8 +423,8 @@
 .glass-card,
 .glass-control,
 .glass-overlay {
-  backdrop-filter: blur(var(--blur-glass)) saturate(1.6);
-  -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(1.6);
+  backdrop-filter: blur(var(--blur-glass)) var(--glass-optics);
+  -webkit-backdrop-filter: blur(var(--blur-glass)) var(--glass-optics);
   box-shadow: var(--shadow-highlight);
 }
 
@@ -438,12 +450,13 @@
   background:
     linear-gradient(
       180deg,
-      light-dark(rgb(255 255 255 / 0.10), rgb(255 255 255 / 0.10)),
-      light-dark(rgb(255 255 255 / 0.02), rgb(255 255 255 / 0.02))
+      rgb(255 255 255 / 0.10) 0%,
+      rgb(255 255 255 / 0.02) 22%,
+      transparent 62%
     ),
     var(--color-glass-1);
-  backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.5);
-  -webkit-backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.5);
+  backdrop-filter: blur(var(--blur-glass-strong)) var(--glass-optics);
+  -webkit-backdrop-filter: blur(var(--blur-glass-strong)) var(--glass-optics);
 }
 
 /* Level 2 — primary surfaces. Cards and panels. */
@@ -451,8 +464,9 @@
   background:
     linear-gradient(
       180deg,
-      light-dark(rgb(255 255 255 / 0.14), rgb(255 255 255 / 0.14)),
-      light-dark(rgb(255 255 255 / 0.03), rgb(255 255 255 / 0.03))
+      rgb(255 255 255 / 0.13) 0%,
+      rgb(255 255 255 / 0.025) 22%,
+      transparent 62%
     ),
     var(--color-glass-2);
   border: 1px solid var(--color-line);
@@ -464,9 +478,14 @@
      facing it. It is a material highlight, not a status marker: low alpha,
      never saturated, and identical on every card so it can never be mistaken
      for meaning. */
+  /* Three edges give the pane thickness: a specular lip along the top, the
+     accent down the leading edge where the room's light comes from, and a
+     faint shade along the bottom where a real sheet would fall into shadow.
+     Without the bottom edge the surface reads as a flat cut-out. */
   box-shadow:
-    inset 0 1px 0 light-dark(rgb(255 255 255 / 0.85), rgb(255 255 255 / 0.07)),
+    inset 0 1px 0 light-dark(rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.10)),
     inset 2px 0 0 color-mix(in oklab, var(--accent-seed) 42%, transparent),
+    inset 0 -1px 0 light-dark(rgb(16 18 22 / 0.05), rgb(0 0 0 / 0.22)),
     var(--shadow-sm);
 }
 
@@ -475,8 +494,9 @@
   background:
     linear-gradient(
       180deg,
-      light-dark(rgb(255 255 255 / 0.10), rgb(255 255 255 / 0.10)),
-      light-dark(rgb(255 255 255 / 0.02), rgb(255 255 255 / 0.02))
+      rgb(255 255 255 / 0.10) 0%,
+      rgb(255 255 255 / 0.02) 22%,
+      transparent 62%
     ),
     var(--color-glass-3);
   border: 1px solid var(--color-line);
@@ -490,12 +510,13 @@
   background:
     linear-gradient(
       180deg,
-      light-dark(rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.12)),
-      light-dark(rgb(255 255 255 / 0.03), rgb(255 255 255 / 0.03))
+      rgb(255 255 255 / 0.12) 0%,
+      rgb(255 255 255 / 0.03) 22%,
+      transparent 62%
     ),
     var(--color-glass-4);
-  backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.8);
-  -webkit-backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.8);
+  backdrop-filter: blur(var(--blur-glass-strong)) var(--glass-optics-strong);
+  -webkit-backdrop-filter: blur(var(--blur-glass-strong)) var(--glass-optics-strong);
   box-shadow:
     inset 0 1px 0 light-dark(rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.08)),
     var(--shadow-lg);
