@@ -36,22 +36,13 @@ type Supplier = {
   linkedCustomerName: string | null;
 };
 
-export function SupplierList({
-  suppliers,
-  customers,
-}: {
-  suppliers: Supplier[];
-  /** For marking a supplier as the same business as one of these. */
-  customers: Array<{ id: string; displayName: string }>;
-}) {
+export function SupplierList({ suppliers }: { suppliers: Supplier[] }) {
   const [filter, setFilter] = useState("");
   // Task 71 item 3. Creating a supplier used to live on the Purchases desk,
   // beside the order table, which is the wrong place twice over: a supplier is
   // a party you keep rather than something you make while placing an order, and
   // anyone looking for one comes here first.
   const [creating, setCreating] = useState(false);
-  // Reported: "the suppliers can be our customers as well."
-  const [linking, setLinking] = useState<Supplier | null>(null);
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -94,39 +85,13 @@ export function SupplierList({
     });
   }
 
-  function link(input: unknown) {
-    setFailure(null);
-    startTransition(async () => {
-      const result = await runCommand(
-        "verity.plywood.link_supplier_to_customer",
-        input,
-        "/suppliers",
-      );
-      if (result.ok) {
-        setLinking(null);
-        router.refresh();
-      } else {
-        setFailure(result);
-      }
-    });
-  }
-
   const dialog = (
-    <>
-      <NewSupplierModal
-        open={creating}
-        pending={pending}
-        onClose={() => setCreating(false)}
-        onSubmit={create}
-      />
-      <LinkCustomerModal
-        supplier={linking}
-        customers={customers}
-        pending={pending}
-        onClose={() => setLinking(null)}
-        onSubmit={link}
-      />
-    </>
+    <NewSupplierModal
+      open={creating}
+      pending={pending}
+      onClose={() => setCreating(false)}
+      onSubmit={create}
+    />
   );
 
   if (suppliers.length === 0) {
@@ -219,9 +184,7 @@ export function SupplierList({
                   <p className="m-0 mt-0.5 text-[12px] text-text-tertiary">
                     {supplier.gstin ?? "No GSTIN recorded"}
                     {supplier.phone ? ` · ${supplier.phone}` : ""}
-                    {supplier.linkedCustomerName
-                      ? ` · also a customer (${supplier.linkedCustomerName})`
-                      : ""}
+                    {supplier.linkedCustomerName ? " · also a customer" : ""}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-8 text-right">
@@ -239,11 +202,7 @@ export function SupplierList({
                       {supplier.openOrders === 1 ? "1 open order" : `${supplier.openOrders} open orders`}
                     </p>
                   </div>
-                  <Button size="sm" onClick={() => setLinking(supplier)}>
-                    {supplier.linkedCustomerName
-                      ? "Change link"
-                      : "Also a customer…"}
-                  </Button>
+
                 </div>
               </Row>
             ))}
@@ -348,90 +307,6 @@ function NewSupplierModal({
           />
         </Field>
       </FormRow>
-    </Modal>
-  );
-}
-
-
-/**
- * Marking a supplier and a customer as the same business.
- *
- * REPORTED: "the suppliers can be our customers as well."
- *
- * It does not merge them, and the copy says so. Buying and selling keep
- * separate documents, separate credit limits and separate ledgers because they
- * are separate obligations — netting a debt against a receivable without saying
- * so misstates both. What this buys is that the two are shown as one
- * relationship wherever a person is asking about the relationship.
- */
-function LinkCustomerModal({
-  supplier,
-  customers,
-  pending,
-  onClose,
-  onSubmit,
-}: {
-  supplier: Supplier | null;
-  customers: Array<{ id: string; displayName: string }>;
-  pending: boolean;
-  onClose: () => void;
-  onSubmit: (input: unknown) => void;
-}) {
-  const [customerId, setCustomerId] = useState("");
-
-  return (
-    <Modal
-      open={supplier !== null}
-      onClose={onClose}
-      title={`Is ${supplier?.displayName ?? "this supplier"} also a customer?`}
-      description="Buying and selling stay separate — separate invoices, separate credit limit, separate ledger. Linking them only means Verity shows one relationship instead of two."
-      width="sm"
-      footer={
-        <>
-          {supplier?.linkedCustomerId && (
-            <Button
-              className="mr-auto"
-              disabled={pending}
-              onClick={() => onSubmit({ supplierId: supplier.id })}
-            >
-              Unlink
-            </Button>
-          )}
-          <ModalCancel onClose={onClose} disabled={pending} />
-          <Button
-            variant="primary"
-            disabled={pending || customerId === ""}
-            onClick={() =>
-              onSubmit({ supplierId: supplier!.id, customerId })
-            }
-          >
-            {pending ? "Linking…" : "Link"}
-          </Button>
-        </>
-      }
-    >
-      <Field
-        label="The same business, as a customer"
-        htmlFor="link-customer"
-        hint={
-          supplier?.linkedCustomerName
-            ? `Currently linked to ${supplier.linkedCustomerName}`
-            : "They must share a GSTIN if both have one"
-        }
-        required
-      >
-        <Combobox
-          id="link-customer"
-          value={customerId}
-          onChange={setCustomerId}
-          required
-          placeholder="Search customers"
-          options={customers.map((row) => ({
-            value: row.id,
-            label: row.displayName,
-          }))}
-        />
-      </Field>
     </Modal>
   );
 }

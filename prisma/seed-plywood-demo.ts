@@ -33,7 +33,6 @@ import {
   createSalesOrder,
   createSupplier,
   dispatchOrder,
-  linkSupplierToCustomer,
   receiveGoods,
   registerGstRegistration,
   setBusinessProfile,
@@ -172,9 +171,9 @@ const CUSTOMERS = [
   { key: "gurgaon", name: "Gurgaon Office Interiors", gstin: "06AAKCG7765R1ZY", state: "06", phone: "9988776655", limit: 900_000 },
   { key: "singh", name: "Singh Carpentry", gstin: null, state: "07", phone: "9818765432", limit: 100_000 },
   { key: "walkin", name: "Counter Sales (cash)", gstin: null, state: "07", phone: null, limit: 0 },
-  // The same firm as the Yamuna supplier — a dealer this business both buys
-  // from and sells to, which is the case the same-business link exists for.
-  { key: "yamuna-c", name: "Yamuna Board Depot", gstin: "07AAGCY5567L1ZR", state: "07", phone: "9868122334", limit: 400_000 },
+  // Deliberately NOT a separate row for the Yamuna dealer: createSupplier
+  // already made their customer side. Adding one here would be the duplicate
+  // the GSTIN match exists to prevent.
 ];
 
 const rupees = (n: number) => Math.round(n * 100);
@@ -273,11 +272,10 @@ async function main(): Promise<void> {
     customerIds.set(customer.key, created.id);
   }
 
-  // One firm on both sides of the trade.
-  await executeCommand(OWNER, linkSupplierToCustomer, {
-    supplierId: supplierIds.get("yamuna")!,
-    customerId: customerIds.get("yamuna-c")!,
-  });
+  // No explicit linking: createSupplier gives every supplier its customer side,
+  // because in this trade every supplier is one. The Yamuna entry in CUSTOMERS
+  // shares that firm's GSTIN, so it is linked to the record the supplier
+  // already created rather than duplicating it.
 
   console.log("Agreed price lists…");
   // Every supplier prices the boards they plausibly carry, at a small spread
@@ -375,7 +373,7 @@ async function main(): Promise<void> {
 
   console.log("Sales orders, deliveries and invoices…");
   const salesSummary = { invoiced: 0, held: 0, approved: 0, credit: 0 };
-  const sellable = CUSTOMERS.filter((c) => c.key !== "yamuna-c");
+  const sellable = CUSTOMERS;
   for (let i = 0; i < 30; i++) {
     const customer = sellable[i % sellable.length]!;
     const godown = i % 4 === 0 ? DEPOT : SHOP;

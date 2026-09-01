@@ -121,10 +121,70 @@ export const createSupplier: CommandDefinition<
         stateCode: input.stateCode ?? null,
       },
     });
+
+    // EVERY SUPPLIER IS ALSO A CUSTOMER.
+    //
+    // Stated by the proprietor as a fact about this trade, not a preference:
+    // the mills and dealers they buy from all buy back. So the matching
+    // customer is created here rather than offered as a button somebody has to
+    // remember to press — a relationship that always exists should not depend
+    // on being declared.
+    //
+    // It is still a LINK and not a merge: buying and selling keep separate
+    // documents, separate credit limits and separate ledgers, because they are
+    // separate obligations and netting one against the other silently would
+    // misstate both.
+    //
+    // An existing customer with the same GSTIN is linked instead of duplicated
+    // — the same firm twice on the selling side is exactly the confusion this
+    // is meant to remove.
+    const existing = input.gstin
+      ? await ctx.tx.plywoodCustomer.findFirst({
+          where: { gstin: input.gstin },
+        })
+      : null;
+
+    const customer =
+      existing ??
+      (await ctx.tx.plywoodCustomer.create({
+        data: {
+          tenantId: ctx.actor.tenantId,
+          displayName: input.displayName,
+          gstin: input.gstin ?? null,
+          phone: input.phone ?? null,
+          email: input.email ?? null,
+          stateCode: input.stateCode ?? null,
+          // Cash only until somebody decides otherwise. A credit limit is a
+          // decision about a specific firm, and inventing one here would extend
+          // credit nobody granted.
+          creditLimitPaise: 0,
+        },
+      }));
+
+    // Only when that customer is not already the other half of a different
+    // supplier — one firm cannot be two suppliers, and the unique index says so.
+    const alreadyLinked = await ctx.tx.plywoodSupplier.findFirst({
+      where: { linkedCustomerId: customer.id },
+    });
+    if (!alreadyLinked) {
+      await ctx.tx.plywoodSupplier.update({
+        where: { id: supplier.id },
+        data: { linkedCustomerId: customer.id },
+      });
+    }
+
     return {
       result: { id: supplier.id },
       events: [
         { name: "verity.plywood.supplier_created", entityId: supplier.id },
+        ...(existing
+          ? []
+          : [
+              {
+                name: "verity.plywood.customer_created",
+                entityId: customer.id,
+              },
+            ]),
       ],
     };
   },

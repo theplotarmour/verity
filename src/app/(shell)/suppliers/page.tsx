@@ -2,7 +2,7 @@ import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
 import { ForbiddenError } from "@/server/platform/authorization";
-import { listCustomers, listSuppliers } from "@/server/capabilities/plywood";
+import { listSuppliers } from "@/server/capabilities/plywood";
 import { PageHeader, PermissionDenied } from "@/components/ui/primitives";
 import { SupplierList } from "./SupplierList";
 
@@ -29,25 +29,13 @@ export default async function SuppliersPage() {
     throw error;
   }
 
-  // For linking a supplier to the customer record of the same business.
-  const customers = await executeQuery(actor, listCustomers, {}).catch((error) => {
-    if (error instanceof ForbiddenError) return [];
-    throw error;
-  });
-
   return (
     <>
       <PageHeader
         title="Suppliers"
         description="Everyone the business buys from. Outstanding is money owed on invoices received; committed is the value of orders placed and not yet billed — they are different obligations and are never added together."
       />
-      <SupplierList
-        suppliers={suppliers}
-        customers={customers.map((row) => ({
-          id: row.id,
-          displayName: row.displayName,
-        }))}
-      />
+      <SupplierList suppliers={suppliers} />
     </>
   );
 }
