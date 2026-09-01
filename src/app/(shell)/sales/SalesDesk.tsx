@@ -10,11 +10,10 @@ import {
   Field,
   Input,
   Panel,
-  Select,
   StateBadge,
 } from "@/components/ui/primitives";
-import { FormCombobox } from "@/components/ui/Combobox";
 import { day } from "@/components/ui/business/format";
+import { NewCustomerModal } from "@/components/ui/business/NewCustomerModal";
 import { NewSalesOrderForm, type SellableRow } from "./NewSalesOrderForm";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
@@ -124,7 +123,6 @@ export function SalesDesk({
   const [newCustomer, setNewCustomer] = useState(false);
   const [approving, setApproving] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState<string | null>(null);
-  const [pricing, setPricing] = useState(false);
   const [creditFor, setCreditFor] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -165,17 +163,6 @@ export function SalesDesk({
   const canOrder =
     customers.length > 0 && godowns.length > 0 && boards.length > 0;
 
-  const priceHint = joinPrereqs([
-    customers.length === 0 && "a customer",
-    boards.length === 0 && (
-      <>
-        a board in{" "}
-        <Link href="/catalogue" className="text-accent-ink hover:underline">
-          Catalogue
-        </Link>
-      </>
-    ),
-  ]);
   const orderHint = joinPrereqs([
     customers.length === 0 && "a customer",
     godowns.length === 0 && (
@@ -210,187 +197,36 @@ export function SalesDesk({
       )}
 
       <div className="mb-1.5 flex flex-wrap justify-end gap-2">
-        <Button onClick={() => setNewCustomer((open) => !open)}>
-          {newCustomer ? "Cancel" : "New customer"}
+        <Button onClick={() => openPanel(() => setNewCustomer(true))}>
+          New customer
         </Button>
-        <Button
-          disabled={customers.length === 0 || boards.length === 0}
-          onClick={() => setPricing((open) => !open)}
-        >
-          {pricing ? "Cancel" : "Set a price"}
-        </Button>
+        {/* "Set a price" is NOT here any more. Agreeing prices is a rate card
+            worked through in one sitting, which is what /prices is for; a
+            one-at-a-time dialog on the selling desk was the reason those lists
+            stayed empty. */}
         <Button
           variant="primary"
           disabled={!canOrder}
-          onClick={() => setNewOrder((o) => !o)}
+          onClick={() => openPanel(() => setNewOrder(true))}
         >
-          {newOrder ? "Cancel" : "New order"}
+          New order
         </Button>
       </div>
 
-      {priceHint && (
-        <PrereqHint className="mb-1.5">
-          Set a price needs {priceHint}.
-        </PrereqHint>
-      )}
       {orderHint && (
         <PrereqHint className="mb-4">New order needs {orderHint}.</PrereqHint>
       )}
 
-      {pricing && (
-        <div className="mb-6">
-          <Panel title="A customer's price for a board">
-            <form
-              className="flex flex-wrap items-end gap-3"
-              action={(formData) =>
-                run(
-                  "verity.plywood.set_customer_price",
-                  {
-                    customerId: String(formData.get("customerId") ?? ""),
-                    productId: String(formData.get("productId") ?? ""),
-                    customPricePaise: Math.round(
-                      Number(formData.get("price") ?? 0) * 100,
-                    ),
-                  },
-                  () => setPricing(false),
-                )
-              }
-            >
-              <div className="min-w-[200px]">
-                <Field label="Customer" htmlFor="cprice-customer" required>
-                  <FormCombobox
-            id="cprice-customer"
-            name="customerId"
-            required
-            placeholder="Search customers"
-            options={customers.map((row) => ({
-              value: row.id,
-              label: row.displayName,
-            }))}
-          />
-                </Field>
-              </div>
-              <div className="min-w-[260px] flex-1">
-                <Field label="Board" htmlFor="cprice-board" required>
-                  <FormCombobox
-            id="cprice-board"
-            name="productId"
-            required
-            placeholder="Search boards"
-            options={boards.map((row) => ({
-              value: row.id,
-              label: row.label,
-            }))}
-          />
-                </Field>
-              </div>
-              <div className="w-[170px]">
-                <Field label="Price (₹)" htmlFor="cprice-value" required>
-                  <Input
-                    id="cprice-value"
-                    name="price"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    required
-                  />
-                </Field>
-              </div>
-              <Button type="submit" variant="primary" disabled={pending}>
-                Save
-              </Button>
-              <p className="m-0 w-full text-[12px] text-text-tertiary">
-                Used when an order leaves the price blank. A price already on a
-                placed order does not move — the line snapshotted it.
-              </p>
-            </form>
-          </Panel>
-        </div>
-      )}
-
-      {newCustomer && (
-        <div className="mb-6">
-          <Panel title="New customer">
-            <form
-              className="flex flex-wrap items-end gap-3"
-              action={(formData) =>
-                run(
-                  "verity.plywood.create_customer",
-                  {
-                    displayName: String(formData.get("name") ?? ""),
-                    ...(formData.get("gstin")
-                      ? { gstin: String(formData.get("gstin")) }
-                      : {}),
-                    ...(formData.get("state")
-                      ? { stateCode: String(formData.get("state")) }
-                      : {}),
-                    ...(formData.get("phone")
-                      ? { phone: String(formData.get("phone")) }
-                      : {}),
-                    creditLimitPaise: Math.round(
-                      Number(formData.get("limit") ?? 0) * 100,
-                    ),
-                  },
-                  () => setNewCustomer(false),
-                )
-              }
-            >
-              <div className="min-w-[220px] flex-1">
-                <Field label="Customer" htmlFor="customer-name" required>
-                  <Input id="customer-name" name="name" required autoFocus />
-                </Field>
-              </div>
-              <div className="w-[200px]">
-                <Field
-                  label="GSTIN"
-                  htmlFor="customer-gstin"
-                  hint="15 characters"
-                >
-                  <Input id="customer-gstin" name="gstin" />
-                </Field>
-              </div>
-              <div className="w-[120px]">
-                <Field
-                  label="State code"
-                  htmlFor="customer-state"
-                  hint="Two digits"
-                >
-                  <Input
-                    id="customer-state"
-                    name="state"
-                    inputMode="numeric"
-                    pattern="[0-9]{2}"
-                  />
-                </Field>
-              </div>
-              <div className="w-[150px]">
-                <Field label="Phone" htmlFor="customer-phone">
-                  <Input id="customer-phone" name="phone" />
-                </Field>
-              </div>
-              <div className="w-[170px]">
-                <Field
-                  label="Credit limit (₹)"
-                  htmlFor="customer-limit"
-                  hint="Zero means cash only"
-                >
-                  <Input
-                    id="customer-limit"
-                    name="limit"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    defaultValue={0}
-                  />
-                </Field>
-              </div>
-              <Button type="submit" variant="primary" disabled={pending}>
-                Create
-              </Button>
-            </form>
-          </Panel>
-        </div>
-      )}
+      <NewCustomerModal
+        open={newCustomer}
+        pending={pending}
+        onClose={() => setNewCustomer(false)}
+        onSubmit={(input) =>
+          run("verity.plywood.create_customer", input, () =>
+            setNewCustomer(false),
+          )
+        }
+      />
 
       {canOrder && (
         <NewSalesOrderForm

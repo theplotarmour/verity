@@ -90,6 +90,42 @@ async function orderNumber(
 
 /* ================================ suppliers =============================== */
 
+/**
+ * A board's name with enough of its specification to tell it from its siblings.
+ *
+ * REPORTED: "in open orders it just says the item name and not its
+ * specifications — there can be multiple items with the same name but a
+ * different width or something else."
+ *
+ * Exactly right, and it is worse than cosmetic: a catalogue routinely carries
+ * "MR Commercial Ply" in 6mm, 12mm and 19mm, and an order line reading only
+ * "MR Commercial Ply" leaves a warehouse user guessing which one to load. The
+ * distinguishing facts are thickness, then size, then grade, so the snapshot
+ * carries them.
+ *
+ * A SNAPSHOT, so it is built once when the line is written and never recomputed:
+ * a catalogue edit must not rewrite a placed order. Lines written before this
+ * keep the bare name they were written with, which is the honest thing for a
+ * snapshot to do.
+ */
+function describeProduct(product: {
+  name: string;
+  thicknessTenthMm?: number | null;
+  widthMm?: number | null;
+  heightMm?: number | null;
+  grade?: string | null;
+}): string {
+  const parts = [product.name];
+  if (product.thicknessTenthMm != null) {
+    parts.push(`${(product.thicknessTenthMm / 10).toFixed(1)} mm`);
+  }
+  if (product.widthMm != null && product.heightMm != null) {
+    parts.push(`${product.widthMm}×${product.heightMm}`);
+  }
+  if (product.grade) parts.push(product.grade);
+  return parts.join(" · ");
+}
+
 export const createSupplier: CommandDefinition<
   {
     displayName: string;
@@ -539,11 +575,12 @@ export const createPurchaseOrder: CommandDefinition<
           qtyOrdered: z.number().int().positive(),
           unitCostPaise: z.number().int().min(0).optional(),
           /**
-           * Basis points off the unit cost. 1250 is 12.5%. Below 10000, because
-           * a 100% discount is a free supply — a different transaction with
-           * different tax treatment, not a very large discount.
+           * Basis points off the unit cost. 1250 is 12.5%; 10000 is the whole
+           * price. A wholly discounted line IS a free supply with its own tax
+           * treatment, and that is a judgement for whoever files the return —
+           * refusing to record what happened does not stop it happening.
            */
-          discountBps: z.number().int().min(0).max(9999).optional(),
+          discountBps: z.number().int().min(0).max(10_000).optional(),
         }),
       )
       .min(1),
@@ -620,7 +657,7 @@ export const createPurchaseOrder: CommandDefinition<
       return {
         productId: line.productId,
         // Snapshots. A catalogue edit must never rewrite a placed order.
-        productNameSnapshot: product.name,
+        productNameSnapshot: describeProduct(product),
         hsnCodeSnapshot: product.hsnCode,
         qtyOrdered: line.qtyOrdered,
         unitCostPaise,
@@ -1247,7 +1284,7 @@ export const createSalesOrder: CommandDefinition<
           qtyOrdered: z.number().int().positive(),
           unitPricePaise: z.number().int().min(0).optional(),
           /** Basis points off the unit price. See the purchase-order note. */
-          discountBps: z.number().int().min(0).max(9999).optional(),
+          discountBps: z.number().int().min(0).max(10_000).optional(),
         }),
       )
       .min(1),
@@ -1325,7 +1362,7 @@ export const createSalesOrder: CommandDefinition<
           : Math.round((listUnitPricePaise * (10_000 - discountBps)) / 10_000);
       return {
         productId: line.productId,
-        productNameSnapshot: product.name,
+        productNameSnapshot: describeProduct(product),
         hsnCodeSnapshot: product.hsnCode,
         qtyOrdered: line.qtyOrdered,
         unitPricePaise,

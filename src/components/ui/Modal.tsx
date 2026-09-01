@@ -64,12 +64,23 @@ export function Modal({
 
   // The page behind a modal must not scroll: on a phone, a form with the
   // keyboard up otherwise scrolls the list underneath instead of the form.
+  //
+  // The SHELL's scroll container, not document.body. html and body are
+  // height:100dvh with overflow:hidden in this app, so locking the body was a
+  // no-op and the page carried on scrolling behind every open dialog. body is
+  // still locked as well, for any surface that does scroll the document.
   useEffect(() => {
     if (!open) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const targets = [
+      document.body,
+      ...document.querySelectorAll<HTMLElement>("[data-shell-scroll]"),
+    ];
+    const previous = targets.map((el) => el.style.overflow);
+    for (const el of targets) el.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = previous;
+      targets.forEach((el, index) => {
+        el.style.overflow = previous[index] ?? "";
+      });
     };
   }, [open]);
 

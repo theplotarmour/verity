@@ -170,11 +170,25 @@ export function Combobox({
 
   // Keeps the highlighted row in view under arrow-key navigation. Without it
   // the highlight walks off the bottom of a scrolled list invisibly.
+  //
+  // The list's own scrollTop, NOT scrollIntoView. The list is
+  // position:fixed, and a fixed element cannot be scrolled into view — so
+  // scrollIntoView walks up to the page's scroll container and scrolls THAT
+  // instead, moving the whole screen under the user for a keypress that was
+  // meant to move a highlight one row. That is the "randomly overscrolls and
+  // gets stuck" this replaces. Setting scrollTop on the list cannot touch an
+  // ancestor at all.
   useEffect(() => {
     if (!open) return;
-    listRef.current
-      ?.querySelector(`[data-index="${active}"]`)
-      ?.scrollIntoView({ block: "nearest" });
+    const list = listRef.current;
+    const row = list?.querySelector<HTMLElement>(`[data-index="${active}"]`);
+    if (!list || !row) return;
+    const top = row.offsetTop;
+    const bottom = top + row.offsetHeight;
+    if (top < list.scrollTop) list.scrollTop = top;
+    else if (bottom > list.scrollTop + list.clientHeight) {
+      list.scrollTop = bottom - list.clientHeight;
+    }
   }, [active, open]);
 
   function close() {

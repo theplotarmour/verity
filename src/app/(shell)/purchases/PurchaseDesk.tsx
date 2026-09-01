@@ -126,7 +126,6 @@ export function PurchaseDesk({
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [newOrder, setNewOrder] = useState(false);
   const [receiving, setReceiving] = useState<string | null>(null);
-  const [pricing, setPricing] = useState(false);
   const [cancelling, setCancelling] = useState<string | null>(null);
   // Controlled, so a refusal does not blank the reason someone just typed.
   const [cancelReason, setCancelReason] = useState("");
@@ -169,17 +168,6 @@ export function PurchaseDesk({
   const canOrder =
     suppliers.length > 0 && godowns.length > 0 && boards.length > 0;
 
-  const priceHint = joinPrereqs([
-    suppliers.length === 0 && "a supplier",
-    boards.length === 0 && (
-      <>
-        a board in{" "}
-        <Link href="/catalogue" className="text-accent-ink hover:underline">
-          Catalogue
-        </Link>
-      </>
-    ),
-  ]);
   const orderHint = joinPrereqs([
     suppliers.length === 0 && "a supplier",
     godowns.length === 0 && (
@@ -217,12 +205,9 @@ export function PurchaseDesk({
         {/* "New supplier" is NOT here any more (Task 71 item 3). A supplier is
             a party you keep, not a thing you make while placing an order, and
             the Suppliers page is where you go to look one up. */}
-        <Button
-          disabled={suppliers.length === 0 || boards.length === 0}
-          onClick={() => openPanel(() => setPricing(true))}
-        >
-          Agree a price
-        </Button>
+        {/* "Agree a price" is NOT here any more. A rate card is worked
+            through in one sitting on /prices; one dialog per board on the
+            buying desk is why those lists stayed empty. */}
         <Button
           variant="primary"
           disabled={!canOrder}
@@ -235,27 +220,9 @@ export function PurchaseDesk({
       {/* Each disabled action names its own missing prerequisite — three
           different reasons can gate "New order" and a shared "not ready" line
           would tell the buyer nothing they could act on. */}
-      {priceHint && (
-        <PrereqHint className="mb-1.5">
-          Agree a price needs {priceHint}.
-        </PrereqHint>
-      )}
       {orderHint && (
         <PrereqHint className="mb-4">New order needs {orderHint}.</PrereqHint>
       )}
-
-      <AgreePriceModal
-        open={pricing}
-        suppliers={suppliers}
-        boards={boards}
-        pending={pending}
-        onClose={() => setPricing(false)}
-        onSubmit={(input) =>
-          run("verity.plywood.set_supplier_price", input, () =>
-            setPricing(false),
-          )
-        }
-      />
 
       {canOrder && (
         <NewPurchaseOrderForm
@@ -472,107 +439,6 @@ export function PurchaseDesk({
       )}
 
     </>
-  );
-}
-
-/**
- * The agreed price with a supplier for one board.
- *
- * A modal (Task 71 item 6) rather than a panel: it has nothing to do with the
- * order table it used to push down the page, and it is a two-second job the
- * buyer wants to finish and dismiss.
- */
-function AgreePriceModal({
-  open,
-  suppliers,
-  boards,
-  pending,
-  onClose,
-  onSubmit,
-}: {
-  open: boolean;
-  suppliers: Supplier[];
-  boards: Array<{ id: string; label: string }>;
-  pending: boolean;
-  onClose: () => void;
-  onSubmit: (input: {
-    supplierId: string;
-    productId: string;
-    negotiatedCostPaise: number;
-  }) => void;
-}) {
-  const [supplierId, setSupplierId] = useState("");
-  const [productId, setProductId] = useState("");
-  const [cost, setCost] = useState("");
-
-  const parsed = Number.parseFloat(cost);
-  const canSave =
-    supplierId !== "" && productId !== "" && Number.isFinite(parsed) && parsed >= 0;
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Agreed price with a supplier"
-      description="Used when an order leaves the cost blank. One current price per supplier per board; what it used to be lives in the orders placed at it."
-      footer={
-        <>
-          <ModalCancel onClose={onClose} disabled={pending} />
-          <Button
-            variant="primary"
-            disabled={pending || !canSave}
-            onClick={() =>
-              onSubmit({
-                supplierId,
-                productId,
-                negotiatedCostPaise: Math.round(parsed * 100),
-              })
-            }
-          >
-            {pending ? "Saving…" : "Save"}
-          </Button>
-        </>
-      }
-    >
-      <FormRow columns="minmax(0,1fr) minmax(0,1.4fr) 150px">
-        <Field label="Supplier" htmlFor="price-supplier" required>
-          <Combobox
-            id="price-supplier"
-            value={supplierId}
-            onChange={setSupplierId}
-            required
-            placeholder="Search suppliers"
-            options={suppliers.map((supplier) => ({
-              value: supplier.id,
-              label: supplier.displayName,
-            }))}
-          />
-        </Field>
-        <Field label="Board" htmlFor="price-board" required>
-          <Combobox
-            id="price-board"
-            value={productId}
-            onChange={setProductId}
-            required
-            placeholder="Search boards"
-            options={boards.map((board) => ({
-              value: board.id,
-              label: board.label,
-            }))}
-          />
-        </Field>
-        <Field label="Agreed cost (₹)" htmlFor="price-cost" required>
-          <Input
-            id="price-cost"
-            type="number"
-            step="0.01"
-            min="0"
-            value={cost}
-            onChange={(event) => setCost(event.target.value)}
-          />
-        </Field>
-      </FormRow>
-    </Modal>
   );
 }
 

@@ -1,9 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { EmptyState, Input, Panel, Row, RowList, Stat, StatRow } from "@/components/ui/primitives";
+import { useRouter } from "next/navigation";
+import {
+  Button,
+  EmptyState,
+  ErrorState,
+  Input,
+  Panel,
+  Row,
+  RowList,
+  Stat,
+  StatRow,
+} from "@/components/ui/primitives";
+import { NewCustomerModal } from "@/components/ui/business/NewCustomerModal";
 import { rupees, rupeesShort } from "@/components/ui/business/format";
+import { runCommand } from "@/server/actions/platform";
+import type { ActionFailure } from "@/server/platform/action-error";
 
 type Customer = {
   id: string;
@@ -19,6 +33,12 @@ type Customer = {
 
 export function CustomerList({ customers }: { customers: Customer[] }) {
   const [filter, setFilter] = useState("");
+  // Reported: creating a customer lived on Sales only, so the page anyone opens
+  // to look a customer up could not make one.
+  const [creating, setCreating] = useState(false);
+  const [failure, setFailure] = useState<ActionFailure | null>(null);
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const shown = useMemo(() => {
     const needle = filter.trim().toLowerCase();
@@ -41,17 +61,69 @@ export function CustomerList({ customers }: { customers: Customer[] }) {
     [customers],
   );
 
+  function create(input: unknown) {
+    setFailure(null);
+    startTransition(async () => {
+      const result = await runCommand(
+        "verity.plywood.create_customer",
+        input,
+        "/customers",
+      );
+      if (result.ok) {
+        setCreating(false);
+        router.refresh();
+      } else {
+        setFailure(result);
+      }
+    });
+  }
+
+  const dialog = (
+    <NewCustomerModal
+      open={creating}
+      pending={pending}
+      onClose={() => setCreating(false)}
+      onSubmit={create}
+    />
+  );
+
   if (customers.length === 0) {
     return (
-      <EmptyState
-        title="No customers yet"
-        description="A customer is created the first time you raise a sales order for them."
-      />
+      <>
+        {failure && (
+          <div className="mb-4">
+            <ErrorState
+              title="That was refused"
+              message={failure.message}
+              issues={failure.issues}
+              retryable={failure.retryable}
+            />
+          </div>
+        )}
+        <EmptyState
+          title="No customers yet"
+          description="Add the first one here, or let a sales order create them."
+          action={
+            <Button variant="primary" onClick={() => setCreating(true)}>
+              New customer
+            </Button>
+          }
+        />
+        {dialog}
+      </>
     );
   }
 
   return (
     <div className="flex flex-col gap-5">
+      {failure && (
+        <ErrorState
+          title="That was refused"
+          message={failure.message}
+          issues={failure.issues}
+          retryable={failure.retryable}
+        />
+      )}
       <StatRow cols={4}>
         <Stat label="Customers" value={customers.length} />
         <Stat label="Exposure" value={rupeesShort(totals.exposure)} hint="Owed plus committed" />
@@ -67,13 +139,18 @@ export function CustomerList({ customers }: { customers: Customer[] }) {
         flush
         title="All customers"
         action={
-          <div className="w-56">
-            <Input
-              value={filter}
-              onChange={(event) => setFilter(event.target.value)}
-              placeholder="Name or GSTIN"
-              aria-label="Filter customers"
-            />
+          <div className="flex items-center gap-2">
+            <div className="w-56">
+              <Input
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+                placeholder="Name or GSTIN"
+                aria-label="Filter customers"
+              />
+            </div>
+            <Button variant="primary" onClick={() => setCreating(true)}>
+              New customer
+            </Button>
           </div>
         }
       >
@@ -132,6 +209,7 @@ export function CustomerList({ customers }: { customers: Customer[] }) {
           </RowList>
         )}
       </Panel>
+      {dialog}
     </div>
   );
 }

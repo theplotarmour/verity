@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   Button,
   Checkbox,
@@ -10,7 +11,9 @@ import {
 } from "@/components/ui/primitives";
 import { Combobox } from "@/components/ui/Combobox";
 import { Modal, ModalCancel } from "@/components/ui/Modal";
+import { NewCustomerModal } from "@/components/ui/business/NewCustomerModal";
 import { rupees, sheets } from "@/components/ui/business/format";
+import { runCommand } from "@/server/actions/platform";
 
 /**
  * Taking an order.
@@ -89,6 +92,27 @@ export function NewSalesOrderForm({
   // enforce that too, not just this form.
   const [taxExempt, setTaxExempt] = useState(false);
   const [exemptReason, setExemptReason] = useState("");
+  // Requested: add a customer without abandoning a half-written order. The new
+  // one is selected on the way back, because the only reason to create a
+  // customer here is to sell to them.
+  const [addingCustomer, setAddingCustomer] = useState(false);
+  const [creating, startCreating] = useTransition();
+  const router = useRouter();
+
+  function createCustomer(input: unknown) {
+    startCreating(async () => {
+      const result = await runCommand(
+        "verity.plywood.create_customer",
+        input,
+        "/sales",
+      );
+      if (result.ok) {
+        setCustomerId((result.data as { id: string }).id);
+        setAddingCustomer(false);
+        router.refresh();
+      }
+    });
+  }
 
   /** Availability and agreed price for the chosen godown, by product. */
   const inGodown = useMemo(() => {
@@ -252,18 +276,36 @@ export function NewSalesOrderForm({
     >
       <div className="flex flex-col gap-5">
         <FormRow columns="minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr)">
-          <Field label="Customer" htmlFor="sale-customer" required>
-            <Combobox
-              id="sale-customer"
-              value={customerId}
-              onChange={setCustomerId}
-              required
-              placeholder="Search customers"
-              options={customers.map((customer) => ({
-                value: customer.id,
-                label: customer.displayName,
-              }))}
-            />
+          <Field
+            label="Customer"
+            htmlFor="sale-customer"
+            required
+            hint={
+              customerId === "" ? "Not listed? Add them without leaving." : undefined
+            }
+          >
+            <div className="flex gap-2">
+              <div className="min-w-0 flex-1">
+                <Combobox
+                  id="sale-customer"
+                  value={customerId}
+                  onChange={setCustomerId}
+                  required
+                  placeholder="Search customers"
+                  options={customers.map((customer) => ({
+                    value: customer.id,
+                    label: customer.displayName,
+                  }))}
+                />
+              </div>
+              <Button
+                disabled={pending || creating}
+                onClick={() => setAddingCustomer(true)}
+                aria-label="Add a customer"
+              >
+                +
+              </Button>
+            </div>
           </Field>
           <Field
             label="From godown"
@@ -385,7 +427,7 @@ export function NewSalesOrderForm({
                       id={`sale-discount-${index}`}
                       type="number"
                       min={0}
-                      max={99.99}
+                      max={100}
                       step="0.01"
                       value={line.discount}
                       onChange={(event) =>
@@ -459,6 +501,16 @@ export function NewSalesOrderForm({
           )}
         </div>
       </div>
+
+      {/* A dialog opened from inside a dialog. Both are native <dialog>
+          elements, so the second joins the top layer above the first and
+          Escape closes only the one on top. */}
+      <NewCustomerModal
+        open={addingCustomer}
+        pending={creating}
+        onClose={() => setAddingCustomer(false)}
+        onSubmit={createCustomer}
+      />
     </Modal>
   );
 }

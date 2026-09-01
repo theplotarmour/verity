@@ -315,7 +315,7 @@ export function NewPurchaseOrderForm({
                     id={`po-discount-${index}`}
                     type="number"
                     min={0}
-                    max={99.99}
+                    max={100}
                     step="0.01"
                     value={line.discount}
                     onChange={(event) =>
