@@ -44,33 +44,21 @@
    * classes at the end of this file, because a colour token cannot carry a
    * filter and pretending otherwise scatters `backdrop-filter` everywhere.
    * ------------------------------------------------------------------- */
-  /* Each level is the neutral material with a trace of the accent mixed in, so
-     a card reads as tinted glass over the atmosphere rather than as white on
-     colour. The tint FALLS as the level rises: level 1 is the shell and may
-     carry the most colour because nothing is read on it, while level 4 holds
-     dialogs and dropdowns whose text must stay legible over arbitrary content.
-     Everything derives from `--accent-seed`, so changing the accent retints the
-     whole material system and no component knows (ADR-012). */
-  --color-glass-1: color-mix(
-    in oklab,
-    var(--accent-seed) 6%,
-    light-dark(rgb(255 255 255 / 0.44), rgb(28 28 32 / 0.46))
-  );
-  --color-glass-2: color-mix(
-    in oklab,
-    var(--accent-seed) 4%,
-    light-dark(rgb(255 255 255 / 0.58), rgb(31 31 35 / 0.58))
-  );
-  --color-glass-3: color-mix(
-    in oklab,
-    var(--accent-seed) 3%,
-    light-dark(rgb(255 255 255 / 0.72), rgb(38 38 43 / 0.68))
-  );
-  --color-glass-4: color-mix(
-    in oklab,
-    var(--accent-seed) 2%,
-    light-dark(rgb(255 255 255 / 0.86), rgb(47 47 52 / 0.80))
-  );
+  /**
+   * The material is NEUTRAL and thin. All the colour in the interface comes
+   * from the ground behind it, read THROUGH the glass — that is what makes it
+   * glass rather than tinted plastic. Mixing the accent into the surface as
+   * well doubled the colour and flattened the depth, because a card then
+   * carried its own hue instead of borrowing the room's.
+   *
+   * Alpha still rises with the level: the shell is thinnest because nothing is
+   * read on it, and dialogs are thickest because they must stay legible over
+   * arbitrary content.
+   */
+  --color-glass-1: light-dark(rgb(255 255 255 / 0.30), rgb(28 28 32 / 0.30));
+  --color-glass-2: light-dark(rgb(255 255 255 / 0.42), rgb(30 32 36 / 0.38));
+  --color-glass-3: light-dark(rgb(255 255 255 / 0.60), rgb(38 40 45 / 0.55));
+  --color-glass-4: light-dark(rgb(255 255 255 / 0.82), rgb(44 47 52 / 0.78));
 
   /* Solid surfaces — level 5. Dense tables, long-form text, forms and
      destructive confirmation live here, per ADR-011. */
@@ -230,12 +218,16 @@
 @layer base {
   * { box-sizing: border-box; }
 
+  html {
+    /* The base colour. body layers the accent wash on top of it. */
+    background: var(--color-canvas);
+  }
+
   html, body {
     margin: 0;
     padding: 0;
     height: 100dvh;
     overflow: hidden;
-    background: var(--color-canvas);
     /**
      * NO ELASTIC OVERSCROLL, AND NO CHAINING.
      *
@@ -264,22 +256,17 @@
   /**
    * THE ATMOSPHERE — an accent-derived ground, not a flat fill.
    *
-   * Three radial washes of the accent at single-digit alpha over the canvas.
-   * Derived from `--accent-seed` through color-mix like everything else, so
-   * changing the accent changes the room the product sits in and no component
-   * needs touching (ADR-012).
+   * Layered into body's own `background` rather than a `::before` with a
+   * negative z-index. That is where the first attempt went wrong: a negative
+   * z-index child paints BEHIND its parent's background, so an opaque body
+   * covered the wash completely and the colour visible on screen was coming
+   * from a tint on the cards instead — which is backwards. The ground carries
+   * the colour; the glass only lets it through.
    *
-   * Deliberately faint. ADR-011's sixth constraint is content over effect: this
-   * has to read as depth from the corner of the eye and never as colour the
-   * reader has to look past. It is painted on a fixed pseudo-element rather
-   * than on `body` so it does not scroll, repeat, or cost a repaint per frame.
+   * `background-attachment: fixed` so it is anchored to the viewport rather
+   * than repeating or scrolling with anything.
    */
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
+  body {
     background:
       radial-gradient(
         1100px 720px at 12% -8%,
@@ -295,17 +282,62 @@
         1000px 800px at 50% 108%,
         color-mix(in oklab, var(--accent-seed) 20%, transparent),
         transparent 64%
-      );
+      ),
+      var(--color-canvas);
+    background-attachment: fixed;
   }
 
-  /* Dark needs less of it: the same alpha over a near-black ground reads as a
-     colour cast rather than as light. */
+  /**
+   * Dark gets its OWN wash rather than a dimmed copy of the light one.
+   *
+   * On a near-black ground the accent has to be stronger and reach further to
+   * read as light at all — the alpha that looks like a lit room over off-white
+   * disappears entirely over #0F1115. The bloom sits top-left where the sidebar
+   * meets the header, so the brightest part of the room is behind the chrome
+   * and the content falls away from it.
+   */
   @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) body::before {
-      opacity: 0.55;
+    :root:not([data-theme="light"]) body {
+      background:
+        radial-gradient(
+          1200px 820px at 4% -14%,
+          color-mix(in oklab, var(--accent-seed) 62%, transparent),
+          transparent 60%
+        ),
+        radial-gradient(
+          1500px 700px at 58% -20%,
+          color-mix(in oklab, var(--accent-seed) 34%, transparent),
+          transparent 64%
+        ),
+        radial-gradient(
+          1200px 900px at 100% 10%,
+          color-mix(in oklab, var(--accent-seed) 22%, transparent),
+          transparent 62%
+        ),
+        var(--color-canvas);
+      background-attachment: fixed;
     }
   }
-  :root[data-theme="dark"] body::before { opacity: 0.55; }
+  :root[data-theme="dark"] body {
+    background:
+      radial-gradient(
+        1200px 820px at 4% -14%,
+        color-mix(in oklab, var(--accent-seed) 62%, transparent),
+        transparent 60%
+      ),
+      radial-gradient(
+        1500px 700px at 58% -20%,
+        color-mix(in oklab, var(--accent-seed) 34%, transparent),
+        transparent 64%
+      ),
+      radial-gradient(
+        1200px 900px at 100% 10%,
+        color-mix(in oklab, var(--accent-seed) 22%, transparent),
+        transparent 62%
+      ),
+      var(--color-canvas);
+    background-attachment: fixed;
+  }
 
   html, body {
     color: var(--color-text);
@@ -406,9 +438,10 @@
   background:
     linear-gradient(
       180deg,
-      color-mix(in oklab, var(--accent-seed) 11%, var(--color-glass-1)),
-      color-mix(in oklab, var(--accent-seed) 5%, var(--color-glass-1))
-    );
+      light-dark(rgb(255 255 255 / 0.10), rgb(255 255 255 / 0.10)),
+      light-dark(rgb(255 255 255 / 0.02), rgb(255 255 255 / 0.02))
+    ),
+    var(--color-glass-1);
   backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.5);
   -webkit-backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.5);
 }
@@ -418,15 +451,22 @@
   background:
     linear-gradient(
       180deg,
-      color-mix(in oklab, var(--accent-seed) 7%, var(--color-glass-2)),
-      color-mix(in oklab, var(--accent-seed) 3%, var(--color-glass-2))
-    );
+      light-dark(rgb(255 255 255 / 0.14), rgb(255 255 255 / 0.14)),
+      light-dark(rgb(255 255 255 / 0.03), rgb(255 255 255 / 0.03))
+    ),
+    var(--color-glass-2);
   border: 1px solid var(--color-line);
   border-radius: var(--radius-xl);
-  /* The top edge is brighter than the rest of the border — light catching the
-     lip of the material, which is what stops it reading as a drawn rectangle. */
+  /* Two lit edges, both drawn as insets so they follow the radius exactly.
+     The top is neutral light catching the lip of the material; the LEADING
+     edge takes the accent, which is where the light in this room comes from
+     — the bloom sits top-left, so the left side of every surface is the side
+     facing it. It is a material highlight, not a status marker: low alpha,
+     never saturated, and identical on every card so it can never be mistaken
+     for meaning. */
   box-shadow:
     inset 0 1px 0 light-dark(rgb(255 255 255 / 0.85), rgb(255 255 255 / 0.07)),
+    inset 2px 0 0 color-mix(in oklab, var(--accent-seed) 42%, transparent),
     var(--shadow-sm);
 }
 
@@ -435,9 +475,10 @@
   background:
     linear-gradient(
       180deg,
-      color-mix(in oklab, var(--accent-seed) 4%, var(--color-glass-3)),
-      color-mix(in oklab, var(--accent-seed) 2%, var(--color-glass-3))
-    );
+      light-dark(rgb(255 255 255 / 0.10), rgb(255 255 255 / 0.10)),
+      light-dark(rgb(255 255 255 / 0.02), rgb(255 255 255 / 0.02))
+    ),
+    var(--color-glass-3);
   border: 1px solid var(--color-line);
 }
 
@@ -449,9 +490,10 @@
   background:
     linear-gradient(
       180deg,
-      color-mix(in oklab, var(--accent-seed) 4%, var(--color-glass-4)),
-      color-mix(in oklab, var(--accent-seed) 2%, var(--color-glass-4))
-    );
+      light-dark(rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.12)),
+      light-dark(rgb(255 255 255 / 0.03), rgb(255 255 255 / 0.03))
+    ),
+    var(--color-glass-4);
   backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.8);
   -webkit-backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.8);
   box-shadow:
@@ -464,12 +506,7 @@
    legibility matters most (ADR-011); the tint keeps them from reading as plain
    white boxes punched through the glass. */
 .verity-solid {
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in oklab, var(--accent-seed) 4%, var(--color-surface)),
-      color-mix(in oklab, var(--accent-seed) 1.5%, var(--color-surface))
-    );
+  background: var(--color-surface);
   box-shadow: inset 0 1px 0 light-dark(rgb(255 255 255 / 0.7), rgb(255 255 255 / 0.05));
 }
 
