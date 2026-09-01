@@ -90,6 +90,10 @@ export function NewSalesOrderForm({
   // required, because a zero-tax invoice with no stated ground cannot be told
   // apart later from an under-declared one — the command and the database
   // enforce that too, not just this form.
+  // Requested in place of the credit gate: has this been paid, or is it owed.
+  const [paymentTerms, setPaymentTerms] = useState<"prepaid" | "credit">(
+    "credit",
+  );
   const [taxExempt, setTaxExempt] = useState(false);
   const [exemptReason, setExemptReason] = useState("");
   // Requested: add a customer without abandoning a half-written order. The new
@@ -212,7 +216,7 @@ export function NewSalesOrderForm({
       open={open}
       onClose={onCancel}
       title="New sales order"
-      description="An order past the customer's credit limit is held for approval, not refused."
+      description="Say whether the money is already in hand. Anything owed appears on Who owes what."
       width="lg"
       footer={
         <>
@@ -263,6 +267,7 @@ export function NewSalesOrderForm({
                       : {}),
                   };
                 }),
+                paymentTerms,
                 ...(taxExempt
                   ? { taxExempt: true, taxExemptReason: exemptReason.trim() }
                   : {}),
@@ -475,6 +480,35 @@ export function NewSalesOrderForm({
               Add another board
             </Button>
           </div>
+        </div>
+
+        <div className="border-t border-line pt-4">
+          <FormRow columns="minmax(0,1fr) minmax(0,1.4fr)">
+            <Field
+              label="Payment"
+              htmlFor="sale-terms"
+              required
+              hint={
+                paymentTerms === "prepaid"
+                  ? "Settles itself when the goods go out"
+                  : "Appears on Who owes what until it is paid"
+              }
+            >
+              <Combobox
+                id="sale-terms"
+                value={paymentTerms}
+                onChange={(value) =>
+                  setPaymentTerms(value as "prepaid" | "credit")
+                }
+                required
+                options={[
+                  { value: "credit", label: "To be paid later" },
+                  { value: "prepaid", label: "Already paid" },
+                ]}
+              />
+            </Field>
+            <span />
+          </FormRow>
         </div>
 
         <div className="flex flex-col gap-3 border-t border-line pt-4">

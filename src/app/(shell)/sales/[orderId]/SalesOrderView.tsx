@@ -39,7 +39,6 @@ export function SalesOrderView({
 }) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
-  const [approving, setApproving] = useState(false);
   const [reason, setReason] = useState("");
   const [issuing, setIssuing] = useState(false);
   const [rackId, setRackId] = useState("");
@@ -73,11 +72,6 @@ export function SalesOrderView({
         description={`${order.customerName} · from ${order.locationName} · taken ${day(order.createdAt)}`}
         actions={
           <>
-            {order.state === "pending_credit" && !approving && (
-              <Button variant="primary" disabled={pending} onClick={() => setApproving(true)}>
-                Review credit
-              </Button>
-            )}
             {order.state === "approved" && (
               <Button
                 variant="primary"
@@ -161,72 +155,11 @@ export function SalesOrderView({
           <StateBadge category={state.category} label={state.label} />
         </div>
 
-        {/* §41 — the block states the amount and names the customer, because
-            "credit issue" tells an approver nothing they can act on. */}
-        {order.state === "pending_credit" && (
-          <div className="rounded-lg border border-warning/25 bg-warning-subtle px-5 py-4">
-            <p className="m-0 text-[14px] text-text">
-              {order.customerName} is {rupees(order.overLimitPaise)} above their credit headroom.
-              Exposure {rupees(order.exposurePaise)} against a limit of{" "}
-              {rupees(order.creditLimitPaise)}.
-            </p>
-            <p className="m-0 mt-1 text-[12px] text-text-tertiary">
-              Nothing is reserved and no stock is committed until this is approved.
-            </p>
-          </div>
-        )}
-
-        {approving && (
-          <Panel title="Approve beyond the credit limit">
-            <div className="flex flex-col gap-4">
-              <DefinitionList
-                items={[
-                  { term: "Credit limit", value: rupees(order.creditLimitPaise) },
-                  { term: "Current exposure", value: rupees(order.exposurePaise) },
-                  { term: "Over by", value: rupees(order.overLimitPaise) },
-                  { term: "This order", value: rupees(order.totalPricePaise) },
-                ]}
-              />
-              {/* §42 — the reason is recorded against the actor and the amount.
-                  An override with no reason is an audit row that cannot be
-                  explained a year later. */}
-              <Field
-                label="Reason"
-                htmlFor="approve-reason"
-                required
-                hint="Recorded in the audit trail with your name and the amount"
-              >
-                <Input
-                  id="approve-reason"
-                  value={reason}
-                  onChange={(event) => setReason(event.target.value)}
-                  placeholder="Owner approved a temporary limit extension"
-                />
-              </Field>
-              <div className="flex gap-2">
-                <Button
-                  variant="primary"
-                  disabled={pending || reason.trim().length === 0}
-                  onClick={() =>
-                    run(
-                      "verity.plywood.approve_credit",
-                      { orderId: order.id, reason: reason.trim() },
-                      () => {
-                        setApproving(false);
-                        setReason("");
-                      },
-                    )
-                  }
-                >
-                  {pending ? "Approving…" : "Approve order"}
-                </Button>
-                <Button disabled={pending} onClick={() => setApproving(false)}>
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          </Panel>
-        )}
+        {/* The credit-approval block and its override form are gone with the
+            gate itself: an order is no longer held for approval, it records
+            whether the money is already in hand. The customer's exposure and
+            headroom are still shown on their own page — the figure is there to
+            look at, it simply no longer blocks anything. */}
 
         {issuing && (
           <Panel title="Issue goods">

@@ -2452,6 +2452,13 @@ model PlywoodPurchaseOrderLine {
 model PlywoodSalesOrder {
   id              String   @id @default(uuid()) @db.Uuid
   tenantId        String   @map("tenant_id") @db.Uuid
+  /// Paid across the counter, or owed.
+  ///
+  /// Replaces the credit-approval gate. `prepaid` settles itself when the
+  /// invoice is raised; `credit` leaves the balance on Who owes what, which is
+  /// where a merchant looks for it. The customer's credit limit still records
+  /// exposure and headroom — it simply no longer blocks an order.
+  paymentTerms    String   @default("credit") @map("payment_terms")
   /// This supply carries no GST, and why.
   ///
   /// Not a discount and not a switch to make a total look better: an exempt or

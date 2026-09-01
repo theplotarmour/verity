@@ -75,6 +75,8 @@ function PrereqHint({
 
 const STATE_LABEL: Record<string, string> = {
   draft: "Draft",
+  // Retained so an order written before the credit gate was removed still
+  // reads sensibly. Nothing produces this state any more.
   pending_credit: "Held for credit",
   approved: "Approved",
   dispatching: "Stock held",
@@ -121,7 +123,6 @@ export function SalesDesk({
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [newOrder, setNewOrder] = useState(false);
   const [newCustomer, setNewCustomer] = useState(false);
-  const [approving, setApproving] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [creditFor, setCreditFor] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -324,21 +325,6 @@ export function SalesDesk({
                       </td>
                       <td className="border-b border-line px-3 py-2 text-right">
                         <div className="flex justify-end gap-2">
-                          {order.state === "pending_credit" && (
-                            <Button
-                              size="sm"
-                              disabled={pending}
-                              onClick={() =>
-                                setApproving(
-                                  approving === order.id ? null : order.id,
-                                )
-                              }
-                            >
-                              {approving === order.id
-                                ? "Close"
-                                : "Approve credit"}
-                            </Button>
-                          )}
                           {order.state === "approved" && (
                             <Button
                               size="sm"
@@ -453,45 +439,6 @@ export function SalesDesk({
             </form>
           )}
 
-          {approving && (
-            <form
-              className="mt-4 flex flex-wrap items-end gap-3 rounded-lg bg-glass-2 p-3"
-              action={(formData) =>
-                run(
-                  "verity.plywood.approve_credit",
-                  {
-                    orderId: approving,
-                    reason: String(formData.get("reason") ?? ""),
-                  },
-                  () => setApproving(null),
-                )
-              }
-            >
-              <div className="min-w-[320px] flex-1">
-                <Field
-                  label="Why is this being approved?"
-                  htmlFor={`approve-${approving}`}
-                  required
-                >
-                  <Input
-                    id={`approve-${approving}`}
-                    name="reason"
-                    required
-                    autoFocus
-                    placeholder="Cheque cleared this morning"
-                  />
-                </Field>
-              </div>
-              <Button type="submit" variant="primary" disabled={pending}>
-                Approve
-              </Button>
-              <p className="m-0 w-full text-[12px] text-text-tertiary">
-                Recorded against the order. This is the decision someone asks
-                about after a bad debt, so the reason is required rather than
-                optional.
-              </p>
-            </form>
-          )}
         </Panel>
       </div>
 

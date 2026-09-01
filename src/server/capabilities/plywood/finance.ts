@@ -480,6 +480,51 @@ export async function issueSalesInvoice(
       },
     });
 
+    // PAID ACROSS THE COUNTER SETTLES ITSELF.
+    //
+    // The order recorded whether the money was already in hand. If it was, the
+    // payment is written here rather than left for somebody to remember —
+    // otherwise a cash sale would sit on Who owes what as a debt that was
+    // settled before the customer left the yard, and chasing it would be the
+    // first anyone heard of the mistake.
+    //
+    // Recorded as a real payment with a real allocation, not as a flag on the
+    // invoice: the money moved, and the cash book on Transactions has to show
+    // it moving.
+    if (order.paymentTerms === "prepaid" && tax.totalPaise > 0) {
+      const payment = await ctx.tx.plywoodPayment.create({
+        data: {
+          tenantId: ctx.actor.tenantId,
+          invoiceId: invoice.id,
+          customerId: order.customerId,
+          direction: "in",
+          method: "cash",
+          amountPaise: tax.totalPaise,
+          reference: `Paid on ${numbering.invoiceNumber}`,
+          byUserId: ctx.actor.userId,
+        },
+      });
+      await ctx.tx.plywoodPaymentAllocation.create({
+        data: {
+          tenantId: ctx.actor.tenantId,
+          paymentId: payment.id,
+          invoiceId: invoice.id,
+          amountPaise: tax.totalPaise,
+        },
+      });
+      await ctx.tx.plywoodLedgerEntry.create({
+        data: {
+          tenantId: ctx.actor.tenantId,
+          customerId: order.customerId,
+          entryType: "credit",
+          amountPaise: tax.totalPaise,
+          invoiceId: invoice.id,
+          paymentId: payment.id,
+          narration: `Paid at the counter against ${numbering.invoiceNumber}`,
+        },
+      });
+    }
+
     return {
       id: invoice.id,
       invoiceNumber: numbering.invoiceNumber,

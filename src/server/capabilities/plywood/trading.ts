@@ -1267,6 +1267,8 @@ export const createSalesOrder: CommandDefinition<
     /** No GST on this supply, with the ground for it. */
     taxExempt?: boolean;
     taxExemptReason?: string;
+    /** `prepaid` when the money is already in hand; `credit` when it is owed. */
+    paymentTerms?: "prepaid" | "credit";
   },
   { id: string; totalPricePaise: number; state: string }
 > = {
@@ -1292,6 +1294,7 @@ export const createSalesOrder: CommandDefinition<
     // Three characters is not a justification, but it stops an empty box being
     // submitted out of habit; the rest is a judgement no schema can make.
     taxExemptReason: z.string().min(3).max(200).optional(),
+    paymentTerms: z.enum(["prepaid", "credit"]).optional(),
   }),
   preconditions: async (ctx, input) => {
     if (input.taxExempt && !input.taxExemptReason?.trim()) {
@@ -1376,15 +1379,6 @@ export const createSalesOrder: CommandDefinition<
       0,
     );
 
-    const customer = await ctx.tx.plywoodCustomer.findUniqueOrThrow({
-      where: { id: input.customerId },
-    });
-    const exposure = await customerExposurePaise(ctx.tx, input.customerId);
-
-    // The credit check is a PRECONDITION of the order, not a warning on a
-    // screen (MET-ACT-003). A limit enforced only in the interface is enforced
-    // until the first person who uses a different one.
-    const overLimit = exposure + totalPricePaise > customer.creditLimitPaise;
 
     // Layer 2 on the write path (P0-01): the same rule for selling out of a
     // godown as for buying into one.
@@ -1405,6 +1399,7 @@ export const createSalesOrder: CommandDefinition<
           input.reference ??
           (await orderNumber(ctx.tx, ctx.actor.tenantId, "SO", new Date())),
         totalPricePaise,
+        paymentTerms: input.paymentTerms ?? "credit",
         taxExempt: input.taxExempt ?? false,
         taxExemptReason: input.taxExempt
           ? (input.taxExemptReason?.trim() ?? null)
@@ -1421,10 +1416,12 @@ export const createSalesOrder: CommandDefinition<
       })),
     });
 
-    // Blocked rather than refused. The order is real and someone with authority
-    // may still approve it; refusing outright would push the business to write
-    // it down somewhere Verity cannot see.
-    const target = overLimit ? "pending_credit" : "approved";
+    // Every order is approved. The credit gate it used to pass through held an
+    // order until somebody with authority released it, which in a yard where
+    // the proprietor takes the order is a step performed on oneself. What the
+    // business actually needs to know is whether the money is in hand, and that
+    // is `paymentTerms` — recorded, not gated.
+    const target = "approved";
     await transition(ctx, {
       entityKey: ENTITY_SALES_ORDER,
       entityId: order.id,
@@ -1436,60 +1433,15 @@ export const createSalesOrder: CommandDefinition<
       data: { state: target, version: { increment: 1 } },
     });
 
-    // §72 — tell someone, and tell them enough to act.
-    //
-    // A held order that nobody is told about is an order that sits until the
-    // customer rings to ask. The message names the customer, the amount over,
-    // and the order to open — "credit issue" would leave the approver to go and
-    // find all three.
-    if (overLimit) {
-      const approvers = await ctx.tx.tenantMembership.findMany({
-        where: {
-          role: {
-            permissions: {
-              some: { verb: "ActionExecute", entity: ENTITY_SALES_ORDER },
-            },
-          },
-        },
-        select: { userId: true },
-      });
-      if (approvers.length > 0) {
-        const over = exposure + totalPricePaise - customer.creditLimitPaise;
-        await notify(ctx.tx, {
-          tenantId: ctx.actor.tenantId,
-          key: "verity.plywood.credit_approval_needed",
-          // De-duplicated: one person can hold several memberships, and being
-          // told the same thing twice teaches people to ignore the channel.
-          recipientIds: [
-            ...new Set(approvers.map((membership) => membership.userId)),
-          ],
-          variables: {
-            customer: customer.displayName,
-            over: String(Math.round(over / 100)),
-          },
-          fallback: {
-            subject: `${customer.displayName} needs credit approval`,
-            body:
-              `This order is ₹${Math.round(over / 100).toLocaleString("en-IN")} above ` +
-              `${customer.displayName}'s credit headroom. Nothing is reserved until it is ` +
-              `approved.\n\nReview the order: /sales/${order.id}`,
-          },
-        });
-      }
-    }
+
+    // The credit-approval notification is gone with the gate that produced it.
+    // Nobody is being asked to release an order any more, so there is nothing
+    // to tell them.
 
     return {
       result: { id: order.id, totalPricePaise, state: target },
       events: [
         { name: "verity.plywood.sales_order_created", entityId: order.id },
-        ...(overLimit
-          ? [
-              {
-                name: "verity.plywood.sales_order_held_for_credit",
-                entityId: order.id,
-              },
-            ]
-          : []),
       ],
     };
   },
