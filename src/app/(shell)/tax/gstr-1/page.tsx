@@ -19,7 +19,7 @@ import {
   PeriodSwitch,
   periodFromParam,
 } from "@/components/ui/business/PeriodSwitch";
-import { monthKeyOf, monthWindow } from "@/components/ui/business/period";
+import { monthWindow } from "@/components/ui/business/period";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +57,11 @@ export default async function Gstr1Page({
     working.b2b.reduce((sum, row) => sum + row.taxPaise, 0) +
     working.b2c.reduce((sum, row) => sum + row.taxPaise, 0);
 
-  const periodKey = chosen ?? monthKeyOf(new Date());
+  // From the SERVER, in the business's zone. monthKeyOf reads a Date in
+  // UTC, which east of UTC names the previous month for the first hours of
+  // every month — and this key is what the period switch and every link on
+  // the page carry, so being wrong here queries an empty month.
+  const periodKey = chosen ?? working.periodKey;
 
   return (
     <>

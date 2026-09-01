@@ -66,14 +66,20 @@ export default async function TaxCentrePage({
     }),
   ]);
 
-  // Named from the window that was actually queried, so the heading and the
-  // figures below it can never describe different months.
-  const periodKey = chosen ?? monthKeyOf(new Date(summary.from));
-  const period = new Date(summary.from).toLocaleDateString("en-IN", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  // Named by the SERVER, from the business's own zone.
+  //
+  // This used to derive both from `summary.from` formatted in UTC. The window
+  // starts at midnight local time, which east of UTC is the previous day — so
+  // September's figures were headed "August 2026" and every link below carried
+  // period=2026-08, making GSTR-1, ITC and the exceptions page each query a
+  // month with nothing in it. The section looked empty while the data sat one
+  // month over.
+  const periodKey = chosen ?? summary.periodKey;
+  const [year, month] = periodKey.split("-").map(Number);
+  const period = new Date(Date.UTC(year!, month! - 1, 1)).toLocaleDateString(
+    "en-IN",
+    { month: "long", year: "numeric", timeZone: "UTC" },
+  );
 
   return (
     <>

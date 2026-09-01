@@ -6,7 +6,11 @@ import {
 } from "@/server/platform/command";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
-import { businessZone, startOfBusinessMonth } from "./clock";
+import {
+  businessPeriodKey,
+  businessZone,
+  startOfBusinessMonth,
+} from "./clock";
 import { HSN_CODE, ENTITY_GST_REGISTRATION, ENTITY_INVOICE } from "./keys";
 
 /**
@@ -195,6 +199,18 @@ export const taxSummary: QueryDefinition<
   {
     from: string;
     to: string;
+    /**
+     * The period this window actually covers, in the BUSINESS's zone.
+     *
+     * Returned rather than left for the caller to derive, because deriving it
+     * from `from` is what went wrong: the window starts at midnight local time,
+     * which in a zone east of UTC is the PREVIOUS day in UTC. Formatting that
+     * instant in UTC labelled September's figures "August 2026" and — far worse
+     * — put period=2026-08 on every link to GSTR-1, ITC and the exceptions
+     * page, so each of them queried a month with nothing in it. The whole tax
+     * section looked empty while the data sat one month over.
+     */
+    periodKey: string;
     outputTaxPaise: number;
     /**
      * GST charged on purchase documents in the window — ALL of them, including
@@ -231,9 +247,8 @@ export const taxSummary: QueryDefinition<
     const now = new Date();
     // Default window: the current month, which is the period an accountant is
     // usually looking at when they open this.
-    const from = input.from
-      ? new Date(input.from)
-      : startOfBusinessMonth(await businessZone(ctx), now);
+    const zone = await businessZone(ctx);
+    const from = input.from ? new Date(input.from) : startOfBusinessMonth(zone, now);
     const to = input.to ? new Date(input.to) : now;
 
     const invoices = await ctx.tx.plywoodInvoice.findMany({
@@ -352,6 +367,8 @@ export const taxSummary: QueryDefinition<
     return {
       from: from.toISOString(),
       to: to.toISOString(),
+      // Named from the window's own start, in the business's zone.
+      periodKey: businessPeriodKey(zone, from),
       outputTaxPaise,
       inputTaxPaise,
       inputTaxEligiblePaise,
@@ -379,6 +396,8 @@ export const taxSummary: QueryDefinition<
 export const gstr1Working: QueryDefinition<
   { from?: string; to?: string },
   {
+    /** The period covered, named in the business's own zone. */
+    periodKey: string;
     b2b: Array<{
       invoiceNumber: string;
       customerName: string;
@@ -410,9 +429,10 @@ export const gstr1Working: QueryDefinition<
   }),
   handler: async (ctx, input) => {
     const now = new Date();
+    const zone = await businessZone(ctx);
     const from = input.from
       ? new Date(input.from)
-      : startOfBusinessMonth(await businessZone(ctx), now);
+      : startOfBusinessMonth(zone, now);
     const to = input.to ? new Date(input.to) : now;
 
     const invoices = await ctx.tx.plywoodInvoice.findMany({
@@ -494,6 +514,7 @@ export const gstr1Working: QueryDefinition<
     }
 
     return {
+      periodKey: businessPeriodKey(zone, from),
       b2b,
       b2c,
       hsnSummary: [...byHsn.entries()].map(([hsnCode, entry]) => ({
@@ -531,6 +552,8 @@ export const gstr3bWorking: QueryDefinition<
   {
     from: string;
     to: string;
+    /** The period covered, named in the business's own zone. */
+    periodKey: string;
     outward: {
       taxablePaise: number;
       cgstPaise: number;
@@ -569,9 +592,10 @@ export const gstr3bWorking: QueryDefinition<
   }),
   handler: async (ctx, input) => {
     const now = new Date();
+    const zone = await businessZone(ctx);
     const from = input.from
       ? new Date(input.from)
-      : startOfBusinessMonth(await businessZone(ctx), now);
+      : startOfBusinessMonth(zone, now);
     const to = input.to ? new Date(input.to) : now;
 
     const invoices = await ctx.tx.plywoodInvoice.findMany({
@@ -661,6 +685,7 @@ export const gstr3bWorking: QueryDefinition<
     return {
       from: from.toISOString(),
       to: to.toISOString(),
+      periodKey: businessPeriodKey(zone, from),
       outward,
       inward,
       // Clamped at zero: a credit surplus carries forward, it is not a refund
