@@ -208,7 +208,7 @@ export function FinanceDesk({
         <Stat
           label="They need to send us"
           value={rupees(totals.owedToUs)}
-          hint="Customers with unpaid invoices"
+          hint="Unpaid invoices, plus orders taken on credit"
           href="/ledgers"
         />
         <Stat

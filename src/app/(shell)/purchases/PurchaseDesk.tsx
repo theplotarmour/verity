@@ -41,6 +41,17 @@ type PurchaseOrder = {
     qtyReceived: number;
     qtyOutstanding: number;
   }>;
+  editable: {
+    locationId: string;
+    supplierId: string;
+    lines: Array<{
+      productId: string;
+      qtyOrdered: number;
+      unitCostPaise: number;
+      listUnitCostPaise: number | null;
+      discountBps: number;
+    }>;
+  };
 };
 
 type Supplier = {
@@ -125,6 +136,8 @@ export function PurchaseDesk({
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [newOrder, setNewOrder] = useState(false);
+  // Amending an order that has not been delivered against.
+  const [amending, setAmending] = useState<PurchaseOrder | null>(null);
   const [receiving, setReceiving] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState<string | null>(null);
   // Controlled, so a refusal does not blank the reason someone just typed.
@@ -223,6 +236,32 @@ export function PurchaseDesk({
       {orderHint && (
         <PrereqHint className="mb-4">New order needs {orderHint}.</PrereqHint>
       )}
+
+      <NewPurchaseOrderForm
+        open={amending !== null}
+        editing={
+          amending
+            ? {
+                id: amending.id,
+                reference: amending.reference,
+                supplierId: amending.editable.supplierId,
+                locationId: amending.editable.locationId,
+                lines: amending.editable.lines,
+              }
+            : null
+        }
+        suppliers={suppliers}
+        godowns={godowns}
+        boards={boards}
+        agreed={agreed}
+        pending={pending}
+        onCancel={() => setAmending(null)}
+        onSubmit={(input) =>
+          run("verity.plywood.edit_purchase_order", input, () =>
+            setAmending(null),
+          )
+        }
+      />
 
       {canOrder && (
         <NewPurchaseOrderForm
@@ -357,6 +396,19 @@ export function PurchaseDesk({
                               {receiving === order.id ? "Close" : "Receive…"}
                             </Button>
                           )}
+                          {/* Amendable only while nothing has arrived — once
+                              it has, the lines describe a real delivery. */}
+                          {order.receivedUnits === 0 &&
+                            order.state !== "completed" &&
+                            order.state !== "cancelled" && (
+                              <Button
+                                size="sm"
+                                disabled={pending}
+                                onClick={() => openPanel(() => setAmending(order))}
+                              >
+                                Edit
+                              </Button>
+                            )}
                           {order.state !== "completed" && (
                             <Button
                               size="sm"

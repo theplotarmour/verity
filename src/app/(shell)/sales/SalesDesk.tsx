@@ -28,6 +28,21 @@ type SalesOrder = {
   orderedUnits: number;
   raisedAt: Date | string;
   summary: string;
+  paymentTerms: string;
+  taxExempt: boolean;
+  taxExemptReason: string | null;
+  amendable: boolean;
+  editable: {
+    locationId: string;
+    customerId: string;
+    lines: Array<{
+      productId: string;
+      qtyOrdered: number;
+      unitPricePaise: number;
+      listUnitPricePaise: number | null;
+      discountBps: number;
+    }>;
+  };
 };
 
 type Customer = {
@@ -122,6 +137,7 @@ export function SalesDesk({
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [newOrder, setNewOrder] = useState(false);
+  const [amending, setAmending] = useState<SalesOrder | null>(null);
   const [newCustomer, setNewCustomer] = useState(false);
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [creditFor, setCreditFor] = useState<string | null>(null);
@@ -229,6 +245,36 @@ export function SalesDesk({
         }
       />
 
+      <NewSalesOrderForm
+        open={amending !== null}
+        editing={
+          amending
+            ? {
+                id: amending.id,
+                reference: amending.reference,
+                customerId: amending.editable.customerId,
+                locationId: amending.editable.locationId,
+                paymentTerms: amending.paymentTerms,
+                taxExempt: amending.taxExempt,
+                taxExemptReason: amending.taxExemptReason,
+                lines: amending.editable.lines,
+              }
+            : null
+        }
+        customers={customers.map((c) => ({
+          id: c.id,
+          displayName: c.displayName,
+        }))}
+        godowns={godowns}
+        boards={boards}
+        sellable={sellable}
+        pending={pending}
+        onCancel={() => setAmending(null)}
+        onSubmit={(input) =>
+          run("verity.plywood.edit_sales_order", input, () => setAmending(null))
+        }
+      />
+
       {canOrder && (
         <NewSalesOrderForm
           open={newOrder}
@@ -325,6 +371,15 @@ export function SalesDesk({
                       </td>
                       <td className="border-b border-line px-3 py-2 text-right">
                         <div className="flex justify-end gap-2">
+                          {order.amendable && (
+                            <Button
+                              size="sm"
+                              disabled={pending}
+                              onClick={() => openPanel(() => setAmending(order))}
+                            >
+                              Edit
+                            </Button>
+                          )}
                           {order.state === "approved" && (
                             <Button
                               size="sm"
@@ -442,135 +497,9 @@ export function SalesDesk({
         </Panel>
       </div>
 
-      {customers.length > 0 && (
-        <Panel title="Customers">
-          <div className="-mx-3 overflow-x-auto px-3">
-            <table className="w-full min-w-[720px] border-collapse">
-              <caption className="sr-only">
-                Customers and credit headroom
-              </caption>
-              <thead>
-                <tr>
-                  {[
-                    "Customer",
-                    "GSTIN",
-                    "Limit",
-                    "Exposure",
-                    "Headroom",
-                    "",
-                  ].map((heading, index) => (
-                    <th
-                      key={heading || index}
-                      className={
-                        "whitespace-nowrap border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                        (index === 0 ? "text-left" : "text-right")
-                      }
-                    >
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {customers.map((customer) => {
-                  const headroom =
-                    customer.creditLimitPaise - customer.exposurePaise;
-                  return (
-                    <tr key={customer.id} className="transition-colors hover:bg-accent-subtle/40">
-                      <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                        {customer.displayName}
-                      </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                        {customer.gstin ?? "—"}
-                      </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                        {customer.creditLimitPaise === 0
-                          ? "Cash only"
-                          : rupees(customer.creditLimitPaise)}
-                      </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                        {rupees(customer.exposurePaise)}
-                      </td>
-                      {/* Headroom, not the ceiling: what a representative needs
-                        before promising anything is what is left. */}
-                      <td
-                        className={
-                          "tabular border-b border-line px-3 py-2 text-right text-[14px] " +
-                          (headroom < 0 ? "text-warning" : "")
-                        }
-                      >
-                        {rupees(headroom)}
-                      </td>
-                      <td className="border-b border-line px-3 py-2 text-right">
-                        <Button
-                          size="sm"
-                          disabled={pending}
-                          onClick={() =>
-                            setCreditFor(
-                              creditFor === customer.id ? null : customer.id,
-                            )
-                          }
-                        >
-                          {creditFor === customer.id ? "Close" : "Credit limit"}
-                        </Button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {creditFor && (
-            <form
-              className="mt-4 flex flex-wrap items-end gap-3 rounded-lg bg-glass-2 p-3"
-              action={(formData) =>
-                run(
-                  "verity.plywood.set_credit_limit",
-                  {
-                    customerId: creditFor,
-                    creditLimitPaise: Math.round(
-                      Number(formData.get("limit") ?? 0) * 100,
-                    ),
-                  },
-                  () => setCreditFor(null),
-                )
-              }
-            >
-              <div className="w-[200px]">
-                <Field
-                  label="Credit limit (₹)"
-                  htmlFor={`limit-${creditFor}`}
-                  required
-                  hint="Zero means cash only"
-                >
-                  <Input
-                    id={`limit-${creditFor}`}
-                    name="limit"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    required
-                    autoFocus
-                    defaultValue={(
-                      (customers.find((c) => c.id === creditFor)
-                        ?.creditLimitPaise ?? 0) / 100
-                    ).toFixed(2)}
-                  />
-                </Field>
-              </div>
-              <Button type="submit" variant="primary" disabled={pending}>
-                Save
-              </Button>
-              <p className="m-0 w-full text-[12px] text-text-tertiary">
-                Who raised whose limit, and from what, is the first question
-                after a bad debt — so the change is recorded against the
-                customer.
-              </p>
-            </form>
-          )}
-        </Panel>
-      )}
+      {/* The customers table is gone from this desk. It duplicated /customers,
+          which is where anyone looking a customer up goes first, and a selling
+          desk is for orders. Same reason the suppliers table left Purchases. */}
     </>
   );
 }

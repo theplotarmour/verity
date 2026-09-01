@@ -44,10 +44,33 @@
    * classes at the end of this file, because a colour token cannot carry a
    * filter and pretending otherwise scatters `backdrop-filter` everywhere.
    * ------------------------------------------------------------------- */
-  --color-glass-1: light-dark(rgb(255 255 255 / 0.44), rgb(28 28 32 / 0.46));
-  --color-glass-2: light-dark(rgb(255 255 255 / 0.58), rgb(31 31 35 / 0.58));
-  --color-glass-3: light-dark(rgb(255 255 255 / 0.72), rgb(38 38 43 / 0.68));
-  --color-glass-4: light-dark(rgb(255 255 255 / 0.86), rgb(47 47 52 / 0.80));
+  /* Each level is the neutral material with a trace of the accent mixed in, so
+     a card reads as tinted glass over the atmosphere rather than as white on
+     colour. The tint FALLS as the level rises: level 1 is the shell and may
+     carry the most colour because nothing is read on it, while level 4 holds
+     dialogs and dropdowns whose text must stay legible over arbitrary content.
+     Everything derives from `--accent-seed`, so changing the accent retints the
+     whole material system and no component knows (ADR-012). */
+  --color-glass-1: color-mix(
+    in oklab,
+    var(--accent-seed) 6%,
+    light-dark(rgb(255 255 255 / 0.44), rgb(28 28 32 / 0.46))
+  );
+  --color-glass-2: color-mix(
+    in oklab,
+    var(--accent-seed) 4%,
+    light-dark(rgb(255 255 255 / 0.58), rgb(31 31 35 / 0.58))
+  );
+  --color-glass-3: color-mix(
+    in oklab,
+    var(--accent-seed) 3%,
+    light-dark(rgb(255 255 255 / 0.72), rgb(38 38 43 / 0.68))
+  );
+  --color-glass-4: color-mix(
+    in oklab,
+    var(--accent-seed) 2%,
+    light-dark(rgb(255 255 255 / 0.86), rgb(47 47 52 / 0.80))
+  );
 
   /* Solid surfaces — level 5. Dense tables, long-form text, forms and
      destructive confirmation live here, per ADR-011. */
@@ -213,6 +236,55 @@
     height: 100dvh;
     overflow: hidden;
     background: var(--color-canvas);
+  }
+
+  /**
+   * THE ATMOSPHERE — an accent-derived ground, not a flat fill.
+   *
+   * Three radial washes of the accent at single-digit alpha over the canvas.
+   * Derived from `--accent-seed` through color-mix like everything else, so
+   * changing the accent changes the room the product sits in and no component
+   * needs touching (ADR-012).
+   *
+   * Deliberately faint. ADR-011's sixth constraint is content over effect: this
+   * has to read as depth from the corner of the eye and never as colour the
+   * reader has to look past. It is painted on a fixed pseudo-element rather
+   * than on `body` so it does not scroll, repeat, or cost a repaint per frame.
+   */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(
+        1100px 720px at 12% -8%,
+        color-mix(in oklab, var(--accent-seed) 22%, transparent),
+        transparent 64%
+      ),
+      radial-gradient(
+        900px 620px at 88% 4%,
+        color-mix(in oklab, var(--accent-seed) 15%, transparent),
+        transparent 60%
+      ),
+      radial-gradient(
+        1000px 800px at 50% 108%,
+        color-mix(in oklab, var(--accent-seed) 12%, transparent),
+        transparent 62%
+      );
+  }
+
+  /* Dark needs less of it: the same alpha over a near-black ground reads as a
+     colour cast rather than as light. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) body::before {
+      opacity: 0.55;
+    }
+  }
+  :root[data-theme="dark"] body::before { opacity: 0.55; }
+
+  html, body {
     color: var(--color-text);
     font-family: var(--font-inter), ui-sans-serif, -apple-system, "Segoe UI", Roboto,
       "Helvetica Neue", Arial, sans-serif;
@@ -384,8 +456,18 @@
     -webkit-backdrop-filter: none;
   }
   .glass-shell { background: var(--color-chrome); }
-  .glass-card, .glass-control { background: var(--color-surface); }
-  .glass-overlay { background: var(--color-surface-elevated); }
+  /* Reduced transparency: the blur goes, the TINT stays. Honouring the
+     preference should not also strip the accent out of the interface. */
+  .glass-card, .glass-control {
+    background: color-mix(in oklab, var(--accent-seed) 3%, var(--color-surface));
+  }
+  .glass-overlay {
+    background: color-mix(
+      in oklab,
+      var(--accent-seed) 2%,
+      var(--color-surface-elevated)
+    );
+  }
   .verity-atmosphere { display: none; }
 }
 

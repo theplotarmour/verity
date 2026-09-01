@@ -1889,6 +1889,53 @@ export const partyBalances: QueryDefinition<
         byParty.set(party.id, row);
       }
 
+      if (side === "customer") {
+        // ORDERED ON CREDIT, NOT YET BILLED.
+        //
+        // Reported: "if I already owe someone ₹1000 and they order ₹5000 worth
+        // of goods, it should simplify it and tell me they owe ₹4000. It is
+        // currently only updating on the sales page under customers."
+        //
+        // Right: an order taken on credit is money the customer will owe, and
+        // showing it only against a credit LIMIT answers a different question
+        // than "where do we stand". It is carried as its own figure rather than
+        // folded into the invoiced total — no document exists yet — and it nets
+        // against anything they have paid ahead, which is the arithmetic the
+        // example asks for.
+        //
+        // Prepaid orders are excluded: that money is already in hand and
+        // counting it as owed would invent a debt.
+        const committed = await ctx.tx.plywoodSalesOrder.findMany({
+          where: {
+            state: { notIn: ["draft", "cancelled"] },
+            paymentTerms: "credit",
+            plywoodInvoices: { none: {} },
+          },
+          include: { customer: { select: { id: true, displayName: true } } },
+        });
+        for (const order of committed) {
+          if (order.totalPricePaise <= 0) continue;
+          const row =
+            byParty.get(order.customerId) ??
+            ({
+              partyId: order.customerId,
+              partyName: order.customer.displayName,
+              side,
+              invoicedPaise: 0,
+              settledPaise: 0,
+              outstandingPaise: 0,
+              uninvoicedPaise: 0,
+              onAccountPaise: 0,
+              counterAdvancePaise: 0,
+              oldestOpenAt: null,
+              provisionalBills: 0,
+              sameBusinessAs: sameBusiness.get(order.customerId) ?? null,
+            } satisfies (typeof rows)[number]);
+          row.uninvoicedPaise += order.totalPricePaise;
+          byParty.set(order.customerId, row);
+        }
+      }
+
       if (side === "supplier") {
         // Delivered but not yet billed: sum over orders that have received
         // something and carry no invoice. This is the figure that keeps the

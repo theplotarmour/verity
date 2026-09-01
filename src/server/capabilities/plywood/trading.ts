@@ -3082,6 +3082,18 @@ export const openOrders: QueryDefinition<
         qtyReceived: number;
         qtyOutstanding: number;
       }>;
+      /// The whole order as it stands, for reopening it in the form.
+      editable: {
+        locationId: string;
+        supplierId: string;
+        lines: Array<{
+          productId: string;
+          qtyOrdered: number;
+          unitCostPaise: number;
+          listUnitCostPaise: number | null;
+          discountBps: number;
+        }>;
+      };
     }>;
     sales: Array<{
       id: string;
@@ -3093,6 +3105,22 @@ export const openOrders: QueryDefinition<
       orderedUnits: number;
       raisedAt: Date;
       summary: string;
+      paymentTerms: string;
+      taxExempt: boolean;
+      taxExemptReason: string | null;
+      editable: {
+        locationId: string;
+        customerId: string;
+        lines: Array<{
+          productId: string;
+          qtyOrdered: number;
+          unitPricePaise: number;
+          listUnitPricePaise: number | null;
+          discountBps: number;
+        }>;
+      };
+      /// False once goods have gone out — see `editSalesOrder`.
+      amendable: boolean;
     }>;
   }
 > = {
@@ -3188,6 +3216,20 @@ export const openOrders: QueryDefinition<
             qtyReceived: line.qtyReceived,
             qtyOutstanding: line.qtyOrdered - line.qtyReceived,
           })),
+        // Everything the order form needs to reopen this order as it stands.
+        // Separate from `lines` above, which is deliberately only what can
+        // still be received — an amendment is about the whole order.
+        editable: {
+          locationId: order.locationId,
+          supplierId: order.supplierId,
+          lines: order.lines.map((line) => ({
+            productId: line.productId,
+            qtyOrdered: line.qtyOrdered,
+            unitCostPaise: line.unitCostPaise,
+            listUnitCostPaise: line.listUnitCostPaise,
+            discountBps: line.discountBps,
+          })),
+        },
       })),
       sales: sales.map((order) => ({
         id: order.id,
@@ -3202,6 +3244,25 @@ export const openOrders: QueryDefinition<
         ),
         raisedAt: order.createdAt,
         summary: summarise(order.lines.map((line) => line.productNameSnapshot)),
+        paymentTerms: order.paymentTerms,
+        taxExempt: order.taxExempt,
+        taxExemptReason: order.taxExemptReason,
+        editable: {
+          locationId: order.locationId,
+          customerId: order.customerId,
+          lines: order.lines.map((line) => ({
+            productId: line.productId,
+            qtyOrdered: line.qtyOrdered,
+            unitPricePaise: line.unitPricePaise,
+            listUnitPricePaise: line.listUnitPricePaise,
+            discountBps: line.discountBps,
+          })),
+        },
+        /** Whether an amendment is still possible — see `editSalesOrder`. */
+        amendable:
+          order.lines.every((line) => line.qtyShipped === 0) &&
+          order.state !== "completed" &&
+          order.state !== "cancelled",
       })),
     };
   },

@@ -63,8 +63,26 @@ function netPrice(line: Line): number {
   return (price * (100 - discount)) / 100;
 }
 
+export type SalesOrderDraft = {
+  id: string;
+  reference: string | null;
+  customerId: string;
+  locationId: string;
+  paymentTerms: string;
+  taxExempt: boolean;
+  taxExemptReason: string | null;
+  lines: Array<{
+    productId: string;
+    qtyOrdered: number;
+    unitPricePaise: number;
+    listUnitPricePaise: number | null;
+    discountBps: number;
+  }>;
+};
+
 export function NewSalesOrderForm({
   open,
+  editing,
   customers,
   godowns,
   boards,
@@ -74,6 +92,8 @@ export function NewSalesOrderForm({
   onCancel,
 }: {
   open: boolean;
+  /** Present when amending an order rather than taking one. */
+  editing?: SalesOrderDraft | null;
   customers: Array<{ id: string; displayName: string }>;
   godowns: Array<{ id: string; name: string }>;
   boards: Array<{ id: string; label: string }>;
@@ -100,6 +120,31 @@ export function NewSalesOrderForm({
   // one is selected on the way back, because the only reason to create a
   // customer here is to sell to them.
   const [addingCustomer, setAddingCustomer] = useState(false);
+  // Seeded on open rather than from an effect, which would overwrite a
+  // half-typed amendment on the next render.
+  const [loaded, setLoaded] = useState<string | null>(null);
+  const openKey = open ? (editing?.id ?? "__new__") : null;
+  if (openKey !== loaded) {
+    setLoaded(openKey);
+    setCustomerId(editing?.customerId ?? "");
+    setLocationId(editing?.locationId ?? "");
+    setReference(editing?.reference ?? "");
+    setPaymentTerms(editing?.paymentTerms === "prepaid" ? "prepaid" : "credit");
+    setTaxExempt(editing?.taxExempt ?? false);
+    setExemptReason(editing?.taxExemptReason ?? "");
+    setLines(
+      editing
+        ? editing.lines.map((line) => ({
+            productId: line.productId,
+            qty: String(line.qtyOrdered),
+            price: String(
+              (line.listUnitPricePaise ?? line.unitPricePaise) / 100,
+            ),
+            discount: line.discountBps ? String(line.discountBps / 100) : "",
+          }))
+        : [{ ...EMPTY_LINE }],
+    );
+  }
   const [creating, startCreating] = useTransition();
   const router = useRouter();
 
@@ -215,8 +260,12 @@ export function NewSalesOrderForm({
     <Modal
       open={open}
       onClose={onCancel}
-      title="New sales order"
-      description="Say whether the money is already in hand. Anything owed appears on Who owes what."
+      title={editing ? `Amend ${editing.reference ?? "order"}` : "New sales order"}
+      description={
+        editing
+          ? "Only possible while nothing has gone out and no stock is held. Say whether the money is already in hand."
+          : "Say whether the money is already in hand. Anything owed appears on Who owes what."
+      }
       width="lg"
       footer={
         <>
@@ -245,6 +294,7 @@ export function NewSalesOrderForm({
             disabled={pending || !canSubmit}
             onClick={() =>
               onSubmit({
+                ...(editing ? { orderId: editing.id } : {}),
                 customerId,
                 locationId,
                 ...(reference.trim() ? { reference: reference.trim() } : {}),
@@ -274,7 +324,7 @@ export function NewSalesOrderForm({
               })
             }
           >
-            {pending ? "Creating…" : "Create order"}
+            {pending ? "Saving…" : editing ? "Save changes" : "Create order"}
           </Button>
         </>
       }

@@ -35,6 +35,20 @@ function netCost(line: Line): number {
   return (cost * (100 - discount)) / 100;
 }
 
+export type OrderDraft = {
+  id: string;
+  reference: string | null;
+  supplierId: string;
+  locationId: string;
+  lines: Array<{
+    productId: string;
+    qtyOrdered: number;
+    unitCostPaise: number;
+    listUnitCostPaise: number | null;
+    discountBps: number;
+  }>;
+};
+
 export function NewPurchaseOrderForm({
   open,
   suppliers,
@@ -44,8 +58,11 @@ export function NewPurchaseOrderForm({
   pending,
   onSubmit,
   onCancel,
+  /** Present when amending an order rather than placing one. */
+  editing,
 }: {
   open: boolean;
+  editing?: OrderDraft | null;
   suppliers: Array<{ id: string; displayName: string; stateCode: string | null }>;
   godowns: Array<{ id: string; name: string }>;
   boards: Array<{ id: string; label: string }>;
@@ -58,6 +75,30 @@ export function NewPurchaseOrderForm({
   const [locationId, setLocationId] = useState("");
   const [reference, setReference] = useState("");
   const [lines, setLines] = useState<Line[]>([{ ...EMPTY_LINE }]);
+  // Seeded when the dialog opens on an order, not from an effect: an effect
+  // would overwrite a half-typed amendment on the next render.
+  const [loaded, setLoaded] = useState<string | null>(null);
+  const key = open ? (editing?.id ?? "__new__") : null;
+  if (key !== loaded) {
+    setLoaded(key);
+    setSupplierId(editing?.supplierId ?? "");
+    setLocationId(editing?.locationId ?? "");
+    setReference(editing?.reference ?? "");
+    setLines(
+      editing
+        ? editing.lines.map((line) => ({
+            productId: line.productId,
+            qty: String(line.qtyOrdered),
+            // The LIST price where a discount was struck, so the two boxes
+            // still read as "this off that" rather than the net twice.
+            cost: String(
+              (line.listUnitCostPaise ?? line.unitCostPaise) / 100,
+            ),
+            discount: line.discountBps ? String(line.discountBps / 100) : "",
+          }))
+        : [{ ...EMPTY_LINE }],
+    );
+  }
 
   /** What this supplier has agreed to, in rupees, by product. */
   const agreedFor = useMemo(() => {
@@ -143,8 +184,12 @@ export function NewPurchaseOrderForm({
     <Modal
       open={open}
       onClose={onCancel}
-      title="New purchase order"
-      description="The supplier's bill and what you owe them are raised for you when the goods arrive."
+      title={editing ? `Amend ${editing.reference ?? "order"}` : "New purchase order"}
+      description={
+        editing
+          ? "Only possible while nothing has arrived. Once goods are received the lines describe a real delivery and are corrected on the bill instead."
+          : "The supplier's bill and what you owe them are raised for you when the goods arrive."
+      }
       width="lg"
       footer={
         <>
@@ -159,6 +204,7 @@ export function NewPurchaseOrderForm({
             disabled={pending || !canSubmit}
             onClick={() =>
               onSubmit({
+                ...(editing ? { orderId: editing.id } : {}),
                 supplierId,
                 locationId,
                 ...(reference.trim() ? { reference: reference.trim() } : {}),
@@ -185,7 +231,7 @@ export function NewPurchaseOrderForm({
               })
             }
           >
-            {pending ? "Creating…" : "Create order"}
+            {pending ? "Saving…" : editing ? "Save changes" : "Create order"}
           </Button>
         </>
       }

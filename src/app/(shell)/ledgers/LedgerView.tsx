@@ -649,7 +649,9 @@ function OwedTable({
                               ? "Customer"
                               : "Supplier"}
                           {row.uninvoicedPaise > 0 &&
-                            ` · ${rupees(row.uninvoicedPaise)} delivered, not yet billed`}
+                            (row.side === "customer"
+                              ? ` · ${rupees(row.uninvoicedPaise)} ordered on credit, not yet billed`
+                              : ` · ${rupees(row.uninvoicedPaise)} delivered, not yet billed`)}
                           {row.onAccountPaise > 0 &&
                             (row.side === "customer"
                               ? ` · ${rupees(row.onAccountPaise)} already paid, not against any bill yet`
