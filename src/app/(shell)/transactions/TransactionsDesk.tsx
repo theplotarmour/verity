@@ -262,8 +262,14 @@ export function TransactionsDesk({
                           </span>
                         )}
                         {unallocated > 0 && (
+                          // "On account" is accountant's language. What it
+                          // means to a merchant is that this much of the money
+                          // is not against any bill yet.
                           <Badge tone="accent">
-                            {rupees(unallocated)} on account
+                            {rupees(unallocated)}{" "}
+                            {payment.direction === "in"
+                              ? "paid in advance"
+                              : "advance to them"}
                           </Badge>
                         )}
                         {payment.settled.length === 0 && unallocated === 0 && "—"}

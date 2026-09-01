@@ -47,7 +47,7 @@ export default async function FinancePage() {
     <>
       <PageHeader
         title="Finance"
-        description="Who owes money and who is owed. Invoices raise themselves when goods move — delivering raises the customer's, receiving raises the supplier's — so the only thing to record here is money actually moving."
+        description="The paperwork behind the money: which invoices and supplier bills exist, which are still waiting on a supplier's own document, and anything that moved without producing one. Money itself is recorded on Transactions, and who owes what is on Who owes what."
       />
       <FinanceDesk
         invoices={invoices}

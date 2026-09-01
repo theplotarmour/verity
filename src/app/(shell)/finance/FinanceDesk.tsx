@@ -44,6 +44,20 @@ export type Balance = {
   provisionalBills: number;
 };
 
+/**
+ * What one party's position comes to, signed from this business's point of
+ * view: positive means they owe us, negative means we owe them.
+ *
+ * A customer's advance and a supplier's bill both push it negative, which is
+ * the whole point — one number, one direction, whichever side of the trade the
+ * party sits on.
+ */
+function netOf(row: Balance): number {
+  const magnitude =
+    row.outstandingPaise + row.uninvoicedPaise - row.onAccountPaise;
+  return row.side === "customer" ? magnitude : -magnitude;
+}
+
 function rupees(paise: number): string {
   return `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
 }
@@ -144,15 +158,26 @@ export function FinanceDesk({
 
   const totals = useMemo(
     () => ({
+      // Summed PER PARTY, and only the parties who actually owe.
+      //
+      // REPORTED: finance showed a negative figure instead of saying who owed
+      // whom. It summed `outstanding - advance` across every customer, so one
+      // customer who had paid ahead subtracted from what the others owed, and a
+      // big enough advance turned the total negative — a headline reading
+      // "They need to send us -₹4,000", which is not a sentence about money.
+      //
+      // A party who has overpaid is not negative debt. They are owed a refund,
+      // which belongs on the other side of the screen, and that is where the
+      // ledger already puts them.
       owedToUs: receivable.reduce(
-        (sum, row) => sum + row.outstandingPaise - row.onAccountPaise,
+        (sum, row) => sum + Math.max(0, netOf(row)),
         0,
       ),
-      owedByUs: payable.reduce(
-        (sum, row) =>
-          sum + row.outstandingPaise + row.uninvoicedPaise - row.onAccountPaise,
-        0,
-      ),
+      owedByUs:
+        payable.reduce((sum, row) => sum + Math.max(0, -netOf(row)), 0) +
+        // A customer in credit is money the business has and will have to give
+        // back or supply against. It belongs with what is owed out.
+        receivable.reduce((sum, row) => sum + Math.max(0, -netOf(row)), 0),
       overdue: receivable.reduce((sum, row) => {
         const age = daysSince(row.oldestOpenAt);
         return sum + (age !== null && age > 30 ? row.outstandingPaise : 0);
@@ -179,13 +204,13 @@ export function FinanceDesk({
         <Stat
           label="They need to send us"
           value={rupees(totals.owedToUs)}
-          hint="Customers, net of anything paid in advance"
+          hint="Customers with unpaid invoices"
           href="/ledgers"
         />
         <Stat
           label="We need to send them"
           value={rupees(totals.owedByUs)}
-          hint="Suppliers, including goods received not yet billed"
+          hint="Suppliers, plus goods received not yet billed and any advance a customer has paid"
           href="/ledgers"
         />
         <Stat

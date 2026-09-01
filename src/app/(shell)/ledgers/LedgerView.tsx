@@ -346,6 +346,15 @@ function OwedOverview({ balances }: { balances: Balance[] }) {
         />
       </StatRow>
 
+      {/* Advances need naming once, where they first confuse someone: a payment
+          that is not against any bill is not an error and not a debt, and
+          "on account" is the accountant's word for it, not a merchant's. */}
+      <p className="m-0 text-[12px] text-text-tertiary">
+        A payment that has not been matched to a bill yet is money paid ahead of
+        one. It still counts — it reduces what the party owes, or increases what
+        they are owed — and it clears itself against the next invoice raised.
+      </p>
+
       <OwedTable
         title="They need to send us"
         empty="Nobody owes the business anything."
@@ -410,7 +419,9 @@ function OwedTable({
                           {row.uninvoicedPaise > 0 &&
                             ` · ${rupees(row.uninvoicedPaise)} delivered, not yet billed`}
                           {row.onAccountPaise > 0 &&
-                            ` · ${rupees(row.onAccountPaise)} paid in advance`}
+                            (row.side === "customer"
+                              ? ` · ${rupees(row.onAccountPaise)} already paid, not against any bill yet`
+                              : ` · ${rupees(row.onAccountPaise)} we have already paid them, not against any bill yet`)}
                           {age !== null && age > 30 && ` · oldest ${age} days`}
                         </span>
                       </td>
