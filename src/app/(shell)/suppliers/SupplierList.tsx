@@ -65,7 +65,17 @@ export function SupplierList({ suppliers }: { suppliers: Supplier[] }) {
 
   const totals = useMemo(
     () => ({
-      outstanding: suppliers.reduce((sum, s) => sum + s.outstandingPaise, 0),
+      // Only what is actually owed OUT. Summing the signed balances let a
+      // supplier who owes us money cancel part of what we owe everyone else,
+      // which is a net position rather than a payable and reads as neither.
+      outstanding: suppliers.reduce(
+        (sum, s) => sum + Math.max(0, -s.outstandingPaise),
+        0,
+      ),
+      owedToUs: suppliers.reduce(
+        (sum, s) => sum + Math.max(0, s.outstandingPaise),
+        0,
+      ),
       committed: suppliers.reduce((sum, s) => sum + s.openCommitmentPaise, 0),
       openOrders: suppliers.reduce((sum, s) => sum + s.openOrders, 0),
     }),
@@ -196,7 +206,11 @@ export function SupplierList({ suppliers }: { suppliers: Supplier[] }) {
       )}
       <StatRow cols={4}>
         <Stat label="Suppliers" value={suppliers.length} />
-        <Stat label="Payable" value={rupeesShort(totals.outstanding)} hint="Invoices received, unpaid" />
+        <Stat
+          label="We need to send"
+          value={rupeesShort(totals.outstanding)}
+          hint="Bills received and not yet paid"
+        />
         <Stat
           label="Committed"
           value={rupeesShort(totals.committed)}
@@ -252,10 +266,21 @@ export function SupplierList({ suppliers }: { suppliers: Supplier[] }) {
                 </div>
                 <div className="flex shrink-0 items-center gap-8 text-right">
                   <div>
+                    {/* Reported: the negative figure was confusing. It was the
+                        raw ledger sum — a supplier's bill is a CREDIT, so owing
+                        them showed as a minus, which is correct double-entry
+                        and not something a merchant agreed to read. The sign is
+                        now a sentence and the number is always positive. */}
                     <p className="tabular m-0 text-[14px] text-text">
-                      {rupees(supplier.outstandingPaise)}
+                      {rupees(Math.abs(supplier.outstandingPaise))}
                     </p>
-                    <p className="m-0 text-[12px] text-text-tertiary">Outstanding</p>
+                    <p className="m-0 text-[12px] text-text-tertiary">
+                      {supplier.outstandingPaise < 0
+                        ? "We need to send"
+                        : supplier.outstandingPaise > 0
+                          ? "They need to send us"
+                          : "Settled"}
+                    </p>
                   </div>
                   <div className="hidden sm:block">
                     <p className="tabular m-0 text-[14px] text-text">

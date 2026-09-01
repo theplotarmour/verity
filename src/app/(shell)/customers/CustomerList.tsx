@@ -261,21 +261,23 @@ export function CustomerList({ customers }: { customers: Customer[] }) {
                         of {rupees(customer.creditLimitPaise)}
                       </p>
                     </div>
-                    <div className="w-28">
-                      {/* Over-limit is stated in words rather than by colour
-                          alone — colour is not information to a reader who
-                          cannot see it, and this is the row that stops a sale. */}
+                    <div className="w-32">
+                      {/* Stated in words rather than by a minus sign or by
+                          colour alone. A leading "−" against a headroom figure
+                          reads as negative money, which it is not — it is how
+                          far past the limit they are — and colour is not
+                          information to a reader who cannot see it. */}
                       <p
                         className={
                           "tabular m-0 text-[14px] " + (over ? "text-danger" : "text-text")
                         }
                       >
                         {over
-                          ? `−${rupees(customer.exposurePaise - customer.creditLimitPaise)}`
+                          ? rupees(customer.exposurePaise - customer.creditLimitPaise)
                           : rupees(customer.availableCreditPaise)}
                       </p>
                       <p className="m-0 text-[12px] text-text-tertiary">
-                        {over ? "Over limit" : "Available"}
+                        {over ? "Past their limit" : "Still available"}
                       </p>
                     </div>
                     <div className="flex shrink-0 gap-2">
