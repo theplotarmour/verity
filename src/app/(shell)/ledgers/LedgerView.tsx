@@ -78,7 +78,16 @@ export type Balance = {
   uninvoicedPaise: number;
   onAccountPaise: number;
   oldestOpenAt: Date | string | null;
+  /** The same firm on the other side of the trade, when the two are linked. */
+  sameBusinessAs: string | null;
 };
+
+/** What this party's position comes to, signed from the business's view. */
+function net(row: Balance): number {
+  const magnitude =
+    row.outstandingPaise + row.uninvoicedPaise - row.onAccountPaise;
+  return row.side === "customer" ? magnitude : -magnitude;
+}
 
 export function LedgerView({
   customers,
@@ -295,23 +304,32 @@ export function LedgerView({
  * makes each harder to work through.
  */
 function OwedOverview({ balances }: { balances: Balance[] }) {
-  const owedToUs = balances.filter(
-    (row) =>
-      (row.side === "customer" ? 1 : -1) *
-        (row.outstandingPaise + row.uninvoicedPaise - row.onAccountPaise) >
-      0,
-  );
-  const weOwe = balances.filter((row) => !owedToUs.includes(row));
+  // A firm we both buy from and sell to appears twice, once on each side. The
+  // two rows are shown as one line with a note, because "they need to send us
+  // X" and "we need to send them Y" about the same firm on two different lines
+  // is not two facts, it is one fact told confusingly.
+  const byId = new Map(balances.map((row) => [row.partyId, row]));
+  const paired = new Set<string>();
+  const lines: Balance[] = [];
+  for (const row of balances) {
+    if (paired.has(row.partyId)) continue;
+    const other = row.sameBusinessAs ? byId.get(row.sameBusinessAs) : undefined;
+    if (!other) {
+      lines.push(row);
+      continue;
+    }
+    paired.add(row.partyId);
+    paired.add(other.partyId);
+    // The side with the larger obligation carries the line, so the sentence
+    // reads in the direction the money actually has to travel.
+    lines.push(Math.abs(net(row)) >= Math.abs(net(other)) ? row : other);
+  }
 
-  const totalIn = owedToUs.reduce(
-    (sum, row) => sum + row.outstandingPaise + row.uninvoicedPaise - row.onAccountPaise,
-    0,
-  );
-  const totalOut = weOwe.reduce(
-    (sum, row) =>
-      sum + Math.abs(row.outstandingPaise + row.uninvoicedPaise - row.onAccountPaise),
-    0,
-  );
+  const owedToUs = lines.filter((row) => net(row) > 0);
+  const weOwe = lines.filter((row) => net(row) <= 0);
+
+  const totalIn = owedToUs.reduce((sum, row) => sum + net(row), 0);
+  const totalOut = weOwe.reduce((sum, row) => sum + Math.abs(net(row)), 0);
 
   return (
     <div className="flex flex-col gap-5">
@@ -366,19 +384,9 @@ function OwedTable({
             <tbody>
               {rows
                 .slice()
-                .sort(
-                  (a, b) =>
-                    Math.abs(
-                      b.outstandingPaise + b.uninvoicedPaise - b.onAccountPaise,
-                    ) -
-                    Math.abs(
-                      a.outstandingPaise + a.uninvoicedPaise - a.onAccountPaise,
-                    ),
-                )
+                .sort((a, b) => Math.abs(net(b)) - Math.abs(net(a)))
                 .map((row) => {
-                  const net = Math.abs(
-                    row.outstandingPaise + row.uninvoicedPaise - row.onAccountPaise,
-                  );
+                  const amount = Math.abs(net(row));
                   const age = daysSince(row.oldestOpenAt);
                   return (
                     <tr key={`${row.side}-${row.partyId}`}>
@@ -394,7 +402,11 @@ function OwedTable({
                           {lead(row)}
                         </Link>
                         <span className="mt-0.5 block text-[12px] text-text-tertiary">
-                          {row.side === "customer" ? "Customer" : "Supplier"}
+                          {row.sameBusinessAs
+                            ? "Customer and supplier"
+                            : row.side === "customer"
+                              ? "Customer"
+                              : "Supplier"}
                           {row.uninvoicedPaise > 0 &&
                             ` · ${rupees(row.uninvoicedPaise)} delivered, not yet billed`}
                           {row.onAccountPaise > 0 &&
@@ -403,7 +415,7 @@ function OwedTable({
                         </span>
                       </td>
                       <td className="tabular whitespace-nowrap border-b border-line px-3 py-2.5 text-right text-[15px] text-text">
-                        {rupees(net)}
+                        {rupees(amount)}
                       </td>
                     </tr>
                   );

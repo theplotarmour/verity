@@ -904,3 +904,21 @@ export const supplierPrices: QueryDefinition<
     return rows;
   },
 };
+
+
+/**
+ * Every agreed customer price, flat — the selling-side twin of `supplierPrices`.
+ */
+export const customerPrices: QueryDefinition<
+  Record<string, never>,
+  Array<{ customerId: string; productId: string; customPricePaise: number }>
+> = {
+  key: "verity.plywood.customer_prices",
+  entity: ENTITY_PRODUCT,
+  input: z.object({}),
+  handler: async (ctx) => {
+    return ctx.tx.plywoodCustomerPrice.findMany({
+      select: { customerId: true, productId: true, customPricePaise: true },
+    });
+  },
+};

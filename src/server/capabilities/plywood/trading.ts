@@ -130,6 +130,149 @@ export const createSupplier: CommandDefinition<
   },
 };
 
+/**
+ * A whole price list at once, for one party.
+ *
+ * REPORTED: "there should be an Excel-sheet kind of sheet for agreeing a price
+ * with suppliers and customers."
+ *
+ * Agreeing prices is not one decision at a time. A merchant sits down with a
+ * mill's rate card and works through it, and the single-price command turned
+ * that into one dialog, one save and one page reload per board — which is why
+ * nobody did it and why the "blank uses agreed price" hint so often had nothing
+ * behind it.
+ *
+ * One transaction for the sheet, so a rate card is applied whole or not at all:
+ * half an applied rate card is worse than none, because nothing on the screen
+ * says which half.
+ *
+ * A blank cell REMOVES the agreed price rather than storing zero. Zero is a
+ * price — a free supply — and storing it would poison the weighted-average cost
+ * of every sheet in the godown the first time an order took the default.
+ */
+export const setPriceSheet: CommandDefinition<
+  {
+    side: "supplier" | "customer";
+    partyId: string;
+    prices: Array<{ productId: string; pricePaise: number | null }>;
+  },
+  { saved: number; removed: number }
+> = {
+  key: "verity.plywood.set_price_sheet",
+  entity: ENTITY_SUPPLIER_PRICE,
+  verb: "Edit",
+  input: z.object({
+    side: z.enum(["supplier", "customer"]),
+    partyId: z.string().uuid(),
+    prices: z
+      .array(
+        z.object({
+          productId: z.string().uuid(),
+          pricePaise: z.number().int().min(0).nullable(),
+        }),
+      )
+      .max(1000),
+  }),
+  handler: async (ctx, input) => {
+    if (input.side === "supplier") {
+      const supplier = await ctx.tx.plywoodSupplier.findUnique({
+        where: { id: input.partyId },
+      });
+      if (!supplier) {
+        throw new ValidationError(
+          "E_VALIDATION: that supplier is not in this tenant",
+        );
+      }
+    } else {
+      const customer = await ctx.tx.plywoodCustomer.findUnique({
+        where: { id: input.partyId },
+      });
+      if (!customer) {
+        throw new ValidationError(
+          "E_VALIDATION: that customer is not in this tenant",
+        );
+      }
+    }
+
+    let saved = 0;
+    let removed = 0;
+
+    for (const row of input.prices) {
+      if (row.pricePaise === null) {
+        if (input.side === "supplier") {
+          const { count } = await ctx.tx.plywoodSupplierPrice.deleteMany({
+            where: { supplierId: input.partyId, productId: row.productId },
+          });
+          removed += count;
+        } else {
+          const { count } = await ctx.tx.plywoodCustomerPrice.deleteMany({
+            where: { customerId: input.partyId, productId: row.productId },
+          });
+          removed += count;
+        }
+        continue;
+      }
+
+      if (input.side === "supplier") {
+        await ctx.tx.plywoodSupplierPrice.upsert({
+          where: {
+            tenantId_supplierId_productId: {
+              tenantId: ctx.actor.tenantId,
+              supplierId: input.partyId,
+              productId: row.productId,
+            },
+          },
+          create: {
+            tenantId: ctx.actor.tenantId,
+            supplierId: input.partyId,
+            productId: row.productId,
+            negotiatedCostPaise: row.pricePaise,
+          },
+          update: {
+            negotiatedCostPaise: row.pricePaise,
+            version: { increment: 1 },
+          },
+        });
+      } else {
+        await ctx.tx.plywoodCustomerPrice.upsert({
+          where: {
+            tenantId_customerId_productId: {
+              tenantId: ctx.actor.tenantId,
+              customerId: input.partyId,
+              productId: row.productId,
+            },
+          },
+          create: {
+            tenantId: ctx.actor.tenantId,
+            customerId: input.partyId,
+            productId: row.productId,
+            customPricePaise: row.pricePaise,
+          },
+          update: {
+            customPricePaise: row.pricePaise,
+            version: { increment: 1 },
+          },
+        });
+      }
+      saved += 1;
+    }
+
+    return {
+      result: { saved, removed },
+      events: [
+        {
+          name:
+            input.side === "supplier"
+              ? "verity.plywood.supplier_price_set"
+              : "verity.plywood.customer_price_set",
+          entityId: input.partyId,
+          payload: { saved, removed },
+        },
+      ],
+    };
+  },
+};
+
 export const setSupplierPrice: CommandDefinition<
   { supplierId: string; productId: string; negotiatedCostPaise: number },
   { id: string }
@@ -503,6 +646,94 @@ export const submitPurchaseOrder: CommandDefinition<
       events: [
         moved.event,
         { name: "verity.plywood.purchase_order_submitted", entityId: order.id },
+      ],
+    };
+  },
+};
+
+/**
+ * Records that a supplier and a customer are the same business.
+ *
+ * Reported: "the suppliers can be our customers as well." Buying and selling
+ * stay separate — separate documents, separate tax treatment, separate credit
+ * limit, separate ledger — because they are separate obligations, and offsetting
+ * one against the other without saying so misstates both. What this records is
+ * that they are one relationship, so the two can be shown together and a net
+ * position stated when someone asks for it.
+ *
+ * Passing no customerId unlinks, which is the correct action when the link was
+ * made against the wrong firm and is not a deletion of anything.
+ */
+export const linkSupplierToCustomer: CommandDefinition<
+  { supplierId: string; customerId?: string },
+  { supplierId: string; customerId: string | null }
+> = {
+  key: "verity.plywood.link_supplier_to_customer",
+  entity: ENTITY_SUPPLIER,
+  verb: "Edit",
+  input: z.object({
+    supplierId: z.string().uuid(),
+    customerId: z.string().uuid().optional(),
+  }),
+  handler: async (ctx, input) => {
+    const supplier = await ctx.tx.plywoodSupplier.findUniqueOrThrow({
+      where: { id: input.supplierId },
+    });
+
+    if (input.customerId) {
+      const customer = await ctx.tx.plywoodCustomer.findUnique({
+        where: { id: input.customerId },
+      });
+      if (!customer) {
+        throw new ValidationError(
+          "E_VALIDATION: that customer is not in this tenant",
+        );
+      }
+      // Checked here as well as by the unique index, so the refusal names the
+      // supplier already holding the link rather than surfacing a constraint.
+      const taken = await ctx.tx.plywoodSupplier.findFirst({
+        where: { linkedCustomerId: input.customerId, id: { not: supplier.id } },
+      });
+      if (taken) {
+        throw new ValidationError(
+          `E_VALIDATION: ${customer.displayName} is already linked to ${taken.displayName}`,
+        );
+      }
+      // Both sides describe the same legal entity, so two different GSTINs are
+      // two different entities and the link would put one firm's tax identity
+      // on another's documents.
+      if (
+        supplier.gstin &&
+        customer.gstin &&
+        supplier.gstin !== customer.gstin
+      ) {
+        throw new ValidationError(
+          `E_VALIDATION: ${supplier.displayName} and ${customer.displayName} have different GSTINs, ` +
+            "so they are not the same business",
+        );
+      }
+    }
+
+    await ctx.tx.plywoodSupplier.update({
+      where: { id: supplier.id },
+      data: {
+        linkedCustomerId: input.customerId ?? null,
+        version: { increment: 1 },
+      },
+    });
+
+    return {
+      result: {
+        supplierId: supplier.id,
+        customerId: input.customerId ?? null,
+      },
+      events: [
+        {
+          name: input.customerId
+            ? "verity.plywood.supplier_linked_to_customer"
+            : "verity.plywood.supplier_unlinked_from_customer",
+          entityId: supplier.id,
+        },
       ],
     };
   },
@@ -1731,6 +1962,9 @@ export const listSuppliers: QueryDefinition<
     outstandingPaise: number;
     /// Value of purchase orders still open. A commitment, never a payable (§54).
     openCommitmentPaise: number;
+    /// The same business on the selling side, when the two have been linked.
+    linkedCustomerId: string | null;
+    linkedCustomerName: string | null;
   }>
 > = {
   key: "verity.plywood.list_suppliers",
@@ -1751,6 +1985,7 @@ export const listSuppliers: QueryDefinition<
         plywoodLedgerEntries: {
           select: { entryType: true, amountPaise: true },
         },
+        linkedCustomer: { select: { id: true, displayName: true } },
       },
     });
     return suppliers.map((supplier) => ({
@@ -1773,6 +2008,8 @@ export const listSuppliers: QueryDefinition<
         (sum, order) => sum + order.totalCostPaise,
         0,
       ),
+      linkedCustomerId: supplier.linkedCustomer?.id ?? null,
+      linkedCustomerName: supplier.linkedCustomer?.displayName ?? null,
     }));
   },
 };

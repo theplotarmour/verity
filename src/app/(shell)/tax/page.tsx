@@ -80,26 +80,67 @@ export default async function TaxCentrePage({
       <PageHeader
         actions={<PeriodSwitch basePath="/tax" periodKey={periodKey} />}
         title="Tax & Compliance"
-        description={`${period}. Every figure here is read from posted invoices and notes — nothing on this page is entered, and there is no field to enter it in.`}
+        description={`${period}. Every figure is read from invoices already raised — nothing here is typed in, and there is no field to type it into.`}
       />
 
       <div className="flex flex-col gap-5">
+        {/* REPORTED: "I don't understand the tax and compliance section and am
+            not sure if it is working. It shows 0 for all the fields." The
+            figures were right and the screen never said what they were. GST is
+            two flows and a subtraction; saying so costs four lines and is the
+            difference between a page an owner trusts and one they avoid. */}
+        <Panel title="What this page is">
+          <ul className="m-0 flex list-none flex-col gap-2 p-0 text-[13px] leading-relaxed text-text-secondary">
+            <li>
+              <strong className="font-medium text-text">
+                You collect GST when you sell.
+              </strong>{" "}
+              It is added to the customer&apos;s invoice and it is not your
+              money — you are holding it for the government.
+            </li>
+            <li>
+              <strong className="font-medium text-text">
+                You pay GST when you buy,
+              </strong>{" "}
+              and you can claim that back. It is called input credit.
+            </li>
+            <li>
+              <strong className="font-medium text-text">
+                You send the difference.
+              </strong>{" "}
+              Collected on sales, minus what you can claim on purchases. If you
+              bought more than you sold this month, the balance carries forward
+              instead.
+            </li>
+            <li>
+              A supplier&apos;s GST can only be claimed once their own bill is
+              recorded. Until then Verity shows it separately — the money is
+              real, the claim is not yet.
+            </li>
+          </ul>
+        </Panel>
+
         <StatRow cols={4}>
           <Stat
-            label="Output GST"
+            label="GST collected on sales"
             value={rupeesShort(summary.outputTaxPaise)}
             hint={`${summary.salesInvoiceCount} sales invoice(s)`}
             href={`/tax/gstr-1?period=${periodKey}`}
           />
           <Stat
-            label="Input credit"
-            value={rupeesShort(summary.inputTaxPaise)}
-            hint={`${summary.purchaseInvoiceCount} purchase invoice(s)`}
+            label="Credit you can claim"
+            value={rupeesShort(summary.inputTaxEligiblePaise)}
+            hint={
+              summary.awaitingBillCount === 0
+                ? `${summary.purchaseInvoiceCount} purchase invoice(s)`
+                : `${rupeesShort(summary.inputTaxAwaitingBillPaise)} more once ${summary.awaitingBillCount} supplier bill(s) arrive`
+            }
+            href={`/tax/itc?period=${periodKey}`}
           />
           <Stat
-            label="Net estimate"
+            label="Estimated to pay"
             value={rupeesShort(summary.netPayablePaise)}
-            hint="Output less credit"
+            hint="Collected on sales, less claimable credit"
             href={`/tax/gstr-3b?period=${periodKey}`}
           />
           <Stat

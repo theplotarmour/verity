@@ -1648,6 +1648,12 @@ export const partyBalances: QueryDefinition<
     onAccountPaise: number;
     oldestOpenAt: Date | null;
     provisionalBills: number;
+    /**
+     * The same business on the other side of the trade, when the two have been
+     * linked. Carried so a reader can be shown one relationship instead of two
+     * rows that happen to share a name.
+     */
+    sameBusinessAs: string | null;
   }>
 > = {
   key: "verity.plywood.party_balances",
@@ -1665,11 +1671,25 @@ export const partyBalances: QueryDefinition<
       onAccountPaise: number;
       oldestOpenAt: Date | null;
       provisionalBills: number;
+      sameBusinessAs: string | null;
     }> = [];
 
     const sides: Array<"customer" | "supplier"> = input.side
       ? [input.side]
       : ["customer", "supplier"];
+
+    // Suppliers that are the same business as a customer, both ways round, so
+    // either row can name its counterpart without a second query per row.
+    const links = await ctx.tx.plywoodSupplier.findMany({
+      where: { linkedCustomerId: { not: null } },
+      select: { id: true, linkedCustomerId: true },
+    });
+    const sameBusiness = new Map<string, string>();
+    for (const link of links) {
+      if (!link.linkedCustomerId) continue;
+      sameBusiness.set(link.id, link.linkedCustomerId);
+      sameBusiness.set(link.linkedCustomerId, link.id);
+    }
 
     for (const side of sides) {
       const invoices = await ctx.tx.plywoodInvoice.findMany({
@@ -1716,6 +1736,7 @@ export const partyBalances: QueryDefinition<
             onAccountPaise: 0,
             oldestOpenAt: null,
             provisionalBills: 0,
+            sameBusinessAs: sameBusiness.get(party.id) ?? null,
           } satisfies (typeof rows)[number]);
 
         row.invoicedPaise += invoice.totalPaise;
@@ -1788,6 +1809,7 @@ export const partyBalances: QueryDefinition<
               onAccountPaise: 0,
               oldestOpenAt: null,
               provisionalBills: 0,
+              sameBusinessAs: sameBusiness.get(order.supplierId) ?? null,
             } satisfies (typeof rows)[number]);
           row.uninvoicedPaise += value;
           byParty.set(order.supplierId, row);

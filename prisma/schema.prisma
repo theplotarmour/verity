@@ -2268,22 +2268,37 @@ model StockBalance {
 
 /// Someone this business buys from.
 model PlywoodSupplier {
-  id           String   @id @default(uuid()) @db.Uuid
-  tenantId     String   @map("tenant_id") @db.Uuid
-  displayName  String   @map("display_name")
-  gstin        String?
-  phone        String?
-  email        String?
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  displayName      String   @map("display_name")
+  gstin            String?
+  phone            String?
+  email            String?
   /// Two-digit GST state code. Present so the invoice command can decide
   /// CGST + SGST against IGST by comparing it with the tenant's own (P4).
-  stateCode    String?  @map("state_code")
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-  version      Int      @default(1)
-  customFields Json     @default("{}") @map("custom_fields")
+  stateCode        String?  @map("state_code")
+  active           Boolean  @default(true)
+  /// The same business, on the selling side.
+  ///
+  /// A plywood merchant routinely buys from and sells to the same firm — a mill
+  /// that also takes offcuts, a dealer who both supplies and orders. They are
+  /// one relationship and one conversation about money, and the two roles were
+  /// two unrelated rows with two unrelated balances.
+  ///
+  /// A LINK, not a merge. Buying and selling stay separate documents with
+  /// separate tax treatment, separate credit limits and separate ledgers,
+  /// because they are separate obligations and netting them by default would
+  /// hide a debt behind a receivable. What the link buys is that the two are
+  /// shown together and their net position can be stated when someone asks for
+  /// it.
+  linkedCustomerId String?  @map("linked_customer_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  version          Int      @default(1)
+  customFields     Json     @default("{}") @map("custom_fields")
 
   tenant               Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  linkedCustomer       PlywoodCustomer?       @relation("PlywoodSameBusiness", fields: [tenantId, linkedCustomerId], references: [tenantId, id], onDelete: SetNull, onUpdate: NoAction)
   pricing              PlywoodSupplierPrice[]
   orders               PlywoodPurchaseOrder[]
   plywoodInvoices      PlywoodInvoice[]
@@ -2291,6 +2306,7 @@ model PlywoodSupplier {
   plywoodPayments      PlywoodPayment[]
 
   @@unique([tenantId, id], name: "plywood_supplier_tenant_scoped_id")
+  @@unique([tenantId, linkedCustomerId])
   @@index([tenantId, displayName])
   @@map("plywood_supplier")
 }
@@ -2334,6 +2350,8 @@ model PlywoodCustomer {
   customFields     Json     @default("{}") @map("custom_fields")
 
   tenant               Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// The same business, on the buying side. See the note on PlywoodSupplier.
+  linkedSupplier       PlywoodSupplier?       @relation("PlywoodSameBusiness")
   pricing              PlywoodCustomerPrice[]
   orders               PlywoodSalesOrder[]
   plywoodInvoices      PlywoodInvoice[]

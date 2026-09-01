@@ -22,6 +22,7 @@ import {
   godownDetail,
   productDetail,
   supplierPrices,
+  customerPrices,
   sellableStock,
   stockLedger,
 } from "./views";
@@ -45,6 +46,7 @@ import {
   ENTITY_INVOICE,
   ENTITY_LEDGER_ENTRY,
   ENTITY_PAYMENT,
+  ENTITY_SUPPLIER_PRICE,
   HSN_CODE,
   PLYWOOD_CAPABILITY,
 } from "./keys";
@@ -75,11 +77,13 @@ import {
   openOrders,
   purchaseOrderDetail,
   receiveGoods,
+  linkSupplierToCustomer,
   reserveForOrder,
   salesOrderDetail,
   setCreditLimit,
   setCustomerPrice,
   setSupplierPrice,
+  setPriceSheet,
   stockAvailability,
   submitPurchaseOrder,
 } from "./trading";
@@ -771,6 +775,17 @@ export function registerPlywoodCapability(): void {
       },
 
       {
+        href: "/prices",
+        label: "Agreed prices",
+        group: "Money",
+        order: 43,
+        icon: "finance",
+        requiresEntity: ENTITY_SUPPLIER_PRICE,
+        requiresVerb: "Edit",
+        shells: ["platform"],
+      },
+
+      {
         // The centre, not the close screen. Closing a period is one thing an
         // accountant does at the end of a month; reading the position is what
         // they do every day, and the nav should land on the second.
@@ -969,12 +984,14 @@ export function registerPlywoodCapability(): void {
   registerCommand(recordReturnedStock);
   registerCommand(createSupplier);
   registerCommand(setSupplierPrice);
+  registerCommand(setPriceSheet);
   registerCommand(createCustomer);
   registerCommand(setCustomerPrice);
   registerCommand(setCreditLimit);
   registerCommand(createPurchaseOrder);
   registerCommand(submitPurchaseOrder);
   registerCommand(receiveGoods);
+  registerCommand(linkSupplierToCustomer);
   registerCommand(cancelPurchaseOrder);
   registerCommand(createSalesOrder);
   registerCommand(approveCredit);
@@ -1002,6 +1019,7 @@ export function registerPlywoodCapability(): void {
   registerQuery(customerDetail);
   registerQuery(productDetail);
   registerQuery(supplierPrices);
+  registerQuery(customerPrices);
   registerQuery(godownDetail);
   registerQuery(stockLedger);
   registerQuery(sellableStock);

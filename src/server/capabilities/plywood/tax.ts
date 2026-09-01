@@ -196,7 +196,24 @@ export const taxSummary: QueryDefinition<
     from: string;
     to: string;
     outputTaxPaise: number;
+    /**
+     * GST charged on purchase documents in the window — ALL of them, including
+     * bills this system raised at goods receipt whose supplier document has not
+     * arrived. Kept as the gross figure because it is what the purchase
+     * register foots to.
+     */
     inputTaxPaise: number;
+    /**
+     * The part of it that can actually be claimed: bills confirmed against the
+     * supplier's own document. A provisional bill's split was COMPUTED from
+     * this business's own HSN rules, and filing a computed split as though a
+     * supplier had issued it is a false return.
+     */
+    inputTaxEligiblePaise: number;
+    /** The rest — real GST, not yet claimable, waiting on their paper. */
+    inputTaxAwaitingBillPaise: number;
+    /** How many bills that is, so the number has something to act on. */
+    awaitingBillCount: number;
     netPayablePaise: number;
     salesInvoiceCount: number;
     purchaseInvoiceCount: number;
@@ -221,7 +238,13 @@ export const taxSummary: QueryDefinition<
 
     const invoices = await ctx.tx.plywoodInvoice.findMany({
       where: { issuedAt: { gte: from, lte: to } },
-      include: { notes: true, customer: true, supplier: true, lines: true },
+      include: {
+        notes: true,
+        customer: true,
+        supplier: true,
+        lines: true,
+        confirmation: { select: { id: true } },
+      },
     });
 
     const sales = invoices.filter((invoice) => invoice.customerId !== null);
@@ -262,6 +285,12 @@ export const taxSummary: QueryDefinition<
       (sum, invoice) => sum + taxOf(invoice),
       0,
     );
+    const awaiting = purchases.filter((invoice) => invoice.confirmation === null);
+    const inputTaxAwaitingBillPaise = awaiting.reduce(
+      (sum, invoice) => sum + taxOf(invoice),
+      0,
+    );
+    const inputTaxEligiblePaise = inputTaxPaise - inputTaxAwaitingBillPaise;
 
     // Exceptions are the accountant's actual work (§63). Each is something a
     // person has to go and fix, named with the document it is on.
@@ -314,7 +343,14 @@ export const taxSummary: QueryDefinition<
       to: to.toISOString(),
       outputTaxPaise,
       inputTaxPaise,
-      netPayablePaise: Math.max(0, outputTaxPaise - inputTaxPaise),
+      inputTaxEligiblePaise,
+      inputTaxAwaitingBillPaise,
+      awaitingBillCount: awaiting.length,
+      // Netted against the CLAIMABLE credit, not the gross. Netting against
+      // credit that cannot yet be claimed understates what is actually payable
+      // this month, which is the direction that gets a business a demand
+      // notice.
+      netPayablePaise: Math.max(0, outputTaxPaise - inputTaxEligiblePaise),
       salesInvoiceCount: sales.length,
       purchaseInvoiceCount: purchases.length,
       creditNoteTaxPaise,
