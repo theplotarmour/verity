@@ -326,7 +326,7 @@ export function FinanceDesk({
               </thead>
               <tbody>
                 {invoices.map((invoice) => (
-                  <tr key={invoice.id}>
+                  <tr key={invoice.id} className="transition-colors hover:bg-accent-subtle/40">
                     <td className="border-b border-line px-3 py-2 text-[14px]">
                       <Link
                         href={`/finance/${invoice.id}`}

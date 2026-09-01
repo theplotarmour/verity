@@ -190,7 +190,12 @@ export function Stat({
 }) {
   const body = (
     <>
-      <span className="tabular text-[24px] font-normal leading-none tracking-[-0.02em] text-text">
+      <span
+        className={
+          "tabular text-[24px] font-normal leading-none tracking-[-0.02em] " +
+          "text-text transition-colors group-hover:text-accent-ink"
+        }
+      >
         {value}
       </span>
       <span className="mt-2 text-[13px] leading-[1.3] text-text-tertiary">{label}</span>
@@ -199,10 +204,18 @@ export function Stat({
   );
 
   if (href) {
+    // A stat that leads somewhere is ACTIONABLE, which is what the accent is
+    // for (ADR-011/012). It stays quiet until the pointer is on it: an accent
+    // sitting permanently on every linked figure would make the accent mean
+    // "a number" rather than "you can act on this".
     return (
       <a
         href={href}
-        className="flex flex-col rounded-md px-5 py-4 no-underline transition-colors hover:bg-glass-2"
+        className={
+          "group flex flex-col rounded-md px-5 py-4 no-underline transition-colors " +
+          "hover:bg-accent-subtle focus-visible:outline-none " +
+          "focus-visible:shadow-[inset_0_0_0_2px_var(--color-accent-line)]"
+        }
       >
         {body}
       </a>
@@ -809,7 +822,16 @@ export function RowList({ children }: { children: ReactNode }) {
 
 export function Row({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <li className={cx("flex items-center justify-between gap-4 px-5 py-3.5", className)}>
+    <li
+      className={cx(
+        "flex items-center justify-between gap-4 px-5 py-3.5",
+        // A record in a list is nearly always something you open. The tint is
+        // the accent at its lightest, so a long list reads as a list and not as
+        // a stack of buttons.
+        "transition-colors hover:bg-accent-subtle/40",
+        className,
+      )}
+    >
       {children}
     </li>
   );

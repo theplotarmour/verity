@@ -9,13 +9,19 @@ import {
   EmptyState,
   ErrorState,
   Field,
+  FormRow,
   Input,
   Panel,
   Row,
   RowList,
   Select,
 } from "@/components/ui/primitives";
+import { Combobox } from "@/components/ui/Combobox";
 import { runCommand } from "@/server/actions/platform";
+import {
+  createTeamLogin,
+  suggestPassword,
+} from "@/server/actions/people";
 import type { ActionFailure } from "@/server/platform/action-error";
 
 type Person = {
@@ -46,6 +52,7 @@ export function PeopleDesk({
 
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [organizationId, setOrganizationId] = useState("");
   const [roleId, setRoleId] = useState("");
 
@@ -90,79 +97,129 @@ export function PeopleDesk({
       )}
 
       {inviting ? (
-        <Panel title="Invite someone">
+        <Panel title="Create a login">
           <div className="flex flex-col gap-4">
-            <Field label="Name" htmlFor="invite-name" required>
-              <Input
-                id="invite-name"
-                value={displayName}
-                onChange={(event) => setDisplayName(event.target.value)}
-              />
-            </Field>
-            <Field
-              label="Email"
-              htmlFor="invite-email"
-              hint="How they will sign in. Can be added later."
-            >
-              <Input
-                id="invite-email"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </Field>
-            <Field
-              label="Works at"
-              htmlFor="invite-org"
-              required
-              hint="Decides which godowns and records they can reach"
-            >
-              <Select
-                id="invite-org"
-                value={organizationId}
-                onChange={(event) => setOrganizationId(event.target.value)}
+            <p className="m-0 text-[13px] text-text-secondary">
+              They can sign in as soon as you press Create. Tell them the email
+              and the password — Verity does not send either.
+            </p>
+            <FormRow columns="minmax(0,1fr) minmax(0,1fr)">
+              <Field label="Name" htmlFor="invite-name" required>
+                <Input
+                  id="invite-name"
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                />
+              </Field>
+              <Field
+                label="Email"
+                htmlFor="invite-email"
+                required
+                hint="This is how they sign in"
               >
-                <option value="">Choose…</option>
-                {organizations.map((organization) => (
-                  <option key={organization.id} value={organization.id}>
-                    {organization.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Role" htmlFor="invite-role" hint="What they are allowed to do">
-              <Select id="invite-role" value={roleId} onChange={(e) => setRoleId(e.target.value)}>
-                <option value="">No role yet</option>
-                {roles.map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {role.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+                <Input
+                  id="invite-email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              </Field>
+              <Field
+                label="Password"
+                htmlFor="invite-password"
+                required
+                hint="At least 8 characters. Give it to them directly."
+              >
+                <div className="flex gap-2">
+                  <div className="min-w-0 flex-1">
+                    <Input
+                      id="invite-password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                    />
+                  </div>
+                  <Button
+                    disabled={pending}
+                    onClick={() =>
+                      startTransition(async () =>
+                        setPassword(await suggestPassword()),
+                      )
+                    }
+                  >
+                    Suggest
+                  </Button>
+                </div>
+              </Field>
+              <Field
+                label="Works at"
+                htmlFor="invite-org"
+                required
+                hint="Decides which godowns and records they can reach"
+              >
+                <Combobox
+                  id="invite-org"
+                  value={organizationId}
+                  onChange={setOrganizationId}
+                  required
+                  placeholder="Search"
+                  options={organizations.map((organization) => ({
+                    value: organization.id,
+                    label: organization.name,
+                  }))}
+                />
+              </Field>
+              <Field
+                label="Role"
+                htmlFor="invite-role"
+                hint="What they are allowed to do"
+              >
+                <Combobox
+                  id="invite-role"
+                  value={roleId}
+                  onChange={setRoleId}
+                  placeholder="No role yet"
+                  options={roles.map((role) => ({
+                    value: role.id,
+                    label: role.name,
+                  }))}
+                />
+              </Field>
+              <span />
+            </FormRow>
             <div className="flex gap-2">
               <Button
                 variant="primary"
-                disabled={pending || displayName.trim().length === 0 || organizationId === ""}
+                disabled={
+                  pending ||
+                  displayName.trim().length === 0 ||
+                  organizationId === "" ||
+                  email.trim().length === 0 ||
+                  password.length < 8
+                }
                 onClick={() =>
-                  run(
-                    "verity.platform.invite_person",
-                    {
+                  startTransition(async () => {
+                    setFailure(null);
+                    const result = await createTeamLogin({
                       displayName: displayName.trim(),
+                      email: email.trim(),
+                      password,
                       organizationId,
-                      ...(email.trim() ? { email: email.trim() } : {}),
-                      ...(roleId ? { roleId } : {}),
-                    },
-                    () => {
+                      roleId: roleId || null,
+                    });
+                    if (result.ok) {
                       setInviting(false);
                       setDisplayName("");
                       setEmail("");
+                      setPassword("");
                       setRoleId("");
-                    },
-                  )
+                      router.refresh();
+                    } else {
+                      setFailure(result);
+                    }
+                  })
                 }
               >
-                {pending ? "Inviting…" : "Invite"}
+                {pending ? "Creating…" : "Create login"}
               </Button>
               <Button disabled={pending} onClick={() => setInviting(false)}>
                 Cancel
@@ -173,7 +230,7 @@ export function PeopleDesk({
       ) : (
         <div>
           <Button variant="primary" onClick={() => setInviting(true)}>
-            Invite someone
+            Create a login
           </Button>
         </div>
       )}

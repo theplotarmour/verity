@@ -216,7 +216,7 @@ export function TransactionsDesk({
                   const unallocated =
                     payment.amountPaise - payment.allocatedPaise;
                   return (
-                    <tr key={payment.id}>
+                    <tr key={payment.id} className="transition-colors hover:bg-accent-subtle/40">
                       <td className="whitespace-nowrap border-b border-line px-3 py-2 text-[13px] text-text-secondary">
                         {shortDate(payment.receivedAt)}
                       </td>

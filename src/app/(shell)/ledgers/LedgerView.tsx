@@ -248,7 +248,7 @@ export function LedgerView({
                 </thead>
                 <tbody>
                   {ledger.entries.map((entry) => (
-                    <tr key={entry.id}>
+                    <tr key={entry.id} className="transition-colors hover:bg-accent-subtle/40">
                       <td className="tabular border-b border-line px-3 py-2 text-[13px] text-text-secondary">
                         {shortDate(entry.occurredAt)}
                       </td>

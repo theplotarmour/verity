@@ -286,7 +286,7 @@ export function SalesDesk({
                 </thead>
                 <tbody>
                   {orders.map((order) => (
-                    <tr key={order.id}>
+                    <tr key={order.id} className="transition-colors hover:bg-accent-subtle/40">
                       <td className="border-b border-line px-3 py-2 text-[14px] text-text">
                         {/* The order is the record; the desk is only a way in.
                           Every action worth taking has more context on the
@@ -476,7 +476,7 @@ export function SalesDesk({
                   const headroom =
                     customer.creditLimitPaise - customer.exposurePaise;
                   return (
-                    <tr key={customer.id}>
+                    <tr key={customer.id} className="transition-colors hover:bg-accent-subtle/40">
                       <td className="border-b border-line px-3 py-2 text-[14px] text-text">
                         {customer.displayName}
                       </td>

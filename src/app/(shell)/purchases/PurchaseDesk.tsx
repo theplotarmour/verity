@@ -284,7 +284,7 @@ export function PurchaseDesk({
                 </thead>
                 <tbody>
                   {orders.map((order) => (
-                    <tr key={order.id}>
+                    <tr key={order.id} className="transition-colors hover:bg-accent-subtle/40">
                       <td className="border-b border-line px-3 py-2 text-[14px] text-text">
                         {/* The order is the record; the desk is only a way in.
                           Every action worth taking has more context on the
