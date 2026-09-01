@@ -741,9 +741,10 @@ export function registerPlywoodCapability(): void {
         // foundation leaking into the product. The routes still exist and still
         // authorize; only the menu entry is replaced.
         supersedes: ["/locations", "/assets"],
-        // Gated on CREATE rather than READ: rack layout is set up by whoever
-        // shapes the godown, not by everyone who reads stock off it.
-        requiresEntity: ENTITY_GODOWN_RACK,
+        // Gated on the LOCATION, not on racks. Racks were withdrawn, and a
+        // menu entry that checks a permission for a feature nobody can reach
+        // hides the page from whoever happens to lack a grant nothing uses.
+        requiresEntity: "verity.location.location",
         requiresVerb: "Create",
         shells: ["platform"],
       },

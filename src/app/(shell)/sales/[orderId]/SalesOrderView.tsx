@@ -32,16 +32,13 @@ type Order = NonNullable<
 
 export function SalesOrderView({
   order,
-  racks,
 }: {
   order: Order;
-  racks: Array<{ id: string; rackLabel: string }>;
 }) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [reason, setReason] = useState("");
   const [issuing, setIssuing] = useState(false);
-  const [rackId, setRackId] = useState("");
   const [collectedBy, setCollectedBy] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -168,20 +165,6 @@ export function SalesOrderView({
                 Issuing releases the reservation and takes the stock out of the godown. On-hand
                 falls, reserved falls, available is unchanged — the sheets were already spoken for.
               </p>
-              {racks.length > 0 && (
-                <Field label="Rack" htmlFor="issue-rack" hint="Where it is being picked from">
-                  <Combobox
-                    id="issue-rack"
-                    value={rackId}
-                    placeholder="Not recorded"
-                    onChange={setRackId}
-                    options={racks.map((rack) => ({
-                      value: rack.id,
-                      label: rack.rackLabel,
-                    }))}
-                  />
-                </Field>
-              )}
               <Field label="Collected by" htmlFor="issue-collected" hint="Who took delivery">
                 <Input
                   id="issue-collected"
@@ -198,7 +181,6 @@ export function SalesOrderView({
                       "verity.plywood.dispatch_order",
                       {
                         orderId: order.id,
-                        ...(rackId ? { rackId } : {}),
                         ...(collectedBy.trim() ? { collectedBy: collectedBy.trim() } : {}),
                       },
                       (data) => {

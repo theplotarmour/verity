@@ -36,10 +36,8 @@ type Order = NonNullable<
 
 export function PurchaseOrderView({
   order,
-  racks,
 }: {
   order: Order;
-  racks: Array<{ id: string; rackLabel: string }>;
 }) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
@@ -55,7 +53,6 @@ export function PurchaseOrderView({
       order.lines.map((line) => [line.productId, String(line.qtyOutstanding)]),
     ),
   );
-  const [rackId, setRackId] = useState("");
   const [challan, setChallan] = useState("");
 
   const state = present(PURCHASE_STATE, order.state);
@@ -100,7 +97,6 @@ export function PurchaseOrderView({
       {
         orderId: order.id,
         lines,
-        ...(rackId ? { rackId } : {}),
         ...(challan.trim() ? { supplierChallanNumber: challan.trim() } : {}),
       },
       () => {
@@ -223,24 +219,6 @@ export function PurchaseOrderView({
                 </Field>
               ))}
 
-              {racks.length > 0 && (
-                <Field
-                  label="Rack"
-                  htmlFor="receipt-rack"
-                  hint="Where it is being put down"
-                >
-                  <Combobox
-                    id="receipt-rack"
-                    value={rackId}
-                    placeholder="Not recorded"
-                    onChange={setRackId}
-                    options={racks.map((rack) => ({
-                      value: rack.id,
-                      label: rack.rackLabel,
-                    }))}
-                  />
-                </Field>
-              )}
 
               <Field
                 label="Supplier challan"

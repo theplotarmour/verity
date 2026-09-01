@@ -4,23 +4,17 @@ import { executeQuery } from "@/server/platform/query";
 import { ForbiddenError } from "@/server/platform/authorization";
 import { listLocations } from "@/server/capabilities/location";
 import { listOrganizations } from "@/server/platform/administration";
-import { listGodownRacks } from "@/server/capabilities/plywood";
 import { PageHeader, PermissionDenied } from "@/components/ui/primitives";
-import { GodownRacks } from "./GodownRacks";
+import { GodownList } from "./GodownList";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Rack layout inside each godown.
+ * The godowns a business holds stock in.
  *
- * Two reads, not one, and deliberately so. A godown is a `Location` and a rack
- * is a capability-owned row, so each is authorized on its own entity: someone
- * who may see the sites but not their internal layout sees the sites and an
- * empty layout, rather than an error or — worse — the layout.
- *
- * The rack query alone would also be the wrong read here. It returns godowns
- * that already have racks, which is exactly the set that excludes the one the
- * user came to fix: the empty godown they want to lay out first.
+ * Racks were withdrawn at the product owner's request, so this is one read
+ * again: a godown is a `Location`, and there is no longer a second,
+ * capability-owned layout to authorize separately.
  */
 export default async function GodownsPage() {
   installCapabilities();
@@ -34,13 +28,6 @@ export default async function GodownsPage() {
     throw error;
   }
 
-  let layout: Awaited<ReturnType<typeof listGodownRacks.handler>> = [];
-  try {
-    layout = await executeQuery(actor, listGodownRacks, { includeInactive: true });
-  } catch (error) {
-    if (!(error instanceof ForbiddenError)) throw error;
-  }
-
   // §0 — hiding the generic Locations entry is only honest if a godown can be
   // created here. Otherwise onboarding step 3 leads to a menu item that no
   // longer exists.
@@ -49,20 +36,18 @@ export default async function GodownsPage() {
     throw error;
   });
 
-  const racksByLocation = new Map(layout.map((entry) => [entry.locationId, entry.racks]));
   const godowns = locations.map((location) => ({
     id: String(location.id),
     name: String(location.name),
-    racks: racksByLocation.get(String(location.id)) ?? [],
   }));
 
   return (
     <>
       <PageHeader
         title="Godowns"
-        description="Where stock physically sits. A rack is a position inside a godown, and a retired rack keeps its history rather than disappearing."
+        description="Where stock physically sits. Every movement names a godown, so this is the first thing to set up. A godown that has held stock is archived rather than deleted — the movements that name it still have to read."
       />
-      <GodownRacks
+      <GodownList
         godowns={godowns}
         organizations={organizations.map((organization) => ({
           id: organization.id,

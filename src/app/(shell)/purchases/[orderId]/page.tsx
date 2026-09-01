@@ -3,7 +3,7 @@ import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
 import { ForbiddenError } from "@/server/platform/authorization";
-import { listGodownRacks, purchaseOrderDetail } from "@/server/capabilities/plywood";
+import { purchaseOrderDetail } from "@/server/capabilities/plywood";
 import { PermissionDenied } from "@/components/ui/primitives";
 import { PurchaseOrderView } from "./PurchaseOrderView";
 
@@ -36,16 +36,5 @@ export default async function PurchaseOrderPage({
   }
   if (!order) notFound();
 
-  // Racks are optional on a receipt; a business that has not laid its godown
-  // out still receives goods. Denied rather than fatal for the same reason.
-  const rackGroups = await executeQuery(actor, listGodownRacks, {}).catch((error) => {
-    if (error instanceof ForbiddenError) return [];
-    throw error;
-  });
-  const racks =
-    rackGroups
-      .find((group) => group.locationId === order.locationId)
-      ?.racks.filter((rack) => rack.active) ?? [];
-
-  return <PurchaseOrderView order={order} racks={racks} />;
+  return <PurchaseOrderView order={order} />;
 }

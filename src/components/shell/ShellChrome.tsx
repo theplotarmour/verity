@@ -146,28 +146,26 @@ export function ShellChrome({
     );
   }
 
-  /** The signed-in person, at the foot of the sidebar as the mockup places it. */
+  /**
+   * Sign out, at the foot of the sidebar.
+   *
+   * It used to show the signed-in person's name and role and sign them out when
+   * pressed — a control that named one thing and did another, which is the one
+   * thing a destructive-ish action must never do. It says what it does now.
+   *
+   * The identity it displayed is not lost: the header carries the avatar and
+   * the organisation the session is acting in, which is the part that actually
+   * changes and the part worth checking.
+   */
   function accountCard() {
     return (
       <form action={signOut} className="mt-auto pt-4">
         <button
           type="submit"
-          className="flex w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-2 py-2 text-left transition-colors hover:bg-glass-2"
+          className="flex w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 py-2.5 text-left text-[14px] text-text-secondary transition-colors hover:bg-glass-2 hover:text-text"
         >
-          <span
-            className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-subtle text-[13px] font-medium text-accent-ink"
-            aria-hidden="true"
-          >
-            {userInitials}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[15px] font-medium text-text">{userLabel}</span>
-            <span className="block truncate text-[13px] text-text-tertiary">
-              {active.roleName ?? "No role assigned"}
-            </span>
-          </span>
-          <Icon name="chevronRight" size={18} className="shrink-0 text-text-tertiary" />
-          <span className="sr-only">Sign out</span>
+          <Icon name="signOut" size={19} className="shrink-0" />
+          <span className="min-w-0 flex-1 truncate">Sign out</span>
         </button>
       </form>
     );
@@ -281,11 +279,17 @@ export function ShellChrome({
               <Icon name="bell" size={19} />
               <span className="sr-only">Recent activity</span>
             </Link>
+            {/* Who the session belongs to. The initials alone say nothing to a
+                screen reader and little to anyone who has not seen the name
+                elsewhere, so the name rides along as the accessible label and
+                as the tooltip — which is where it went when the sidebar footer
+                became a plain Sign out. */}
             <span
               className="grid size-11 shrink-0 place-items-center rounded-full bg-accent-subtle text-[13px] font-medium text-accent-ink ring-1 ring-[var(--color-accent-line)]"
-              aria-hidden="true"
+              title={userLabel}
             >
-              {userInitials}
+              <span aria-hidden="true">{userInitials}</span>
+              <span className="sr-only">Signed in as {userLabel}</span>
             </span>
           </div>
         </div>

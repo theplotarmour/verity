@@ -3,7 +3,7 @@ import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
 import { ForbiddenError } from "@/server/platform/authorization";
-import { listGodownRacks, salesOrderDetail } from "@/server/capabilities/plywood";
+import { salesOrderDetail } from "@/server/capabilities/plywood";
 import { PermissionDenied } from "@/components/ui/primitives";
 import { SalesOrderView } from "./SalesOrderView";
 
@@ -34,14 +34,5 @@ export default async function SalesOrderPage({
   }
   if (!order) notFound();
 
-  const rackGroups = await executeQuery(actor, listGodownRacks, {}).catch((error) => {
-    if (error instanceof ForbiddenError) return [];
-    throw error;
-  });
-  const racks =
-    rackGroups
-      .find((group) => group.locationId === order.locationId)
-      ?.racks.filter((rack) => rack.active) ?? [];
-
-  return <SalesOrderView order={order} racks={racks} />;
+  return <SalesOrderView order={order} />;
 }
