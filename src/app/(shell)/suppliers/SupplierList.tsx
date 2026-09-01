@@ -1,9 +1,25 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { EmptyState, Input, Panel, Row, RowList, Stat, StatRow } from "@/components/ui/primitives";
+import {
+  Button,
+  EmptyState,
+  ErrorState,
+  Field,
+  FormRow,
+  Input,
+  Panel,
+  Row,
+  RowList,
+  Stat,
+  StatRow,
+} from "@/components/ui/primitives";
+import { Modal, ModalCancel } from "@/components/ui/Modal";
 import { rupees, rupeesShort } from "@/components/ui/business/format";
+import { runCommand } from "@/server/actions/platform";
+import type { ActionFailure } from "@/server/platform/action-error";
 
 type Supplier = {
   id: string;
@@ -19,6 +35,14 @@ type Supplier = {
 
 export function SupplierList({ suppliers }: { suppliers: Supplier[] }) {
   const [filter, setFilter] = useState("");
+  // Task 71 item 3. Creating a supplier used to live on the Purchases desk,
+  // beside the order table, which is the wrong place twice over: a supplier is
+  // a party you keep rather than something you make while placing an order, and
+  // anyone looking for one comes here first.
+  const [creating, setCreating] = useState(false);
+  const [failure, setFailure] = useState<ActionFailure | null>(null);
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   const shown = useMemo(() => {
     const needle = filter.trim().toLowerCase();
@@ -41,17 +65,69 @@ export function SupplierList({ suppliers }: { suppliers: Supplier[] }) {
     [suppliers],
   );
 
+  function create(input: unknown) {
+    setFailure(null);
+    startTransition(async () => {
+      const result = await runCommand(
+        "verity.plywood.create_supplier",
+        input,
+        "/suppliers",
+      );
+      if (result.ok) {
+        setCreating(false);
+        router.refresh();
+      } else {
+        setFailure(result);
+      }
+    });
+  }
+
+  const dialog = (
+    <NewSupplierModal
+      open={creating}
+      pending={pending}
+      onClose={() => setCreating(false)}
+      onSubmit={create}
+    />
+  );
+
   if (suppliers.length === 0) {
     return (
-      <EmptyState
-        title="No suppliers yet"
-        description="A supplier is created the first time you raise a purchase order, or here once the catalogue exists."
-      />
+      <>
+        {failure && (
+          <div className="mb-4">
+            <ErrorState
+              title="That was refused"
+              message={failure.message}
+              issues={failure.issues}
+              retryable={failure.retryable}
+            />
+          </div>
+        )}
+        <EmptyState
+          title="No suppliers yet"
+          description="Add the first one here, or let a purchase order create it."
+          action={
+            <Button variant="primary" onClick={() => setCreating(true)}>
+              New supplier
+            </Button>
+          }
+        />
+        {dialog}
+      </>
     );
   }
 
   return (
     <div className="flex flex-col gap-5">
+      {failure && (
+        <ErrorState
+          title="That was refused"
+          message={failure.message}
+          issues={failure.issues}
+          retryable={failure.retryable}
+        />
+      )}
       <StatRow cols={4}>
         <Stat label="Suppliers" value={suppliers.length} />
         <Stat label="Payable" value={rupeesShort(totals.outstanding)} hint="Invoices received, unpaid" />
@@ -70,13 +146,18 @@ export function SupplierList({ suppliers }: { suppliers: Supplier[] }) {
         // `w-full`, and two width utilities on one element resolve by
         // stylesheet order rather than by which was written last.
         action={
-          <div className="w-56">
-            <Input
-              value={filter}
-              onChange={(event) => setFilter(event.target.value)}
-              placeholder="Name or GSTIN"
-              aria-label="Filter suppliers"
-            />
+          <div className="flex items-center gap-2">
+            <div className="w-56">
+              <Input
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+                placeholder="Name or GSTIN"
+                aria-label="Filter suppliers"
+              />
+            </div>
+            <Button variant="primary" onClick={() => setCreating(true)}>
+              New supplier
+            </Button>
           </div>
         }
       >
@@ -123,6 +204,104 @@ export function SupplierList({ suppliers }: { suppliers: Supplier[] }) {
           </RowList>
         )}
       </Panel>
+      {dialog}
     </div>
+  );
+}
+
+/**
+ * Creating a supplier.
+ *
+ * The form from the reported screenshot, where Supplier, GSTIN, State code and
+ * Phone each sat at a different height because the row aligned their BOTTOMS
+ * and only two of them carried a hint. `FormRow` puts all four on one subgrid,
+ * so the labels line up, the inputs line up, and the hints line up (item 2).
+ *
+ * The state code is asked for here rather than left for later because a
+ * supplier without one cannot be taxed: the bill raised when their goods
+ * arrive has no way to decide between IGST and CGST+SGST, and refuses.
+ */
+function NewSupplierModal({
+  open,
+  pending,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  pending: boolean;
+  onClose: () => void;
+  onSubmit: (input: unknown) => void;
+}) {
+  const [name, setName] = useState("");
+  const [gstin, setGstin] = useState("");
+  const [stateCode, setStateCode] = useState("");
+  const [phone, setPhone] = useState("");
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="New supplier"
+      description="The state code decides whether their bills carry IGST or CGST and SGST."
+      footer={
+        <>
+          <ModalCancel onClose={onClose} disabled={pending} />
+          <Button
+            variant="primary"
+            disabled={pending || name.trim() === ""}
+            onClick={() =>
+              onSubmit({
+                displayName: name.trim(),
+                ...(gstin.trim() ? { gstin: gstin.trim() } : {}),
+                ...(stateCode.trim() ? { stateCode: stateCode.trim() } : {}),
+                ...(phone.trim() ? { phone: phone.trim() } : {}),
+              })
+            }
+          >
+            {pending ? "Creating…" : "Create"}
+          </Button>
+        </>
+      }
+    >
+      <FormRow columns="minmax(0,1.4fr) minmax(0,1fr)">
+        <Field label="Supplier" htmlFor="supplier-name" required>
+          <Input
+            id="supplier-name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            autoFocus
+          />
+        </Field>
+        <Field label="Phone" htmlFor="supplier-phone">
+          <Input
+            id="supplier-phone"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+          />
+        </Field>
+        <Field label="GSTIN" htmlFor="supplier-gstin" hint="15 characters">
+          <Input
+            id="supplier-gstin"
+            value={gstin}
+            onChange={(event) => setGstin(event.target.value.toUpperCase())}
+            maxLength={15}
+          />
+        </Field>
+        <Field
+          label="State code"
+          htmlFor="supplier-state"
+          hint="Two digits — 07 for Delhi"
+        >
+          <Input
+            id="supplier-state"
+            value={stateCode}
+            onChange={(event) => setStateCode(event.target.value)}
+            inputMode="numeric"
+            pattern="[0-9]{2}"
+            maxLength={2}
+          />
+        </Field>
+      </FormRow>
+    </Modal>
   );
 }

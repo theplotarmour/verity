@@ -14,11 +14,11 @@ import {
   Panel,
   Row,
   RowList,
-  Select,
   Stat,
   StatRow,
   StateBadge,
 } from "@/components/ui/primitives";
+import { Combobox } from "@/components/ui/Combobox";
 import { day, rupees, sheets } from "@/components/ui/business/format";
 import { PURCHASE_STATE, present } from "@/components/ui/business/states";
 import { Related } from "@/components/ui/business/Related";
@@ -229,18 +229,16 @@ export function PurchaseOrderView({
                   htmlFor="receipt-rack"
                   hint="Where it is being put down"
                 >
-                  <Select
+                  <Combobox
                     id="receipt-rack"
                     value={rackId}
-                    onChange={(e) => setRackId(e.target.value)}
-                  >
-                    <option value="">Not recorded</option>
-                    {racks.map((rack) => (
-                      <option key={rack.id} value={rack.id}>
-                        {rack.rackLabel}
-                      </option>
-                    ))}
-                  </Select>
+                    placeholder="Not recorded"
+                    onChange={setRackId}
+                    options={racks.map((rack) => ({
+                      value: rack.id,
+                      label: rack.rackLabel,
+                    }))}
+                  />
                 </Field>
               )}
 

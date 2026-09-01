@@ -13,6 +13,7 @@ import { reachableGodownIds } from "./scope";
 import { businessZone } from "./clock";
 import {
   ValidationError,
+  type CommandContext,
   type CommandDefinition,
 } from "@/server/platform/command";
 import { type QueryDefinition } from "@/server/platform/query";
@@ -228,18 +229,32 @@ const nextInvoiceNumber = nextDocumentNumber;
 
 /* ================================ invoicing =============================== */
 
-export const raiseSalesInvoice: CommandDefinition<
-  { salesOrderId: string; seriesKey?: string },
-  { id: string; invoiceNumber: string; totalPaise: number; interState: boolean }
-> = {
-  key: "verity.plywood.raise_sales_invoice",
-  entity: ENTITY_INVOICE,
-  verb: "Create",
-  input: z.object({
-    salesOrderId: z.string().uuid(),
-    seriesKey: z.string().min(1).max(20).optional(),
-  }),
-  handler: async (ctx, input) => {
+export type SalesInvoiceResult = {
+  id: string;
+  invoiceNumber: string;
+  totalPaise: number;
+  interState: boolean;
+};
+
+/**
+ * Raises the sales invoice for an order that has issued goods.
+ *
+ * Extracted from the command so `dispatch_order` can call it directly when the
+ * last line leaves the yard (Task 71 item 10). The product owner's complaint
+ * was that nothing in finance happens by itself — a clerk records a sale, and
+ * then has to know that a second, separately-named action turns it into money
+ * owed. That is not a workflow a shop runs; it is an accounting chore bolted
+ * onto one.
+ *
+ * The command stays, because raising an invoice deliberately — a different
+ * series, a re-raise after a cancelled note — is a real thing to want. It is
+ * now a second door onto the same room rather than the only one.
+ */
+export async function issueSalesInvoice(
+  ctx: CommandContext,
+  input: { salesOrderId: string; seriesKey?: string },
+): Promise<SalesInvoiceResult> {
+  {
     const order = await ctx.tx.plywoodSalesOrder.findUniqueOrThrow({
       where: { id: input.salesOrderId },
       include: { lines: true, customer: true },
@@ -455,14 +470,31 @@ export const raiseSalesInvoice: CommandDefinition<
     });
 
     return {
-      result: {
-        id: invoice.id,
-        invoiceNumber: numbering.invoiceNumber,
-        totalPaise: tax.totalPaise,
-        interState: tax.interState,
-      },
+      id: invoice.id,
+      invoiceNumber: numbering.invoiceNumber,
+      totalPaise: tax.totalPaise,
+      interState: tax.interState,
+    };
+  }
+}
+
+export const raiseSalesInvoice: CommandDefinition<
+  { salesOrderId: string; seriesKey?: string },
+  SalesInvoiceResult
+> = {
+  key: "verity.plywood.raise_sales_invoice",
+  entity: ENTITY_INVOICE,
+  verb: "Create",
+  input: z.object({
+    salesOrderId: z.string().uuid(),
+    seriesKey: z.string().min(1).max(20).optional(),
+  }),
+  handler: async (ctx, input) => {
+    const result = await issueSalesInvoice(ctx, input);
+    return {
+      result,
       events: [
-        { name: "verity.plywood.sales_invoice_raised", entityId: invoice.id },
+        { name: "verity.plywood.sales_invoice_raised", entityId: result.id },
       ],
     };
   },
@@ -684,6 +716,514 @@ export const raisePurchaseInvoice: CommandDefinition<
   },
 };
 
+/**
+ * The tax rates in force for a set of HSN codes on a given day.
+ *
+ * One rate per document, for the reason `raiseSalesInvoice` gives: the invoice
+ * model carries one set of rates, and a document whose lines resolve to
+ * different ones is refused rather than silently taxed at whichever line was
+ * read first.
+ */
+async function ratesFor(
+  tx: TenantScopedClient,
+  hsnCodes: string[],
+  on: Date,
+): Promise<{ cgstRateBp: number; sgstRateBp: number; igstRateBp: number }> {
+  const registration = await tx.plywoodGstRegistration.findFirst({
+    where: { active: true },
+  });
+
+  if (!registration) {
+    const [rawCgst, rawSgst, rawIgst] = await Promise.all([
+      resolveConfig<unknown>(tx, CONFIG_CGST_RATE_BP),
+      resolveConfig<unknown>(tx, CONFIG_SGST_RATE_BP),
+      resolveConfig<unknown>(tx, CONFIG_IGST_RATE_BP),
+    ]);
+    const cgstRateBp = configNumber(rawCgst, CONFIG_CGST_RATE_BP);
+    const sgstRateBp = configNumber(rawSgst, CONFIG_SGST_RATE_BP);
+    const igstRateBp = configNumber(rawIgst, CONFIG_IGST_RATE_BP);
+    // Refused rather than defaulted to zero. A document computed at 0% is not
+    // "tax unknown" — it is a statement that no tax was charged, and on a
+    // purchase bill that statement costs the business its input credit.
+    if (
+      cgstRateBp === undefined ||
+      sgstRateBp === undefined ||
+      igstRateBp === undefined
+    ) {
+      throw new ValidationError(
+        "E_VALIDATION: no GST registration and no fallback rates are configured, " +
+          "so tax cannot be decided. Add a registration under Business Settings.",
+      );
+    }
+    return { cgstRateBp, sgstRateBp, igstRateBp };
+  }
+
+  const seen = new Set<string>();
+  let cgstRateBp = 0;
+  let sgstRateBp = 0;
+  for (const hsnCode of hsnCodes) {
+    const rate = await resolveTaxRate(tx, {
+      registrationId: registration.id,
+      hsnCode,
+      on,
+    });
+    seen.add(`${rate.cgstRateBp}:${rate.sgstRateBp}`);
+    cgstRateBp = rate.cgstRateBp;
+    sgstRateBp = rate.sgstRateBp;
+  }
+  if (seen.size > 1) {
+    throw new ValidationError(
+      "E_VALIDATION: these lines attract different tax rates, and one document " +
+        "carries one rate. Split them into one order per rate.",
+    );
+  }
+  return { cgstRateBp, sgstRateBp, igstRateBp: cgstRateBp + sgstRateBp };
+}
+
+/**
+ * Raises the supplier's bill from the order itself, at goods receipt.
+ *
+ * TASK 71 ITEM 7 — the complaint this exists for. Placing an order offered
+ * "receive goods" and nothing else; the money side had to be raised by hand,
+ * and doing so was refused with *"nothing has been received against this
+ * purchase order, so there is nothing to invoice"*. That refusal is CORRECT —
+ * a payable for goods that have not arrived is how a business pays for a
+ * delivery it never got — and the fix is not to remove it. It is to stop
+ * asking a person to raise the document at all, and to raise it at the moment
+ * the goods actually arrive, which is the moment the money is genuinely owed.
+ *
+ * WHAT MAKES THIS BILL PROVISIONAL. Its figures come from the order's agreed
+ * prices and its tax split from the effective HSN rules. Both are this
+ * business's own view of what it was charged, not the supplier's. That is
+ * enough to owe money against and to chase a payment, and it is NOT enough to
+ * claim input credit — a computed split filed as though a supplier had issued
+ * it is a false return. So no `plywood_purchase_bill_confirmation` row is
+ * written here, and every reader that files or claims must exclude bills that
+ * have none. `confirmPurchaseBill` records the supplier's own document later.
+ *
+ * WHY AT COMPLETION, NOT AT EVERY RECEIPT. `plywood_invoice_one_per_purchase_
+ * order` allows one invoice per order, and an invoice is immutable, so a bill
+ * raised on the first of three deliveries could never grow to cover the other
+ * two. Until the order is fully received its delivered value shows on the
+ * payables view as received-not-yet-billed, which is the truth: the goods are
+ * here, the supplier has not finished delivering, and no document exists yet.
+ *
+ * Returns null when there is nothing to bill or a bill already exists, so the
+ * caller can stay indifferent to both.
+ */
+export async function issueProvisionalPurchaseBill(
+  ctx: CommandContext,
+  purchaseOrderId: string,
+): Promise<{ id: string; invoiceNumber: string; totalPaise: number } | null> {
+  const order = await ctx.tx.plywoodPurchaseOrder.findUniqueOrThrow({
+    where: { id: purchaseOrderId },
+    include: { lines: true, supplier: true },
+  });
+
+  const existing = await ctx.tx.plywoodInvoice.findFirst({
+    where: { purchaseOrderId: order.id },
+  });
+  if (existing) return null;
+
+  const received = order.lines.filter((line) => line.qtyReceived > 0);
+  if (received.length === 0) return null;
+
+  const issuedAt = new Date();
+  await assertPeriodOpen(ctx.tx, issuedAt);
+
+  // The supply is the SUPPLIER's, so the supply state is theirs and the place
+  // of supply is ours — the mirror of a sales invoice, and the reason a
+  // supplier in another state bills IGST.
+  const ourStateCode =
+    (await sellerIdentity(ctx.tx)).stateCode ??
+    String(
+      (await resolveConfig<unknown>(ctx.tx, CONFIG_TENANT_STATE_CODE)) ?? "",
+    ).trim();
+  if (!ourStateCode) {
+    throw new ValidationError(
+      "E_VALIDATION: this business has no GST registration, so tax on a supplier " +
+        "bill cannot be decided. Add one under Business Settings.",
+    );
+  }
+  // A supplier with no state code is not guessed at. Defaulting to our own
+  // would tax an interstate purchase as local, which claims the wrong credit
+  // and fails in the direction that looks right on screen.
+  if (!order.supplier.stateCode) {
+    throw new ValidationError(
+      `E_VALIDATION: ${order.supplier.displayName} has no state code, so tax on their ` +
+        "bill cannot be decided. Add it on the supplier before receiving.",
+    );
+  }
+
+  const rates = await ratesFor(
+    ctx.tx,
+    received.map((line) => line.hsnCodeSnapshot),
+    issuedAt,
+  );
+  const taxablePaise = received.reduce(
+    (sum, line) => sum + line.qtyReceived * line.unitCostPaise,
+    0,
+  );
+  const tax = computeInvoiceTax({
+    taxablePaise,
+    supplyStateCode: order.supplier.stateCode,
+    placeOfSupplyStateCode: ourStateCode,
+    ...rates,
+  });
+
+  const financialYear = financialYearOf(issuedAt);
+  const numbering = await nextInvoiceNumber(
+    ctx.tx,
+    ctx.actor.tenantId,
+    "PURCHASE",
+    financialYear,
+  );
+
+  const invoice = await ctx.tx.plywoodInvoice.create({
+    data: {
+      tenantId: ctx.actor.tenantId,
+      seriesId: numbering.seriesId,
+      supplierId: order.supplierId,
+      purchaseOrderId: order.id,
+      invoiceNumber: numbering.invoiceNumber,
+      sequenceNumber: numbering.sequenceNumber,
+      financialYear,
+      supplyStateCode: order.supplier.stateCode,
+      placeOfSupplyStateCode: ourStateCode,
+      cgstRateBp: tax.interState ? 0 : rates.cgstRateBp,
+      sgstRateBp: tax.interState ? 0 : rates.sgstRateBp,
+      igstRateBp: tax.interState ? rates.igstRateBp : 0,
+      taxablePaise,
+      cgstPaise: tax.cgstPaise,
+      sgstPaise: tax.sgstPaise,
+      igstPaise: tax.igstPaise,
+      totalPaise: tax.totalPaise,
+      issuedAt,
+    },
+  });
+
+  await ctx.tx.plywoodInvoiceLine.createMany({
+    data: received.map((line) => ({
+      tenantId: ctx.actor.tenantId,
+      invoiceId: invoice.id,
+      productId: line.productId,
+      productNameSnapshot: line.productNameSnapshot,
+      hsnCodeSnapshot: line.hsnCodeSnapshot,
+      qtyUnits: line.qtyReceived,
+      unitPricePaise: line.unitCostPaise,
+      lineTotalPaise: line.qtyReceived * line.unitCostPaise,
+    })),
+  });
+
+  await ctx.tx.plywoodLedgerEntry.create({
+    data: {
+      tenantId: ctx.actor.tenantId,
+      supplierId: order.supplierId,
+      entryType: "credit",
+      amountPaise: tax.totalPaise,
+      invoiceId: invoice.id,
+      narration: `Purchase bill ${numbering.invoiceNumber} (awaiting supplier document)`,
+    },
+  });
+
+  return {
+    id: invoice.id,
+    invoiceNumber: numbering.invoiceNumber,
+    totalPaise: tax.totalPaise,
+  };
+}
+
+/**
+ * Records the supplier's own document against a bill this system raised.
+ *
+ * Not an edit. `plywood_invoice` is immutable by trigger and that rule is not
+ * being weakened for convenience, so the supplier's number and figures are
+ * appended as a confirmation and a money DIFFERENCE is corrected the way every
+ * other posted difference is — a debit or credit note, which `raiseInvoiceNote`
+ * already does. What this command changes is eligibility: an unconfirmed bill
+ * is a payable but not a credit claim, and confirming it makes it both.
+ */
+export const confirmPurchaseBill: CommandDefinition<
+  {
+    invoiceId: string;
+    supplierInvoiceNumber: string;
+    supplierInvoiceDate: string;
+    taxablePaise: number;
+    cgstPaise?: number;
+    sgstPaise?: number;
+    igstPaise?: number;
+    totalPaise: number;
+  },
+  { id: string; differencePaise: number }
+> = {
+  key: "verity.plywood.confirm_purchase_bill",
+  entity: ENTITY_INVOICE,
+  verb: "Edit",
+  input: z.object({
+    invoiceId: z.string().uuid(),
+    supplierInvoiceNumber: z.string().min(1).max(60),
+    supplierInvoiceDate: z.string().min(1),
+    taxablePaise: z.number().int().min(0),
+    cgstPaise: z.number().int().min(0).optional(),
+    sgstPaise: z.number().int().min(0).optional(),
+    igstPaise: z.number().int().min(0).optional(),
+    totalPaise: z.number().int().min(0),
+  }),
+  handler: async (ctx, input) => {
+    const invoice = await ctx.tx.plywoodInvoice.findUniqueOrThrow({
+      where: { id: input.invoiceId },
+      include: { confirmation: true },
+    });
+    if (!invoice.supplierId) {
+      throw new ValidationError(
+        "E_VALIDATION: only a purchase bill is confirmed against a supplier document",
+      );
+    }
+    if (invoice.confirmation) {
+      throw new ValidationError(
+        `E_VALIDATION: this bill was already confirmed against ${invoice.confirmation.supplierInvoiceNumber}`,
+      );
+    }
+
+    const cgstPaise = input.cgstPaise ?? 0;
+    const sgstPaise = input.sgstPaise ?? 0;
+    const igstPaise = input.igstPaise ?? 0;
+    if (input.taxablePaise + cgstPaise + sgstPaise + igstPaise !== input.totalPaise) {
+      throw new ValidationError(
+        `E_VALIDATION: taxable ${input.taxablePaise} plus tax ` +
+          `${cgstPaise + sgstPaise + igstPaise} does not equal the total ${input.totalPaise}`,
+      );
+    }
+    if (igstPaise > 0 && (cgstPaise > 0 || sgstPaise > 0)) {
+      throw new ValidationError(
+        "E_VALIDATION: a bill carries either IGST or CGST+SGST, never both",
+      );
+    }
+
+    const supplierInvoiceDate = new Date(input.supplierInvoiceDate);
+    if (Number.isNaN(supplierInvoiceDate.getTime())) {
+      throw new ValidationError(
+        "E_VALIDATION: that supplier invoice date could not be read",
+      );
+    }
+
+    await ctx.tx.plywoodPurchaseBillConfirmation.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        invoiceId: invoice.id,
+        supplierInvoiceNumber: input.supplierInvoiceNumber,
+        supplierInvoiceDate,
+        taxablePaise: input.taxablePaise,
+        cgstPaise,
+        sgstPaise,
+        igstPaise,
+        totalPaise: input.totalPaise,
+        confirmedBy: ctx.actor.userId,
+      },
+    });
+
+    // The difference is REPORTED, not posted. Posting it here would put a
+    // correction into the books that nobody had decided to accept — the
+    // supplier may be wrong, and the answer to a disagreement is a
+    // conversation followed by a note, not a silent adjustment.
+    const differencePaise = input.totalPaise - invoice.totalPaise;
+
+    return {
+      result: { id: invoice.id, differencePaise },
+      events: [
+        {
+          name: "verity.plywood.purchase_bill_confirmed",
+          entityId: invoice.id,
+          payload: { differencePaise },
+        },
+      ],
+    };
+  },
+};
+
+/** What one invoice still has outstanding, from its allocations. */
+async function outstandingOnInvoice(
+  tx: TenantScopedClient,
+  invoiceId: string,
+  totalPaise: number,
+): Promise<number> {
+  const allocated = await tx.plywoodPaymentAllocation.aggregate({
+    where: { invoiceId },
+    _sum: { amountPaise: true },
+  });
+  const notes = await tx.plywoodInvoiceNote.aggregate({
+    where: { invoiceId },
+    _sum: { totalPaise: true },
+  });
+  return totalPaise - (allocated._sum.amountPaise ?? 0) - (notes._sum.totalPaise ?? 0);
+}
+
+/**
+ * Money moved, recorded against a party rather than a document.
+ *
+ * TASK 71 ITEM 11 — "record payment which asks us if we made a payment or
+ * received, it can be from or to the suppliers/customers, then we add amount
+ * and it automatically handles the finances."
+ *
+ * The existing `record_payment` required an invoice id, which meant the person
+ * entering a cheque had to know which document it settled and enter it three
+ * times when it settled three. That is bookkeeping, and this business wanted a
+ * record of what happened.
+ *
+ * ALLOCATION IS OLDEST-FIRST. Not because a payer intends it, but because it
+ * is the only rule that needs no further information, and every alternative
+ * (largest first, by due date, by reference) silently guesses at an intention
+ * the payer did not state. Anything left over is an ADVANCE, kept as an
+ * unallocated payment on the party's account rather than refused — a customer
+ * paying ahead is ordinary, and refusing it makes the record wrong rather than
+ * the transaction impossible.
+ */
+export const recordPartyPayment: CommandDefinition<
+  {
+    party: { customerId: string } | { supplierId: string };
+    direction: "in" | "out";
+    amountPaise: number;
+    method: "cash" | "bank" | "upi" | "cheque";
+    reference?: string;
+    receivedAt?: string;
+  },
+  {
+    id: string;
+    allocatedPaise: number;
+    unallocatedPaise: number;
+    settled: Array<{ invoiceNumber: string; amountPaise: number }>;
+    balancePaise: number;
+  }
+> = {
+  key: "verity.plywood.record_party_payment",
+  entity: ENTITY_PAYMENT,
+  verb: "Create",
+  input: z.object({
+    party: z.union([
+      z.object({ customerId: z.string().uuid() }),
+      z.object({ supplierId: z.string().uuid() }),
+    ]),
+    direction: z.enum(["in", "out"]),
+    amountPaise: z.number().int().positive(),
+    method: z.enum(["cash", "bank", "upi", "cheque"]),
+    reference: z.string().max(120).optional(),
+    receivedAt: z.string().optional(),
+  }),
+  handler: async (ctx, input) => {
+    const customerId = "customerId" in input.party ? input.party.customerId : null;
+    const supplierId = "supplierId" in input.party ? input.party.supplierId : null;
+
+    const receivedAt = input.receivedAt ? new Date(input.receivedAt) : new Date();
+    if (Number.isNaN(receivedAt.getTime())) {
+      throw new ValidationError("E_VALIDATION: that payment date could not be read");
+    }
+    await assertPeriodOpen(ctx.tx, receivedAt);
+
+    // Existence is checked explicitly rather than left to the foreign key,
+    // because a foreign-key violation surfaces as a database error a user
+    // cannot act on.
+    if (customerId) {
+      await ctx.tx.plywoodCustomer.findUniqueOrThrow({ where: { id: customerId } });
+    } else if (supplierId) {
+      await ctx.tx.plywoodSupplier.findUniqueOrThrow({ where: { id: supplierId } });
+    }
+
+    const payment = await ctx.tx.plywoodPayment.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        customerId,
+        supplierId,
+        direction: input.direction,
+        method: input.method,
+        amountPaise: input.amountPaise,
+        reference: input.reference ?? null,
+        receivedAt,
+        byUserId: ctx.actor.userId,
+      },
+    });
+
+    // Which invoices this payment can settle. Money IN settles what a customer
+    // owes us; money OUT settles what we owe a supplier. A refund — money out
+    // to a customer, or in from a supplier — settles nothing and is left
+    // wholly unallocated, which is exactly right: it is a movement against the
+    // account, not a settlement of a document.
+    const settles =
+      (input.direction === "in" && customerId) ||
+      (input.direction === "out" && supplierId);
+
+    const settled: Array<{ invoiceNumber: string; amountPaise: number }> = [];
+    let remaining = input.amountPaise;
+
+    if (settles) {
+      const open = await ctx.tx.plywoodInvoice.findMany({
+        where: customerId ? { customerId } : { supplierId },
+        orderBy: { issuedAt: "asc" },
+      });
+      for (const invoice of open) {
+        if (remaining <= 0) break;
+        const outstanding = await outstandingOnInvoice(
+          ctx.tx,
+          invoice.id,
+          invoice.totalPaise,
+        );
+        if (outstanding <= 0) continue;
+        const amountPaise = Math.min(outstanding, remaining);
+        await ctx.tx.plywoodPaymentAllocation.create({
+          data: {
+            tenantId: ctx.actor.tenantId,
+            paymentId: payment.id,
+            invoiceId: invoice.id,
+            amountPaise,
+          },
+        });
+        settled.push({ invoiceNumber: invoice.invoiceNumber, amountPaise });
+        remaining -= amountPaise;
+      }
+    }
+
+    // ONE ledger entry for the whole payment, not one per allocation. The
+    // ledger records that money moved against this party; how it was split
+    // across their documents is the allocation table's job, and writing it
+    // twice would double the balance.
+    await ctx.tx.plywoodLedgerEntry.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        customerId,
+        supplierId,
+        // A customer paying us reduces what they owe: a credit. Paying a
+        // supplier reduces what we owe them, which in this ledger's single
+        // point of view — positive means owed to us — is a debit.
+        entryType: input.direction === "in" ? "credit" : "debit",
+        amountPaise: input.amountPaise,
+        paymentId: payment.id,
+        narration:
+          settled.length > 0
+            ? `${input.method} ${input.direction === "in" ? "received" : "paid"}, against ${settled
+                .map((row) => row.invoiceNumber)
+                .join(", ")}`
+            : `${input.method} ${input.direction === "in" ? "received" : "paid"} on account`,
+        occurredAt: receivedAt,
+      },
+    });
+
+    return {
+      result: {
+        id: payment.id,
+        allocatedPaise: input.amountPaise - remaining,
+        unallocatedPaise: remaining,
+        settled,
+        balancePaise: await partyBalancePaise(ctx.tx, {
+          ...(customerId ? { customerId } : {}),
+          ...(supplierId ? { supplierId } : {}),
+        }),
+      },
+      events: [
+        { name: "verity.plywood.payment_recorded", entityId: payment.id },
+      ],
+    };
+  },
+};
+
 export const recordPayment: CommandDefinition<
   {
     invoiceId: string;
@@ -705,14 +1245,18 @@ export const recordPayment: CommandDefinition<
   handler: async (ctx, input) => {
     const invoice = await ctx.tx.plywoodInvoice.findUniqueOrThrow({
       where: { id: input.invoiceId },
-      include: { payments: true },
     });
 
-    const paid = invoice.payments.reduce(
-      (sum, payment) => sum + payment.amountPaise,
-      0,
+    // From ALLOCATIONS, not from payments joined on invoice_id. Since Task 71 a
+    // payment is recorded against a party and allocated across documents, so a
+    // payment that settled this invoice may carry a different invoice_id or
+    // none at all. Summing payments would report such an invoice as unpaid and
+    // let it be paid twice.
+    const outstandingBefore = await outstandingOnInvoice(
+      ctx.tx,
+      invoice.id,
+      invoice.totalPaise,
     );
-    const outstandingBefore = invoice.totalPaise - paid;
     if (input.amountPaise > outstandingBefore) {
       // Refused rather than accepted as an overpayment. An overpayment is a real
       // event with its own treatment — an advance, or a refund — and quietly
@@ -726,10 +1270,28 @@ export const recordPayment: CommandDefinition<
       data: {
         tenantId: ctx.actor.tenantId,
         invoiceId: invoice.id,
+        // The party and direction the schema now requires. Taken from the
+        // invoice rather than asked for: a payment against a sales invoice is
+        // money in from that customer, and there is no other reading.
+        customerId: invoice.customerId,
+        supplierId: invoice.supplierId,
+        direction: invoice.customerId ? "in" : "out",
         method: input.method,
         amountPaise: input.amountPaise,
         reference: input.reference ?? null,
         byUserId: ctx.actor.userId,
+      },
+    });
+
+    // The allocation is what every outstanding read now sums. Without it this
+    // payment would settle the invoice in the ledger and leave it looking
+    // wholly unpaid on the desk.
+    await ctx.tx.plywoodPaymentAllocation.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        paymentId: payment.id,
+        invoiceId: invoice.id,
+        amountPaise: input.amountPaise,
       },
     });
 
@@ -800,7 +1362,7 @@ export const outstandingReceivables: QueryDefinition<
   handler: async (ctx) => {
     const invoices = await ctx.tx.plywoodInvoice.findMany({
       where: { customerId: { not: null } },
-      include: { customer: { select: { displayName: true } }, payments: true },
+      include: { customer: { select: { displayName: true } }, allocations: true },
     });
 
     const byCustomer = new Map<
@@ -817,8 +1379,10 @@ export const outstandingReceivables: QueryDefinition<
 
     for (const invoice of invoices) {
       const customerId = invoice.customerId!;
-      const paid = invoice.payments.reduce(
-        (sum, payment) => sum + payment.amountPaise,
+      // Allocations, not payments: a party payment settles documents through
+      // the allocation table and carries no invoice_id of its own.
+      const paid = invoice.allocations.reduce(
+        (sum, allocation) => sum + allocation.amountPaise,
         0,
       );
       const outstanding = invoice.totalPaise - paid;
@@ -847,6 +1411,286 @@ export const outstandingReceivables: QueryDefinition<
     return [...byCustomer.values()]
       .filter((row) => row.outstandingPaise !== 0)
       .sort((a, b) => b.outstandingPaise - a.outstandingPaise);
+  },
+};
+
+/**
+ * Everything owed, in both directions, in one read.
+ *
+ * TASK 71 ITEM 10 — "finance is completely useless right now, nothing is
+ * linked to it". The desk had a list of invoices and no answer to the two
+ * questions a proprietor actually asks: who owes me, and who do I owe.
+ *
+ * `uninvoicedPaise` is the honest half of the answer. Goods received against a
+ * part-delivered order are a real obligation with no document yet, because a
+ * purchase order carries one invoice and it is raised when the order completes
+ * (see `issueProvisionalPurchaseBill`). Leaving that value out would show a
+ * payables figure lower than what the business will actually pay; showing it
+ * inside the invoiced figure would claim a document exists. It is its own
+ * column.
+ */
+/**
+ * Orders whose goods have moved but which carry no document.
+ *
+ * Since Task 71 a delivery raises the customer's invoice and a receipt raises
+ * the supplier's bill, both automatically. So an order in this list is a
+ * FAILURE, not a queue — something refused the automatic raise, almost always a
+ * missing GST state code on the party — and the finance desk presents it as a
+ * repair with a retry rather than as work waiting to be done.
+ *
+ * It cannot be answered from `openOrders`, which deliberately excludes
+ * completed orders: a fully received purchase order whose bill was refused is
+ * exactly the case that matters and exactly the case that query drops.
+ */
+export const unbilledMovements: QueryDefinition<
+  Record<string, never>,
+  {
+    sales: Array<{
+      id: string;
+      customerName: string;
+      reference: string | null;
+      valuePaise: number;
+    }>;
+    purchases: Array<{
+      id: string;
+      supplierName: string;
+      reference: string | null;
+      valuePaise: number;
+    }>;
+  }
+> = {
+  key: "verity.plywood.unbilled_movements",
+  entity: ENTITY_INVOICE,
+  input: z.object({}),
+  handler: async (ctx) => {
+    const salesOrders = await ctx.tx.plywoodSalesOrder.findMany({
+      where: {
+        state: { notIn: ["draft", "cancelled"] },
+        plywoodInvoices: { none: {} },
+        lines: { some: { qtyShipped: { gt: 0 } } },
+      },
+      include: { lines: true, customer: { select: { displayName: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+
+    const purchaseOrders = await ctx.tx.plywoodPurchaseOrder.findMany({
+      where: {
+        // Completed only. A part-received order has no bill BY DESIGN — one
+        // invoice per order, raised when the last delivery lands — so listing
+        // it here would report correct behaviour as a fault.
+        state: "completed",
+        plywoodInvoices: { none: {} },
+        lines: { some: { qtyReceived: { gt: 0 } } },
+      },
+      include: { lines: true, supplier: { select: { displayName: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+
+    return {
+      sales: salesOrders.map((order) => ({
+        id: order.id,
+        customerName: order.customer.displayName,
+        reference: order.reference,
+        // What was actually SHIPPED, which is what the invoice would be for.
+        valuePaise: order.lines.reduce(
+          (sum, line) => sum + line.qtyShipped * line.unitPricePaise,
+          0,
+        ),
+      })),
+      purchases: purchaseOrders.map((order) => ({
+        id: order.id,
+        supplierName: order.supplier.displayName,
+        reference: order.reference,
+        valuePaise: order.lines.reduce(
+          (sum, line) => sum + line.qtyReceived * line.unitCostPaise,
+          0,
+        ),
+      })),
+    };
+  },
+};
+
+export const partyBalances: QueryDefinition<
+  { side?: "customer" | "supplier" },
+  Array<{
+    partyId: string;
+    partyName: string;
+    side: "customer" | "supplier";
+    invoicedPaise: number;
+    settledPaise: number;
+    outstandingPaise: number;
+    /** Received or issued, no document yet. Zero for customers. */
+    uninvoicedPaise: number;
+    onAccountPaise: number;
+    oldestOpenAt: Date | null;
+    provisionalBills: number;
+  }>
+> = {
+  key: "verity.plywood.party_balances",
+  entity: ENTITY_LEDGER_ENTRY,
+  input: z.object({ side: z.enum(["customer", "supplier"]).optional() }),
+  handler: async (ctx, input) => {
+    const rows: Array<{
+      partyId: string;
+      partyName: string;
+      side: "customer" | "supplier";
+      invoicedPaise: number;
+      settledPaise: number;
+      outstandingPaise: number;
+      uninvoicedPaise: number;
+      onAccountPaise: number;
+      oldestOpenAt: Date | null;
+      provisionalBills: number;
+    }> = [];
+
+    const sides: Array<"customer" | "supplier"> = input.side
+      ? [input.side]
+      : ["customer", "supplier"];
+
+    for (const side of sides) {
+      const invoices = await ctx.tx.plywoodInvoice.findMany({
+        where:
+          side === "customer"
+            ? { customerId: { not: null } }
+            : { supplierId: { not: null } },
+        include: {
+          allocations: true,
+          confirmation: { select: { id: true } },
+          customer: { select: { id: true, displayName: true } },
+          supplier: { select: { id: true, displayName: true } },
+          notes: { select: { totalPaise: true } },
+        },
+        orderBy: { issuedAt: "asc" },
+      });
+
+      const byParty = new Map<string, (typeof rows)[number]>();
+
+      for (const invoice of invoices) {
+        const party =
+          side === "customer" ? invoice.customer : invoice.supplier;
+        if (!party) continue;
+        const settled = invoice.allocations.reduce(
+          (sum, allocation) => sum + allocation.amountPaise,
+          0,
+        );
+        const noted = invoice.notes.reduce(
+          (sum, note) => sum + note.totalPaise,
+          0,
+        );
+        const outstanding = invoice.totalPaise - settled - noted;
+
+        const row =
+          byParty.get(party.id) ??
+          ({
+            partyId: party.id,
+            partyName: party.displayName,
+            side,
+            invoicedPaise: 0,
+            settledPaise: 0,
+            outstandingPaise: 0,
+            uninvoicedPaise: 0,
+            onAccountPaise: 0,
+            oldestOpenAt: null,
+            provisionalBills: 0,
+          } satisfies (typeof rows)[number]);
+
+        row.invoicedPaise += invoice.totalPaise;
+        row.settledPaise += settled;
+        row.outstandingPaise += outstanding;
+        if (side === "supplier" && !invoice.confirmation) {
+          row.provisionalBills += 1;
+        }
+        if (outstanding > 0 && row.oldestOpenAt === null) {
+          row.oldestOpenAt = invoice.issuedAt;
+        }
+        byParty.set(party.id, row);
+      }
+
+      // Money on account: paid or received without settling a document. It
+      // reduces what is owed even though no invoice records it, so leaving it
+      // out would chase a customer who has already paid in advance.
+      const payments = await ctx.tx.plywoodPayment.findMany({
+        where:
+          side === "customer"
+            ? { customerId: { not: null } }
+            : { supplierId: { not: null } },
+        include: { allocations: { select: { amountPaise: true } } },
+      });
+      for (const payment of payments) {
+        const partyId =
+          side === "customer" ? payment.customerId : payment.supplierId;
+        if (!partyId) continue;
+        const allocated = payment.allocations.reduce(
+          (sum, allocation) => sum + allocation.amountPaise,
+          0,
+        );
+        const unallocated = payment.amountPaise - allocated;
+        if (unallocated <= 0) continue;
+        const row = byParty.get(partyId);
+        if (!row) continue;
+        row.onAccountPaise += unallocated;
+      }
+
+      if (side === "supplier") {
+        // Delivered but not yet billed: sum over orders that have received
+        // something and carry no invoice. This is the figure that keeps the
+        // payables total honest on a part-delivered order.
+        const openOrders = await ctx.tx.plywoodPurchaseOrder.findMany({
+          where: {
+            state: { notIn: ["draft", "cancelled"] },
+            plywoodInvoices: { none: {} },
+          },
+          include: {
+            lines: true,
+            supplier: { select: { id: true, displayName: true } },
+          },
+        });
+        for (const order of openOrders) {
+          const value = order.lines.reduce(
+            (sum, line) => sum + line.qtyReceived * line.unitCostPaise,
+            0,
+          );
+          if (value <= 0) continue;
+          const row =
+            byParty.get(order.supplierId) ??
+            ({
+              partyId: order.supplierId,
+              partyName: order.supplier.displayName,
+              side,
+              invoicedPaise: 0,
+              settledPaise: 0,
+              outstandingPaise: 0,
+              uninvoicedPaise: 0,
+              onAccountPaise: 0,
+              oldestOpenAt: null,
+              provisionalBills: 0,
+            } satisfies (typeof rows)[number]);
+          row.uninvoicedPaise += value;
+          byParty.set(order.supplierId, row);
+        }
+      }
+
+      for (const row of byParty.values()) {
+        // A party who owes nothing, is owed nothing and has nothing on account
+        // is not a balance; listing them makes the real ones harder to find.
+        if (
+          row.outstandingPaise === 0 &&
+          row.uninvoicedPaise === 0 &&
+          row.onAccountPaise === 0
+        ) {
+          continue;
+        }
+        rows.push(row);
+      }
+    }
+
+    return rows.sort(
+      (a, b) =>
+        b.outstandingPaise + b.uninvoicedPaise -
+        (a.outstandingPaise + a.uninvoicedPaise),
+    );
   },
 };
 
@@ -959,15 +1803,15 @@ export const invoiceDetail: QueryDefinition<
       where: { id: input.invoiceId },
       include: {
         lines: true,
-        payments: true,
+        allocations: { include: { payment: true } },
         customer: { select: { displayName: true, gstin: true } },
         supplier: { select: { displayName: true, gstin: true } },
       },
     });
     if (!invoice) return null;
 
-    const paidPaise = invoice.payments.reduce(
-      (sum, payment) => sum + payment.amountPaise,
+    const paidPaise = invoice.allocations.reduce(
+      (sum, allocation) => sum + allocation.amountPaise,
       0,
     );
     return {
@@ -990,14 +1834,20 @@ export const invoiceDetail: QueryDefinition<
       cgstRateBp: invoice.cgstRateBp,
       sgstRateBp: invoice.sgstRateBp,
       igstRateBp: invoice.igstRateBp,
-      payments: invoice.payments
+      // What settled THIS invoice, through the allocation and back to the
+      // payment that made it — so a cheque that covered three bills shows on
+      // each of them for its own share rather than its whole face value.
+      payments: invoice.allocations
         .slice()
-        .sort((a, b) => a.receivedAt.getTime() - b.receivedAt.getTime())
-        .map((payment) => ({
-          method: payment.method,
-          amountPaise: payment.amountPaise,
-          reference: payment.reference,
-          receivedAt: payment.receivedAt,
+        .sort(
+          (a, b) =>
+            a.payment.receivedAt.getTime() - b.payment.receivedAt.getTime(),
+        )
+        .map((allocation) => ({
+          method: allocation.payment.method,
+          amountPaise: allocation.amountPaise,
+          reference: allocation.payment.reference,
+          receivedAt: allocation.payment.receivedAt,
         })),
       taxablePaise: invoice.taxablePaise,
       cgstPaise: invoice.cgstPaise,
@@ -1027,6 +1877,12 @@ export const listInvoices: QueryDefinition<
     issuedAt: Date;
     totalPaise: number;
     outstandingPaise: number;
+    /**
+     * A purchase bill raised at goods receipt whose supplier document has not
+     * been recorded yet. Its tax split was computed, so it is a payable but not
+     * a credit claim — the desk has to be able to tell the two apart.
+     */
+    provisional: boolean;
   }>
 > = {
   key: "verity.plywood.list_invoices",
@@ -1035,7 +1891,8 @@ export const listInvoices: QueryDefinition<
   handler: async (ctx, input) => {
     const invoices = await ctx.tx.plywoodInvoice.findMany({
       include: {
-        payments: true,
+        allocations: true,
+        confirmation: { select: { id: true } },
         customer: { select: { displayName: true } },
         supplier: { select: { displayName: true } },
       },
@@ -1045,8 +1902,8 @@ export const listInvoices: QueryDefinition<
 
     return invoices
       .map((invoice) => {
-        const paid = invoice.payments.reduce(
-          (sum, payment) => sum + payment.amountPaise,
+        const paid = invoice.allocations.reduce(
+          (sum, allocation) => sum + allocation.amountPaise,
           0,
         );
         return {
@@ -1062,6 +1919,8 @@ export const listInvoices: QueryDefinition<
           issuedAt: invoice.issuedAt,
           totalPaise: invoice.totalPaise,
           outstandingPaise: invoice.totalPaise - paid,
+          provisional:
+            invoice.supplierId !== null && invoice.confirmation === null,
         };
       })
       .filter((row) => !input.unpaidOnly || row.outstandingPaise > 0);
@@ -1183,9 +2042,14 @@ export const ownerConsole: QueryDefinition<
           WHERE r.released_at IS NULL
             AND r.location_id = ANY(${godowns}::uuid[]))::bigint
           AS reserved_units,
+        -- Settled amounts come from plywood_payment_allocation, not from
+        -- payments joined on invoice_id. Since Task 71 a payment names a PARTY
+        -- and is allocated across their documents, so a settled invoice may
+        -- have no payment pointing at it at all; the old join reported every
+        -- such invoice as fully outstanding.
         (SELECT COALESCE(SUM(i.total_paise), 0) - COALESCE((
-           SELECT SUM(p.amount_paise) FROM plywood_payment p
-            JOIN plywood_invoice pi ON pi.id = p.invoice_id
+           SELECT SUM(a.amount_paise) FROM plywood_payment_allocation a
+            JOIN plywood_invoice pi ON pi.id = a.invoice_id
            WHERE pi.customer_id IS NOT NULL), 0)
            FROM plywood_invoice i WHERE i.customer_id IS NOT NULL)::bigint
           AS receivables,
@@ -1193,30 +2057,39 @@ export const ownerConsole: QueryDefinition<
         -- payment terms, so "older than 30 days and not settled" is stated as
         -- the rule rather than dressed up as a term the business never agreed.
         (SELECT COALESCE(SUM(i.total_paise - COALESCE((
-             SELECT SUM(p.amount_paise) FROM plywood_payment p WHERE p.invoice_id = i.id
+             SELECT SUM(a.amount_paise) FROM plywood_payment_allocation a WHERE a.invoice_id = i.id
            ), 0)), 0)
            FROM plywood_invoice i
           WHERE i.customer_id IS NOT NULL
             AND i.issued_at < now() - interval '30 days'
             AND i.total_paise > COALESCE((
-              SELECT SUM(p.amount_paise) FROM plywood_payment p WHERE p.invoice_id = i.id), 0))::bigint
+              SELECT SUM(a.amount_paise) FROM plywood_payment_allocation a WHERE a.invoice_id = i.id), 0))::bigint
           AS overdue_receivables,
         (SELECT COALESCE(SUM(i.total_paise), 0) - COALESCE((
-           SELECT SUM(p.amount_paise) FROM plywood_payment p
-            JOIN plywood_invoice pi ON pi.id = p.invoice_id
+           SELECT SUM(a.amount_paise) FROM plywood_payment_allocation a
+            JOIN plywood_invoice pi ON pi.id = a.invoice_id
            WHERE pi.supplier_id IS NOT NULL), 0)
            FROM plywood_invoice i WHERE i.supplier_id IS NOT NULL)::bigint
           AS payables,
+        -- Money actually taken in today, from the payment itself rather than
+        -- through an invoice: an advance is a collection even before it settles
+        -- anything, and the old join could not see one.
         (SELECT COALESCE(SUM(p.amount_paise), 0) FROM plywood_payment p
-           JOIN plywood_invoice i ON i.id = p.invoice_id
-          WHERE i.customer_id IS NOT NULL
+          WHERE p.customer_id IS NOT NULL AND p.direction = 'in'
             AND p.received_at >= date_trunc('day', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS collections_today,
         (SELECT COALESCE(SUM(cgst_paise + sgst_paise + igst_paise), 0) FROM plywood_invoice
           WHERE customer_id IS NOT NULL AND issued_at >= date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS output_tax,
-        (SELECT COALESCE(SUM(cgst_paise + sgst_paise + igst_paise), 0) FROM plywood_invoice
-          WHERE supplier_id IS NOT NULL AND issued_at >= date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
+        -- CONFIRMED bills only. A provisional bill's tax split was computed
+        -- from this business's own rules, not read off a supplier's document,
+        -- and presenting it as eligible credit would overstate what can be
+        -- claimed by exactly the amount nobody has evidence for.
+        (SELECT COALESCE(SUM(i.cgst_paise + i.sgst_paise + i.igst_paise), 0)
+           FROM plywood_invoice i
+           JOIN plywood_purchase_bill_confirmation c ON c.invoice_id = i.id
+          WHERE i.supplier_id IS NOT NULL
+            AND i.issued_at >= date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS eligible_itc,
         -- Available, not on hand (rule freeze §4.2). Counting on-hand reports
         -- plenty while every sheet is already reserved, and the buyer finds

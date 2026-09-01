@@ -93,3 +93,32 @@ shares the same three baselines whether or not it has a hint.
   receivables and one Record payment action. Items 3, 5, 6, 10.
 
 Each slice ships with tests and is committed on its own.
+
+## Delivered
+
+| # | Complaint | Where it landed |
+|---|---|---|
+| 1 | Native dropdowns, want type-ahead | `src/components/ui/Combobox.tsx` (+ `FormCombobox` for uncontrolled forms). Every entity picker on the plywood desks, ledgers, stock, godowns and both order views. A two-option select — the stock-correction direction — stays native, where a search box would be worse. |
+| 2 | Misaligned text fields | `FormRow` + `.verity-field` subgrid in `globals.css`. Cause was `flex items-end`: a field with a hint is taller, so aligning bottoms pushed its label and control up. |
+| 3 | Add supplier belongs on Suppliers | `SupplierList.tsx` owns it now, including from the empty state; removed from `PurchaseDesk`, along with the supplier table that duplicated `/suppliers`. |
+| 4 | Receive only the ordered lines | Already true since Task 69; moved into the modal. |
+| 5 | Several boards on one purchase | `NewPurchaseOrderForm.tsx`. |
+| 6 | Popups, not new page sections | `src/components/ui/Modal.tsx` on the native `<dialog>`. New supplier, new order (both sides), agree a price, receive, cancel, record payment, confirm a supplier bill. |
+| 7 | Purchase should create the money side | `issueProvisionalPurchaseBill`, called from `receiveGoods` when the order completes. The old refusal is intact and no longer reachable by an ordinary user. |
+| 8 | Agreed price should prefill | `supplierPrices` query; the form fills the cost and shows the agreed figure on the option itself. |
+| 9 | Discount percentage | `discountBps` + `listUnit*Paise` on both order lines; `unit*Paise` stays the net. |
+| 10 | Finance is unlinked and errors | `FinanceDesk` rebuilt around `partyBalances`; raising a document by hand survives only as a retry on a failed automatic raise, with the reason shown. |
+| 11 | Party-first payment recording | `recordPartyPayment`, FIFO allocation through `plywood_payment_allocation`, surplus kept on account. |
+
+## Deliberately not done
+
+- **A bill per delivery.** `plywood_invoice_one_per_purchase_order` allows one invoice
+  per order and an invoice is immutable, so a bill raised on the first of three
+  deliveries could never grow. Changing that is a schema decision with GST
+  consequences and belongs to its own task. Until then a part-delivered order shows
+  its received value as `Not yet billed`, which is the truth.
+- **Weakening invoice immutability.** Confirming a supplier's document appends a
+  confirmation row; it does not edit the bill. A money difference is a note.
+- **Blocking a receipt on a billing failure.** Stock arriving is a physical fact. A
+  missing state code makes the bill impossible, not the delivery, so the receipt
+  stands and the reason is returned and shown.

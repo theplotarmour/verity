@@ -281,6 +281,11 @@ export const BUSINESS_ACTIVITIES: BusinessActivity[] = [
         ENTITY_SUPPLIER,
       ),
       { verb: "Create", entity: ENTITY_INVOICE },
+      // Recording the supplier's own document against a bill this system
+      // raised at goods receipt. Not an edit of the invoice — that table is
+      // immutable — but it is the verb the command declares, because it
+      // changes what the bill is eligible for.
+      { verb: "Edit", entity: ENTITY_INVOICE },
     ],
   },
   {

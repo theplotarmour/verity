@@ -21,6 +21,7 @@ import {
 import {
   godownDetail,
   productDetail,
+  supplierPrices,
   sellableStock,
   stockLedger,
 } from "./views";
@@ -85,12 +86,16 @@ import {
   invoiceDetail,
   listInvoices,
   outstandingReceivables,
+  partyBalances,
+  unbilledMovements,
   partyLedger,
   raisePurchaseInvoice,
   marginReport,
   ownerConsole,
   raiseSalesInvoice,
   recordPayment,
+  recordPartyPayment,
+  confirmPurchaseBill,
 } from "./finance";
 
 /**
@@ -964,6 +969,8 @@ export function registerPlywoodCapability(): void {
   registerCommand(raiseSalesInvoice);
   registerCommand(raisePurchaseInvoice);
   registerCommand(recordPayment);
+  registerCommand(recordPartyPayment);
+  registerCommand(confirmPurchaseBill);
   registerCommand(raiseInvoiceNote);
 
   registerQuery(listCatalogue);
@@ -978,6 +985,7 @@ export function registerPlywoodCapability(): void {
   registerQuery(listCustomers);
   registerQuery(customerDetail);
   registerQuery(productDetail);
+  registerQuery(supplierPrices);
   registerQuery(godownDetail);
   registerQuery(stockLedger);
   registerQuery(sellableStock);
@@ -990,6 +998,8 @@ export function registerPlywoodCapability(): void {
   registerQuery(invoiceDetail);
   registerQuery(outstandingReceivables);
   registerQuery(partyLedger);
+  registerQuery(partyBalances);
+  registerQuery(unbilledMovements);
   registerQuery(ownerConsole);
   registerQuery(marginReport);
 }

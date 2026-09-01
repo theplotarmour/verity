@@ -15,6 +15,7 @@ import {
   Stat,
   StatRow,
 } from "@/components/ui/primitives";
+import { FormCombobox } from "@/components/ui/Combobox";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -465,21 +466,16 @@ function MovementForm({
     >
       <div className="min-w-[260px] flex-1">
         <Field label="Board" htmlFor="movement-product" required>
-          <Select
+          <FormCombobox
             id="movement-product"
             name="productId"
             required
-            defaultValue=""
-          >
-            <option value="" disabled>
-              Choose a board
-            </option>
-            {boards.map((board) => (
-              <option key={board.id} value={board.id}>
-                {board.label}
-              </option>
-            ))}
-          </Select>
+            placeholder="Search boards"
+            options={boards.map((row) => ({
+              value: row.id,
+              label: row.label,
+            }))}
+          />
         </Field>
       </div>
 
@@ -489,42 +485,32 @@ function MovementForm({
           htmlFor="movement-location"
           required
         >
-          <Select
+          <FormCombobox
             id="movement-location"
             name="locationId"
             required
-            defaultValue=""
-          >
-            <option value="" disabled>
-              Choose a godown
-            </option>
-            {godowns.map((godown) => (
-              <option key={godown.id} value={godown.id}>
-                {godown.name}
-              </option>
-            ))}
-          </Select>
+            placeholder="Search godowns"
+            options={godowns.map((row) => ({
+              value: row.id,
+              label: row.name,
+            }))}
+          />
         </Field>
       </div>
 
       {movement === "transfer" && (
         <div className="min-w-[180px]">
           <Field label="To godown" htmlFor="movement-to-location" required>
-            <Select
-              id="movement-to-location"
-              name="toLocationId"
-              required
-              defaultValue=""
-            >
-              <option value="" disabled>
-                Choose a godown
-              </option>
-              {godowns.map((godown) => (
-                <option key={godown.id} value={godown.id}>
-                  {godown.name}
-                </option>
-              ))}
-            </Select>
+            <FormCombobox
+            id="movement-to-location"
+            name="toLocationId"
+            required
+            placeholder="Search godowns"
+            options={godowns.map((row) => ({
+              value: row.id,
+              label: row.name,
+            }))}
+          />
           </Field>
         </div>
       )}
@@ -625,41 +611,31 @@ function CorrectionForm({
     >
       <div className="min-w-[240px] flex-1">
         <Field label="Board" htmlFor="correction-product" required>
-          <Select
+          <FormCombobox
             id="correction-product"
             name="productId"
             required
-            defaultValue=""
-          >
-            <option value="" disabled>
-              Choose a board
-            </option>
-            {boards.map((board) => (
-              <option key={board.id} value={board.id}>
-                {board.label}
-              </option>
-            ))}
-          </Select>
+            placeholder="Search boards"
+            options={boards.map((row) => ({
+              value: row.id,
+              label: row.label,
+            }))}
+          />
         </Field>
       </div>
 
       <div className="min-w-[170px]">
         <Field label="Godown" htmlFor="correction-location" required>
-          <Select
+          <FormCombobox
             id="correction-location"
             name="locationId"
             required
-            defaultValue=""
-          >
-            <option value="" disabled>
-              Choose a godown
-            </option>
-            {godowns.map((godown) => (
-              <option key={godown.id} value={godown.id}>
-                {godown.name}
-              </option>
-            ))}
-          </Select>
+            placeholder="Search godowns"
+            options={godowns.map((row) => ({
+              value: row.id,
+              label: row.name,
+            }))}
+          />
         </Field>
       </div>
 

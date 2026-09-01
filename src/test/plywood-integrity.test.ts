@@ -284,14 +284,23 @@ describeDb("plywood integrity foundation (slice 1)", () => {
       const beforeIssue = await withTenant(tenantId, (tx) => customerExposurePaise(tx, customerId));
       expect(beforeIssue).toBe(order.totalPricePaise);
 
-      await executeCommand(owner, dispatchOrder, { orderId: order.id });
+      const issued = await executeCommand(owner, dispatchOrder, {
+        orderId: order.id,
+      });
 
       // THE DEFECT: dispatch completed the order, the old formula counted only
       // non-completed orders, and exposure fell to zero while the customer had
       // not paid a rupee. The next order then passed a credit check it should
       // have failed.
       const afterIssue = await withTenant(tenantId, (tx) => customerExposurePaise(tx, customerId));
-      expect(afterIssue).toBe(beforeIssue);
+      expect(afterIssue).toBeGreaterThanOrEqual(beforeIssue);
+
+      // Since Task 71 the same act raises the invoice, so the commitment turns
+      // into a receivable in one step and exposure RISES by the tax the
+      // customer now also owes. The invariant is that it never falls until
+      // money arrives; equality with the commitment was only ever a
+      // consequence of invoicing being a separate manual step.
+      expect(afterIssue).toBe(issued.invoicing!.totalPaise);
     });
 
     it("converts a commitment into a receivable when invoiced, without counting it twice", async () => {
@@ -304,9 +313,12 @@ describeDb("plywood integrity foundation (slice 1)", () => {
         lines: [{ productId, qtyOrdered: 10, unitPricePaise: 150_000 }],
       });
       await executeCommand(owner, reserveForOrder, { orderId: order.id });
-      await executeCommand(owner, dispatchOrder, { orderId: order.id });
-
-      const invoice = await executeCommand(owner, raiseSalesInvoice, { salesOrderId: order.id });
+      // Task 71: dispatching raises the invoice, so the commitment becomes a
+      // receivable in the same step rather than in a second one.
+      const issued = await executeCommand(owner, dispatchOrder, {
+        orderId: order.id,
+      });
+      const invoice = issued.invoicing!;
       const exposure = await withTenant(tenantId, (tx) => customerExposurePaise(tx, customerId));
 
       // The invoice is gross of tax and therefore larger than the order's
@@ -325,8 +337,10 @@ describeDb("plywood integrity foundation (slice 1)", () => {
         lines: [{ productId, qtyOrdered: 10, unitPricePaise: 150_000 }],
       });
       await executeCommand(owner, reserveForOrder, { orderId: order.id });
-      await executeCommand(owner, dispatchOrder, { orderId: order.id });
-      const invoice = await executeCommand(owner, raiseSalesInvoice, { salesOrderId: order.id });
+      const issued = await executeCommand(owner, dispatchOrder, {
+        orderId: order.id,
+      });
+      const invoice = issued.invoicing!;
 
       await executeCommand(owner, recordPayment, {
         invoiceId: invoice.id,
@@ -380,10 +394,12 @@ describeDb("plywood integrity foundation (slice 1)", () => {
       ).rejects.toThrow(/nothing has been issued/);
 
       await executeCommand(owner, reserveForOrder, { orderId: order.id });
-      await executeCommand(owner, dispatchOrder, { orderId: order.id });
-      await expect(
-        executeCommand(owner, raiseSalesInvoice, { salesOrderId: order.id }),
-      ).resolves.toMatchObject({ totalPaise: expect.any(Number) });
+      // And with the goods actually gone, the invoice appears by itself.
+      const issued = await executeCommand(owner, dispatchOrder, {
+        orderId: order.id,
+      });
+      expect(issued.invoicingRefusal).toBeNull();
+      expect(issued.invoicing).toMatchObject({ totalPaise: expect.any(Number) });
     });
 
     it("refuses a supplier invoice against a purchase order that was never submitted", async () => {
@@ -420,9 +436,10 @@ describeDb("plywood integrity foundation (slice 1)", () => {
         lines: [{ productId, qtyOrdered: 5, unitPricePaise: 150_000 }],
       });
       await executeCommand(owner, reserveForOrder, { orderId: order.id });
-      await executeCommand(owner, dispatchOrder, { orderId: order.id });
-      const invoice = await executeCommand(owner, raiseSalesInvoice, { salesOrderId: order.id });
-      invoiceId = invoice.id;
+      const issued = await executeCommand(owner, dispatchOrder, {
+        orderId: order.id,
+      });
+      invoiceId = issued.invoicing!.id;
       const payment = await executeCommand(owner, recordPayment, {
         invoiceId, method: "cash", amountPaise: 100_000,
       });
@@ -479,8 +496,11 @@ describeDb("plywood integrity foundation (slice 1)", () => {
       lines: [{ productId, qtyOrdered: 5, unitPricePaise: 150_000 }],
     });
     await executeCommand(owner, reserveForOrder, { orderId: order.id });
-    await executeCommand(owner, dispatchOrder, { orderId: order.id });
-    const first = await executeCommand(owner, raiseSalesInvoice, { salesOrderId: order.id });
+    // The first invoice is the one dispatch raised.
+    const issued = await executeCommand(owner, dispatchOrder, {
+      orderId: order.id,
+    });
+    const first = issued.invoicing!;
 
     // The application check remains, and is what produces the readable error.
     await expect(

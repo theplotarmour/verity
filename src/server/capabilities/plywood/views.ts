@@ -867,3 +867,40 @@ export const sellableStock: QueryDefinition<
       );
   },
 };
+
+/**
+ * Every agreed supplier price, flat.
+ *
+ * TASK 71 ITEM 8 — "if I have set an agreed price for a supplier, it should
+ * autofill the price per unit." The command has always fallen back to the
+ * negotiated price when the cost is left blank, but the form could not SHOW
+ * that price, so the buyer had a box labelled "blank uses agreed price" and no
+ * way to know what would happen. The sales desk already solved this; the
+ * purchase desk had no equivalent read.
+ *
+ * Flat rather than nested by supplier: the form needs a lookup keyed on
+ * (supplier, product) and rebuilding that from a nested shape on every
+ * keystroke is work the query can do once.
+ */
+export const supplierPrices: QueryDefinition<
+  Record<string, never>,
+  Array<{
+    supplierId: string;
+    productId: string;
+    negotiatedCostPaise: number;
+  }>
+> = {
+  key: "verity.plywood.supplier_prices",
+  entity: ENTITY_PRODUCT,
+  input: z.object({}),
+  handler: async (ctx) => {
+    const rows = await ctx.tx.plywoodSupplierPrice.findMany({
+      select: {
+        supplierId: true,
+        productId: true,
+        negotiatedCostPaise: true,
+      },
+    });
+    return rows;
+  },
+};

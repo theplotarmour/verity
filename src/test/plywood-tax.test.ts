@@ -235,8 +235,13 @@ describeDb("plywood tax (slice 6)", () => {
       lines: [{ productId, qtyOrdered: qty, unitPricePaise: price }],
     });
     await executeCommand(owner, reserveForOrder, { orderId: order.id });
-    await executeCommand(owner, dispatchOrder, { orderId: order.id });
-    return executeCommand(owner, raiseSalesInvoice, { salesOrderId: order.id });
+    // Task 71: issuing the goods raises the invoice. There is no second step
+    // any more, and calling one would be refused as a duplicate — correctly,
+    // since an order carries one invoice.
+    const issued = await executeCommand(owner, dispatchOrder, {
+      orderId: order.id,
+    });
+    return issued.invoicing!;
   }
 
   beforeAll(async () => {
@@ -398,9 +403,14 @@ describeDb("plywood tax (slice 6)", () => {
         lines: [{ productId, qtyOrdered: 10, unitCostPaise: 100_000 }],
       });
       await executeCommand(owner, submitPurchaseOrder, { orderId: po.id });
+      // PART received on purpose. A fully received order raises its own bill
+      // now (Task 71), with a computed split, so the only way to reach the
+      // no-split case is the path that still exists for it: an accountant
+      // entering a supplier's total by hand against an order the automatic
+      // bill has not covered.
       await executeCommand(owner, receiveGoods, {
         orderId: po.id,
-        lines: [{ productId, qtyReceived: 10 }],
+        lines: [{ productId, qtyReceived: 5 }],
       });
       const purchaseInvoice = await executeCommand(owner, raisePurchaseInvoice, {
         purchaseOrderId: po.id,

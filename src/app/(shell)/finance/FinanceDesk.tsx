@@ -4,16 +4,19 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Badge,
   Button,
   EmptyState,
   ErrorState,
   Field,
+  FormRow,
   Input,
   Panel,
-  Select,
   Stat,
   StatRow,
 } from "@/components/ui/primitives";
+import { Combobox } from "@/components/ui/Combobox";
+import { Modal, ModalCancel } from "@/components/ui/Modal";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -25,15 +28,20 @@ type Invoice = {
   issuedAt: Date | string;
   totalPaise: number;
   outstandingPaise: number;
+  provisional: boolean;
 };
 
-type Receivable = {
-  customerId: string;
-  customerName: string;
+export type Balance = {
+  partyId: string;
+  partyName: string;
+  side: "customer" | "supplier";
   invoicedPaise: number;
-  receivedPaise: number;
+  settledPaise: number;
   outstandingPaise: number;
-  oldestUnpaidAt: Date | string | null;
+  uninvoicedPaise: number;
+  onAccountPaise: number;
+  oldestOpenAt: Date | string | null;
+  provisionalBills: number;
 };
 
 function rupees(paise: number): string {
@@ -58,52 +66,62 @@ function shortDate(value: Date | string): string {
 /**
  * The finance desk.
  *
- * Receivables lead and invoices follow, because a paid invoice is a record while
- * an unpaid one is a phone call somebody has to make today. Each receivable
- * carries the age of its oldest unpaid invoice rather than only an amount — the
- * age is what decides whether the call happens this week.
+ * REBUILT FOR TASK 71 ITEM 10 — "finance is completely useless right now,
+ * nothing is linked to it, whenever I try to raise an invoice or supplier bill
+ * it always shows some kind of error."
+ *
+ * Both halves of that were true and they were the same fault. The desk's main
+ * actions were *raise a sales invoice* and *raise a supplier bill*, which are
+ * accounting operations, not things a plywood merchant does. Each was refused
+ * unless goods had already moved — correctly, since an invoice for goods that
+ * have not gone out is a bill for nothing — so the ordinary path through the
+ * screen was an error message.
+ *
+ * Nobody raises a document here any more. Selling and delivering raises the
+ * customer's invoice; receiving raises the supplier's bill. What is left is the
+ * only question this screen ever needed to answer — who owes money, and who is
+ * owed — plus the one action a merchant actually performs: recording that money
+ * moved.
+ *
+ * Raising by hand survives only as a RETRY, on an order whose automatic
+ * document was refused, with the reason shown. That is a repair, and it is
+ * presented as one.
  */
 export function FinanceDesk({
   invoices,
-  receivables,
-  invoiceableOrders,
-  invoiceablePurchases,
+  balances,
+  customers,
+  suppliers,
+  unbilledSales,
+  unbilledPurchases,
 }: {
   invoices: Invoice[];
-  receivables: Receivable[];
-  invoiceableOrders: Array<{
+  balances: Balance[];
+  customers: Array<{ id: string; displayName: string }>;
+  suppliers: Array<{ id: string; displayName: string }>;
+  /** Goods issued, no invoice — the automatic one did not go through. */
+  unbilledSales: Array<{
     id: string;
     customerName: string;
-    totalPricePaise: number;
+    reference: string | null;
+    valuePaise: number;
   }>;
-  invoiceablePurchases: Array<{
+  /** Goods received, no bill, order complete — same situation, buying side. */
+  unbilledPurchases: Array<{
     id: string;
     supplierName: string;
-    totalCostPaise: number;
+    reference: string | null;
+    valuePaise: number;
   }>;
 }) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
-  const [raising, setRaising] = useState(false);
-  const [raisingPurchase, setRaisingPurchase] = useState(false);
-  const [paying, setPaying] = useState<string | null>(null);
-  const [crediting, setCrediting] = useState<string | null>(null);
+  const [payment, setPayment] = useState<
+    | { side: "customer" | "supplier"; partyId: string; partyName: string }
+    | null
+  >(null);
+  const [confirming, setConfirming] = useState<Invoice | null>(null);
   const [pending, startTransition] = useTransition();
-
-  const totals = useMemo(() => {
-    const owedToUs = receivables.reduce(
-      (sum, row) => sum + row.outstandingPaise,
-      0,
-    );
-    const owedByUs = invoices
-      .filter((invoice) => invoice.direction === "purchase")
-      .reduce((sum, invoice) => sum + invoice.outstandingPaise, 0);
-    const oldest = receivables.reduce<number | null>((worst, row) => {
-      const age = daysSince(row.oldestUnpaidAt);
-      return age !== null && (worst === null || age > worst) ? age : worst;
-    }, null);
-    return { owedToUs, owedByUs, oldest };
-  }, [invoices, receivables]);
 
   function run(key: string, input: unknown, after?: () => void) {
     setFailure(null);
@@ -118,354 +136,234 @@ export function FinanceDesk({
     });
   }
 
+  const receivable = balances.filter((row) => row.side === "customer");
+  const payable = balances.filter((row) => row.side === "supplier");
+
+  const totals = useMemo(
+    () => ({
+      owedToUs: receivable.reduce(
+        (sum, row) => sum + row.outstandingPaise - row.onAccountPaise,
+        0,
+      ),
+      owedByUs: payable.reduce(
+        (sum, row) =>
+          sum + row.outstandingPaise + row.uninvoicedPaise - row.onAccountPaise,
+        0,
+      ),
+      overdue: receivable.reduce((sum, row) => {
+        const age = daysSince(row.oldestOpenAt);
+        return sum + (age !== null && age > 30 ? row.outstandingPaise : 0);
+      }, 0),
+      provisional: payable.reduce((sum, row) => sum + row.provisionalBills, 0),
+    }),
+    [receivable, payable],
+  );
+
+  const unbilled = unbilledSales.length + unbilledPurchases.length;
+
   return (
-    <>
+    <div className="flex flex-col gap-5">
       {failure && (
-        <div className="mb-4">
-          <ErrorState
-            title="That was refused"
-            message={failure.message}
-            issues={failure.issues}
-            retryable={failure.retryable}
-          />
-        </div>
+        <ErrorState
+          title="That was refused"
+          message={failure.message}
+          issues={failure.issues}
+          retryable={failure.retryable}
+        />
       )}
 
-      <div className="mb-6">
-        <StatRow cols={3}>
-          <Stat
-            label="Owed to us"
-            value={rupees(totals.owedToUs)}
-            hint="Receivables"
-          />
-          <Stat
-            label="Owed by us"
-            value={rupees(totals.owedByUs)}
-            hint="Payables"
-          />
-          <Stat
-            label="Oldest unpaid"
-            value={totals.oldest === null ? "—" : `${totals.oldest}d`}
-            hint={
-              totals.oldest === null
-                ? "Nothing outstanding"
-                : "Since the invoice was raised"
-            }
-          />
-        </StatRow>
-      </div>
+      <StatRow cols={4}>
+        <Stat
+          label="Owed to us"
+          value={rupees(totals.owedToUs)}
+          hint="Customers, net of anything paid in advance"
+        />
+        <Stat
+          label="We owe"
+          value={rupees(totals.owedByUs)}
+          hint="Suppliers, including goods received not yet billed"
+        />
+        <Stat
+          label="Overdue"
+          value={rupees(totals.overdue)}
+          hint="Oldest unpaid invoice past 30 days"
+        />
+        <Stat
+          label="Awaiting supplier bill"
+          value={totals.provisional}
+          hint="Raised from the order; their document not recorded"
+        />
+      </StatRow>
 
-      <div className="mb-4 flex flex-wrap justify-end gap-2">
-        <Link href="/ledgers">
-          <Button>Ledgers</Button>
-        </Link>
-        {invoiceablePurchases.length > 0 && (
-          <Button onClick={() => setRaisingPurchase((open) => !open)}>
-            {raisingPurchase ? "Cancel" : "Record supplier bill"}
-          </Button>
-        )}
-        {invoiceableOrders.length > 0 && (
-          <Button variant="primary" onClick={() => setRaising((open) => !open)}>
-            {raising ? "Cancel" : "Raise invoice"}
-          </Button>
-        )}
-      </div>
-
-      {raisingPurchase && (
-        <div className="mb-6">
-          <Panel title="Record what a supplier billed">
-            <form
-              className="flex flex-wrap items-end gap-3"
-              action={(formData) =>
-                run(
-                  "verity.plywood.raise_purchase_invoice",
-                  {
-                    purchaseOrderId: String(
-                      formData.get("purchaseOrderId") ?? "",
-                    ),
-                    supplierInvoiceTotalPaise: Math.round(
-                      Number(formData.get("total") ?? 0) * 100,
-                    ),
-                  },
-                  () => setRaisingPurchase(false),
-                )
-              }
-            >
-              <div className="min-w-[300px] flex-1">
-                <Field
-                  label="Purchase order"
-                  htmlFor="purchase-invoice-order"
-                  required
+      {unbilled > 0 && (
+        <Panel title="Goods moved without a document">
+          <p className="m-0 mb-3 text-[13px] text-text-secondary">
+            These normally raise themselves — a delivery raises the customer&apos;s
+            invoice, a receipt raises the supplier&apos;s bill. Something stopped
+            each of these, usually a missing GST state code on the party.
+            Raising one here retries it and shows the reason if it fails again.
+          </p>
+          <div className="flex flex-col divide-y divide-line">
+            {unbilledSales.map((order) => (
+              <div
+                key={order.id}
+                className="flex flex-wrap items-center justify-between gap-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="m-0 text-[14px] text-text">
+                    {order.reference ?? "Sales order"} · {order.customerName}
+                  </p>
+                  <p className="m-0 text-[12px] text-text-tertiary">
+                    Delivered {rupees(order.valuePaise)}, not invoiced
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  disabled={pending}
+                  onClick={() =>
+                    run("verity.plywood.raise_sales_invoice", {
+                      salesOrderId: order.id,
+                    })
+                  }
                 >
-                  <Select
-                    id="purchase-invoice-order"
-                    name="purchaseOrderId"
-                    required
-                    defaultValue=""
-                  >
-                    <option value="" disabled>
-                      Choose an order
-                    </option>
-                    {invoiceablePurchases.map((order) => (
-                      <option key={order.id} value={order.id}>
-                        {order.supplierName} — {rupees(order.totalCostPaise)}{" "}
-                        ordered
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
+                  Raise invoice
+                </Button>
               </div>
-              <div className="w-[190px]">
-                <Field
-                  label="Amount billed (₹)"
-                  htmlFor="purchase-invoice-total"
-                  required
-                  hint="As the supplier wrote it"
+            ))}
+            {unbilledPurchases.map((order) => (
+              <div
+                key={order.id}
+                className="flex flex-wrap items-center justify-between gap-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="m-0 text-[14px] text-text">
+                    {order.reference ?? "Purchase order"} · {order.supplierName}
+                  </p>
+                  <p className="m-0 text-[12px] text-text-tertiary">
+                    Received {rupees(order.valuePaise)}, not billed
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  disabled={pending}
+                  onClick={() =>
+                    run("verity.plywood.raise_purchase_invoice", {
+                      purchaseOrderId: order.id,
+                      supplierInvoiceTotalPaise: order.valuePaise,
+                    })
+                  }
                 >
-                  <Input
-                    id="purchase-invoice-total"
-                    name="total"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    required
-                  />
-                </Field>
+                  Raise bill
+                </Button>
               </div>
-              <Button type="submit" variant="primary" disabled={pending}>
-                Record
-              </Button>
-              <p className="m-0 w-full text-[12px] text-text-tertiary">
-                Recorded as given rather than recomputed from the order. What
-                this business owes is what the supplier billed, and a
-                disagreement with the order is a conversation to have — not a
-                correction to make silently.
-              </p>
-            </form>
-          </Panel>
-        </div>
+            ))}
+          </div>
+        </Panel>
       )}
 
-      {raising && (
-        <div className="mb-6">
-          <Panel title="Raise a tax invoice">
-            <form
-              className="flex flex-wrap items-end gap-3"
-              action={(formData) =>
-                run(
-                  "verity.plywood.raise_sales_invoice",
-                  { salesOrderId: String(formData.get("salesOrderId") ?? "") },
-                  () => setRaising(false),
-                )
-              }
-            >
-              <div className="min-w-[320px] flex-1">
-                <Field label="Order" htmlFor="invoice-order" required>
-                  <Select
-                    id="invoice-order"
-                    name="salesOrderId"
-                    required
-                    defaultValue=""
-                  >
-                    <option value="" disabled>
-                      Choose an order
-                    </option>
-                    {invoiceableOrders.map((order) => (
-                      <option key={order.id} value={order.id}>
-                        {order.customerName} — {rupees(order.totalPricePaise)}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-              <Button type="submit" variant="primary" disabled={pending}>
-                Raise
-              </Button>
-              <p className="m-0 w-full text-[12px] text-text-tertiary">
-                The number is taken from the series counter inside the same
-                transaction, so a failure returns it rather than leaving a gap.
-                Tax is decided by the customer&apos;s state against this
-                business&apos;s — CGST and SGST at home, IGST across a border.
-              </p>
-            </form>
-          </Panel>
-        </div>
-      )}
+      <BalanceTable
+        title="Customers owe us"
+        emptyTitle="Nobody owes anything"
+        emptyDescription="A delivery raises the invoice, and it appears here until it is paid."
+        rows={receivable}
+        pending={pending}
+        actionLabel="Record money received"
+        onAct={(row) =>
+          setPayment({
+            side: "customer",
+            partyId: row.partyId,
+            partyName: row.partyName,
+          })
+        }
+      />
 
-      {receivables.length > 0 && (
-        <div className="mb-4">
-          <Panel title="Outstanding">
-            <div className="-mx-3 overflow-x-auto px-3">
-              <table className="w-full min-w-[600px] border-collapse">
-                <caption className="sr-only">
-                  Outstanding receivables by customer
-                </caption>
-                <thead>
-                  <tr>
-                    {[
-                      "Customer",
-                      "Invoiced",
-                      "Received",
-                      "Outstanding",
-                      "Oldest",
-                    ].map((heading, index) => (
-                      <th
-                        key={heading}
-                        className={
-                          "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                          (index === 0 ? "text-left" : "text-right")
-                        }
-                      >
-                        {heading}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {receivables.map((row) => {
-                    const age = daysSince(row.oldestUnpaidAt);
-                    return (
-                      <tr key={row.customerId}>
-                        <td className="border-b border-line px-3 py-2 text-[14px]">
-                          <Link
-                            href={`/ledgers?customer=${row.customerId}`}
-                            className="text-text no-underline hover:underline"
-                          >
-                            {row.customerName}
-                          </Link>
-                        </td>
-                        <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                          {rupees(row.invoicedPaise)}
-                        </td>
-                        <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                          {rupees(row.receivedPaise)}
-                        </td>
-                        <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                          {rupees(row.outstandingPaise)}
-                        </td>
-                        {/* Age, not date: how long it has been owed is what decides
-                          whether the call happens this week. */}
-                        <td
-                          className={
-                            "tabular border-b border-line px-3 py-2 text-right text-[13px] " +
-                            (age !== null && age > 30
-                              ? "text-warning"
-                              : "text-text-secondary")
-                          }
-                        >
-                          {age === null ? "—" : `${age}d`}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </Panel>
-        </div>
-      )}
+      <BalanceTable
+        title="We owe suppliers"
+        emptyTitle="Nothing owed to suppliers"
+        emptyDescription="Receiving a delivery raises the supplier's bill, and it appears here until it is paid."
+        rows={payable}
+        pending={pending}
+        actionLabel="Record payment made"
+        onAct={(row) =>
+          setPayment({
+            side: "supplier",
+            partyId: row.partyId,
+            partyName: row.partyName,
+          })
+        }
+      />
 
-      <Panel title="Invoices" flush={invoices.length === 0}>
+      <Panel title="Documents" flush={invoices.length === 0}>
         {invoices.length === 0 ? (
           <EmptyState
             compact
             title="No invoices yet"
-            description="Raise one against an approved order and it appears here."
+            description="They are raised by delivering goods and by receiving them."
           />
         ) : (
           <div className="-mx-3 overflow-x-auto px-3">
-            <table className="w-full min-w-[600px] border-collapse">
-              <caption className="sr-only">Invoices</caption>
+            <table className="w-full min-w-[760px] border-collapse">
+              <caption className="sr-only">
+                Invoices and supplier bills, newest first
+              </caption>
               <thead>
                 <tr>
-                  {[
-                    "Number",
-                    "Party",
-                    "Issued",
-                    "Total",
-                    "Outstanding",
-                    "",
-                  ].map((heading, index) => (
-                    <th
-                      key={heading || index}
-                      className={
-                        "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                        (index <= 1 ? "text-left" : "text-right")
-                      }
-                    >
-                      {heading}
-                    </th>
-                  ))}
+                  {["Document", "Party", "Date", "Total", "Outstanding", ""].map(
+                    (heading, index) => (
+                      <th
+                        key={heading || index}
+                        className={
+                          "whitespace-nowrap border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
+                          (index <= 2 ? "text-left" : "text-right")
+                        }
+                      >
+                        {heading}
+                      </th>
+                    ),
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {invoices.map((invoice) => (
                   <tr key={invoice.id}>
-                    <td className="tabular border-b border-line px-3 py-2 text-[14px]">
+                    <td className="border-b border-line px-3 py-2 text-[14px]">
                       <Link
                         href={`/finance/${invoice.id}`}
-                        className="text-text no-underline hover:underline"
+                        className="whitespace-nowrap text-text no-underline hover:underline"
                       >
                         {invoice.invoiceNumber}
                       </Link>
-                    </td>
-                    <td className="border-b border-line px-3 py-2 text-[14px] text-text-secondary">
-                      {/* The separator is a real space, not only the margin.
-                          CSS contributes nothing to an accessible name, so
-                          `ml-2` alone left a screen reader announcing
-                          "Divyom Sharmapurchase" while the page looked fine. */}
-                      {invoice.partyName}{" "}
-                      <span className="ml-1 text-[12px] text-text-tertiary">
-                        {invoice.direction === "sales" ? "sale" : "purchase"}
+                      <span className="mt-0.5 block text-[12px] text-text-tertiary">
+                        {invoice.direction === "sales"
+                          ? "Sales invoice"
+                          : "Supplier bill"}
+                        {invoice.provisional && " · awaiting their document"}
                       </span>
                     </td>
-                    <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
+                    <td className="border-b border-line px-3 py-2 text-[14px] text-text-secondary">
+                      {invoice.partyName}
+                    </td>
+                    <td className="whitespace-nowrap border-b border-line px-3 py-2 text-[13px] text-text-secondary">
                       {shortDate(invoice.issuedAt)}
                     </td>
-                    <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
+                    <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] text-text-secondary">
                       {rupees(invoice.totalPaise)}
                     </td>
-                    <td
-                      className={
-                        "tabular border-b border-line px-3 py-2 text-right text-[14px] " +
-                        (invoice.outstandingPaise === 0 ? "text-success" : "")
-                      }
-                    >
+                    <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px]">
                       {invoice.outstandingPaise === 0
-                        ? "Paid"
+                        ? "Settled"
                         : rupees(invoice.outstandingPaise)}
                     </td>
-                    <td className="flex justify-end gap-2 border-b border-line px-3 py-2 text-right">
-                      {invoice.outstandingPaise > 0 && (
+                    <td className="border-b border-line px-3 py-2 text-right">
+                      {invoice.provisional && (
                         <Button
                           size="sm"
                           disabled={pending}
-                          onClick={() =>
-                            setPaying(paying === invoice.id ? null : invoice.id)
-                          }
+                          onClick={() => setConfirming(invoice)}
                         >
-                          {paying === invoice.id ? "Close" : "Record payment"}
+                          Record their bill…
                         </Button>
                       )}
-                      {/*
-                      A posted invoice cannot be edited (slice 1), so the only
-                      way to correct one is a note. Offered beside the payment
-                      rather than hidden on a detail page, because the moment
-                      somebody notices an invoice is wrong is the moment they
-                      are looking at this list.
-                    */}
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={pending}
-                        onClick={() =>
-                          setCrediting(
-                            crediting === invoice.id ? null : invoice.id,
-                          )
-                        }
-                      >
-                        {crediting === invoice.id ? "Close" : "Credit note"}
-                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -473,181 +371,478 @@ export function FinanceDesk({
             </table>
           </div>
         )}
-
-        {paying && (
-          <PaymentForm
-            invoice={invoices.find((invoice) => invoice.id === paying)!}
-            pending={pending}
-            onSubmit={(input) =>
-              run("verity.plywood.record_payment", input, () => setPaying(null))
-            }
-          />
-        )}
-
-        {crediting && (
-          <NoteForm
-            invoice={invoices.find((invoice) => invoice.id === crediting)!}
-            pending={pending}
-            onSubmit={(input) =>
-              run("verity.plywood.raise_invoice_note", input, () =>
-                setCrediting(null),
-              )
-            }
-          />
-        )}
       </Panel>
-    </>
+
+      <RecordPaymentModal
+        party={payment}
+        customers={customers}
+        suppliers={suppliers}
+        pending={pending}
+        onClose={() => setPayment(null)}
+        onSubmit={(input) =>
+          run("verity.plywood.record_party_payment", input, () =>
+            setPayment(null),
+          )
+        }
+      />
+
+      <ConfirmBillModal
+        invoice={confirming}
+        pending={pending}
+        onClose={() => setConfirming(null)}
+        onSubmit={(input) =>
+          run("verity.plywood.confirm_purchase_bill", input, () =>
+            setConfirming(null),
+          )
+        }
+      />
+    </div>
   );
 }
 
 /**
- * Recording money received.
+ * One side of the ledger.
  *
- * The amount defaults to what is outstanding, because a full settlement is the
- * common case and typing the figure again is a chance to get it wrong. More than
- * is owed is refused by the command — an overpayment is an advance or a refund,
- * not a larger payment.
+ * `Not yet billed` is its own column rather than folded into the outstanding
+ * figure. Goods received against a part-delivered order are genuinely owed for,
+ * but no document exists, and a single total that hid the difference would be a
+ * number the business could not reconcile against any piece of paper.
  */
-function PaymentForm({
-  invoice,
+function BalanceTable({
+  title,
+  emptyTitle,
+  emptyDescription,
+  rows,
   pending,
+  actionLabel,
+  onAct,
+}: {
+  title: string;
+  emptyTitle: string;
+  emptyDescription: string;
+  rows: Balance[];
+  pending: boolean;
+  actionLabel: string;
+  onAct: (row: Balance) => void;
+}) {
+  const supplierSide = rows.some((row) => row.side === "supplier");
+
+  return (
+    <Panel title={title} flush={rows.length === 0}>
+      {rows.length === 0 ? (
+        <EmptyState
+          compact
+          title={emptyTitle}
+          description={emptyDescription}
+        />
+      ) : (
+        <div className="-mx-3 overflow-x-auto px-3">
+          <table className="w-full min-w-[720px] border-collapse">
+            <caption className="sr-only">{title}</caption>
+            <thead>
+              <tr>
+                {[
+                  "Party",
+                  "Billed",
+                  "Settled",
+                  ...(supplierSide ? ["Not yet billed"] : []),
+                  "On account",
+                  "Outstanding",
+                  "",
+                ].map((heading, index) => (
+                  <th
+                    key={heading || index}
+                    className={
+                      "whitespace-nowrap border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
+                      (index === 0 ? "text-left" : "text-right")
+                    }
+                  >
+                    {heading}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const age = daysSince(row.oldestOpenAt);
+                return (
+                  <tr key={row.partyId}>
+                    <td className="border-b border-line px-3 py-2 text-[14px] text-text">
+                      <Link
+                        href={
+                          row.side === "customer"
+                            ? `/customers/${row.partyId}`
+                            : `/suppliers/${row.partyId}`
+                        }
+                        className="text-text no-underline hover:underline"
+                      >
+                        {row.partyName}
+                      </Link>
+                      {age !== null && age > 30 && (
+                        <span className="mt-0.5 block text-[12px] text-warning">
+                          Oldest unpaid {age} days
+                        </span>
+                      )}
+                      {row.provisionalBills > 0 && (
+                        <span className="mt-0.5 block text-[12px] text-text-tertiary">
+                          {row.provisionalBills === 1
+                            ? "1 bill awaiting their document"
+                            : `${row.provisionalBills} bills awaiting their document`}
+                        </span>
+                      )}
+                    </td>
+                    <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] text-text-secondary">
+                      {rupees(row.invoicedPaise)}
+                    </td>
+                    <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] text-text-secondary">
+                      {rupees(row.settledPaise)}
+                    </td>
+                    {supplierSide && (
+                      <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] text-text-secondary">
+                        {row.uninvoicedPaise === 0
+                          ? "—"
+                          : rupees(row.uninvoicedPaise)}
+                      </td>
+                    )}
+                    <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px]">
+                      {row.onAccountPaise === 0 ? (
+                        "—"
+                      ) : (
+                        <Badge tone="accent">
+                          {rupees(row.onAccountPaise)}
+                        </Badge>
+                      )}
+                    </td>
+                    <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] text-text">
+                      {rupees(row.outstandingPaise + row.uninvoicedPaise)}
+                    </td>
+                    <td className="border-b border-line px-3 py-2 text-right">
+                      <Button
+                        size="sm"
+                        disabled={pending}
+                        onClick={() => onAct(row)}
+                      >
+                        {actionLabel}
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+/**
+ * Money moved.
+ *
+ * TASK 71 ITEM 11, as asked for: did it come in or go out, whose money was it,
+ * how much, and by what means. Nothing about invoices — the allocation happens
+ * on the server, oldest first, and anything left over sits on the party's
+ * account as an advance rather than being refused.
+ *
+ * Opened from a row, so the party and the direction are already right. It can
+ * also be opened cold, which is why both pickers are here: a refund to a
+ * customer is money OUT against a customer, and the person recording it should
+ * not have to find a different screen to say so.
+ */
+function RecordPaymentModal({
+  party,
+  customers,
+  suppliers,
+  pending,
+  onClose,
   onSubmit,
 }: {
-  invoice: Invoice;
+  party:
+    | { side: "customer" | "supplier"; partyId: string; partyName: string }
+    | null;
+  customers: Array<{ id: string; displayName: string }>;
+  suppliers: Array<{ id: string; displayName: string }>;
   pending: boolean;
+  onClose: () => void;
   onSubmit: (input: unknown) => void;
 }) {
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState("bank");
+  const [reference, setReference] = useState("");
+  const [direction, setDirection] = useState<"in" | "out">("in");
+  const [partyId, setPartyId] = useState("");
+
+  // Opening from a row pre-answers both questions, so the state is seeded from
+  // the row each time the modal opens rather than held independently of it.
+  const side = party?.side ?? "customer";
+  const effectivePartyId = party?.partyId ?? partyId;
+  const effectiveDirection = party ? (side === "customer" ? "in" : "out") : direction;
+
+  const parsed = Number.parseFloat(amount);
+  const canSave =
+    effectivePartyId !== "" && Number.isFinite(parsed) && parsed > 0;
+
   return (
-    <form
-      className="mt-4 flex flex-wrap items-end gap-3 rounded-lg bg-glass-2 p-3"
-      action={(formData) =>
-        onSubmit({
-          invoiceId: invoice.id,
-          // Rupees in, paise out. The server never sees a decimal amount.
-          amountPaise: Math.round(Number(formData.get("amount") ?? 0) * 100),
-          method: String(formData.get("method") ?? "cash"),
-          ...(formData.get("reference")
-            ? { reference: String(formData.get("reference")) }
-            : {}),
-        })
+    <Modal
+      open={party !== null}
+      onClose={onClose}
+      title={
+        party
+          ? side === "customer"
+            ? `Money received from ${party.partyName}`
+            : `Payment made to ${party.partyName}`
+          : "Record a payment"
+      }
+      description="It settles the oldest open documents first. Anything left over stays on their account as an advance."
+      footer={
+        <>
+          <ModalCancel onClose={onClose} disabled={pending} />
+          <Button
+            variant="primary"
+            disabled={pending || !canSave}
+            onClick={() => {
+              onSubmit({
+                party:
+                  side === "customer"
+                    ? { customerId: effectivePartyId }
+                    : { supplierId: effectivePartyId },
+                direction: effectiveDirection,
+                amountPaise: Math.round(parsed * 100),
+                method,
+                ...(reference.trim() ? { reference: reference.trim() } : {}),
+              });
+              setAmount("");
+              setReference("");
+            }}
+          >
+            {pending ? "Recording…" : "Record"}
+          </Button>
+        </>
       }
     >
-      <div className="w-[170px]">
-        <Field label="Amount (₹)" htmlFor={`pay-amount-${invoice.id}`} required>
-          <Input
-            id={`pay-amount-${invoice.id}`}
-            name="amount"
-            type="number"
-            step="0.01"
-            min="0.01"
+      <FormRow columns="minmax(0,1fr) 150px minmax(0,1fr)">
+        {!party && (
+          <Field
+            label={side === "customer" ? "Customer" : "Supplier"}
+            htmlFor="pay-party"
             required
+          >
+            <Combobox
+              id="pay-party"
+              value={partyId}
+              onChange={setPartyId}
+              required
+              placeholder="Search"
+              options={(side === "customer" ? customers : suppliers).map(
+                (row) => ({ value: row.id, label: row.displayName }),
+              )}
+            />
+          </Field>
+        )}
+        <Field label="Amount (₹)" htmlFor="pay-amount" required>
+          <Input
+            id="pay-amount"
+            type="number"
+            min="0"
+            step="0.01"
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
             autoFocus
-            defaultValue={(invoice.outstandingPaise / 100).toFixed(2)}
           />
         </Field>
-      </div>
-      <div className="w-[150px]">
-        <Field label="Method" htmlFor={`pay-method-${invoice.id}`} required>
-          <Select
-            id={`pay-method-${invoice.id}`}
-            name="method"
+        <Field label="How" htmlFor="pay-method" required>
+          <Combobox
+            id="pay-method"
+            value={method}
+            onChange={setMethod}
             required
-            defaultValue="bank"
-          >
-            <option value="cash">Cash</option>
-            <option value="bank">Bank transfer</option>
-            <option value="upi">UPI</option>
-            <option value="cheque">Cheque</option>
-          </Select>
+            options={[
+              { value: "cash", label: "Cash" },
+              { value: "bank", label: "Bank transfer" },
+              { value: "upi", label: "UPI" },
+              { value: "cheque", label: "Cheque" },
+            ]}
+          />
         </Field>
-      </div>
-      <div className="min-w-[220px] flex-1">
         <Field
           label="Reference"
-          htmlFor={`pay-ref-${invoice.id}`}
+          htmlFor="pay-reference"
           hint="UTR, UPI id or cheque number"
         >
-          <Input id={`pay-ref-${invoice.id}`} name="reference" />
+          <Input
+            id="pay-reference"
+            value={reference}
+            onChange={(event) => setReference(event.target.value)}
+          />
         </Field>
-      </div>
-      <Button type="submit" variant="primary" disabled={pending}>
-        Record
-      </Button>
-      <p className="m-0 w-full text-[12px] text-text-tertiary">
-        {rupees(invoice.outstandingPaise)} outstanding on{" "}
-        {invoice.invoiceNumber}. More than that is refused — an overpayment is
-        an advance or a refund, and absorbing it here would leave money the
-        ledger cannot explain.
-      </p>
-    </form>
+        {!party && (
+          <Field label="Direction" htmlFor="pay-direction" required>
+            <Combobox
+              id="pay-direction"
+              value={direction}
+              onChange={(value) => setDirection(value as "in" | "out")}
+              required
+              options={[
+                { value: "in", label: "Money received" },
+                { value: "out", label: "Money paid" },
+              ]}
+            />
+          </Field>
+        )}
+      </FormRow>
+    </Modal>
   );
 }
 
 /**
- * A credit or debit note against a posted invoice.
+ * The supplier's own document, arriving after the bill was already raised.
  *
- * The taxable amount is asked for, never the total: the tax follows the
- * invoice's own rates, and letting somebody type a total would let the two
- * disagree on a document that has to be filed.
- *
- * The reason is required by the command and by the database. A note nobody can
- * explain is the one a tax officer asks about.
+ * This does not edit the bill — a posted invoice is immutable, by database
+ * trigger. It records what their paper says, which is what makes the input
+ * credit claimable. A difference between the two figures is reported and left
+ * for a credit or debit note, because a supplier who has billed the wrong
+ * amount is a conversation, not a silent adjustment.
  */
-function NoteForm({
+function ConfirmBillModal({
   invoice,
   pending,
+  onClose,
   onSubmit,
 }: {
-  invoice: { id: string; invoiceNumber: string; outstandingPaise: number };
+  invoice: Invoice | null;
   pending: boolean;
-  onSubmit: (input: Record<string, unknown>) => void;
+  onClose: () => void;
+  onSubmit: (input: unknown) => void;
 }) {
+  const [number, setNumber] = useState("");
+  const [date, setDate] = useState("");
+  const [taxable, setTaxable] = useState("");
+  const [cgst, setCgst] = useState("");
+  const [sgst, setSgst] = useState("");
+  const [igst, setIgst] = useState("");
+
+  const parse = (value: string) => {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? Math.round(parsed * 100) : 0;
+  };
+  const total =
+    parse(taxable) + parse(cgst) + parse(sgst) + parse(igst);
+  const difference = invoice ? total - invoice.totalPaise : 0;
+  const canSave =
+    invoice !== null && number.trim() !== "" && date !== "" && total > 0;
+
   return (
-    <form
-      className="mt-3 flex flex-wrap items-end gap-3 border-t border-line pt-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const data = new FormData(event.currentTarget);
-        onSubmit({
-          invoiceId: invoice.id,
-          noteType: String(data.get("noteType") ?? "credit"),
-          taxablePaise: Math.round(Number(data.get("taxableRupees")) * 100),
-          reason: String(data.get("reason") ?? "").trim(),
-        });
-      }}
+    <Modal
+      open={invoice !== null}
+      onClose={onClose}
+      title={`Record the supplier's bill for ${invoice?.invoiceNumber ?? ""}`}
+      description="Their number and their figures, as written. We raised this from the order when the goods arrived; this is what makes the tax on it claimable."
+      footer={
+        <>
+          {total > 0 && (
+            <span className="tabular mr-auto text-[13px] text-text-secondary">
+              Their total {rupees(total)}
+              {difference !== 0 && (
+                <span className="text-warning">
+                  {" "}
+                  · {difference > 0 ? "over" : "under"} ours by{" "}
+                  {rupees(Math.abs(difference))}
+                </span>
+              )}
+            </span>
+          )}
+          <ModalCancel onClose={onClose} disabled={pending} />
+          <Button
+            variant="primary"
+            disabled={pending || !canSave}
+            onClick={() =>
+              onSubmit({
+                invoiceId: invoice!.id,
+                supplierInvoiceNumber: number.trim(),
+                supplierInvoiceDate: date,
+                taxablePaise: parse(taxable),
+                cgstPaise: parse(cgst),
+                sgstPaise: parse(sgst),
+                igstPaise: parse(igst),
+                totalPaise: total,
+              })
+            }
+          >
+            {pending ? "Recording…" : "Record"}
+          </Button>
+        </>
+      }
     >
-      <Field htmlFor="noteType" label="Note">
-        <Select id="noteType" name="noteType" defaultValue="credit">
-          <option value="credit">Credit note — reduces what they owe</option>
-          <option value="debit">Debit note — increases what they owe</option>
-        </Select>
-      </Field>
-      <Field
-        htmlFor="taxableRupees"
-        label="Taxable amount"
-        hint="Tax follows the invoice's own rates."
-      >
-        <Input
-          id="taxableRupees"
-          name="taxableRupees"
-          type="number"
-          min="1"
-          step="0.01"
-          required
-        />
-      </Field>
-      <Field htmlFor="reason" label="Reason">
-        <Input
-          id="reason"
-          name="reason"
-          required
-          minLength={3}
-          placeholder="Short-supplied 4 sheets"
-        />
-      </Field>
-      <Button type="submit" disabled={pending}>
-        Raise against {invoice.invoiceNumber}
-      </Button>
-    </form>
+      <div className="flex flex-col gap-4">
+        <FormRow columns="minmax(0,1fr) 170px">
+          <Field label="Their invoice number" htmlFor="bill-number" required>
+            <Input
+              id="bill-number"
+              value={number}
+              onChange={(event) => setNumber(event.target.value)}
+              autoFocus
+            />
+          </Field>
+          <Field label="Their invoice date" htmlFor="bill-date" required>
+            <Input
+              id="bill-date"
+              type="date"
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+            />
+          </Field>
+        </FormRow>
+        <FormRow columns="repeat(4, minmax(0,1fr))">
+          <Field label="Taxable (₹)" htmlFor="bill-taxable" required>
+            <Input
+              id="bill-taxable"
+              type="number"
+              min="0"
+              step="0.01"
+              value={taxable}
+              onChange={(event) => setTaxable(event.target.value)}
+            />
+          </Field>
+          <Field
+            label="CGST (₹)"
+            htmlFor="bill-cgst"
+            hint="Leave blank if interstate"
+          >
+            <Input
+              id="bill-cgst"
+              type="number"
+              min="0"
+              step="0.01"
+              value={cgst}
+              onChange={(event) => setCgst(event.target.value)}
+            />
+          </Field>
+          <Field label="SGST (₹)" htmlFor="bill-sgst">
+            <Input
+              id="bill-sgst"
+              type="number"
+              min="0"
+              step="0.01"
+              value={sgst}
+              onChange={(event) => setSgst(event.target.value)}
+            />
+          </Field>
+          <Field
+            label="IGST (₹)"
+            htmlFor="bill-igst"
+            hint="Only for interstate"
+          >
+            <Input
+              id="bill-igst"
+              type="number"
+              min="0"
+              step="0.01"
+              value={igst}
+              onChange={(event) => setIgst(event.target.value)}
+            />
+          </Field>
+        </FormRow>
+      </div>
+    </Modal>
   );
 }

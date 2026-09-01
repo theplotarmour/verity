@@ -2,7 +2,13 @@ import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
 import { ForbiddenError } from "@/server/platform/authorization";
-import { listInvoices, openOrders, outstandingReceivables } from "@/server/capabilities/plywood";
+import {
+  listCustomers,
+  listInvoices,
+  listSuppliers,
+  partyBalances,
+  unbilledMovements,
+} from "@/server/capabilities/plywood";
 import { PageHeader, PermissionDenied } from "@/components/ui/primitives";
 import { FinanceDesk } from "./FinanceDesk";
 
@@ -26,13 +32,23 @@ export default async function FinancePage() {
     throw error;
   }
 
-  const [receivables, orders] = await Promise.all([
-    executeQuery(actor, outstandingReceivables, {}).catch((error) => {
+  const [balances, unbilled, customers, suppliers] = await Promise.all([
+    executeQuery(actor, partyBalances, {}).catch((error) => {
       if (error instanceof ForbiddenError) return [];
       throw error;
     }),
-    executeQuery(actor, openOrders, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return { purchases: [], sales: [] };
+    // Goods moved with no document — a FAILED automatic raise, not a queue.
+    executeQuery(actor, unbilledMovements, {}).catch((error) => {
+      if (error instanceof ForbiddenError)
+        return { purchases: [], sales: [] };
+      throw error;
+    }),
+    executeQuery(actor, listCustomers, {}).catch((error) => {
+      if (error instanceof ForbiddenError) return [];
+      throw error;
+    }),
+    executeQuery(actor, listSuppliers, {}).catch((error) => {
+      if (error instanceof ForbiddenError) return [];
       throw error;
     }),
   ]);
@@ -41,26 +57,21 @@ export default async function FinancePage() {
     <>
       <PageHeader
         title="Finance"
-        description="Tax invoices, payments received, and what each customer still owes. Invoice numbers are sequential and gapless within a financial year, which is a legal requirement rather than a convention."
+        description="Who owes money and who is owed. Invoices raise themselves when goods move — delivering raises the customer's, receiving raises the supplier's — so the only thing to record here is money actually moving."
       />
       <FinanceDesk
         invoices={invoices}
-        receivables={receivables}
-        // Only orders that can legitimately be invoiced: an order still in draft
-        // or already cancelled would be refused by the command anyway, and
-        // offering it here would be an invitation to a failure.
-        invoiceableOrders={orders.sales.filter(
-          (order) => order.state !== "draft" && order.state !== "cancelled",
-        )}
-        // A purchase invoice records what a supplier billed. Only orders that
-        // have actually been sent to the supplier can carry one.
-        invoiceablePurchases={orders.purchases
-          .filter((order) => order.state !== "draft" && order.state !== "cancelled")
-          .map((order) => ({
-            id: order.id,
-            supplierName: order.supplierName,
-            totalCostPaise: order.totalCostPaise,
-          }))}
+        balances={balances}
+        customers={customers.map((row) => ({
+          id: row.id,
+          displayName: row.displayName,
+        }))}
+        suppliers={suppliers.map((row) => ({
+          id: row.id,
+          displayName: row.displayName,
+        }))}
+        unbilledSales={unbilled.sales}
+        unbilledPurchases={unbilled.purchases}
       />
     </>
   );

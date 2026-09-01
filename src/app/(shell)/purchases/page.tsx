@@ -7,6 +7,7 @@ import {
   listCatalogue,
   listSuppliers,
   openOrders,
+  supplierPrices,
 } from "@/server/capabilities/plywood";
 import { PageHeader, PermissionDenied } from "@/components/ui/primitives";
 import { PurchaseDesk } from "./PurchaseDesk";
@@ -32,7 +33,7 @@ export default async function PurchasesPage() {
     throw error;
   }
 
-  const [suppliers, godowns, catalogue] = await Promise.all([
+  const [suppliers, godowns, catalogue, agreed] = await Promise.all([
     executeQuery(actor, listSuppliers, {}).catch((error) => {
       if (error instanceof ForbiddenError) return [];
       throw error;
@@ -42,6 +43,12 @@ export default async function PurchasesPage() {
       throw error;
     }),
     executeQuery(actor, listCatalogue, {}).catch((error) => {
+      if (error instanceof ForbiddenError) return [];
+      throw error;
+    }),
+    // Task 71 item 8: the buyer sees the price they already agreed, in the
+    // field, instead of a box that says "blank uses agreed price".
+    executeQuery(actor, supplierPrices, {}).catch((error) => {
       if (error instanceof ForbiddenError) return [];
       throw error;
     }),
@@ -66,6 +73,7 @@ export default async function PurchasesPage() {
           id: String(godown.id),
           name: String(godown.name),
         }))}
+        agreed={agreed}
         // U2-6: a dropdown labelled "Board" must not offer a service. A service
         // is not held in a godown, cannot be received into one, and cannot be
         // reserved — offering it invites an order that fails at the first step

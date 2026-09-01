@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { financialYearOf, nextDocumentNumber } from "./finance";
+import {
+  financialYearOf,
+  issueProvisionalPurchaseBill,
+  issueSalesInvoice,
+  nextDocumentNumber,
+} from "./finance";
 import { assertGodownInScope, reachableGodownIds } from "./scope";
 import {
   ValidationError,
@@ -312,6 +317,7 @@ export const createPurchaseOrder: CommandDefinition<
       productId: string;
       qtyOrdered: number;
       unitCostPaise?: number;
+      discountBps?: number;
     }>;
   },
   { id: string; totalCostPaise: number }
@@ -329,6 +335,12 @@ export const createPurchaseOrder: CommandDefinition<
           productId: z.string().uuid(),
           qtyOrdered: z.number().int().positive(),
           unitCostPaise: z.number().int().min(0).optional(),
+          /**
+           * Basis points off the unit cost. 1250 is 12.5%. Below 10000, because
+           * a 100% discount is a free supply — a different transaction with
+           * different tax treatment, not a very large discount.
+           */
+          discountBps: z.number().int().min(0).max(9999).optional(),
         }),
       )
       .min(1),
@@ -384,12 +396,24 @@ export const createPurchaseOrder: CommandDefinition<
       // The caller may override; otherwise the negotiated price applies. An
       // order with neither is refused rather than defaulted to zero, because a
       // zero-cost receipt would poison the weighted average silently.
-      const unitCostPaise = line.unitCostPaise ?? agreed?.negotiatedCostPaise;
-      if (unitCostPaise === undefined) {
+      const listUnitCostPaise =
+        line.unitCostPaise ?? agreed?.negotiatedCostPaise;
+      if (listUnitCostPaise === undefined) {
         throw new ValidationError(
           `E_VALIDATION: no agreed price for ${product.name} with this supplier, and none given`,
         );
       }
+      // The discount is applied ONCE, here, and `unitCostPaise` carries the
+      // result. Every reader downstream — the stock movement's cost, the
+      // weighted average, the payable, the purchase register — reads that one
+      // field, so none of them can apply the discount a second time or miss it
+      // entirely. The list price is kept only so the order can show what was
+      // struck off.
+      const discountBps = line.discountBps ?? 0;
+      const unitCostPaise =
+        discountBps === 0
+          ? listUnitCostPaise
+          : Math.round((listUnitCostPaise * (10_000 - discountBps)) / 10_000);
       return {
         productId: line.productId,
         // Snapshots. A catalogue edit must never rewrite a placed order.
@@ -397,6 +421,8 @@ export const createPurchaseOrder: CommandDefinition<
         hsnCodeSnapshot: product.hsnCode,
         qtyOrdered: line.qtyOrdered,
         unitCostPaise,
+        discountBps,
+        listUnitCostPaise: discountBps === 0 ? null : listUnitCostPaise,
       };
     });
 
@@ -490,7 +516,16 @@ export const receiveGoods: CommandDefinition<
     notes?: string;
     lines: Array<{ productId: string; qtyReceived: number }>;
   },
-  { id: string; state: string; receiptId: string; receiptNumber: string }
+  {
+    id: string;
+    state: string;
+    receiptId: string;
+    receiptNumber: string;
+    /** The supplier bill this receipt raised, when it completed the order. */
+    billing: { id: string; invoiceNumber: string; totalPaise: number } | null;
+    /** Why no bill was raised, when one was due but could not be. */
+    billingRefusal: string | null;
+  }
 > = {
   key: "verity.plywood.receive_goods",
   entity: ENTITY_PURCHASE_ORDER,
@@ -657,12 +692,45 @@ export const receiveGoods: CommandDefinition<
       stateEvents.push(moved.event);
     }
 
+    // THE MONEY SIDE, WITHOUT ANYONE ASKING FOR IT (Task 71 item 7).
+    //
+    // The goods are here, so the money is owed. Raised at completion rather
+    // than at every receipt because an order carries one invoice and an invoice
+    // is immutable; until then the delivered value shows on the payables view
+    // as received-not-yet-billed, which is what it is.
+    //
+    // A failure here does NOT roll back the receipt. Stock arriving is a
+    // physical fact and the warehouse must be able to record it even when the
+    // supplier is missing a state code or no tax rate is configured. The reason
+    // is returned instead, so the desk can say why no bill exists rather than
+    // leaving the buyer to notice its absence.
+    let billing: {
+      id: string;
+      invoiceNumber: string;
+      totalPaise: number;
+    } | null = null;
+    let billingRefusal: string | null = null;
+    if (complete) {
+      try {
+        const bill = await issueProvisionalPurchaseBill(ctx, order.id);
+        if (bill) billing = bill;
+      } catch (error) {
+        if (error instanceof ValidationError) {
+          billingRefusal = error.message;
+        } else {
+          throw error;
+        }
+      }
+    }
+
     return {
       result: {
         id: order.id,
         state: target,
         receiptId: receipt.id,
         receiptNumber: receipt.receiptNumber,
+        billing,
+        billingRefusal,
       },
       events: [
         ...stateEvents,
@@ -673,6 +741,15 @@ export const receiveGoods: CommandDefinition<
           entityId: order.id,
           payload: { receiptNumber: receipt.receiptNumber },
         },
+        ...(billing
+          ? [
+              {
+                name: "verity.plywood.purchase_bill_raised",
+                entityId: order.id,
+                payload: { invoiceNumber: billing.invoiceNumber },
+              },
+            ]
+          : []),
       ],
     };
   },
@@ -857,6 +934,7 @@ export const createSalesOrder: CommandDefinition<
       productId: string;
       qtyOrdered: number;
       unitPricePaise?: number;
+      discountBps?: number;
     }>;
   },
   { id: string; totalPricePaise: number; state: string }
@@ -874,6 +952,8 @@ export const createSalesOrder: CommandDefinition<
           productId: z.string().uuid(),
           qtyOrdered: z.number().int().positive(),
           unitPricePaise: z.number().int().min(0).optional(),
+          /** Basis points off the unit price. See the purchase-order note. */
+          discountBps: z.number().int().min(0).max(9999).optional(),
         }),
       )
       .min(1),
@@ -923,19 +1003,30 @@ export const createSalesOrder: CommandDefinition<
       const customerPrice = agreed.find(
         (price) => price.productId === line.productId,
       );
-      const unitPricePaise =
+      const listUnitPricePaise =
         line.unitPricePaise ?? customerPrice?.customPricePaise;
-      if (unitPricePaise === undefined) {
+      if (listUnitPricePaise === undefined) {
         throw new ValidationError(
           `E_VALIDATION: no price for ${product.name} for this customer, and none given`,
         );
       }
+      // Applied once; `unitPricePaise` is the net. The credit check below, the
+      // invoice, the margin report and the ledger all read that one field, so
+      // the discount reaches every one of them without any of them knowing it
+      // exists.
+      const discountBps = line.discountBps ?? 0;
+      const unitPricePaise =
+        discountBps === 0
+          ? listUnitPricePaise
+          : Math.round((listUnitPricePaise * (10_000 - discountBps)) / 10_000);
       return {
         productId: line.productId,
         productNameSnapshot: product.name,
         hsnCodeSnapshot: product.hsnCode,
         qtyOrdered: line.qtyOrdered,
         unitPricePaise,
+        discountBps,
+        listUnitPricePaise: discountBps === 0 ? null : listUnitPricePaise,
       };
     });
 
@@ -1327,6 +1418,15 @@ export const dispatchOrder: CommandDefinition<
     issueId: string;
     issueNumber: string;
     issuedLines: number;
+    /** The invoice this issue raised, when it fulfilled the order. */
+    invoicing: {
+      id: string;
+      invoiceNumber: string;
+      totalPaise: number;
+      interState: boolean;
+    } | null;
+    /** Why no invoice was raised, when one was due but could not be. */
+    invoicingRefusal: string | null;
   }
 > = {
   key: "verity.plywood.dispatch_order",
@@ -1519,6 +1619,30 @@ export const dispatchOrder: CommandDefinition<
       });
     }
 
+    // The customer's invoice, raised by the act of handing the goods over
+    // (Task 71 item 10) — for the same reasons, and with the same refusal
+    // handling, as the supplier bill at goods receipt. Goods leaving the yard
+    // is a physical fact; a missing state code on the customer must not make it
+    // unrecordable, only unbilled and visibly so.
+    let invoicing: {
+      id: string;
+      invoiceNumber: string;
+      totalPaise: number;
+      interState: boolean;
+    } | null = null;
+    let invoicingRefusal: string | null = null;
+    if (fulfilled) {
+      try {
+        invoicing = await issueSalesInvoice(ctx, { salesOrderId: order.id });
+      } catch (error) {
+        if (error instanceof ValidationError) {
+          invoicingRefusal = error.message;
+        } else {
+          throw error;
+        }
+      }
+    }
+
     return {
       result: {
         id: order.id,
@@ -1526,6 +1650,8 @@ export const dispatchOrder: CommandDefinition<
         issueId: issue.id,
         issueNumber: issue.issueNumber,
         issuedLines: requested.length,
+        invoicing,
+        invoicingRefusal,
       },
       events: [
         {
@@ -1535,6 +1661,15 @@ export const dispatchOrder: CommandDefinition<
           entityId: order.id,
           payload: { issueNumber: issue.issueNumber },
         },
+        ...(invoicing
+          ? [
+              {
+                name: "verity.plywood.sales_invoice_raised",
+                entityId: order.id,
+                payload: { invoiceNumber: invoicing.invoiceNumber },
+              },
+            ]
+          : []),
       ],
     };
   },

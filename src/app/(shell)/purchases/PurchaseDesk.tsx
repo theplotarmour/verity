@@ -8,11 +8,17 @@ import {
   EmptyState,
   ErrorState,
   Field,
+  FormRow,
   Input,
   Panel,
-  Select,
   StateBadge,
 } from "@/components/ui/primitives";
+import { Combobox } from "@/components/ui/Combobox";
+import { Modal, ModalCancel } from "@/components/ui/Modal";
+import {
+  NewPurchaseOrderForm,
+  type AgreedCost,
+} from "./NewPurchaseOrderForm";
 import { day } from "@/components/ui/business/format";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
@@ -108,19 +114,22 @@ export function PurchaseDesk({
   suppliers,
   godowns,
   boards,
+  agreed,
 }: {
   orders: PurchaseOrder[];
   suppliers: Supplier[];
   godowns: Array<{ id: string; name: string }>;
   boards: Array<{ id: string; label: string }>;
+  agreed: AgreedCost[];
 }) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [newOrder, setNewOrder] = useState(false);
-  const [newSupplier, setNewSupplier] = useState(false);
   const [receiving, setReceiving] = useState<string | null>(null);
   const [pricing, setPricing] = useState(false);
   const [cancelling, setCancelling] = useState<string | null>(null);
+  // Controlled, so a refusal does not blank the reason someone just typed.
+  const [cancelReason, setCancelReason] = useState("");
   const [pending, startTransition] = useTransition();
 
   /**
@@ -205,21 +214,21 @@ export function PurchaseDesk({
       )}
 
       <div className="mb-1.5 flex flex-wrap justify-end gap-2">
-        <Button onClick={() => setNewSupplier((open) => !open)}>
-          {newSupplier ? "Cancel" : "New supplier"}
-        </Button>
+        {/* "New supplier" is NOT here any more (Task 71 item 3). A supplier is
+            a party you keep, not a thing you make while placing an order, and
+            the Suppliers page is where you go to look one up. */}
         <Button
           disabled={suppliers.length === 0 || boards.length === 0}
-          onClick={() => setPricing((open) => !open)}
+          onClick={() => openPanel(() => setPricing(true))}
         >
-          {pricing ? "Cancel" : "Agree a price"}
+          Agree a price
         </Button>
         <Button
           variant="primary"
           disabled={!canOrder}
-          onClick={() => setNewOrder((open) => !open)}
+          onClick={() => openPanel(() => setNewOrder(true))}
         >
-          {newOrder ? "Cancel" : "New order"}
+          New order
         </Button>
       </div>
 
@@ -235,282 +244,34 @@ export function PurchaseDesk({
         <PrereqHint className="mb-4">New order needs {orderHint}.</PrereqHint>
       )}
 
-      {newSupplier && (
-        <div className="mb-6">
-          <Panel title="New supplier">
-            <form
-              className="flex flex-wrap items-end gap-3"
-              action={(formData) =>
-                run(
-                  "verity.plywood.create_supplier",
-                  {
-                    displayName: String(formData.get("name") ?? ""),
-                    ...(formData.get("gstin")
-                      ? { gstin: String(formData.get("gstin")) }
-                      : {}),
-                    ...(formData.get("state")
-                      ? { stateCode: String(formData.get("state")) }
-                      : {}),
-                    ...(formData.get("phone")
-                      ? { phone: String(formData.get("phone")) }
-                      : {}),
-                  },
-                  () => setNewSupplier(false),
-                )
-              }
-            >
-              <div className="min-w-[240px] flex-1">
-                <Field label="Supplier" htmlFor="supplier-name" required>
-                  <Input id="supplier-name" name="name" required autoFocus />
-                </Field>
-              </div>
-              <div className="w-[200px]">
-                <Field
-                  label="GSTIN"
-                  htmlFor="supplier-gstin"
-                  hint="15 characters"
-                >
-                  <Input id="supplier-gstin" name="gstin" />
-                </Field>
-              </div>
-              <div className="w-[120px]">
-                <Field
-                  label="State code"
-                  htmlFor="supplier-state"
-                  hint="Two digits"
-                >
-                  <Input
-                    id="supplier-state"
-                    name="state"
-                    inputMode="numeric"
-                    pattern="[0-9]{2}"
-                  />
-                </Field>
-              </div>
-              <div className="w-[160px]">
-                <Field label="Phone" htmlFor="supplier-phone">
-                  <Input id="supplier-phone" name="phone" />
-                </Field>
-              </div>
-              <Button type="submit" variant="primary" disabled={pending}>
-                Create
-              </Button>
-            </form>
-          </Panel>
-        </div>
-      )}
+      <AgreePriceModal
+        open={pricing}
+        suppliers={suppliers}
+        boards={boards}
+        pending={pending}
+        onClose={() => setPricing(false)}
+        onSubmit={(input) =>
+          run("verity.plywood.set_supplier_price", input, () =>
+            setPricing(false),
+          )
+        }
+      />
 
-      {pricing && (
-        <div className="mb-6">
-          <Panel title="Agreed price with a supplier">
-            <form
-              className="flex flex-wrap items-end gap-3"
-              action={(formData) =>
-                run(
-                  "verity.plywood.set_supplier_price",
-                  {
-                    supplierId: String(formData.get("supplierId") ?? ""),
-                    productId: String(formData.get("productId") ?? ""),
-                    negotiatedCostPaise: Math.round(
-                      Number(formData.get("cost") ?? 0) * 100,
-                    ),
-                  },
-                  () => setPricing(false),
-                )
-              }
-            >
-              <div className="min-w-[200px]">
-                <Field label="Supplier" htmlFor="price-supplier" required>
-                  <Select
-                    id="price-supplier"
-                    name="supplierId"
-                    required
-                    defaultValue=""
-                  >
-                    <option value="" disabled>
-                      Choose a supplier
-                    </option>
-                    {suppliers.map((supplier) => (
-                      <option key={supplier.id} value={supplier.id}>
-                        {supplier.displayName}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-              <div className="min-w-[260px] flex-1">
-                <Field label="Board" htmlFor="price-board" required>
-                  <Select
-                    id="price-board"
-                    name="productId"
-                    required
-                    defaultValue=""
-                  >
-                    <option value="" disabled>
-                      Choose a board
-                    </option>
-                    {boards.map((board) => (
-                      <option key={board.id} value={board.id}>
-                        {board.label}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-              <div className="w-[170px]">
-                <Field label="Agreed cost (₹)" htmlFor="price-cost" required>
-                  <Input
-                    id="price-cost"
-                    name="cost"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    required
-                  />
-                </Field>
-              </div>
-              <Button type="submit" variant="primary" disabled={pending}>
-                Save
-              </Button>
-              <p className="m-0 w-full text-[12px] text-text-tertiary">
-                Used when an order leaves the cost blank. One current price per
-                supplier per board; what it used to be lives in the orders that
-                were placed at it.
-              </p>
-            </form>
-          </Panel>
-        </div>
-      )}
-
-      {newOrder && canOrder && (
-        <div className="mb-6">
-          <Panel title="New purchase order">
-            <form
-              className="flex flex-wrap items-end gap-3"
-              action={(formData) =>
-                run(
-                  "verity.plywood.create_purchase_order",
-                  {
-                    supplierId: String(formData.get("supplierId") ?? ""),
-                    locationId: String(formData.get("locationId") ?? ""),
-                    ...(formData.get("reference")
-                      ? { reference: String(formData.get("reference")) }
-                      : {}),
-                    lines: [
-                      {
-                        productId: String(formData.get("productId") ?? ""),
-                        qtyOrdered: Number(formData.get("qty") ?? 0),
-                        // Blank means "use the negotiated price". Sending zero
-                        // instead would book a free delivery and poison the
-                        // weighted average.
-                        ...(String(formData.get("cost") ?? "") === ""
-                          ? {}
-                          : {
-                              unitCostPaise: Math.round(
-                                Number(formData.get("cost")) * 100,
-                              ),
-                            }),
-                      },
-                    ],
-                  },
-                  () => setNewOrder(false),
-                )
-              }
-            >
-              <div className="min-w-[200px]">
-                <Field label="Supplier" htmlFor="order-supplier" required>
-                  <Select
-                    id="order-supplier"
-                    name="supplierId"
-                    required
-                    defaultValue=""
-                  >
-                    <option value="" disabled>
-                      Choose a supplier
-                    </option>
-                    {suppliers.map((supplier) => (
-                      <option key={supplier.id} value={supplier.id}>
-                        {supplier.displayName}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-              <div className="min-w-[180px]">
-                <Field label="Deliver to" htmlFor="order-godown" required>
-                  <Select
-                    id="order-godown"
-                    name="locationId"
-                    required
-                    defaultValue=""
-                  >
-                    <option value="" disabled>
-                      Choose a godown
-                    </option>
-                    {godowns.map((godown) => (
-                      <option key={godown.id} value={godown.id}>
-                        {godown.name}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-              <div className="min-w-[240px] flex-1">
-                <Field label="Board" htmlFor="order-board" required>
-                  <Select
-                    id="order-board"
-                    name="productId"
-                    required
-                    defaultValue=""
-                  >
-                    <option value="" disabled>
-                      Choose a board
-                    </option>
-                    {boards.map((board) => (
-                      <option key={board.id} value={board.id}>
-                        {board.label}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-              <div className="w-[120px]">
-                <Field label="Quantity" htmlFor="order-qty" required>
-                  <Input
-                    id="order-qty"
-                    name="qty"
-                    type="number"
-                    min="1"
-                    required
-                  />
-                </Field>
-              </div>
-              <div className="w-[150px]">
-                <Field
-                  label="Cost per unit (₹)"
-                  htmlFor="order-cost"
-                  hint="Blank uses agreed price"
-                >
-                  <Input
-                    id="order-cost"
-                    name="cost"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                  />
-                </Field>
-              </div>
-              <div className="w-[150px]">
-                <Field label="Reference" htmlFor="order-reference">
-                  <Input id="order-reference" name="reference" />
-                </Field>
-              </div>
-              <Button type="submit" variant="primary" disabled={pending}>
-                Create
-              </Button>
-            </form>
-          </Panel>
-        </div>
+      {canOrder && (
+        <NewPurchaseOrderForm
+          open={newOrder}
+          suppliers={suppliers}
+          godowns={godowns}
+          boards={boards}
+          agreed={agreed}
+          pending={pending}
+          onCancel={() => setNewOrder(false)}
+          onSubmit={(input) =>
+            run("verity.plywood.create_purchase_order", input, () =>
+              setNewOrder(false),
+            )
+          }
+        />
       )}
 
       <div className="mb-4">
@@ -655,107 +416,163 @@ export function PurchaseDesk({
             </div>
           )}
 
-          {cancelling && (
-            <form
-              className="mt-4 flex flex-wrap items-end gap-3 rounded-lg bg-glass-2 p-3"
-              action={(formData) =>
-                run(
-                  "verity.plywood.cancel_purchase_order",
-                  {
-                    orderId: cancelling,
-                    reason: String(formData.get("reason") ?? ""),
-                  },
-                  () => setCancelling(null),
-                )
-              }
-            >
-              <div className="min-w-[320px] flex-1">
-                <Field
-                  label={`Why is ${cancellingOrder?.reference ?? "this order"} being cancelled?`}
-                  htmlFor="cancel-po"
-                  required
-                >
-                  <Input
-                    id="cancel-po"
-                    name="reason"
-                    required
-                    autoFocus
-                    minLength={3}
-                    placeholder="Supplier cannot supply before the season"
-                  />
-                </Field>
-              </div>
-              <Button type="submit" variant="danger" disabled={pending}>
-                Cancel order
-              </Button>
-              <p className="m-0 w-full text-[12px] text-text-tertiary">
-                Anything already received stays received. Cancelling closes what
-                is still owed; it does not unwind stock that came through the
-                door.
-              </p>
-            </form>
-          )}
-
-          {receivingOrder && (
-            <ReceiveForm
-              order={receivingOrder}
-              pending={pending}
-              onClose={() => setReceiving(null)}
-              onSubmit={(input) =>
-                run("verity.plywood.receive_goods", input, () =>
-                  setReceiving(null),
-                )
-              }
-            />
-          )}
         </Panel>
       </div>
 
-      {suppliers.length > 0 && (
-        <Panel title="Suppliers">
-          <div className="-mx-3 overflow-x-auto px-3">
-            <table className="w-full min-w-[720px] border-collapse">
-              <caption className="sr-only">Suppliers</caption>
-              <thead>
-                <tr>
-                  {["Supplier", "GSTIN", "GST state", "Open orders"].map(
-                    (heading, index) => (
-                      <th
-                        key={heading}
-                        className={
-                          "whitespace-nowrap border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                          (index === 0 ? "text-left" : "text-right")
-                        }
-                      >
-                        {heading}
-                      </th>
-                    ),
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {suppliers.map((supplier) => (
-                  <tr key={supplier.id}>
-                    <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                      {supplier.displayName}
-                    </td>
-                    <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                      {supplier.gstin ?? "—"}
-                    </td>
-                    <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                      {supplier.stateCode ?? "—"}
-                    </td>
-                    <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px]">
-                      {supplier.openOrders === 0 ? "—" : supplier.openOrders}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Panel>
+      <Modal
+        open={cancelling !== null}
+        onClose={() => setCancelling(null)}
+        title={`Cancel ${cancellingOrder?.reference ?? "this order"}`}
+        description="Anything already received stays received. Cancelling closes what is still owed; it does not unwind stock that came through the door."
+        width="sm"
+        footer={
+          <>
+            <ModalCancel onClose={() => setCancelling(null)} disabled={pending}>
+              Keep order
+            </ModalCancel>
+            <Button
+              variant="danger"
+              disabled={pending || cancelReason.trim().length < 3}
+              onClick={() =>
+                run(
+                  "verity.plywood.cancel_purchase_order",
+                  { orderId: cancelling, reason: cancelReason.trim() },
+                  () => {
+                    setCancelling(null);
+                    setCancelReason("");
+                  },
+                )
+              }
+            >
+              Cancel order
+            </Button>
+          </>
+        }
+      >
+        <Field label="Why is it being cancelled?" htmlFor="cancel-po" required>
+          <Input
+            id="cancel-po"
+            value={cancelReason}
+            onChange={(event) => setCancelReason(event.target.value)}
+            minLength={3}
+            placeholder="Supplier cannot supply before the season"
+          />
+        </Field>
+      </Modal>
+
+      {receivingOrder && (
+        <ReceiveForm
+          order={receivingOrder}
+          pending={pending}
+          onClose={() => setReceiving(null)}
+          onSubmit={(input) =>
+            run("verity.plywood.receive_goods", input, () => setReceiving(null))
+          }
+        />
       )}
+
     </>
+  );
+}
+
+/**
+ * The agreed price with a supplier for one board.
+ *
+ * A modal (Task 71 item 6) rather than a panel: it has nothing to do with the
+ * order table it used to push down the page, and it is a two-second job the
+ * buyer wants to finish and dismiss.
+ */
+function AgreePriceModal({
+  open,
+  suppliers,
+  boards,
+  pending,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  suppliers: Supplier[];
+  boards: Array<{ id: string; label: string }>;
+  pending: boolean;
+  onClose: () => void;
+  onSubmit: (input: {
+    supplierId: string;
+    productId: string;
+    negotiatedCostPaise: number;
+  }) => void;
+}) {
+  const [supplierId, setSupplierId] = useState("");
+  const [productId, setProductId] = useState("");
+  const [cost, setCost] = useState("");
+
+  const parsed = Number.parseFloat(cost);
+  const canSave =
+    supplierId !== "" && productId !== "" && Number.isFinite(parsed) && parsed >= 0;
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Agreed price with a supplier"
+      description="Used when an order leaves the cost blank. One current price per supplier per board; what it used to be lives in the orders placed at it."
+      footer={
+        <>
+          <ModalCancel onClose={onClose} disabled={pending} />
+          <Button
+            variant="primary"
+            disabled={pending || !canSave}
+            onClick={() =>
+              onSubmit({
+                supplierId,
+                productId,
+                negotiatedCostPaise: Math.round(parsed * 100),
+              })
+            }
+          >
+            {pending ? "Saving…" : "Save"}
+          </Button>
+        </>
+      }
+    >
+      <FormRow columns="minmax(0,1fr) minmax(0,1.4fr) 150px">
+        <Field label="Supplier" htmlFor="price-supplier" required>
+          <Combobox
+            id="price-supplier"
+            value={supplierId}
+            onChange={setSupplierId}
+            required
+            placeholder="Search suppliers"
+            options={suppliers.map((supplier) => ({
+              value: supplier.id,
+              label: supplier.displayName,
+            }))}
+          />
+        </Field>
+        <Field label="Board" htmlFor="price-board" required>
+          <Combobox
+            id="price-board"
+            value={productId}
+            onChange={setProductId}
+            required
+            placeholder="Search boards"
+            options={boards.map((board) => ({
+              value: board.id,
+              label: board.label,
+            }))}
+          />
+        </Field>
+        <Field label="Agreed cost (₹)" htmlFor="price-cost" required>
+          <Input
+            id="price-cost"
+            type="number"
+            step="0.01"
+            min="0"
+            value={cost}
+            onChange={(event) => setCost(event.target.value)}
+          />
+        </Field>
+      </FormRow>
+    </Modal>
   );
 }
 
@@ -802,72 +619,58 @@ function ReceiveForm({
     );
 
   return (
-    <div className="mt-4 rounded-lg bg-glass-2 p-4">
-      <div className="mb-3 flex items-baseline justify-between gap-4">
-        <h3 className="m-0 text-[13px] font-medium text-text">
-          Receive against {order.reference ?? `order ${order.id.slice(0, 8)}`}
-          <span className="font-normal text-text-tertiary">
-            {" "}
-            · {order.supplierName}
+    <Modal
+      open
+      onClose={onClose}
+      title={`Receive against ${order.reference ?? `order ${order.id.slice(0, 8)}`}`}
+      description={`${order.supplierName} · only this order's outstanding lines are listed`}
+      footer={
+        <>
+          <span className="mr-auto text-[12px] text-text-tertiary">
+            Costed at what the order agreed. The stock moves in and, once the
+            order is fully received, the supplier&apos;s bill is raised for you.
           </span>
-        </h3>
-        <Button size="sm" onClick={onClose} disabled={pending}>
-          Close
-        </Button>
-      </div>
-
+          <ModalCancel onClose={onClose} disabled={pending} />
+          <Button
+            variant="primary"
+            disabled={pending || lines.length === 0}
+            onClick={() => onSubmit({ orderId: order.id, lines })}
+          >
+            {pending ? "Recording…" : "Record receipt"}
+          </Button>
+        </>
+      }
+    >
       {order.lines.length === 0 ? (
         <p className="m-0 text-[13px] text-text-secondary">
           Everything on this order has already been received.
         </p>
       ) : (
-        <>
-          <div className="flex flex-col gap-3">
-            {order.lines.map((line) => (
-              <div
-                key={line.productId}
-                className="flex flex-wrap items-end gap-3"
-              >
-                <div className="min-w-[240px] flex-1">
-                  <Field
-                    label={line.name}
-                    htmlFor={`receive-${order.id}-${line.productId}`}
-                    hint={`${line.qtyOrdered} ordered · ${line.qtyReceived} received · ${line.qtyOutstanding} still owed`}
-                  >
-                    <Input
-                      id={`receive-${order.id}-${line.productId}`}
-                      type="number"
-                      min={0}
-                      max={line.qtyOutstanding}
-                      value={quantities[line.productId] ?? ""}
-                      onChange={(event) =>
-                        setQuantities((current) => ({
-                          ...current,
-                          [line.productId]: event.target.value,
-                        }))
-                      }
-                    />
-                  </Field>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-3 flex items-center gap-3">
-            <Button
-              variant="primary"
-              disabled={pending || lines.length === 0}
-              onClick={() => onSubmit({ orderId: order.id, lines })}
+        <FormRow columns="repeat(auto-fit, minmax(240px, 1fr))">
+          {order.lines.map((line) => (
+            <Field
+              key={line.productId}
+              label={line.name}
+              htmlFor={`receive-${order.id}-${line.productId}`}
+              hint={`${line.qtyOrdered} ordered · ${line.qtyReceived} received · ${line.qtyOutstanding} still owed`}
             >
-              {pending ? "Recording…" : "Record receipt"}
-            </Button>
-            <p className="m-0 text-[12px] text-text-tertiary">
-              Costed at what the order agreed. Receiving moves the stock into
-              the godown in the same step, and more than was ordered is refused
-              rather than accepted.
-            </p>
-          </div>
-        </>
+              <Input
+                id={`receive-${order.id}-${line.productId}`}
+                type="number"
+                min={0}
+                max={line.qtyOutstanding}
+                value={quantities[line.productId] ?? ""}
+                onChange={(event) =>
+                  setQuantities((current) => ({
+                    ...current,
+                    [line.productId]: event.target.value,
+                  }))
+                }
+              />
+            </Field>
+          ))}
+        </FormRow>
       )}
-    </div>
+    </Modal>
   );
 }

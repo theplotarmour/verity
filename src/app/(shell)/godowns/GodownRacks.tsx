@@ -10,8 +10,8 @@ import {
   Field,
   Input,
   Panel,
-  Select,
 } from "@/components/ui/primitives";
+import { Combobox } from "@/components/ui/Combobox";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -81,18 +81,16 @@ export function GodownRacks({
           required
           hint="Decides who can see and move its stock"
         >
-          <Select
+          <Combobox
             id="godown-org"
             value={organizationId}
-            onChange={(event) => setOrganizationId(event.target.value)}
-          >
-            <option value="">Choose…</option>
-            {organizations.map((organization) => (
-              <option key={organization.id} value={organization.id}>
-                {organization.name}
-              </option>
-            ))}
-          </Select>
+            placeholder="Search organizations"
+            onChange={setOrganizationId}
+            options={organizations.map((organization) => ({
+              value: organization.id,
+              label: organization.name,
+            }))}
+          />
         </Field>
         <div className="flex gap-2">
           <Button

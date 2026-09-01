@@ -13,6 +13,7 @@ import {
   Select,
   StateBadge,
 } from "@/components/ui/primitives";
+import { FormCombobox } from "@/components/ui/Combobox";
 import { day } from "@/components/ui/business/format";
 import { NewSalesOrderForm, type SellableRow } from "./NewSalesOrderForm";
 import { runCommand } from "@/server/actions/platform";
@@ -253,40 +254,30 @@ export function SalesDesk({
             >
               <div className="min-w-[200px]">
                 <Field label="Customer" htmlFor="cprice-customer" required>
-                  <Select
-                    id="cprice-customer"
-                    name="customerId"
-                    required
-                    defaultValue=""
-                  >
-                    <option value="" disabled>
-                      Choose a customer
-                    </option>
-                    {customers.map((customer) => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.displayName}
-                      </option>
-                    ))}
-                  </Select>
+                  <FormCombobox
+            id="cprice-customer"
+            name="customerId"
+            required
+            placeholder="Search customers"
+            options={customers.map((row) => ({
+              value: row.id,
+              label: row.displayName,
+            }))}
+          />
                 </Field>
               </div>
               <div className="min-w-[260px] flex-1">
                 <Field label="Board" htmlFor="cprice-board" required>
-                  <Select
-                    id="cprice-board"
-                    name="productId"
-                    required
-                    defaultValue=""
-                  >
-                    <option value="" disabled>
-                      Choose a board
-                    </option>
-                    {boards.map((board) => (
-                      <option key={board.id} value={board.id}>
-                        {board.label}
-                      </option>
-                    ))}
-                  </Select>
+                  <FormCombobox
+            id="cprice-board"
+            name="productId"
+            required
+            placeholder="Search boards"
+            options={boards.map((row) => ({
+              value: row.id,
+              label: row.label,
+            }))}
+          />
                 </Field>
               </div>
               <div className="w-[170px]">
@@ -397,25 +388,24 @@ export function SalesDesk({
         </div>
       )}
 
-      {newOrder && canOrder && (
-        <div className="mb-6">
-          <NewSalesOrderForm
-            customers={customers.map((c) => ({
-              id: c.id,
-              displayName: c.displayName,
-            }))}
-            godowns={godowns}
-            boards={boards}
-            sellable={sellable}
-            pending={pending}
-            onCancel={() => setNewOrder(false)}
-            onSubmit={(input) =>
-              run("verity.plywood.create_sales_order", input, () =>
-                setNewOrder(false),
-              )
-            }
-          />
-        </div>
+      {canOrder && (
+        <NewSalesOrderForm
+          open={newOrder}
+          customers={customers.map((c) => ({
+            id: c.id,
+            displayName: c.displayName,
+          }))}
+          godowns={godowns}
+          boards={boards}
+          sellable={sellable}
+          pending={pending}
+          onCancel={() => setNewOrder(false)}
+          onSubmit={(input) =>
+            run("verity.plywood.create_sales_order", input, () =>
+              setNewOrder(false),
+            )
+          }
+        />
       )}
 
       <div className="mb-4">

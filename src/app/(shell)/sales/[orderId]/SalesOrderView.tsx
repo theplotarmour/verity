@@ -14,11 +14,11 @@ import {
   Panel,
   Row,
   RowList,
-  Select,
   Stat,
   StatRow,
   StateBadge,
 } from "@/components/ui/primitives";
+import { Combobox } from "@/components/ui/Combobox";
 import { day, rupees, sheets } from "@/components/ui/business/format";
 import { SALES_STATE, present } from "@/components/ui/business/states";
 import { Related } from "@/components/ui/business/Related";
@@ -233,14 +233,16 @@ export function SalesOrderView({
               </p>
               {racks.length > 0 && (
                 <Field label="Rack" htmlFor="issue-rack" hint="Where it is being picked from">
-                  <Select id="issue-rack" value={rackId} onChange={(e) => setRackId(e.target.value)}>
-                    <option value="">Not recorded</option>
-                    {racks.map((rack) => (
-                      <option key={rack.id} value={rack.id}>
-                        {rack.rackLabel}
-                      </option>
-                    ))}
-                  </Select>
+                  <Combobox
+                    id="issue-rack"
+                    value={rackId}
+                    placeholder="Not recorded"
+                    onChange={setRackId}
+                    options={racks.map((rack) => ({
+                      value: rack.id,
+                      label: rack.rackLabel,
+                    }))}
+                  />
                 </Field>
               )}
               <Field label="Collected by" htmlFor="issue-collected" hint="Who took delivery">

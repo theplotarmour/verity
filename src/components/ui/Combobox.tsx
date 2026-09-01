@@ -290,3 +290,26 @@ export function Combobox({
     </div>
   );
 }
+
+/**
+ * A `Combobox` for a plain `<form action={…}>` that reads FormData.
+ *
+ * Some forms are uncontrolled on purpose — a filter bar, a two-field admin
+ * panel — and making them controlled just to swap a `<select>` for a searchable
+ * one would be a rewrite for no gain. This holds the selection itself and posts
+ * it through the hidden input, so the surrounding form reads `formData.get(name)`
+ * exactly as it did before.
+ *
+ * Use `Combobox` directly wherever the parent already needs to know the value:
+ * two sources of truth for one field is the bug this deliberately avoids
+ * everywhere it can.
+ */
+export function FormCombobox({
+  defaultValue = "",
+  ...rest
+}: Omit<React.ComponentProps<typeof Combobox>, "value" | "onChange"> & {
+  defaultValue?: string;
+}) {
+  const [value, setValue] = useState(defaultValue);
+  return <Combobox {...rest} value={value} onChange={setValue} />;
+}

@@ -239,8 +239,11 @@ describeDb("plywood period close (slice 7)", () => {
       lines: [{ productId, qtyOrdered: qty, unitPricePaise: 150_000 }],
     });
     await executeCommand(owner, reserveForOrder, { orderId: order.id });
-    await executeCommand(owner, dispatchOrder, { orderId: order.id });
-    return executeCommand(owner, raiseSalesInvoice, { salesOrderId: order.id });
+    // Task 71: issuing the goods raises the invoice in the same step.
+    const issued = await executeCommand(owner, dispatchOrder, {
+      orderId: order.id,
+    });
+    return issued.invoicing!;
   }
 
   beforeAll(async () => {
@@ -274,8 +277,11 @@ describeDb("plywood period close (slice 7)", () => {
         lines: [{ productId, qtyOrdered: 10, unitCostPaise: 100_000 }],
       });
       await executeCommand(owner, submitPurchaseOrder, { orderId: po.id });
+      // PART received deliberately: a fully received order raises its own bill
+      // with a computed split (Task 71), and the no-split case this blocker is
+      // about now arises only from a hand-entered supplier total.
       await executeCommand(owner, receiveGoods, {
-        orderId: po.id, lines: [{ productId, qtyReceived: 10 }],
+        orderId: po.id, lines: [{ productId, qtyReceived: 6 }],
       });
       await executeCommand(owner, raisePurchaseInvoice, {
         purchaseOrderId: po.id,
@@ -314,8 +320,9 @@ describeDb("plywood period close (slice 7)", () => {
         lines: [{ productId, qtyOrdered: 5, unitCostPaise: 100_000 }],
       });
       await executeCommand(owner, submitPurchaseOrder, { orderId: po.id });
+      // Part received, for the same reason as above.
       await executeCommand(owner, receiveGoods, {
-        orderId: po.id, lines: [{ productId, qtyReceived: 5 }],
+        orderId: po.id, lines: [{ productId, qtyReceived: 3 }],
       });
       await executeCommand(owner, raisePurchaseInvoice, {
         purchaseOrderId: po.id, supplierInvoiceTotalPaise: 590_000,
@@ -393,7 +400,6 @@ describeDb("plywood period close (slice 7)", () => {
         lines: [{ productId, qtyOrdered: 5, unitPricePaise: 150_000 }],
       });
       await executeCommand(owner, reserveForOrder, { orderId: order.id });
-      await executeCommand(owner, dispatchOrder, { orderId: order.id });
 
       // Same zone the posting guard uses, so the period this test closes is
       // the period the posting is actually checked against (U0-3).
@@ -411,6 +417,18 @@ describeDb("plywood period close (slice 7)", () => {
       });
 
       try {
+        // The goods still leave the yard — that is a physical fact and a closed
+        // book cannot undo it (Task 71). What is blocked is the POSTING, and
+        // the refusal is returned rather than swallowed, so the desk can say
+        // why the order has no invoice.
+        const issued = await executeCommand(owner, dispatchOrder, {
+          orderId: order.id,
+        });
+        expect(issued.invoicing).toBeNull();
+        expect(issued.invoicingRefusal).toMatch(/is closed/);
+
+        // And the manual path refuses in the same way, which is what the
+        // automatic one is relaying.
         await expect(
           executeCommand(owner, raiseSalesInvoice, { salesOrderId: order.id }),
         ).rejects.toThrow(/is closed/);

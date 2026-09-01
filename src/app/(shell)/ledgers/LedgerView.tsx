@@ -5,10 +5,10 @@ import {
   EmptyState,
   Field,
   Panel,
-  Select,
   Stat,
   StatRow,
 } from "@/components/ui/primitives";
+import { Combobox } from "@/components/ui/Combobox";
 
 type Entry = {
   id: string;
@@ -86,46 +86,34 @@ export function LedgerView({
           <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-[240px] flex-1">
               <Field label="Customer" htmlFor="ledger-customer">
-                <Select
+                <Combobox
                   id="ledger-customer"
                   value={selectedCustomerId ?? ""}
-                  onChange={(event) =>
-                    router.push(
-                      event.target.value
-                        ? `/ledgers?customer=${event.target.value}`
-                        : "/ledgers",
-                    )
+                  placeholder="Search customers"
+                  onChange={(value) =>
+                    router.push(value ? `/ledgers?customer=${value}` : "/ledgers")
                   }
-                >
-                  <option value="">—</option>
-                  {customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </option>
-                  ))}
-                </Select>
+                  options={customers.map((customer) => ({
+                    value: customer.id,
+                    label: customer.name,
+                  }))}
+                />
               </Field>
             </div>
             <div className="min-w-[240px] flex-1">
               <Field label="Supplier" htmlFor="ledger-supplier">
-                <Select
+                <Combobox
                   id="ledger-supplier"
                   value={selectedSupplierId ?? ""}
-                  onChange={(event) =>
-                    router.push(
-                      event.target.value
-                        ? `/ledgers?supplier=${event.target.value}`
-                        : "/ledgers",
-                    )
+                  placeholder="Search suppliers"
+                  onChange={(value) =>
+                    router.push(value ? `/ledgers?supplier=${value}` : "/ledgers")
                   }
-                >
-                  <option value="">—</option>
-                  {suppliers.map((supplier) => (
-                    <option key={supplier.id} value={supplier.id}>
-                      {supplier.name}
-                    </option>
-                  ))}
-                </Select>
+                  options={suppliers.map((supplier) => ({
+                    value: supplier.id,
+                    label: supplier.name,
+                  }))}
+                />
               </Field>
             </div>
           </div>
