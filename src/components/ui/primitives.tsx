@@ -376,6 +376,49 @@ export function CardAction({
  * system. Hint and error occupy the same slot so the layout does not jump when
  * validation appears.
  */
+/**
+ * A row of fields whose labels, controls and hints line up across the row.
+ *
+ * Task 71 item 2. The desks laid fields out with `flex items-end`, so a field
+ * carrying a hint under its control was taller than its neighbours and aligning
+ * their BOTTOMS pushed its label and input upward — which is exactly the
+ * staircase in the reported screenshot: Supplier's input sat a row below
+ * GSTIN's, which sat below State code's, which sat below Phone's.
+ *
+ * A three-row subgrid fixes it structurally rather than by hand-tuning
+ * padding: every field spans the same label row, control row and hint row, so
+ * the three baselines are shared whether or not a given field has a hint.
+ * Fields with no hint simply leave the third row empty.
+ *
+ * `columns` is a raw `grid-template-columns` value so a caller states the
+ * intended widths once, in one place, instead of hanging a width class on a
+ * wrapper div around every field.
+ */
+export function FormRow({
+  columns = "repeat(auto-fit, minmax(200px, 1fr))",
+  className,
+  children,
+}: {
+  columns?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={cx("form-row grid gap-x-3 gap-y-4", className)}
+      style={{
+        gridTemplateColumns: columns,
+        // Three explicit bands. A field that wraps to a second visual row then
+        // gets its own three implicit rows rather than colliding with these.
+        gridTemplateRows: "auto auto auto",
+        alignItems: "start",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function Field({
   label,
   htmlFor,
@@ -394,8 +437,13 @@ export function Field({
   const errorId = error ? `${htmlFor}-error` : undefined;
   const hintId = hint ? `${htmlFor}-hint` : undefined;
 
+  // `verity-field` carries the layout, from globals.css, rather than utility
+  // classes here. `FormRow` needs to override the display for its children, and
+  // `.form-row > .verity-field` beats `.verity-field` by specificity — which is
+  // a rule the cascade guarantees, unlike two Tailwind utilities of equal
+  // weight where the winner depends on stylesheet order.
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="verity-field">
       <label htmlFor={htmlFor} className="text-[13px] font-medium text-text">
         {label}
         {required && (

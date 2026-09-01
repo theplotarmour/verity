@@ -321,6 +321,57 @@
 .verity-scrim { background: light-dark(rgb(24 24 27 / 0.16), rgb(6 6 8 / 0.5)); }
 
 /**
+ * Form field layout — Task 71 item 2.
+ *
+ * A field is label / control / hint stacked. Inside a `FormRow` it becomes a
+ * three-row subgrid instead, so every field in the row shares the same label
+ * baseline, the same control baseline and the same hint baseline — whether or
+ * not it has a hint.
+ *
+ * The desks previously used `flex items-end` for these rows, which aligns
+ * BOTTOMS: a field carrying a hint was taller, so its label and control were
+ * pushed up relative to its neighbours. That is the staircase the product owner
+ * reported on the New supplier row, where Supplier, GSTIN, State code and Phone
+ * each sat at a different height.
+ *
+ * These live here rather than as utility classes because `FormRow` has to
+ * override the display of its own children, and `.form-row > .verity-field`
+ * wins that on specificity. Two Tailwind utilities of equal specificity would
+ * resolve by stylesheet order, which is not something a component should depend
+ * on.
+ */
+.verity-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.form-row > .verity-field {
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  /* Overrides the row's own 16px vertical gutter for the three tracks this
+     field spans; the 16px is the space BETWEEN wrapped field rows, not between
+     a label and its input. */
+  row-gap: 6px;
+  align-content: start;
+}
+
+/* Without subgrid a field would occupy one row and the alignment guarantee is
+   gone, so fall back to the stacked layout and let the row space them evenly
+   rather than rendering a broken grid. */
+@supports not (grid-template-rows: subgrid) {
+  .form-row > .verity-field {
+    display: flex;
+    grid-row: auto;
+  }
+  .form-row {
+    align-items: end;
+  }
+}
+
+/**
  * ADR-011 constraint 5 — user preference outranks the material.
  *
  * Reduced transparency is honoured by making every surface opaque and dropping
