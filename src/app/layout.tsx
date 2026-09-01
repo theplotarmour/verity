@@ -97,6 +97,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       <body>
         {/* Level 0. Fixed, behind everything, never interactive. */}
         <div className="verity-atmosphere" aria-hidden="true" />
+        {/* Unblurred grain, on top of the atmosphere: dithers its gradient so
+            it stays smooth at this size instead of banding. See globals.css. */}
+        <div className="verity-grain" aria-hidden="true" />
         {/* First stop for a keyboard user on every page. */}
         <a
           href="#main"

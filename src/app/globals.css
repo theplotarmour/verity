@@ -340,19 +340,34 @@
 /**
  * LEVEL 0 — the atmosphere.
  *
- * Two accent blooms, not a spray of them: one entering from the top-left
- * corner (the room's light source — matches the accent edge every glass
- * card already catches on its leading side), one small counterweight at the
- * opposite corner so the frame doesn't tip. Minimal reads as a choice; a
- * third and fourth blob reads as decoration nobody stopped to remove.
+ * One light source, not a spray of blobs: a single soft field entering from
+ * top-centre, the way a studio backdrop is lit — brightest at the top edge,
+ * falling clean and continuous to the canvas colour, with no second or
+ * third bloom competing for the eye. Reference: a softbox product shot, one
+ * light, one smooth falloff.
+ *
+ * Seven stops, not two. A "bright to transparent" gradient with few stops
+ * has a near-linear alpha ramp, and a linear ramp is exactly what 8-bit
+ * colour bands on — visible as faint concentric rings once the area gets
+ * large. An eased curve (steep near the light, flat by the tail) needs more
+ * stops to describe, but never asks the display to represent a slow, wide,
+ * almost-linear alpha change, which is the specific case that bands.
+ *
+ * `rgb(from var(--accent-seed) r g b / a)`, not `color-mix(…, transparent)`.
+ * Mixing toward the transparent keyword mixes toward its (0, 0, 0) colour
+ * channels too, not just its alpha — a visible dark ring across a field
+ * this size, where the fade has room to pass through a muddier version of
+ * the accent before it reaches zero. The relative-colour form holds r/g/b
+ * fixed and only varies alpha, so the accent hue never bends as it fades.
  *
  * `filter: blur()` is what makes it frosty rather than a printed gradient —
  * a radial-gradient's own falloff is a mathematically exact curve, and an
- * exact curve is precisely what a wash of ambient light behind frosted
- * glass never has. The blur is the material cue; the gradient underneath is
- * just its colour. Every blob's own transparent tail already lands well
- * inside the viewport before this box's edge, so the blur has room to
- * soften without a hard cutoff appearing at inset: 0.
+ * exact curve is precisely what a wash of light through frosted glass never
+ * has. `.verity-grain` (below) is what makes it a photograph rather than a
+ * screen: even a seven-stop blurred gradient still bands faintly on a large
+ * enough panel, the same way an unlit studio photo would if it had no film
+ * grain — a few percent of noise dithers the transition below the eye's
+ * threshold, which is the actual, complete fix, not a workaround for it.
  *
  * Fixed rather than scrolling, so it reads as the room the interface sits in
  * rather than as a decorated page. Pointer-events none: it is a backdrop,
@@ -369,33 +384,66 @@
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  filter: blur(40px);
+  filter: blur(46px);
   /**
-   * `rgb(from var(--accent-seed) r g b / a)`, not `color-mix(…, transparent)`.
-   * Mixing toward the transparent keyword mixes toward its (0, 0, 0) colour
-   * channels too, not just its alpha — invisible on a 1–2px edge highlight
-   * elsewhere in this file, but a visible dark ring across a 600–900px blob,
-   * where the fade has room to pass through a muddier version of the accent
-   * before it reaches zero. The relative-colour form holds r/g/b fixed and
-   * only varies alpha, so the fade is pure and the accent hue never bends.
+   * Two stops per shape, not seven. Every extra hand-placed stop is a point
+   * where the RATE of change changes — continuous in colour, but not in
+   * slope — and that kink survives blur as its own faint ring. A seven-stop
+   * attempt at "smoother" produced seven concentric rings, one per stop; a
+   * single peak-to-transparent slope has no interior kink to ring at all.
+   * Size, position and blur radius do the shaping instead — that is what
+   * "smooth" actually means for a gradient, not more control points.
+   *
+   * Same reasoning kept the vignette a second, correctly-nested
+   * radial-gradient sharing this shape's own centre rather than a
+   * `box-shadow` (which falls off from the box's straight edges, not
+   * radially, and printed its own soft rectangle here) or an independently
+   * placed radial (which beat against this one as two different circular
+   * maths overlapping).
    */
   background:
     radial-gradient(
-      880px 640px at 6% -12%,
+      1300px 1000px at 50% -12%,
       light-dark(
-        rgb(from var(--accent-seed) r g b / 46%),
-        rgb(from var(--accent-seed) r g b / 74%)
+        rgb(from var(--accent-seed) r g b / 30%),
+        rgb(from var(--accent-seed) r g b / 62%)
       ) 0%,
-      rgb(from var(--accent-seed) r g b / 0%) 70%
+      rgb(from var(--accent-seed) r g b / 0%) 85%
     ),
     radial-gradient(
-      640px 480px at 98% 98%,
-      light-dark(
-        rgb(from var(--accent-seed) r g b / 26%),
-        rgb(from var(--accent-seed) r g b / 38%)
-      ) 0%,
-      rgb(from var(--accent-seed) r g b / 0%) 66%
+      1300px 1000px at 50% -12%,
+      transparent 0%,
+      light-dark(rgba(15, 17, 21, 0.015), rgba(0, 0, 0, 0.3)) 100%
     );
+}
+
+/**
+ * The grain. Deliberately NOT inside `.verity-atmosphere` — that layer has
+ * `filter: blur()`, and blur is exactly what a dither texture cannot survive;
+ * a blurred noise field just becomes a slightly different smooth gradient; it
+ * stops being noise. This is its own unblurred sibling instead, an SVG
+ * fractal-noise tile repeated over the viewport.
+ *
+ * `soft-light`, not `overlay`, and the opacity is real (0.55+), not a
+ * near-zero dusting. `overlay` barely moves a pixel that already sits near
+ * white or near black — exactly the tonal range this gradient spends most
+ * of its area in — so at any opacity it left every ring the gradient
+ * itself draws untouched; measured, not assumed, after the first two
+ * numbers did nothing. `soft-light` perturbs evenly across the tonal range,
+ * and at this opacity actually breaks up the 8-bit steps a smooth radial
+ * gradient bands into over an area this large — which is the one thing
+ * this layer exists to do. The tile itself stays invisible as a pattern;
+ * only its dithering effect on the gradient shows.
+ */
+.verity-grain {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: light-dark(0.55, 0.6);
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
 }
 
 /**
@@ -610,7 +658,7 @@
       var(--color-surface-elevated)
     );
   }
-  .verity-atmosphere { display: none; }
+  .verity-atmosphere, .verity-grain { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
