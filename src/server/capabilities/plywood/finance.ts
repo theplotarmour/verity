@@ -934,6 +934,52 @@ export async function issueProvisionalPurchaseBill(
 }
 
 /**
+ * Re-runs the automatic supplier bill for one order.
+ *
+ * REPORTED: raising a bill from the finance desk answered *"nothing has been
+ * received against this purchase order, so there is nothing to invoice"* for an
+ * order that had, and the desk was offering no other outstanding purchase.
+ *
+ * Two faults, both mine. The desk's retry called `raise_purchase_invoice`,
+ * which requires a goods RECEIPT document, while the list that offered it was
+ * built from `qty_received` on the line — a quantity an order can carry with no
+ * receipt behind it, from data written before receipts were documents. So the
+ * button appeared for orders the command would always refuse. And it passed the
+ * order's pre-tax value as `supplierInvoiceTotalPaise`, which would have booked
+ * a payable short by the whole GST if it had ever succeeded.
+ *
+ * The retry now runs exactly what goods receipt runs, with no figures guessed
+ * by the caller, and the list is built from receipts.
+ */
+export const raisePurchaseBillFromOrder: CommandDefinition<
+  { purchaseOrderId: string },
+  { id: string; invoiceNumber: string; totalPaise: number }
+> = {
+  key: "verity.plywood.raise_purchase_bill_from_order",
+  entity: ENTITY_INVOICE,
+  verb: "Create",
+  input: z.object({ purchaseOrderId: z.string().uuid() }),
+  handler: async (ctx, input) => {
+    const bill = await issueProvisionalPurchaseBill(ctx, input.purchaseOrderId);
+    if (!bill) {
+      throw new ValidationError(
+        "E_VALIDATION: this order already has a bill, or nothing has been " +
+          "received against it yet",
+      );
+    }
+    return {
+      result: bill,
+      events: [
+        {
+          name: "verity.plywood.purchase_bill_raised",
+          entityId: bill.id,
+        },
+      ],
+    };
+  },
+};
+
+/**
  * Records the supplier's own document against a bill this system raised.
  *
  * Not an edit. `plywood_invoice` is immutable by trigger and that rule is not
@@ -1467,7 +1513,7 @@ export const unbilledMovements: QueryDefinition<
       where: {
         state: { notIn: ["draft", "cancelled"] },
         plywoodInvoices: { none: {} },
-        lines: { some: { qtyShipped: { gt: 0 } } },
+        goodsIssues: { some: {} },
       },
       include: { lines: true, customer: { select: { displayName: true } } },
       orderBy: { createdAt: "desc" },
@@ -1481,7 +1527,12 @@ export const unbilledMovements: QueryDefinition<
         // it here would report correct behaviour as a fault.
         state: "completed",
         plywoodInvoices: { none: {} },
-        lines: { some: { qtyReceived: { gt: 0 } } },
+        // A RECEIPT, not a received quantity. `qty_received` can be non-zero on
+        // an order with no receipt document behind it — data written before
+        // receipts became documents does exactly that — and the bill is raised
+        // from receipts. Listing such an order offered a button that could only
+        // ever be refused.
+        goodsReceipts: { some: {} },
       },
       include: { lines: true, supplier: { select: { displayName: true } } },
       orderBy: { createdAt: "desc" },
@@ -1509,6 +1560,77 @@ export const unbilledMovements: QueryDefinition<
         ),
       })),
     };
+  },
+};
+
+/**
+ * Every movement of money, both directions, newest first.
+ *
+ * REPORTED: "there should be a whole record of payments being received and
+ * being sent, no matter from whom or to whom."
+ *
+ * `partyLedger` answers "what happened with this one party" and needs a party
+ * chosen before it says anything. That is the wrong question for a proprietor
+ * closing the day, whose question is "what money moved". This is that list, and
+ * it is deliberately about PAYMENTS rather than ledger entries: an invoice is
+ * also a ledger entry, and mixing documents into a cash book is how a cash book
+ * stops being one.
+ */
+export const paymentJournal: QueryDefinition<
+  { limit?: number },
+  Array<{
+    id: string;
+    direction: "in" | "out";
+    partyId: string;
+    partyName: string;
+    partySide: "customer" | "supplier";
+    method: string;
+    reference: string | null;
+    amountPaise: number;
+    allocatedPaise: number;
+    receivedAt: Date;
+    settled: string[];
+  }>
+> = {
+  key: "verity.plywood.payment_journal",
+  entity: ENTITY_PAYMENT,
+  input: z.object({ limit: z.number().int().min(1).max(500).optional() }),
+  handler: async (ctx, input) => {
+    const payments = await ctx.tx.plywoodPayment.findMany({
+      include: {
+        customer: { select: { id: true, displayName: true } },
+        supplier: { select: { id: true, displayName: true } },
+        allocations: {
+          include: { invoice: { select: { invoiceNumber: true } } },
+        },
+      },
+      orderBy: [{ receivedAt: "desc" }, { createdAt: "desc" }],
+      take: input.limit ?? 200,
+    });
+
+    return payments.map((payment) => {
+      const party = payment.customer ?? payment.supplier;
+      return {
+        id: payment.id,
+        direction: payment.direction === "out" ? ("out" as const) : ("in" as const),
+        partyId: party?.id ?? "",
+        partyName: party?.displayName ?? "—",
+        partySide: payment.customerId
+          ? ("customer" as const)
+          : ("supplier" as const),
+        method: payment.method,
+        reference: payment.reference,
+        amountPaise: payment.amountPaise,
+        allocatedPaise: payment.allocations.reduce(
+          (sum, allocation) => sum + allocation.amountPaise,
+          0,
+        ),
+        receivedAt: payment.receivedAt,
+        settled: payment.allocations.map(
+          (allocation) => allocation.invoice.invoiceNumber,
+        ),
+      };
+    });
   },
 };
 

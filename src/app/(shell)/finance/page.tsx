@@ -3,9 +3,7 @@ import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
 import { ForbiddenError } from "@/server/platform/authorization";
 import {
-  listCustomers,
   listInvoices,
-  listSuppliers,
   partyBalances,
   unbilledMovements,
 } from "@/server/capabilities/plywood";
@@ -32,7 +30,7 @@ export default async function FinancePage() {
     throw error;
   }
 
-  const [balances, unbilled, customers, suppliers] = await Promise.all([
+  const [balances, unbilled] = await Promise.all([
     executeQuery(actor, partyBalances, {}).catch((error) => {
       if (error instanceof ForbiddenError) return [];
       throw error;
@@ -41,14 +39,6 @@ export default async function FinancePage() {
     executeQuery(actor, unbilledMovements, {}).catch((error) => {
       if (error instanceof ForbiddenError)
         return { purchases: [], sales: [] };
-      throw error;
-    }),
-    executeQuery(actor, listCustomers, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return [];
-      throw error;
-    }),
-    executeQuery(actor, listSuppliers, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return [];
       throw error;
     }),
   ]);
@@ -62,14 +52,6 @@ export default async function FinancePage() {
       <FinanceDesk
         invoices={invoices}
         balances={balances}
-        customers={customers.map((row) => ({
-          id: row.id,
-          displayName: row.displayName,
-        }))}
-        suppliers={suppliers.map((row) => ({
-          id: row.id,
-          displayName: row.displayName,
-        }))}
         unbilledSales={unbilled.sales}
         unbilledPurchases={unbilled.purchases}
       />

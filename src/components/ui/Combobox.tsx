@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export type ComboboxOption = {
   value: string;
@@ -59,6 +60,66 @@ export function Combobox({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
 
+  /**
+   * Where to draw the list, in viewport coordinates.
+   *
+   * REPORTED: "the dropdown lists are very small, only 1 item is visible."
+   *
+   * The list was absolutely positioned inside the field, and every form that
+   * matters here sits inside a `Modal`, whose body is `overflow-y-auto` so a
+   * long form scrolls rather than growing past the viewport. An absolutely
+   * positioned child is clipped by the nearest scrolling ancestor, so the list
+   * was cut off at the bottom edge of whatever space happened to be left — one
+   * row, in a short modal.
+   *
+   * Fixed positioning in a portal on <body> escapes that: nothing between the
+   * field and the body can clip it. The cost is that the position has to be
+   * measured and kept up to date, which is what this state and the listener
+   * below are for.
+   */
+  const [anchor, setAnchor] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    maxHeight: number;
+    above: boolean;
+  } | null>(null);
+
+  const measure = useCallback(() => {
+    const field = rootRef.current;
+    if (!field) return;
+    const box = field.getBoundingClientRect();
+    const below = window.innerHeight - box.bottom - 8;
+    const above = box.top - 8;
+    // Open upward when there is materially more room there. A picker near the
+    // bottom of a modal otherwise gets a few pixels of list and nothing else,
+    // which is the reported symptom in its other form.
+    const openAbove = below < 200 && above > below;
+    setAnchor({
+      left: box.left,
+      width: box.width,
+      top: openAbove ? box.top - 4 : box.bottom + 4,
+      // Never smaller than about four rows: a list you cannot see is not a
+      // list. If the space is genuinely that tight the list scrolls itself.
+      maxHeight: Math.max(180, Math.min(320, openAbove ? above : below)),
+      above: openAbove,
+    });
+  }, []);
+
+  // Before paint, so the list never appears at the wrong place for a frame.
+  useLayoutEffect(() => {
+    if (!open) return;
+    measure();
+    // Capture phase: an ancestor scrolling is exactly the case that moves the
+    // field, and scroll events on it do not bubble to window.
+    window.addEventListener("scroll", measure, true);
+    window.addEventListener("resize", measure);
+    return () => {
+      window.removeEventListener("scroll", measure, true);
+      window.removeEventListener("resize", measure);
+    };
+  }, [open, measure]);
+
   const selected = options.find((option) => option.value === value) ?? null;
 
   const matches = useMemo(() => {
@@ -80,7 +141,11 @@ export function Combobox({
   useEffect(() => {
     if (!open) return;
     function onPointerDown(event: PointerEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) close();
+      const target = event.target as Node;
+      // The list lives on <body> now, so "inside" is the field OR the list.
+      if (rootRef.current?.contains(target)) return;
+      if (listRef.current?.contains(target)) return;
+      close();
     }
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
@@ -236,57 +301,71 @@ export function Combobox({
         </svg>
       </div>
 
-      {open && (
-        <ul
-          ref={listRef}
-          id={listId}
-          role="listbox"
-          className={
-            "glass-overlay absolute left-0 right-0 top-[calc(100%+4px)] z-50 m-0 max-h-64 " +
-            "list-none overflow-y-auto rounded-lg border border-line p-1 shadow-[var(--shadow-lg)]"
-          }
-        >
-          {matches.length === 0 && (
-            <li className="px-3 py-2 text-[13px] text-text-tertiary">
-              {emptyMessage}
-            </li>
-          )}
-          {matches.map((option, index) => (
-            <li
-              key={option.value}
-              id={`${listId}-${index}`}
-              data-index={index}
-              role="option"
-              aria-selected={option.value === value}
-              aria-disabled={option.disabled || undefined}
-              // pointerdown, not click: the outside-click handler also listens
-              // on pointerdown, and a click handler would fire after the list
-              // had already closed.
-              onPointerDown={(event) => {
-                event.preventDefault();
-                commit(option);
-              }}
-              onPointerEnter={() => setActive(index)}
-              className={
-                "cursor-pointer rounded-md px-3 py-2 text-[14px] " +
-                (option.disabled
-                  ? "cursor-not-allowed text-text-tertiary "
-                  : index === active
-                    ? "bg-accent-subtle text-text "
-                    : "text-text ") +
-                (option.value === value ? "font-medium " : "")
-              }
-            >
-              <span className="block truncate">{option.label}</span>
-              {option.note && (
-                <span className="mt-0.5 block truncate text-[12px] text-text-tertiary">
-                  {option.note}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      {open &&
+        anchor &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <ul
+            ref={listRef}
+            id={listId}
+            role="listbox"
+            style={{
+              position: "fixed",
+              left: anchor.left,
+              width: anchor.width,
+              maxHeight: anchor.maxHeight,
+              ...(anchor.above
+                ? { bottom: window.innerHeight - anchor.top }
+                : { top: anchor.top }),
+            }}
+            className={
+              "glass-overlay z-[100] m-0 list-none overflow-y-auto overscroll-contain " +
+              "rounded-lg border border-line p-1 shadow-[var(--shadow-lg)]"
+            }
+          >
+            {matches.length === 0 && (
+              <li className="px-3 py-2 text-[13px] text-text-tertiary">
+                {emptyMessage}
+              </li>
+            )}
+            {matches.map((option, index) => (
+              <li
+                key={option.value}
+                id={`${listId}-${index}`}
+                data-index={index}
+                role="option"
+                aria-selected={option.value === value}
+                aria-disabled={option.disabled || undefined}
+                // pointerdown, not click: the outside-click handler also
+                // listens on pointerdown, and a click handler would fire after
+                // the list had already closed.
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  commit(option);
+                }}
+                onPointerEnter={() => setActive(index)}
+                className={
+                  "cursor-pointer rounded-md px-3 py-2 text-[14px] " +
+                  (option.disabled
+                    ? "cursor-not-allowed text-text-tertiary "
+                    : index === active
+                      ? "bg-accent-subtle text-text "
+                      : "text-text ") +
+                  (option.value === value ? "font-medium " : "")
+                }
+              >
+                <span className="block truncate">{option.label}</span>
+                {option.note && (
+                  <span className="mt-0.5 block truncate text-[12px] text-text-tertiary">
+                    {option.note}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>,
+          document.body,
+        )}
+
     </div>
   );
 }

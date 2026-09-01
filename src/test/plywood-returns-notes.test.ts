@@ -223,9 +223,17 @@ describeDb("plywood returns and corrections (slice 5)", () => {
       lines: [{ productId, qtyOrdered, unitPricePaise }],
     });
     await executeCommand(owner, reserveForOrder, { orderId: order.id });
+    // Task 71: issuing raises the invoice, so there is no second call. One
+    // here would be refused as a duplicate, correctly — an order carries one
+    // invoice.
     const issued = await executeCommand(owner, dispatchOrder, { orderId: order.id });
-    const invoice = await executeCommand(owner, raiseSalesInvoice, { salesOrderId: order.id });
-    return { productId, customerId, orderId: order.id, issued, invoice };
+    return {
+      productId,
+      customerId,
+      orderId: order.id,
+      issued,
+      invoice: issued.invoicing!,
+    };
   }
 
   /* ---------------------------- returns (§66) ---------------------------- */

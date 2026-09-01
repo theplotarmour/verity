@@ -64,7 +64,18 @@ function shortDate(value: Date | string): string {
 }
 
 /**
- * The finance desk.
+ * The finance desk — the DOCUMENTS.
+ *
+ * Money moving lives on /transactions and who owes what lives on /ledgers.
+ * This screen is about the paperwork behind those numbers: which invoices and
+ * bills exist, which supplier bills are still waiting on their document, and
+ * which movements failed to produce one at all.
+ *
+ * Recording a payment was here and is not any more. Reported: "the transaction
+ * page is the only page where we can record that we received a payment or we
+ * sent a payment." Two doors onto the same act is how the same cheque gets
+ * entered twice.
+ *
  *
  * REBUILT FOR TASK 71 ITEM 10 — "finance is completely useless right now,
  * nothing is linked to it, whenever I try to raise an invoice or supplier bill
@@ -90,15 +101,11 @@ function shortDate(value: Date | string): string {
 export function FinanceDesk({
   invoices,
   balances,
-  customers,
-  suppliers,
   unbilledSales,
   unbilledPurchases,
 }: {
   invoices: Invoice[];
   balances: Balance[];
-  customers: Array<{ id: string; displayName: string }>;
-  suppliers: Array<{ id: string; displayName: string }>;
   /** Goods issued, no invoice — the automatic one did not go through. */
   unbilledSales: Array<{
     id: string;
@@ -116,10 +123,6 @@ export function FinanceDesk({
 }) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
-  const [payment, setPayment] = useState<
-    | { side: "customer" | "supplier"; partyId: string; partyName: string }
-    | null
-  >(null);
   const [confirming, setConfirming] = useState<Invoice | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -174,14 +177,16 @@ export function FinanceDesk({
 
       <StatRow cols={4}>
         <Stat
-          label="Owed to us"
+          label="They need to send us"
           value={rupees(totals.owedToUs)}
           hint="Customers, net of anything paid in advance"
+          href="/ledgers"
         />
         <Stat
-          label="We owe"
+          label="We need to send them"
           value={rupees(totals.owedByUs)}
           hint="Suppliers, including goods received not yet billed"
+          href="/ledgers"
         />
         <Stat
           label="Overdue"
@@ -247,9 +252,8 @@ export function FinanceDesk({
                   size="sm"
                   disabled={pending}
                   onClick={() =>
-                    run("verity.plywood.raise_purchase_invoice", {
+                    run("verity.plywood.raise_purchase_bill_from_order", {
                       purchaseOrderId: order.id,
-                      supplierInvoiceTotalPaise: order.valuePaise,
                     })
                   }
                 >
@@ -260,38 +264,6 @@ export function FinanceDesk({
           </div>
         </Panel>
       )}
-
-      <BalanceTable
-        title="Customers owe us"
-        emptyTitle="Nobody owes anything"
-        emptyDescription="A delivery raises the invoice, and it appears here until it is paid."
-        rows={receivable}
-        pending={pending}
-        actionLabel="Record money received"
-        onAct={(row) =>
-          setPayment({
-            side: "customer",
-            partyId: row.partyId,
-            partyName: row.partyName,
-          })
-        }
-      />
-
-      <BalanceTable
-        title="We owe suppliers"
-        emptyTitle="Nothing owed to suppliers"
-        emptyDescription="Receiving a delivery raises the supplier's bill, and it appears here until it is paid."
-        rows={payable}
-        pending={pending}
-        actionLabel="Record payment made"
-        onAct={(row) =>
-          setPayment({
-            side: "supplier",
-            partyId: row.partyId,
-            partyName: row.partyName,
-          })
-        }
-      />
 
       <Panel title="Documents" flush={invoices.length === 0}>
         {invoices.length === 0 ? (
@@ -373,19 +345,6 @@ export function FinanceDesk({
         )}
       </Panel>
 
-      <RecordPaymentModal
-        party={payment}
-        customers={customers}
-        suppliers={suppliers}
-        pending={pending}
-        onClose={() => setPayment(null)}
-        onSubmit={(input) =>
-          run("verity.plywood.record_party_payment", input, () =>
-            setPayment(null),
-          )
-        }
-      />
-
       <ConfirmBillModal
         invoice={confirming}
         pending={pending}
@@ -397,300 +356,6 @@ export function FinanceDesk({
         }
       />
     </div>
-  );
-}
-
-/**
- * One side of the ledger.
- *
- * `Not yet billed` is its own column rather than folded into the outstanding
- * figure. Goods received against a part-delivered order are genuinely owed for,
- * but no document exists, and a single total that hid the difference would be a
- * number the business could not reconcile against any piece of paper.
- */
-function BalanceTable({
-  title,
-  emptyTitle,
-  emptyDescription,
-  rows,
-  pending,
-  actionLabel,
-  onAct,
-}: {
-  title: string;
-  emptyTitle: string;
-  emptyDescription: string;
-  rows: Balance[];
-  pending: boolean;
-  actionLabel: string;
-  onAct: (row: Balance) => void;
-}) {
-  const supplierSide = rows.some((row) => row.side === "supplier");
-
-  return (
-    <Panel title={title} flush={rows.length === 0}>
-      {rows.length === 0 ? (
-        <EmptyState
-          compact
-          title={emptyTitle}
-          description={emptyDescription}
-        />
-      ) : (
-        <div className="-mx-3 overflow-x-auto px-3">
-          <table className="w-full min-w-[720px] border-collapse">
-            <caption className="sr-only">{title}</caption>
-            <thead>
-              <tr>
-                {[
-                  "Party",
-                  "Billed",
-                  "Settled",
-                  ...(supplierSide ? ["Not yet billed"] : []),
-                  "On account",
-                  "Outstanding",
-                  "",
-                ].map((heading, index) => (
-                  <th
-                    key={heading || index}
-                    className={
-                      "whitespace-nowrap border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                      (index === 0 ? "text-left" : "text-right")
-                    }
-                  >
-                    {heading}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
-                const age = daysSince(row.oldestOpenAt);
-                return (
-                  <tr key={row.partyId}>
-                    <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                      <Link
-                        href={
-                          row.side === "customer"
-                            ? `/customers/${row.partyId}`
-                            : `/suppliers/${row.partyId}`
-                        }
-                        className="text-text no-underline hover:underline"
-                      >
-                        {row.partyName}
-                      </Link>
-                      {age !== null && age > 30 && (
-                        <span className="mt-0.5 block text-[12px] text-warning">
-                          Oldest unpaid {age} days
-                        </span>
-                      )}
-                      {row.provisionalBills > 0 && (
-                        <span className="mt-0.5 block text-[12px] text-text-tertiary">
-                          {row.provisionalBills === 1
-                            ? "1 bill awaiting their document"
-                            : `${row.provisionalBills} bills awaiting their document`}
-                        </span>
-                      )}
-                    </td>
-                    <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] text-text-secondary">
-                      {rupees(row.invoicedPaise)}
-                    </td>
-                    <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] text-text-secondary">
-                      {rupees(row.settledPaise)}
-                    </td>
-                    {supplierSide && (
-                      <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] text-text-secondary">
-                        {row.uninvoicedPaise === 0
-                          ? "—"
-                          : rupees(row.uninvoicedPaise)}
-                      </td>
-                    )}
-                    <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px]">
-                      {row.onAccountPaise === 0 ? (
-                        "—"
-                      ) : (
-                        <Badge tone="accent">
-                          {rupees(row.onAccountPaise)}
-                        </Badge>
-                      )}
-                    </td>
-                    <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] text-text">
-                      {rupees(row.outstandingPaise + row.uninvoicedPaise)}
-                    </td>
-                    <td className="border-b border-line px-3 py-2 text-right">
-                      <Button
-                        size="sm"
-                        disabled={pending}
-                        onClick={() => onAct(row)}
-                      >
-                        {actionLabel}
-                      </Button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Panel>
-  );
-}
-
-/**
- * Money moved.
- *
- * TASK 71 ITEM 11, as asked for: did it come in or go out, whose money was it,
- * how much, and by what means. Nothing about invoices — the allocation happens
- * on the server, oldest first, and anything left over sits on the party's
- * account as an advance rather than being refused.
- *
- * Opened from a row, so the party and the direction are already right. It can
- * also be opened cold, which is why both pickers are here: a refund to a
- * customer is money OUT against a customer, and the person recording it should
- * not have to find a different screen to say so.
- */
-function RecordPaymentModal({
-  party,
-  customers,
-  suppliers,
-  pending,
-  onClose,
-  onSubmit,
-}: {
-  party:
-    | { side: "customer" | "supplier"; partyId: string; partyName: string }
-    | null;
-  customers: Array<{ id: string; displayName: string }>;
-  suppliers: Array<{ id: string; displayName: string }>;
-  pending: boolean;
-  onClose: () => void;
-  onSubmit: (input: unknown) => void;
-}) {
-  const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState("bank");
-  const [reference, setReference] = useState("");
-  const [direction, setDirection] = useState<"in" | "out">("in");
-  const [partyId, setPartyId] = useState("");
-
-  // Opening from a row pre-answers both questions, so the state is seeded from
-  // the row each time the modal opens rather than held independently of it.
-  const side = party?.side ?? "customer";
-  const effectivePartyId = party?.partyId ?? partyId;
-  const effectiveDirection = party ? (side === "customer" ? "in" : "out") : direction;
-
-  const parsed = Number.parseFloat(amount);
-  const canSave =
-    effectivePartyId !== "" && Number.isFinite(parsed) && parsed > 0;
-
-  return (
-    <Modal
-      open={party !== null}
-      onClose={onClose}
-      title={
-        party
-          ? side === "customer"
-            ? `Money received from ${party.partyName}`
-            : `Payment made to ${party.partyName}`
-          : "Record a payment"
-      }
-      description="It settles the oldest open documents first. Anything left over stays on their account as an advance."
-      footer={
-        <>
-          <ModalCancel onClose={onClose} disabled={pending} />
-          <Button
-            variant="primary"
-            disabled={pending || !canSave}
-            onClick={() => {
-              onSubmit({
-                party:
-                  side === "customer"
-                    ? { customerId: effectivePartyId }
-                    : { supplierId: effectivePartyId },
-                direction: effectiveDirection,
-                amountPaise: Math.round(parsed * 100),
-                method,
-                ...(reference.trim() ? { reference: reference.trim() } : {}),
-              });
-              setAmount("");
-              setReference("");
-            }}
-          >
-            {pending ? "Recording…" : "Record"}
-          </Button>
-        </>
-      }
-    >
-      <FormRow columns="minmax(0,1fr) 150px minmax(0,1fr)">
-        {!party && (
-          <Field
-            label={side === "customer" ? "Customer" : "Supplier"}
-            htmlFor="pay-party"
-            required
-          >
-            <Combobox
-              id="pay-party"
-              value={partyId}
-              onChange={setPartyId}
-              required
-              placeholder="Search"
-              options={(side === "customer" ? customers : suppliers).map(
-                (row) => ({ value: row.id, label: row.displayName }),
-              )}
-            />
-          </Field>
-        )}
-        <Field label="Amount (₹)" htmlFor="pay-amount" required>
-          <Input
-            id="pay-amount"
-            type="number"
-            min="0"
-            step="0.01"
-            value={amount}
-            onChange={(event) => setAmount(event.target.value)}
-            autoFocus
-          />
-        </Field>
-        <Field label="How" htmlFor="pay-method" required>
-          <Combobox
-            id="pay-method"
-            value={method}
-            onChange={setMethod}
-            required
-            options={[
-              { value: "cash", label: "Cash" },
-              { value: "bank", label: "Bank transfer" },
-              { value: "upi", label: "UPI" },
-              { value: "cheque", label: "Cheque" },
-            ]}
-          />
-        </Field>
-        <Field
-          label="Reference"
-          htmlFor="pay-reference"
-          hint="UTR, UPI id or cheque number"
-        >
-          <Input
-            id="pay-reference"
-            value={reference}
-            onChange={(event) => setReference(event.target.value)}
-          />
-        </Field>
-        {!party && (
-          <Field label="Direction" htmlFor="pay-direction" required>
-            <Combobox
-              id="pay-direction"
-              value={direction}
-              onChange={(value) => setDirection(value as "in" | "out")}
-              required
-              options={[
-                { value: "in", label: "Money received" },
-                { value: "out", label: "Money paid" },
-              ]}
-            />
-          </Field>
-        )}
-      </FormRow>
-    </Modal>
   );
 }
 

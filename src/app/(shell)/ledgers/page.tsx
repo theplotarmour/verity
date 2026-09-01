@@ -2,7 +2,12 @@ import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
 import { ForbiddenError } from "@/server/platform/authorization";
-import { listCustomers, listSuppliers, partyLedger } from "@/server/capabilities/plywood";
+import {
+  listCustomers,
+  listSuppliers,
+  partyBalances,
+  partyLedger,
+} from "@/server/capabilities/plywood";
 import { PageHeader, PermissionDenied } from "@/components/ui/primitives";
 import { LedgerView } from "./LedgerView";
 
@@ -41,6 +46,15 @@ export default async function LedgersPage({
     throw error;
   });
 
+  // Reported: "instead of selecting a particular customer or supplier, we see
+  // the full table of amount we need to send, and amount they send us."
+  // Choosing a party first meant the screen said nothing until you already knew
+  // whose name you were looking for, which is the opposite of what it is for.
+  const balances = await executeQuery(actor, partyBalances, {}).catch((error) => {
+    if (error instanceof ForbiddenError) return [];
+    throw error;
+  });
+
   // Exactly one party, as the query requires. A ledger of everybody at once is
   // not a ledger, it is a journal, and nobody asked for one.
   const selected = customer
@@ -65,8 +79,8 @@ export default async function LedgersPage({
   return (
     <>
       <PageHeader
-        title="Ledgers"
-        description="Every movement of money against one party, oldest first. The balance is the sum of these entries — nothing caches it, so nothing can disagree with it."
+        title="Who owes what"
+        description="Everyone the business trades with, and which way the money is owed. Open a name to see every movement against them, oldest first. Nothing is cached — a balance is the sum of its entries, so nothing can disagree with it."
       />
       <LedgerView
         customers={customers.map((row) => ({ id: row.id, name: row.displayName }))}
@@ -75,6 +89,7 @@ export default async function LedgersPage({
         selectedSupplierId={supplier ?? null}
         selectedName={selectedName}
         ledger={ledger}
+        balances={balances}
       />
     </>
   );

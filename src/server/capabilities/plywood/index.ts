@@ -44,6 +44,7 @@ import {
   ENTITY_SUPPLIER,
   ENTITY_INVOICE,
   ENTITY_LEDGER_ENTRY,
+  ENTITY_PAYMENT,
   HSN_CODE,
   PLYWOOD_CAPABILITY,
 } from "./keys";
@@ -87,6 +88,7 @@ import {
   listInvoices,
   outstandingReceivables,
   partyBalances,
+  paymentJournal,
   unbilledMovements,
   partyLedger,
   raisePurchaseInvoice,
@@ -96,6 +98,7 @@ import {
   recordPayment,
   recordPartyPayment,
   confirmPurchaseBill,
+  raisePurchaseBillFromOrder,
 } from "./finance";
 
 /**
@@ -746,8 +749,20 @@ export function registerPlywoodCapability(): void {
         shells: ["platform"],
       },
       {
+        // The cash book, and the only place a payment is entered. Above the
+        // ledgers because "what money moved" is asked far more often than
+        // "what happened with this one party".
+        href: "/transactions",
+        label: "Transactions",
+        group: "Money",
+        order: 41,
+        icon: "ledger",
+        requiresEntity: ENTITY_PAYMENT,
+        shells: ["platform"],
+      },
+      {
         href: "/ledgers",
-        label: "Ledgers",
+        label: "Who owes what",
         group: "Money",
         order: 42,
         icon: "ledger",
@@ -971,6 +986,7 @@ export function registerPlywoodCapability(): void {
   registerCommand(recordPayment);
   registerCommand(recordPartyPayment);
   registerCommand(confirmPurchaseBill);
+  registerCommand(raisePurchaseBillFromOrder);
   registerCommand(raiseInvoiceNote);
 
   registerQuery(listCatalogue);
@@ -999,6 +1015,7 @@ export function registerPlywoodCapability(): void {
   registerQuery(outstandingReceivables);
   registerQuery(partyLedger);
   registerQuery(partyBalances);
+  registerQuery(paymentJournal);
   registerQuery(unbilledMovements);
   registerQuery(ownerConsole);
   registerQuery(marginReport);

@@ -56,6 +56,7 @@ import {
   listInvoices,
   partyBalances,
   receiveGoods,
+  reserveForOrder,
   recordPartyPayment,
   registerPlywoodCapability,
   submitPurchaseOrder,
@@ -371,6 +372,9 @@ describeDb("plywood finance automation (Task 71)", () => {
         locationId: godownId,
         lines: [{ productId, qtyOrdered: 30, unitPricePaise: 150_000 }],
       });
+      // Stock must be held before it can be issued; that guard predates this
+      // task and is not what is under test here.
+      await executeCommand(owner, reserveForOrder, { orderId: sale.id });
       const issued = await executeCommand(owner, dispatchOrder, {
         orderId: sale.id,
       });

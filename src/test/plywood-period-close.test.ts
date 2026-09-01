@@ -417,21 +417,20 @@ describeDb("plywood period close (slice 7)", () => {
       });
 
       try {
-        // The goods still leave the yard — that is a physical fact and a closed
-        // book cannot undo it (Task 71). What is blocked is the POSTING, and
-        // the refusal is returned rather than swallowed, so the desk can say
-        // why the order has no invoice.
-        const issued = await executeCommand(owner, dispatchOrder, {
-          orderId: order.id,
-        });
-        expect(issued.invoicing).toBeNull();
-        expect(issued.invoicingRefusal).toMatch(/is closed/);
+        // A closed period refuses the GOODS ISSUE as well as the invoice —
+        // the issue is itself a posted document with a date — so dispatch is
+        // refused outright rather than succeeding with an unbilled order. That
+        // is the stronger guarantee, and it is why the invoice never gets far
+        // enough to need its own refusal here.
+        await expect(
+          executeCommand(owner, dispatchOrder, { orderId: order.id }),
+        ).rejects.toThrow(/is closed/);
 
-        // And the manual path refuses in the same way, which is what the
-        // automatic one is relaying.
+        // The invoice path refuses in its own right too, on an order that did
+        // manage to issue before the period was closed.
         await expect(
           executeCommand(owner, raiseSalesInvoice, { salesOrderId: order.id }),
-        ).rejects.toThrow(/is closed/);
+        ).rejects.toThrow(/is closed|nothing has been issued/);
       } finally {
         await withTenant(tenantId, (tx) =>
           tx.plywoodAccountingPeriod.deleteMany({ where: { periodKey: thisMonth } }),

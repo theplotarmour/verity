@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   EmptyState,
@@ -32,6 +33,14 @@ function balanceDirection(balancePaise: number, isSupplier: boolean): string {
   return balancePaise > 0 ? "they owe" : "in their favour";
 }
 
+/** Whole days since an instant. Module scope: `Date.now()` is impure, and a
+ *  component that calls it during render can re-render to a different answer. */
+function daysSince(value: Date | string | null): number | null {
+  if (!value) return null;
+  const then = typeof value === "string" ? new Date(value) : value;
+  return Math.floor((Date.now() - then.getTime()) / 86_400_000);
+}
+
 function rupees(paise: number): string {
   return `₹${(paise / 100).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
@@ -61,6 +70,16 @@ function shortDate(value: Date | string): string {
  * conversation is about, and it is computed here from the entries rather than
  * read from anywhere (P3).
  */
+export type Balance = {
+  partyId: string;
+  partyName: string;
+  side: "customer" | "supplier";
+  outstandingPaise: number;
+  uninvoicedPaise: number;
+  onAccountPaise: number;
+  oldestOpenAt: Date | string | null;
+};
+
 export function LedgerView({
   customers,
   suppliers,
@@ -68,6 +87,7 @@ export function LedgerView({
   selectedSupplierId,
   selectedName,
   ledger,
+  balances,
 }: {
   customers: Array<{ id: string; name: string }>;
   suppliers: Array<{ id: string; name: string }>;
@@ -75,9 +95,18 @@ export function LedgerView({
   selectedSupplierId: string | null;
   selectedName: string | null;
   ledger: { balancePaise: number; entries: Entry[] } | null;
+  balances: Balance[];
 }) {
   const router = useRouter();
   const isSupplier = Boolean(selectedSupplierId);
+  const selectedAny = Boolean(selectedCustomerId || selectedSupplierId);
+
+  // The overview is the default view. Reported: choosing a party first meant
+  // the page said nothing at all until you already knew whose name you wanted,
+  // which is not what a "who owes what" screen is for.
+  if (!selectedAny) {
+    return <OwedOverview balances={balances} />;
+  }
 
   return (
     <>
@@ -244,5 +273,145 @@ export function LedgerView({
         </>
       )}
     </>
+  );
+}
+
+
+/**
+ * Everyone the business trades with, and which way the money points.
+ *
+ * REPORTED: "it is very difficult to tell whether we owe the suppliers
+ * something or do they owe us. Make it simpler, use language like they need to
+ * send us x amount or we need to send them y amount."
+ *
+ * So the direction is a SENTENCE, not a sign, a colour or a column heading.
+ * The underlying ledger stores debits positive and credits negative, which is
+ * correct double-entry and is not something a plywood trader agreed to learn —
+ * for a supplier the balance goes most negative exactly when the business owes
+ * the most, which is the least intuitive reading available.
+ *
+ * Two groups rather than one sorted list: "money coming to us" and "money we
+ * have to send" are different jobs on different days, and interleaving them
+ * makes each harder to work through.
+ */
+function OwedOverview({ balances }: { balances: Balance[] }) {
+  const owedToUs = balances.filter(
+    (row) =>
+      (row.side === "customer" ? 1 : -1) *
+        (row.outstandingPaise + row.uninvoicedPaise - row.onAccountPaise) >
+      0,
+  );
+  const weOwe = balances.filter((row) => !owedToUs.includes(row));
+
+  const totalIn = owedToUs.reduce(
+    (sum, row) => sum + row.outstandingPaise + row.uninvoicedPaise - row.onAccountPaise,
+    0,
+  );
+  const totalOut = weOwe.reduce(
+    (sum, row) =>
+      sum + Math.abs(row.outstandingPaise + row.uninvoicedPaise - row.onAccountPaise),
+    0,
+  );
+
+  return (
+    <div className="flex flex-col gap-5">
+      <StatRow cols={2}>
+        <Stat
+          label="They need to send us"
+          value={rupees(totalIn)}
+          hint="Across every customer and supplier"
+        />
+        <Stat
+          label="We need to send them"
+          value={rupees(totalOut)}
+          hint="Including goods received but not yet billed"
+        />
+      </StatRow>
+
+      <OwedTable
+        title="They need to send us"
+        empty="Nobody owes the business anything."
+        rows={owedToUs}
+        lead={(row) => `${row.partyName} needs to send us`}
+      />
+      <OwedTable
+        title="We need to send them"
+        empty="The business owes nobody anything."
+        rows={weOwe}
+        lead={(row) => `We need to send ${row.partyName}`}
+      />
+    </div>
+  );
+}
+
+function OwedTable({
+  title,
+  empty,
+  rows,
+  lead,
+}: {
+  title: string;
+  empty: string;
+  rows: Balance[];
+  lead: (row: Balance) => string;
+}) {
+  return (
+    <Panel title={title} flush={rows.length === 0}>
+      {rows.length === 0 ? (
+        <EmptyState compact title={empty} />
+      ) : (
+        <div className="-mx-3 overflow-x-auto px-3">
+          <table className="w-full min-w-[640px] border-collapse">
+            <caption className="sr-only">{title}</caption>
+            <tbody>
+              {rows
+                .slice()
+                .sort(
+                  (a, b) =>
+                    Math.abs(
+                      b.outstandingPaise + b.uninvoicedPaise - b.onAccountPaise,
+                    ) -
+                    Math.abs(
+                      a.outstandingPaise + a.uninvoicedPaise - a.onAccountPaise,
+                    ),
+                )
+                .map((row) => {
+                  const net = Math.abs(
+                    row.outstandingPaise + row.uninvoicedPaise - row.onAccountPaise,
+                  );
+                  const age = daysSince(row.oldestOpenAt);
+                  return (
+                    <tr key={`${row.side}-${row.partyId}`}>
+                      <td className="border-b border-line px-3 py-2.5 text-[14px] text-text">
+                        <Link
+                          href={
+                            row.side === "customer"
+                              ? `/ledgers?customer=${row.partyId}`
+                              : `/ledgers?supplier=${row.partyId}`
+                          }
+                          className="text-text no-underline hover:underline"
+                        >
+                          {lead(row)}
+                        </Link>
+                        <span className="mt-0.5 block text-[12px] text-text-tertiary">
+                          {row.side === "customer" ? "Customer" : "Supplier"}
+                          {row.uninvoicedPaise > 0 &&
+                            ` · ${rupees(row.uninvoicedPaise)} delivered, not yet billed`}
+                          {row.onAccountPaise > 0 &&
+                            ` · ${rupees(row.onAccountPaise)} paid in advance`}
+                          {age !== null && age > 30 && ` · oldest ${age} days`}
+                        </span>
+                      </td>
+                      <td className="tabular whitespace-nowrap border-b border-line px-3 py-2.5 text-right text-[15px] text-text">
+                        {rupees(net)}
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
   );
 }

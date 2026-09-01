@@ -509,7 +509,7 @@ export function SalesDesk({
                                 })
                               }
                             >
-                              Reserve stock
+                              Hold stock for this
                             </Button>
                           )}
                           {order.state === "dispatching" && (
@@ -523,7 +523,7 @@ export function SalesDesk({
                                 })
                               }
                             >
-                              Dispatch
+                              Hand over &amp; invoice
                             </Button>
                           )}
                           <Button

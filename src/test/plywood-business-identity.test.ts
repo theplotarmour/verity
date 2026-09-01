@@ -374,8 +374,8 @@ describeDb("plywood business identity (slice 2)", () => {
       lines: [{ productId: product.id, qtyOrdered: 10, unitPricePaise: 150_000 }],
     });
     await executeCommand(owner, reserveForOrder, { orderId: so.id });
-    await executeCommand(owner, dispatchOrder, { orderId: so.id });
-    const invoice = await executeCommand(owner, raiseSalesInvoice, { salesOrderId: so.id });
+    const issued = await executeCommand(owner, dispatchOrder, { orderId: so.id });
+    const invoice = issued.invoicing!;
 
     const stored = await withTenant(tenantId, (tx) =>
       tx.plywoodInvoice.findUniqueOrThrow({ where: { id: invoice.id } }),
@@ -427,11 +427,18 @@ describeDb("plywood business identity (slice 2)", () => {
       lines: [{ productId: product.id, qtyOrdered: 5, unitPricePaise: 150_000 }],
     });
     await executeCommand(owner, reserveForOrder, { orderId: so.id });
-    await executeCommand(owner, dispatchOrder, { orderId: so.id });
 
     // THE DEFECT (rule freeze §4.4): the old code fell back to the business's
     // own state, which silently taxes an interstate supply as if it were
     // local — the wrong tax, the wrong return, and it looks right on screen.
+    //
+    // Since Task 71 the goods still go out — a customer missing a state code
+    // does not stop a lorry — and the automatic invoice refuses instead,
+    // reporting why rather than silently producing nothing.
+    const issued = await executeCommand(owner, dispatchOrder, { orderId: so.id });
+    expect(issued.invoicing).toBeNull();
+    expect(issued.invoicingRefusal).toMatch(/no state code/);
+
     await expect(
       executeCommand(owner, raiseSalesInvoice, { salesOrderId: so.id }),
     ).rejects.toThrow(/no state code/);

@@ -224,7 +224,7 @@ export function StatRow({
   className,
   children,
 }: {
-  cols?: 3 | 4;
+  cols?: 2 | 3 | 4;
   className?: string;
   children: ReactNode;
 }) {
@@ -232,7 +232,7 @@ export function StatRow({
     <Surface
       className={cx(
         "grid grid-cols-2 divide-line [&>*]:min-w-0",
-        cols === 3 ? "sm:grid-cols-3" : "sm:grid-cols-4",
+        cols === 2 ? "sm:grid-cols-2" : cols === 3 ? "sm:grid-cols-3" : "sm:grid-cols-4",
         "sm:divide-x",
         className,
       )}
