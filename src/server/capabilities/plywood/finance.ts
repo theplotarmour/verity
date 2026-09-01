@@ -1645,7 +1645,19 @@ export const partyBalances: QueryDefinition<
     outstandingPaise: number;
     /** Received or issued, no document yet. Zero for customers. */
     uninvoicedPaise: number;
+    /**
+     * Money that flowed in the direction that settles THIS party's obligation
+     * but has not been matched to a document — a customer paying ahead, or a
+     * supplier we have paid ahead. It reduces what they owe.
+     */
     onAccountPaise: number;
+    /**
+     * Unmatched money that flowed the OTHER way: cash we handed a customer, or
+     * cash a supplier sent us. It increases what they owe, and treating it like
+     * the field above — which is what this query used to do — reverses the sign
+     * of a real obligation.
+     */
+    counterAdvancePaise: number;
     oldestOpenAt: Date | null;
     provisionalBills: number;
     /**
@@ -1669,6 +1681,7 @@ export const partyBalances: QueryDefinition<
       outstandingPaise: number;
       uninvoicedPaise: number;
       onAccountPaise: number;
+      counterAdvancePaise: number;
       oldestOpenAt: Date | null;
       provisionalBills: number;
       sameBusinessAs: string | null;
@@ -1734,6 +1747,7 @@ export const partyBalances: QueryDefinition<
             outstandingPaise: 0,
             uninvoicedPaise: 0,
             onAccountPaise: 0,
+            counterAdvancePaise: 0,
             oldestOpenAt: null,
             provisionalBills: 0,
             sameBusinessAs: sameBusiness.get(party.id) ?? null,
@@ -1751,29 +1765,72 @@ export const partyBalances: QueryDefinition<
         byParty.set(party.id, row);
       }
 
-      // Money on account: paid or received without settling a document. It
-      // reduces what is owed even though no invoice records it, so leaving it
-      // out would chase a customer who has already paid in advance.
+      // Unmatched money — paid or received with no document to settle.
+      //
+      // TWO BUGS LIVED HERE, and together they are the reported one: "I sent a
+      // customer some amount and after that it wasn't shown in who owes what."
+      //
+      // First, a party with no invoices was dropped outright — the row was
+      // looked up and `continue`d when absent, so a customer we had only ever
+      // paid never appeared anywhere. The row is created here now.
+      //
+      // Second, direction was ignored. Cash handed TO a customer is not the
+      // same event as cash received FROM one: the first means they owe us that
+      // money back, the second means they have paid ahead. Adding both to one
+      // subtracted figure reversed the sign of a real obligation.
       const payments = await ctx.tx.plywoodPayment.findMany({
         where:
           side === "customer"
             ? { customerId: { not: null } }
             : { supplierId: { not: null } },
-        include: { allocations: { select: { amountPaise: true } } },
+        include: {
+          allocations: { select: { amountPaise: true } },
+          customer: { select: { id: true, displayName: true } },
+          supplier: { select: { id: true, displayName: true } },
+        },
       });
       for (const payment of payments) {
-        const partyId =
-          side === "customer" ? payment.customerId : payment.supplierId;
-        if (!partyId) continue;
+        const party =
+          side === "customer" ? payment.customer : payment.supplier;
+        if (!party) continue;
         const allocated = payment.allocations.reduce(
           (sum, allocation) => sum + allocation.amountPaise,
           0,
         );
         const unallocated = payment.amountPaise - allocated;
         if (unallocated <= 0) continue;
-        const row = byParty.get(partyId);
-        if (!row) continue;
-        row.onAccountPaise += unallocated;
+
+        const row =
+          byParty.get(party.id) ??
+          ({
+            partyId: party.id,
+            partyName: party.displayName,
+            side,
+            invoicedPaise: 0,
+            settledPaise: 0,
+            outstandingPaise: 0,
+            uninvoicedPaise: 0,
+            onAccountPaise: 0,
+            counterAdvancePaise: 0,
+            oldestOpenAt: null,
+            provisionalBills: 0,
+            sameBusinessAs: sameBusiness.get(party.id) ?? null,
+          } satisfies (typeof rows)[number]);
+
+        // Money moving in the direction that settles THIS party's obligation
+        // reduces it; money moving the other way increases it. Symmetric across
+        // both sides: a customer's payment in and our payment to a supplier are
+        // the same kind of event seen from opposite ends of the trade.
+        const settlesTheirObligation =
+          side === "customer"
+            ? payment.direction === "in"
+            : payment.direction === "out";
+        if (settlesTheirObligation) {
+          row.onAccountPaise += unallocated;
+        } else {
+          row.counterAdvancePaise += unallocated;
+        }
+        byParty.set(party.id, row);
       }
 
       if (side === "supplier") {
@@ -1807,6 +1864,7 @@ export const partyBalances: QueryDefinition<
               outstandingPaise: 0,
               uninvoicedPaise: 0,
               onAccountPaise: 0,
+              counterAdvancePaise: 0,
               oldestOpenAt: null,
               provisionalBills: 0,
               sameBusinessAs: sameBusiness.get(order.supplierId) ?? null,
@@ -1822,7 +1880,8 @@ export const partyBalances: QueryDefinition<
         if (
           row.outstandingPaise === 0 &&
           row.uninvoicedPaise === 0 &&
-          row.onAccountPaise === 0
+          row.onAccountPaise === 0 &&
+          row.counterAdvancePaise === 0
         ) {
           continue;
         }

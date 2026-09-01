@@ -77,15 +77,26 @@ export type Balance = {
   outstandingPaise: number;
   uninvoicedPaise: number;
   onAccountPaise: number;
+  counterAdvancePaise: number;
   oldestOpenAt: Date | string | null;
   /** The same firm on the other side of the trade, when the two are linked. */
   sameBusinessAs: string | null;
 };
 
-/** What this party's position comes to, signed from the business's view. */
+/**
+ * What this party's position comes to, signed from the business's view:
+ * positive means they owe us, negative means we owe them.
+ *
+ * `counterAdvancePaise` — cash handed to a customer, or received from a
+ * supplier — moves the balance the OPPOSITE way from a normal advance, which
+ * is why it is a separate term rather than folded into onAccount.
+ */
 function net(row: Balance): number {
   const magnitude =
-    row.outstandingPaise + row.uninvoicedPaise - row.onAccountPaise;
+    row.outstandingPaise +
+    row.uninvoicedPaise -
+    row.onAccountPaise +
+    row.counterAdvancePaise;
   return row.side === "customer" ? magnitude : -magnitude;
 }
 
@@ -422,6 +433,10 @@ function OwedTable({
                             (row.side === "customer"
                               ? ` · ${rupees(row.onAccountPaise)} already paid, not against any bill yet`
                               : ` · ${rupees(row.onAccountPaise)} we have already paid them, not against any bill yet`)}
+                          {row.counterAdvancePaise > 0 &&
+                            (row.side === "customer"
+                              ? ` · ${rupees(row.counterAdvancePaise)} we sent them, not against any bill yet`
+                              : ` · ${rupees(row.counterAdvancePaise)} they sent us, not against any bill yet`)}
                           {age !== null && age > 30 && ` · oldest ${age} days`}
                         </span>
                       </td>

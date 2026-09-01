@@ -16,6 +16,14 @@ const eslintConfig = defineConfig([
       "prefer-const": "off"
     }
   },
+  {
+    // A CommonJS runner that patches Node's module resolver before anything is
+    // loaded cannot use ESM imports: `import` is hoisted and evaluated before
+    // any statement that would install the patch, which is the whole job of the
+    // file. require() is not a style choice here, it is the mechanism.
+    files: ["prisma/*.cjs"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
   globalIgnores([
     ".next/**",
     "out/**",

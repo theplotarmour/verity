@@ -40,6 +40,7 @@ export type Balance = {
   outstandingPaise: number;
   uninvoicedPaise: number;
   onAccountPaise: number;
+  counterAdvancePaise: number;
   oldestOpenAt: Date | string | null;
   provisionalBills: number;
 };
@@ -54,7 +55,10 @@ export type Balance = {
  */
 function netOf(row: Balance): number {
   const magnitude =
-    row.outstandingPaise + row.uninvoicedPaise - row.onAccountPaise;
+    row.outstandingPaise +
+    row.uninvoicedPaise -
+    row.onAccountPaise +
+    row.counterAdvancePaise;
   return row.side === "customer" ? magnitude : -magnitude;
 }
 
