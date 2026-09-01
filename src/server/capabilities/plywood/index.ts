@@ -69,6 +69,12 @@ import {
   createPurchaseOrder,
   createSalesOrder,
   createSupplier,
+  editSalesOrder,
+  editPurchaseOrder,
+  removeCustomer,
+  editCustomer,
+  removeSupplier,
+  editSupplier,
   dispatchOrder,
   customerDetail,
   listCustomers,
@@ -983,6 +989,12 @@ export function registerPlywoodCapability(): void {
   registerCommand(recordDamagedStock);
   registerCommand(recordReturnedStock);
   registerCommand(createSupplier);
+  registerCommand(editSalesOrder);
+  registerCommand(editPurchaseOrder);
+  registerCommand(removeCustomer);
+  registerCommand(editCustomer);
+  registerCommand(removeSupplier);
+  registerCommand(editSupplier);
   registerCommand(setSupplierPrice);
   registerCommand(setPriceSheet);
   registerCommand(createCustomer);

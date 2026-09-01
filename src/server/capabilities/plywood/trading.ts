@@ -227,6 +227,223 @@ export const createSupplier: CommandDefinition<
 };
 
 /**
+ * Correcting a supplier's details, and retiring one.
+ *
+ * Requested: "option to remove and edit customers, suppliers and godowns."
+ *
+ * REMOVING IS DEACTIVATION, NOT DELETION, and the difference is not pedantry.
+ * A supplier is referenced by every order placed with them, every bill they
+ * sent, and every ledger entry against them, all of which are ON DELETE
+ * RESTRICT because a payable whose counterparty vanished is unexplainable. So
+ * "remove" means "stop offering them", which is what the person clicking it
+ * actually wants: the firm is gone from the pickers and the history is intact.
+ *
+ * A supplier who has never been traded with is a different case — a typo, a
+ * duplicate — and is genuinely deleted, because there is no history to protect
+ * and leaving a deactivated typo in the list is clutter that never goes away.
+ */
+export const editSupplier: CommandDefinition<
+  {
+    supplierId: string;
+    displayName?: string;
+    gstin?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    stateCode?: string | null;
+    active?: boolean;
+  },
+  { id: string }
+> = {
+  key: "verity.plywood.edit_supplier",
+  entity: ENTITY_SUPPLIER,
+  verb: "Edit",
+  input: z.object({
+    supplierId: z.string().uuid(),
+    displayName: z.string().min(1).max(200).optional(),
+    gstin: GSTIN.nullable().optional(),
+    phone: z.string().max(40).nullable().optional(),
+    email: z.string().email().max(200).nullable().optional(),
+    stateCode: STATE_CODE.nullable().optional(),
+    active: z.boolean().optional(),
+  }),
+  handler: async (ctx, input) => {
+    const { supplierId, ...changes } = input;
+    await ctx.tx.plywoodSupplier.findUniqueOrThrow({ where: { id: supplierId } });
+    await ctx.tx.plywoodSupplier.update({
+      where: { id: supplierId },
+      data: { ...changes, version: { increment: 1 } },
+    });
+    return {
+      result: { id: supplierId },
+      events: [
+        { name: "verity.plywood.supplier_edited", entityId: supplierId },
+      ],
+    };
+  },
+};
+
+export const removeSupplier: CommandDefinition<
+  { supplierId: string },
+  { id: string; deleted: boolean }
+> = {
+  key: "verity.plywood.remove_supplier",
+  entity: ENTITY_SUPPLIER,
+  verb: "Edit",
+  input: z.object({ supplierId: z.string().uuid() }),
+  handler: async (ctx, input) => {
+    const supplier = await ctx.tx.plywoodSupplier.findUniqueOrThrow({
+      where: { id: input.supplierId },
+      include: {
+        orders: { select: { id: true }, take: 1 },
+        plywoodInvoices: { select: { id: true }, take: 1 },
+        plywoodLedgerEntries: { select: { id: true }, take: 1 },
+        plywoodPayments: { select: { id: true }, take: 1 },
+      },
+    });
+
+    const traded =
+      supplier.orders.length > 0 ||
+      supplier.plywoodInvoices.length > 0 ||
+      supplier.plywoodLedgerEntries.length > 0 ||
+      supplier.plywoodPayments.length > 0;
+
+    if (traded) {
+      // History exists, so the row stays and stops being offered. Deleting it
+      // would orphan orders, bills and ledger entries that explain money.
+      await ctx.tx.plywoodSupplier.update({
+        where: { id: supplier.id },
+        data: { active: false, version: { increment: 1 } },
+      });
+      return {
+        result: { id: supplier.id, deleted: false },
+        events: [
+          {
+            name: "verity.plywood.supplier_deactivated",
+            entityId: supplier.id,
+          },
+        ],
+      };
+    }
+
+    // Never traded with: a typo or a duplicate, with nothing to protect.
+    await ctx.tx.plywoodSupplierPrice.deleteMany({
+      where: { supplierId: supplier.id },
+    });
+    await ctx.tx.plywoodSupplier.delete({ where: { id: supplier.id } });
+    return {
+      result: { id: supplier.id, deleted: true },
+      events: [
+        { name: "verity.plywood.supplier_deleted", entityId: supplier.id },
+      ],
+    };
+  },
+};
+
+/** The selling-side twin of `editSupplier`. Same rules, same reasoning. */
+export const editCustomer: CommandDefinition<
+  {
+    customerId: string;
+    displayName?: string;
+    gstin?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    stateCode?: string | null;
+    creditLimitPaise?: number;
+    active?: boolean;
+  },
+  { id: string }
+> = {
+  key: "verity.plywood.edit_customer",
+  entity: ENTITY_CUSTOMER,
+  verb: "Edit",
+  input: z.object({
+    customerId: z.string().uuid(),
+    displayName: z.string().min(1).max(200).optional(),
+    gstin: GSTIN.nullable().optional(),
+    phone: z.string().max(40).nullable().optional(),
+    email: z.string().email().max(200).nullable().optional(),
+    stateCode: STATE_CODE.nullable().optional(),
+    creditLimitPaise: z.number().int().min(0).optional(),
+    active: z.boolean().optional(),
+  }),
+  handler: async (ctx, input) => {
+    const { customerId, ...changes } = input;
+    await ctx.tx.plywoodCustomer.findUniqueOrThrow({ where: { id: customerId } });
+    await ctx.tx.plywoodCustomer.update({
+      where: { id: customerId },
+      data: { ...changes, version: { increment: 1 } },
+    });
+    return {
+      result: { id: customerId },
+      events: [
+        { name: "verity.plywood.customer_edited", entityId: customerId },
+      ],
+    };
+  },
+};
+
+export const removeCustomer: CommandDefinition<
+  { customerId: string },
+  { id: string; deleted: boolean }
+> = {
+  key: "verity.plywood.remove_customer",
+  entity: ENTITY_CUSTOMER,
+  verb: "Edit",
+  input: z.object({ customerId: z.string().uuid() }),
+  handler: async (ctx, input) => {
+    const customer = await ctx.tx.plywoodCustomer.findUniqueOrThrow({
+      where: { id: input.customerId },
+      include: {
+        orders: { select: { id: true }, take: 1 },
+        plywoodInvoices: { select: { id: true }, take: 1 },
+        plywoodLedgerEntries: { select: { id: true }, take: 1 },
+        plywoodPayments: { select: { id: true }, take: 1 },
+      },
+    });
+
+    const traded =
+      customer.orders.length > 0 ||
+      customer.plywoodInvoices.length > 0 ||
+      customer.plywoodLedgerEntries.length > 0 ||
+      customer.plywoodPayments.length > 0;
+
+    if (traded) {
+      await ctx.tx.plywoodCustomer.update({
+        where: { id: customer.id },
+        data: { active: false, version: { increment: 1 } },
+      });
+      return {
+        result: { id: customer.id, deleted: false },
+        events: [
+          {
+            name: "verity.plywood.customer_deactivated",
+            entityId: customer.id,
+          },
+        ],
+      };
+    }
+
+    // A supplier may be pointing at this customer as their own selling side.
+    // The link is cleared rather than the delete being refused: the supplier is
+    // untouched, and the link described a customer that no longer exists.
+    await ctx.tx.plywoodSupplier.updateMany({
+      where: { linkedCustomerId: customer.id },
+      data: { linkedCustomerId: null },
+    });
+    await ctx.tx.plywoodCustomerPrice.deleteMany({
+      where: { customerId: customer.id },
+    });
+    await ctx.tx.plywoodCustomer.delete({ where: { id: customer.id } });
+    return {
+      result: { id: customer.id, deleted: true },
+      events: [
+        { name: "verity.plywood.customer_deleted", entityId: customer.id },
+      ],
+    };
+  },
+};
+
+/**
  * A whole price list at once, for one party.
  *
  * REPORTED: "there should be an Excel-sheet kind of sheet for agreeing a price
@@ -831,6 +1048,302 @@ export const linkSupplierToCustomer: CommandDefinition<
             : "verity.plywood.supplier_unlinked_from_customer",
           entityId: supplier.id,
         },
+      ],
+    };
+  },
+};
+
+/**
+ * Amending an order that has not moved yet.
+ *
+ * Requested: "option to edit purchase and sales orders."
+ *
+ * WHAT CAN BE EDITED, AND WHEN. Only while nothing has physically happened —
+ * no goods received on a purchase order, none issued on a sales order. Once a
+ * delivery has been made against a line, that line describes a real event: the
+ * stock ledger, the weighted-average cost and any bill raised from it all read
+ * the ordered quantity and price, and rewriting them would restate history that
+ * a warehouse and a supplier both witnessed. Such an order is amended the way
+ * every other posted difference is — by cancelling the remainder, or by a note.
+ *
+ * Lines are REPLACED rather than patched. An amendment is "the order now reads
+ * this", not a sequence of edits to reconcile, and replacing them wholesale is
+ * the only version that cannot leave a line nobody meant to keep.
+ */
+export const editPurchaseOrder: CommandDefinition<
+  {
+    orderId: string;
+    reference?: string | null;
+    lines?: Array<{
+      productId: string;
+      qtyOrdered: number;
+      unitCostPaise?: number;
+      discountBps?: number;
+    }>;
+  },
+  { id: string; totalCostPaise: number }
+> = {
+  key: "verity.plywood.edit_purchase_order",
+  entity: ENTITY_PURCHASE_ORDER,
+  verb: "Edit",
+  input: z.object({
+    orderId: z.string().uuid(),
+    reference: z.string().max(60).nullable().optional(),
+    lines: z
+      .array(
+        z.object({
+          productId: z.string().uuid(),
+          qtyOrdered: z.number().int().positive(),
+          unitCostPaise: z.number().int().min(0).optional(),
+          discountBps: z.number().int().min(0).max(10_000).optional(),
+        }),
+      )
+      .min(1)
+      .optional(),
+  }),
+  handler: async (ctx, input) => {
+    const order = await ctx.tx.plywoodPurchaseOrder.findUniqueOrThrow({
+      where: { id: input.orderId },
+      include: { lines: true },
+    });
+
+    if (order.state === "cancelled" || order.state === "completed") {
+      throw new ValidationError(
+        `E_VALIDATION: a ${order.state} order cannot be amended`,
+      );
+    }
+    const received = order.lines.some((line) => line.qtyReceived > 0);
+    if (received && input.lines) {
+      throw new ValidationError(
+        "E_VALIDATION: goods have already arrived against this order, so its lines " +
+          "describe something that happened. Cancel what is still owed instead, or " +
+          "correct the difference on the bill.",
+      );
+    }
+
+    await assertGodownInScope(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_PURCHASE_ORDER,
+      "Edit",
+      order.locationId,
+    );
+
+    let totalCostPaise = order.totalCostPaise;
+
+    if (input.lines) {
+      const products = await ctx.tx.plywoodProduct.findMany({
+        where: { id: { in: input.lines.map((line) => line.productId) }, active: true },
+      });
+      if (products.length !== new Set(input.lines.map((l) => l.productId)).size) {
+        throw new ValidationError(
+          "E_VALIDATION: a board on this order is unknown or withdrawn",
+        );
+      }
+      const negotiated = await ctx.tx.plywoodSupplierPrice.findMany({
+        where: { supplierId: order.supplierId },
+      });
+
+      const priced = input.lines.map((line) => {
+        const product = products.find((p) => p.id === line.productId)!;
+        const listUnitCostPaise =
+          line.unitCostPaise ??
+          negotiated.find((price) => price.productId === line.productId)
+            ?.negotiatedCostPaise;
+        if (listUnitCostPaise === undefined) {
+          throw new ValidationError(
+            `E_VALIDATION: no agreed price for ${product.name} with this supplier, and none given`,
+          );
+        }
+        const discountBps = line.discountBps ?? 0;
+        const unitCostPaise =
+          discountBps === 0
+            ? listUnitCostPaise
+            : Math.round((listUnitCostPaise * (10_000 - discountBps)) / 10_000);
+        return {
+          tenantId: ctx.actor.tenantId,
+          purchaseOrderId: order.id,
+          productId: line.productId,
+          productNameSnapshot: describeProduct(product),
+          hsnCodeSnapshot: product.hsnCode,
+          qtyOrdered: line.qtyOrdered,
+          unitCostPaise,
+          discountBps,
+          listUnitCostPaise: discountBps === 0 ? null : listUnitCostPaise,
+        };
+      });
+
+      await ctx.tx.plywoodPurchaseOrderLine.deleteMany({
+        where: { purchaseOrderId: order.id },
+      });
+      await ctx.tx.plywoodPurchaseOrderLine.createMany({ data: priced });
+      totalCostPaise = priced.reduce(
+        (sum, line) => sum + line.qtyOrdered * line.unitCostPaise,
+        0,
+      );
+    }
+
+    await ctx.tx.plywoodPurchaseOrder.update({
+      where: { id: order.id },
+      data: {
+        ...(input.reference === undefined ? {} : { reference: input.reference }),
+        totalCostPaise,
+        version: { increment: 1 },
+      },
+    });
+
+    return {
+      result: { id: order.id, totalCostPaise },
+      events: [
+        { name: "verity.plywood.purchase_order_edited", entityId: order.id },
+      ],
+    };
+  },
+};
+
+/** The selling-side twin of `editPurchaseOrder`. Same rules, same reasoning. */
+export const editSalesOrder: CommandDefinition<
+  {
+    orderId: string;
+    reference?: string | null;
+    paymentTerms?: "prepaid" | "credit";
+    lines?: Array<{
+      productId: string;
+      qtyOrdered: number;
+      unitPricePaise?: number;
+      discountBps?: number;
+    }>;
+  },
+  { id: string; totalPricePaise: number }
+> = {
+  key: "verity.plywood.edit_sales_order",
+  entity: ENTITY_SALES_ORDER,
+  verb: "Edit",
+  input: z.object({
+    orderId: z.string().uuid(),
+    reference: z.string().max(60).nullable().optional(),
+    paymentTerms: z.enum(["prepaid", "credit"]).optional(),
+    lines: z
+      .array(
+        z.object({
+          productId: z.string().uuid(),
+          qtyOrdered: z.number().int().positive(),
+          unitPricePaise: z.number().int().min(0).optional(),
+          discountBps: z.number().int().min(0).max(10_000).optional(),
+        }),
+      )
+      .min(1)
+      .optional(),
+  }),
+  handler: async (ctx, input) => {
+    const order = await ctx.tx.plywoodSalesOrder.findUniqueOrThrow({
+      where: { id: input.orderId },
+      include: { lines: true },
+    });
+
+    if (order.state === "cancelled" || order.state === "completed") {
+      throw new ValidationError(
+        `E_VALIDATION: a ${order.state} order cannot be amended`,
+      );
+    }
+    const issued = order.lines.some((line) => line.qtyShipped > 0);
+    if (issued && input.lines) {
+      throw new ValidationError(
+        "E_VALIDATION: goods have already left against this order, so its lines " +
+          "describe something that happened. Cancel what is still owed instead, or " +
+          "correct the difference with a credit note.",
+      );
+    }
+    // Stock is held against the CURRENT lines. Changing them under a live hold
+    // would leave sheets reserved for quantities the order no longer asks for.
+    const held = await ctx.tx.plywoodStockReservation.count({
+      where: { salesOrderId: order.id, releasedAt: null },
+    });
+    if (held > 0 && input.lines) {
+      throw new ValidationError(
+        "E_VALIDATION: stock is held against this order. Cancel the order to release " +
+          "the hold, or amend it before holding stock.",
+      );
+    }
+
+    await assertGodownInScope(
+      ctx.tx,
+      ctx.actor,
+      ENTITY_SALES_ORDER,
+      "Edit",
+      order.locationId,
+    );
+
+    let totalPricePaise = order.totalPricePaise;
+
+    if (input.lines) {
+      const products = await ctx.tx.plywoodProduct.findMany({
+        where: { id: { in: input.lines.map((line) => line.productId) }, active: true },
+      });
+      if (products.length !== new Set(input.lines.map((l) => l.productId)).size) {
+        throw new ValidationError(
+          "E_VALIDATION: a board on this order is unknown or withdrawn",
+        );
+      }
+      const agreed = await ctx.tx.plywoodCustomerPrice.findMany({
+        where: { customerId: order.customerId },
+      });
+
+      const priced = input.lines.map((line) => {
+        const product = products.find((p) => p.id === line.productId)!;
+        const listUnitPricePaise =
+          line.unitPricePaise ??
+          agreed.find((price) => price.productId === line.productId)
+            ?.customPricePaise;
+        if (listUnitPricePaise === undefined) {
+          throw new ValidationError(
+            `E_VALIDATION: no price for ${product.name} for this customer, and none given`,
+          );
+        }
+        const discountBps = line.discountBps ?? 0;
+        const unitPricePaise =
+          discountBps === 0
+            ? listUnitPricePaise
+            : Math.round((listUnitPricePaise * (10_000 - discountBps)) / 10_000);
+        return {
+          tenantId: ctx.actor.tenantId,
+          salesOrderId: order.id,
+          productId: line.productId,
+          productNameSnapshot: describeProduct(product),
+          hsnCodeSnapshot: product.hsnCode,
+          qtyOrdered: line.qtyOrdered,
+          unitPricePaise,
+          discountBps,
+          listUnitPricePaise: discountBps === 0 ? null : listUnitPricePaise,
+        };
+      });
+
+      await ctx.tx.plywoodSalesOrderLine.deleteMany({
+        where: { salesOrderId: order.id },
+      });
+      await ctx.tx.plywoodSalesOrderLine.createMany({ data: priced });
+      totalPricePaise = priced.reduce(
+        (sum, line) => sum + line.qtyOrdered * line.unitPricePaise,
+        0,
+      );
+    }
+
+    await ctx.tx.plywoodSalesOrder.update({
+      where: { id: order.id },
+      data: {
+        ...(input.reference === undefined ? {} : { reference: input.reference }),
+        ...(input.paymentTerms === undefined
+          ? {}
+          : { paymentTerms: input.paymentTerms }),
+        totalPricePaise,
+        version: { increment: 1 },
+      },
+    });
+
+    return {
+      result: { id: order.id, totalPricePaise },
+      events: [
+        { name: "verity.plywood.sales_order_edited", entityId: order.id },
       ],
     };
   },

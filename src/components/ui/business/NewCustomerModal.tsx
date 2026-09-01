@@ -17,15 +17,28 @@ import { Modal, ModalCancel } from "@/components/ui/Modal";
  * only, which is the safe default and the one this business should have to
  * choose against deliberately.
  */
+export type CustomerDraft = {
+  displayName: string;
+  gstin: string | null;
+  stateCode: string | null;
+  phone: string | null;
+  creditLimitPaise: number;
+};
+
 export function NewCustomerModal({
   open,
   pending,
   onClose,
   onSubmit,
+  /** Present when editing an existing customer rather than creating one. */
+  initial,
+  title,
 }: {
   open: boolean;
   pending: boolean;
   onClose: () => void;
+  initial?: CustomerDraft | null;
+  title?: string;
   onSubmit: (input: {
     displayName: string;
     gstin?: string;
@@ -39,8 +52,22 @@ export function NewCustomerModal({
   const [stateCode, setStateCode] = useState("");
   const [phone, setPhone] = useState("");
   const [limit, setLimit] = useState("0");
+  // Which record the fields currently hold. Seeding on open rather than in an
+  // effect keeps a half-typed correction from being overwritten by a re-render.
+  const [loaded, setLoaded] = useState<string | null>(null);
+
+  const key = open ? (initial ? initial.displayName : "__new__") : null;
+  if (key !== loaded) {
+    setLoaded(key);
+    setName(initial?.displayName ?? "");
+    setGstin(initial?.gstin ?? "");
+    setStateCode(initial?.stateCode ?? "");
+    setPhone(initial?.phone ?? "");
+    setLimit(String((initial?.creditLimitPaise ?? 0) / 100));
+  }
 
   function reset() {
+    setLoaded(null);
     setName("");
     setGstin("");
     setStateCode("");
@@ -55,7 +82,7 @@ export function NewCustomerModal({
         reset();
         onClose();
       }}
-      title="New customer"
+      title={title ?? (initial ? "Edit customer" : "New customer")}
       description="The state code decides whether their invoices carry IGST or CGST and SGST, so a sale cannot be taxed without it."
       footer={
         <>
@@ -83,7 +110,7 @@ export function NewCustomerModal({
               reset();
             }}
           >
-            {pending ? "Creating…" : "Create"}
+            {pending ? "Saving…" : initial ? "Save" : "Create"}
           </Button>
         </>
       }

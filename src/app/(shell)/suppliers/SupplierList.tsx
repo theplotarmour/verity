@@ -43,6 +43,10 @@ export function SupplierList({ suppliers }: { suppliers: Supplier[] }) {
   // a party you keep rather than something you make while placing an order, and
   // anyone looking for one comes here first.
   const [creating, setCreating] = useState(false);
+  // Requested: edit and remove. Removing DEACTIVATES a supplier who has been
+  // traded with and deletes one who has not — see removeSupplier for why.
+  const [editing, setEditing] = useState<Supplier | null>(null);
+  const [removing, setRemoving] = useState<Supplier | null>(null);
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -85,13 +89,72 @@ export function SupplierList({ suppliers }: { suppliers: Supplier[] }) {
     });
   }
 
+  function send(key: string, input: unknown, done: () => void) {
+    setFailure(null);
+    startTransition(async () => {
+      const result = await runCommand(key, input, "/suppliers");
+      if (result.ok) {
+        done();
+        router.refresh();
+      } else {
+        setFailure(result);
+      }
+    });
+  }
+
   const dialog = (
-    <NewSupplierModal
-      open={creating}
-      pending={pending}
-      onClose={() => setCreating(false)}
-      onSubmit={create}
-    />
+    <>
+      <NewSupplierModal
+        open={creating}
+        pending={pending}
+        onClose={() => setCreating(false)}
+        onSubmit={create}
+      />
+      <NewSupplierModal
+        open={editing !== null}
+        pending={pending}
+        initial={editing}
+        onClose={() => setEditing(null)}
+        onSubmit={(input) =>
+          send(
+            "verity.plywood.edit_supplier",
+            { supplierId: editing!.id, ...(input as Record<string, unknown>) },
+            () => setEditing(null),
+          )
+        }
+      />
+      <Modal
+        open={removing !== null}
+        onClose={() => setRemoving(null)}
+        title={`Remove ${removing?.displayName ?? ""}?`}
+        description="If you have ever bought from them they are kept and simply stop being offered — their orders, bills and ledger explain money and cannot be orphaned. A supplier with no history is deleted outright."
+        width="sm"
+        footer={
+          <>
+            <ModalCancel onClose={() => setRemoving(null)} disabled={pending}>
+              Keep
+            </ModalCancel>
+            <Button
+              variant="danger"
+              disabled={pending}
+              onClick={() =>
+                send(
+                  "verity.plywood.remove_supplier",
+                  { supplierId: removing!.id },
+                  () => setRemoving(null),
+                )
+              }
+            >
+              Remove
+            </Button>
+          </>
+        }
+      >
+        <p className="m-0 text-[13px] text-text-secondary">
+          Nothing already recorded against them changes either way.
+        </p>
+      </Modal>
+    </>
   );
 
   if (suppliers.length === 0) {
@@ -202,6 +265,14 @@ export function SupplierList({ suppliers }: { suppliers: Supplier[] }) {
                       {supplier.openOrders === 1 ? "1 open order" : `${supplier.openOrders} open orders`}
                     </p>
                   </div>
+                  <div className="flex shrink-0 gap-2">
+                    <Button size="sm" onClick={() => setEditing(supplier)}>
+                      Edit
+                    </Button>
+                    <Button size="sm" onClick={() => setRemoving(supplier)}>
+                      Remove
+                    </Button>
+                  </div>
 
                 </div>
               </Row>
@@ -231,22 +302,36 @@ function NewSupplierModal({
   pending,
   onClose,
   onSubmit,
+  /** Present when correcting an existing supplier rather than adding one. */
+  initial,
 }: {
   open: boolean;
   pending: boolean;
   onClose: () => void;
   onSubmit: (input: unknown) => void;
+  initial?: Supplier | null;
 }) {
   const [name, setName] = useState("");
   const [gstin, setGstin] = useState("");
   const [stateCode, setStateCode] = useState("");
   const [phone, setPhone] = useState("");
+  // Seeded when the dialog opens on a record, not in an effect: an effect would
+  // overwrite a half-typed correction on the next render.
+  const [loaded, setLoaded] = useState<string | null>(null);
+  const key = open ? (initial?.id ?? "__new__") : null;
+  if (key !== loaded) {
+    setLoaded(key);
+    setName(initial?.displayName ?? "");
+    setGstin(initial?.gstin ?? "");
+    setStateCode(initial?.stateCode ?? "");
+    setPhone(initial?.phone ?? "");
+  }
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="New supplier"
+      title={initial ? "Edit supplier" : "New supplier"}
       description="The state code decides whether their bills carry IGST or CGST and SGST."
       footer={
         <>
@@ -263,7 +348,7 @@ function NewSupplierModal({
               })
             }
           >
-            {pending ? "Creating…" : "Create"}
+            {pending ? "Saving…" : initial ? "Save" : "Create"}
           </Button>
         </>
       }

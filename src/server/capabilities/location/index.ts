@@ -127,6 +127,97 @@ export const createLocation: CommandDefinition<
   },
 };
 
+/**
+ * Renaming a location, and retiring one.
+ *
+ * Requested alongside the same for customers and suppliers: "option to remove
+ * and edit customers, suppliers and godowns."
+ *
+ * A location that has held stock cannot be deleted — stock ledger entries,
+ * balances, orders and receipts all point at it, and a movement whose godown
+ * vanished is a quantity nobody can place. Removing such a location therefore
+ * archives it: it stops being offered, and everything that happened there still
+ * reads. One that has never been used is deleted outright, because a typo left
+ * archived is clutter that never clears.
+ */
+export const editLocation: CommandDefinition<
+  { locationId: string; name?: string; archived?: boolean },
+  { id: string }
+> = {
+  key: "verity.location.edit_location",
+  entity: ENTITY_LOCATION,
+  verb: "Edit",
+  input: z.object({
+    locationId: z.string().uuid(),
+    name: z.string().min(1).max(200).optional(),
+    archived: z.boolean().optional(),
+  }),
+  handler: async (ctx, input) => {
+    const location = await ctx.tx.location.findUniqueOrThrow({
+      where: { id: input.locationId },
+    });
+    await ctx.tx.location.update({
+      where: { id: location.id },
+      data: {
+        ...(input.name === undefined ? {} : { name: input.name }),
+        ...(input.archived === undefined ? {} : { active: !input.archived }),
+      },
+    });
+    return {
+      result: { id: location.id },
+      events: [
+        { name: "verity.location.location_edited", entityId: location.id },
+      ],
+    };
+  },
+};
+
+export const removeLocation: CommandDefinition<
+  { locationId: string },
+  { id: string; deleted: boolean }
+> = {
+  key: "verity.location.remove_location",
+  entity: ENTITY_LOCATION,
+  verb: "Edit",
+  input: z.object({ locationId: z.string().uuid() }),
+  handler: async (ctx, input) => {
+    const location = await ctx.tx.location.findUniqueOrThrow({
+      where: { id: input.locationId },
+    });
+
+    // Counted rather than joined: this command is about whether ANY history
+    // exists, and one row of it is as decisive as ten thousand.
+    const [balances, movements] = await Promise.all([
+      ctx.tx.stockBalance.count({ where: { locationId: location.id } }),
+      ctx.tx.stockLedgerEntry.count({ where: { locationId: location.id } }),
+    ]);
+
+    if (balances > 0 || movements > 0) {
+      await ctx.tx.location.update({
+        where: { id: location.id },
+        data: { active: false },
+      });
+      return {
+        result: { id: location.id, deleted: false },
+        events: [
+          {
+            name: "verity.location.location_archived",
+            entityId: location.id,
+          },
+        ],
+      };
+    }
+
+    await ctx.tx.location.delete({ where: { id: location.id } });
+    return {
+      result: { id: location.id, deleted: true },
+      events: [
+        { name: "verity.location.location_deleted", entityId: location.id },
+      ],
+    };
+  },
+};
+
 export const addGeofence: CommandDefinition<
   { locationId: string; name: string; centreLat: number; centreLng: number; radiusMetres: number },
   { id: string }
@@ -256,6 +347,8 @@ export function registerLocationCapability(): void {
   });
   registerCommand(createPlace);
   registerCommand(createLocation);
+  registerCommand(editLocation);
+  registerCommand(removeLocation);
   registerCommand(addGeofence);
   registerCommand(assignUserToLocation);
   registerCommand(setLocationCustomFields);

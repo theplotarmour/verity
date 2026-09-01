@@ -14,8 +14,12 @@ import {
   Stat,
   StatRow,
 } from "@/components/ui/primitives";
-import { NewCustomerModal } from "@/components/ui/business/NewCustomerModal";
+import {
+  NewCustomerModal,
+  type CustomerDraft,
+} from "@/components/ui/business/NewCustomerModal";
 import { rupees, rupeesShort } from "@/components/ui/business/format";
+import { Modal, ModalCancel } from "@/components/ui/Modal";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -36,6 +40,11 @@ export function CustomerList({ customers }: { customers: Customer[] }) {
   // Reported: creating a customer lived on Sales only, so the page anyone opens
   // to look a customer up could not make one.
   const [creating, setCreating] = useState(false);
+  // Requested: edit and remove. Removing DEACTIVATES a customer who has traded
+  // — their orders, invoices and ledger entries all point at them — and deletes
+  // one who never has, because a leftover typo is clutter that never clears.
+  const [editing, setEditing] = useState<Customer | null>(null);
+  const [removing, setRemoving] = useState<Customer | null>(null);
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -78,13 +87,80 @@ export function CustomerList({ customers }: { customers: Customer[] }) {
     });
   }
 
+  function send(key: string, input: unknown, done: () => void) {
+    setFailure(null);
+    startTransition(async () => {
+      const result = await runCommand(key, input, "/customers");
+      if (result.ok) {
+        done();
+        router.refresh();
+      } else {
+        setFailure(result);
+      }
+    });
+  }
+
+  const asDraft = (row: Customer): CustomerDraft => ({
+    displayName: row.displayName,
+    gstin: row.gstin,
+    stateCode: row.stateCode,
+    phone: row.phone,
+    creditLimitPaise: row.creditLimitPaise,
+  });
+
   const dialog = (
-    <NewCustomerModal
-      open={creating}
-      pending={pending}
-      onClose={() => setCreating(false)}
-      onSubmit={create}
-    />
+    <>
+      <NewCustomerModal
+        open={creating}
+        pending={pending}
+        onClose={() => setCreating(false)}
+        onSubmit={create}
+      />
+      <NewCustomerModal
+        open={editing !== null}
+        pending={pending}
+        initial={editing ? asDraft(editing) : null}
+        onClose={() => setEditing(null)}
+        onSubmit={(input) =>
+          send(
+            "verity.plywood.edit_customer",
+            { customerId: editing!.id, ...input },
+            () => setEditing(null),
+          )
+        }
+      />
+      <Modal
+        open={removing !== null}
+        onClose={() => setRemoving(null)}
+        title={`Remove ${removing?.displayName ?? ""}?`}
+        description="If they have ever been sold to, they are kept and simply stop being offered — their orders, invoices and ledger explain money and cannot be orphaned. A customer with no history is deleted outright."
+        width="sm"
+        footer={
+          <>
+            <ModalCancel onClose={() => setRemoving(null)} disabled={pending}>
+              Keep
+            </ModalCancel>
+            <Button
+              variant="danger"
+              disabled={pending}
+              onClick={() =>
+                send(
+                  "verity.plywood.remove_customer",
+                  { customerId: removing!.id },
+                  () => setRemoving(null),
+                )
+              }
+            >
+              Remove
+            </Button>
+          </>
+        }
+      >
+        <p className="m-0 text-[13px] text-text-secondary">
+          Nothing already recorded against them changes either way.
+        </p>
+      </Modal>
+    </>
   );
 
   if (customers.length === 0) {
@@ -201,6 +277,14 @@ export function CustomerList({ customers }: { customers: Customer[] }) {
                       <p className="m-0 text-[12px] text-text-tertiary">
                         {over ? "Over limit" : "Available"}
                       </p>
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <Button size="sm" onClick={() => setEditing(customer)}>
+                        Edit
+                      </Button>
+                      <Button size="sm" onClick={() => setRemoving(customer)}>
+                        Remove
+                      </Button>
                     </div>
                   </div>
                 </Row>

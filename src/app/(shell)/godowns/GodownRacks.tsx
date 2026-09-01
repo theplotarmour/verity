@@ -12,6 +12,7 @@ import {
   Panel,
 } from "@/components/ui/primitives";
 import { Combobox } from "@/components/ui/Combobox";
+import { Modal, ModalCancel } from "@/components/ui/Modal";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -42,6 +43,11 @@ export function GodownRacks({
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [addingTo, setAddingTo] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
+  const [removing, setRemoving] = useState<{ id: string; name: string } | null>(
+    null,
+  );
   const [creating, setCreating] = useState(false);
   const [godownName, setGodownName] = useState("");
   const [organizationId, setOrganizationId] = useState("");
@@ -117,6 +123,76 @@ export function GodownRacks({
     </Panel>
   );
 
+  const godownDialogs = (
+    <>
+      <Modal
+        open={renaming !== null}
+        onClose={() => setRenaming(null)}
+        title="Rename godown"
+        width="sm"
+        footer={
+          <>
+            <ModalCancel onClose={() => setRenaming(null)} disabled={pending} />
+            <Button
+              variant="primary"
+              disabled={pending || newName.trim() === ""}
+              onClick={() =>
+                run(
+                  "verity.location.edit_location",
+                  { locationId: renaming, name: newName.trim() },
+                  () => setRenaming(null),
+                )
+              }
+            >
+              Save
+            </Button>
+          </>
+        }
+      >
+        <Field label="Name" htmlFor="godown-rename" required>
+          <Input
+            id="godown-rename"
+            value={newName}
+            onChange={(event) => setNewName(event.target.value)}
+            autoFocus
+          />
+        </Field>
+      </Modal>
+
+      <Modal
+        open={removing !== null}
+        onClose={() => setRemoving(null)}
+        title={`Remove ${removing?.name ?? ""}?`}
+        description="A godown that has held stock is archived, not deleted — every movement and balance points at it, and a quantity whose godown vanished cannot be placed. One that has never held anything is deleted outright."
+        width="sm"
+        footer={
+          <>
+            <ModalCancel onClose={() => setRemoving(null)} disabled={pending}>
+              Keep
+            </ModalCancel>
+            <Button
+              variant="danger"
+              disabled={pending}
+              onClick={() =>
+                run(
+                  "verity.location.remove_location",
+                  { locationId: removing!.id },
+                  () => setRemoving(null),
+                )
+              }
+            >
+              Remove
+            </Button>
+          </>
+        }
+      >
+        <p className="m-0 text-[13px] text-text-secondary">
+          Racks defined here go with it. Stock history does not change either way.
+        </p>
+      </Modal>
+    </>
+  );
+
   if (godowns.length === 0) {
     return (
       <div className="flex flex-col gap-4">
@@ -173,6 +249,7 @@ export function GodownRacks({
         </div>
       )}
 
+      {godownDialogs}
       <div className="flex flex-col gap-4">
         {godowns.map((godown) => {
           const live = godown.racks.filter((rack) => rack.active).length;
@@ -190,6 +267,24 @@ export function GodownRacks({
                     onClick={() => setAddingTo(addingTo === godown.id ? null : godown.id)}
                   >
                     {addingTo === godown.id ? "Close" : "Add rack"}
+                  </Button>
+                  {/* Requested: edit and remove godowns. Removing ARCHIVES one
+                      that has held stock — the ledger and every balance point
+                      at it — and deletes one that never has. */}
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setRenaming(godown.id);
+                      setNewName(godown.name);
+                    }}
+                  >
+                    Rename
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => setRemoving({ id: godown.id, name: godown.name })}
+                  >
+                    Remove
                   </Button>
                 </div>
               }
