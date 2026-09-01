@@ -3,36 +3,43 @@
 import { useEffect, useState } from "react";
 import { Icon, type IconName } from "@/components/ui/icons";
 
-type Preference = "light" | "dark" | "system";
+type Preference = "light" | "dark";
 
-const ORDER: Preference[] = ["light", "dark", "system"];
-const ICON: Record<Preference, IconName> = { light: "sun", dark: "moon", system: "system" };
-const LABEL: Record<Preference, string> = {
-  light: "Light",
-  dark: "Dark",
-  system: "Match system",
-};
+const ORDER: Preference[] = ["light", "dark"];
+const ICON: Record<Preference, IconName> = { light: "sun", dark: "moon" };
+const LABEL: Record<Preference, string> = { light: "Light", dark: "Dark" };
 
 /** A year. Long enough that the choice survives, short enough to expire. */
 const MAX_AGE = 60 * 60 * 24 * 365;
 
 function readPreference(): Preference {
-  const match = document.cookie.match(/(?:^|;\s*)verity-theme=(light|dark|system)/);
-  return (match?.[1] as Preference) ?? "system";
+  const match = document.cookie.match(/(?:^|;\s*)verity-theme=(light|dark)/);
+  if (match?.[1]) return match[1] as Preference;
+  // No stored choice, or the retired "system" value: start from whatever the
+  // OS is showing right now, so the first press flips rather than appearing to
+  // do nothing.
+  return typeof window !== "undefined" &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
 }
 
 /**
- * Theme control. Three states, as the board specifies — Light, Dark, System.
+ * Theme control. Two states — Light and Dark.
+ *
+ * "System" was a third state and is gone at the product owner's request. It was
+ * defensible and it was also the state nobody could read off the button: three
+ * positions on one icon means the current one is a guess until you press it.
+ * Two positions make the control a switch, which is what people expect a theme
+ * button to be.
+ *
+ * A stored "system" from before simply falls through to whatever the OS is
+ * showing at that moment, so nobody is stranded on a value that no longer
+ * exists, and the first press flips rather than appearing to do nothing.
  *
  * The preference is a COOKIE, not localStorage, so the server can stamp
  * `data-theme` into the first byte of HTML. That is what lets the document
  * carry no theme script at all; see `app/layout.tsx` and `globals.css`.
- *
- * "System" is a real state and not a synonym for the current system value: a
- * user who picks it expects the interface to follow the OS when it changes at
- * dusk. It is stored as written, and it removes the attribute entirely — the
- * stylesheet's `color-scheme: light dark` then follows the OS on its own, with
- * no media listener to attach and nothing to keep in sync.
  *
  * The attribute is also set here directly rather than waiting for a navigation,
  * so switching is instant instead of a round trip.
@@ -42,7 +49,7 @@ function readPreference(): Preference {
  * be a guess that hydration then corrects in front of the user.
  */
 export function ThemeToggle() {
-  const [preference, setPreference] = useState<Preference>("system");
+  const [preference, setPreference] = useState<Preference>("light");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -53,8 +60,7 @@ export function ThemeToggle() {
   function choose(next: Preference) {
     setPreference(next);
     document.cookie = `verity-theme=${next}; path=/; max-age=${MAX_AGE}; samesite=lax`;
-    if (next === "system") document.documentElement.removeAttribute("data-theme");
-    else document.documentElement.setAttribute("data-theme", next);
+    document.documentElement.setAttribute("data-theme", next);
   }
 
   // Placeholder holds the exact footprint so the header does not reflow when
@@ -71,8 +77,8 @@ export function ThemeToggle() {
       className="grid size-11 cursor-pointer place-items-center rounded-md border border-line bg-surface text-text-secondary transition-colors hover:bg-surface-sunken hover:text-text lg:size-9"
     >
       <Icon name={ICON[preference]} size={17} />
-      {/* The icon alone does not say which of three states is active, so the
-          state is also carried as text for assistive technology. */}
+      {/* The state is carried as text as well as an icon, for assistive
+          technology. */}
       <span className="sr-only">
         Theme: {LABEL[preference]}. Activate to switch to {LABEL[next]}.
       </span>
