@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "prisma generate && next build",
     "db:sync": "prisma db push",
-    "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
+    "db:reset": "prisma db push --force-reset && npm run seed:plywood",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
@@ -16,7 +16,7 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:push": "prisma db push",
-    "seed": "tsx prisma/seed.ts",
+    "seed:plywood": "node prisma/run-seed.cjs seed-plywood-demo.ts",
     "bootstrap:operator": "tsx prisma/bootstrap-operator.ts",
     "db:migrate": "prisma migrate dev",
     "deploy:preview": "vercel deploy --yes",
@@ -76,6 +76,6 @@
     "vitest": "^4.1.10"
   },
   "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "seed": "node prisma/run-seed.cjs seed-plywood-demo.ts"
   }
 }

@@ -276,89 +276,30 @@
   }
 
   /**
-   * THE ATMOSPHERE — an accent-derived ground, not a flat fill.
+   * THE ATMOSPHERE — carried entirely by `.verity-atmosphere` (Level 0,
+   * below), not by body's own background.
    *
-   * Layered into body's own `background` rather than a `::before` with a
-   * negative z-index. That is where the first attempt went wrong: a negative
-   * z-index child paints BEHIND its parent's background, so an opaque body
-   * covered the wash completely and the colour visible on screen was coming
-   * from a tint on the cards instead — which is backwards. The ground carries
-   * the colour; the glass only lets it through.
+   * The two used to duplicate each other: body painted its own three-blob
+   * wash AND `.verity-atmosphere` painted a second, different one on top,
+   * and the two falloffs disagreed at the edges — visible as a faint seam
+   * where one gradient's transparent tail crossed the other's. One accent
+   * ground, defined once, reads as a room; two disagreeing ones read as a
+   * rendering bug. Flat canvas here, all the colour on the dedicated layer.
    *
-   * `background-attachment: fixed` so it is anchored to the viewport rather
-   * than repeating or scrolling with anything.
+   * `isolation: isolate` makes body its OWN stacking context, which flips
+   * the painting order that would otherwise sink `.verity-atmosphere`
+   * (below, `z-index: -1`): as the element THAT stacking context is formed
+   * on, body's flat background becomes step 1 (paints first), and its
+   * negative-z-index child becomes step 2 (paints next, on top of step 1)
+   * — instead of body's background escaping to the document root and
+   * painting in root's step 3, after every negative-z-index descendant
+   * anywhere on the page. Without this, a page that deliberately wants no
+   * atmosphere (sign-in's own opaque `bg-canvas` main) would find the
+   * atmosphere painted in front of it instead of behind it.
    */
   body {
-    background:
-      radial-gradient(
-        1100px 720px at 12% -8%,
-        color-mix(in oklab, var(--accent-seed) 34%, transparent),
-        transparent 66%
-      ),
-      radial-gradient(
-        900px 620px at 88% 4%,
-        color-mix(in oklab, var(--accent-seed) 24%, transparent),
-        transparent 62%
-      ),
-      radial-gradient(
-        1000px 800px at 50% 108%,
-        color-mix(in oklab, var(--accent-seed) 20%, transparent),
-        transparent 64%
-      ),
-      var(--color-canvas);
-    background-attachment: fixed;
-  }
-
-  /**
-   * Dark gets its OWN wash rather than a dimmed copy of the light one.
-   *
-   * On a near-black ground the accent has to be stronger and reach further to
-   * read as light at all — the alpha that looks like a lit room over off-white
-   * disappears entirely over #0F1115. The bloom sits top-left where the sidebar
-   * meets the header, so the brightest part of the room is behind the chrome
-   * and the content falls away from it.
-   */
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) body {
-      background:
-        radial-gradient(
-          1200px 820px at 4% -14%,
-          color-mix(in oklab, var(--accent-seed) 62%, transparent),
-          transparent 60%
-        ),
-        radial-gradient(
-          1500px 700px at 58% -20%,
-          color-mix(in oklab, var(--accent-seed) 34%, transparent),
-          transparent 64%
-        ),
-        radial-gradient(
-          1200px 900px at 100% 10%,
-          color-mix(in oklab, var(--accent-seed) 22%, transparent),
-          transparent 62%
-        ),
-        var(--color-canvas);
-      background-attachment: fixed;
-    }
-  }
-  :root[data-theme="dark"] body {
-    background:
-      radial-gradient(
-        1200px 820px at 4% -14%,
-        color-mix(in oklab, var(--accent-seed) 62%, transparent),
-        transparent 60%
-      ),
-      radial-gradient(
-        1500px 700px at 58% -20%,
-        color-mix(in oklab, var(--accent-seed) 34%, transparent),
-        transparent 64%
-      ),
-      radial-gradient(
-        1200px 900px at 100% 10%,
-        color-mix(in oklab, var(--accent-seed) 22%, transparent),
-        transparent 62%
-      ),
-      var(--color-canvas);
-    background-attachment: fixed;
+    background: var(--color-canvas);
+    isolation: isolate;
   }
 
   html, body {
@@ -399,23 +340,62 @@
 /**
  * LEVEL 0 — the atmosphere.
  *
- * Accent-derived radial fields over the flat canvas, at the source's own
- * positions and opacities. Fixed rather than scrolling, so it reads as the room
- * the interface sits in rather than as a decorated page. Pointer-events none:
- * it is a backdrop, never a surface.
+ * Two accent blooms, not a spray of them: one entering from the top-left
+ * corner (the room's light source — matches the accent edge every glass
+ * card already catches on its leading side), one small counterweight at the
+ * opposite corner so the frame doesn't tip. Minimal reads as a choice; a
+ * third and fourth blob reads as decoration nobody stopped to remove.
+ *
+ * `filter: blur()` is what makes it frosty rather than a printed gradient —
+ * a radial-gradient's own falloff is a mathematically exact curve, and an
+ * exact curve is precisely what a wash of ambient light behind frosted
+ * glass never has. The blur is the material cue; the gradient underneath is
+ * just its colour. Every blob's own transparent tail already lands well
+ * inside the viewport before this box's edge, so the blur has room to
+ * soften without a hard cutoff appearing at inset: 0.
+ *
+ * Fixed rather than scrolling, so it reads as the room the interface sits in
+ * rather than as a decorated page. Pointer-events none: it is a backdrop,
+ * never a surface. `prefers-reduced-transparency` turns the whole layer off
+ * below, which is why body carries no accent colour of its own.
+ *
+ * `z-index: -1` relies on body's `isolation: isolate` above — see that
+ * comment. Without it this layer either paints behind body's own flat
+ * background (invisible) or in front of every static-positioned page
+ * container (sign-in's deliberately gradient-free canvas included).
  */
 .verity-atmosphere {
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
+  filter: blur(40px);
+  /**
+   * `rgb(from var(--accent-seed) r g b / a)`, not `color-mix(…, transparent)`.
+   * Mixing toward the transparent keyword mixes toward its (0, 0, 0) colour
+   * channels too, not just its alpha — invisible on a 1–2px edge highlight
+   * elsewhere in this file, but a visible dark ring across a 600–900px blob,
+   * where the fade has room to pass through a muddier version of the accent
+   * before it reaches zero. The relative-colour form holds r/g/b fixed and
+   * only varies alpha, so the fade is pure and the accent hue never bends.
+   */
   background:
-    radial-gradient(circle at 66% 16%,
-      color-mix(in srgb, transparent 92%, var(--accent-seed)), transparent 34%),
-    radial-gradient(circle at 18% 74%,
-      color-mix(in srgb, transparent 96%, var(--accent-seed)), transparent 40%),
-    radial-gradient(circle at 45% 45%,
-      light-dark(rgb(255 255 255 / 0.30), rgb(255 255 255 / 0.02)), transparent 60%);
+    radial-gradient(
+      880px 640px at 6% -12%,
+      light-dark(
+        rgb(from var(--accent-seed) r g b / 46%),
+        rgb(from var(--accent-seed) r g b / 74%)
+      ) 0%,
+      rgb(from var(--accent-seed) r g b / 0%) 70%
+    ),
+    radial-gradient(
+      640px 480px at 98% 98%,
+      light-dark(
+        rgb(from var(--accent-seed) r g b / 26%),
+        rgb(from var(--accent-seed) r g b / 38%)
+      ) 0%,
+      rgb(from var(--accent-seed) r g b / 0%) 66%
+    );
 }
 
 /**
