@@ -236,6 +236,29 @@
     height: 100dvh;
     overflow: hidden;
     background: var(--color-canvas);
+    /**
+     * NO ELASTIC OVERSCROLL, AND NO CHAINING.
+     *
+     * Reported: "the whole website gets overscrolled and stuck, not even solved
+     * by a reload."
+     *
+     * `overflow: hidden` hides a scrollbar; it does not stop the document being
+     * scrolled. On macOS a wheel or trackpad gesture that runs past the end of
+     * an inner scroller CHAINS to its ancestors and rubber-bands the document —
+     * which here has no scrollbar to drag back with, so the whole interface sits
+     * displaced with no way to return it.
+     *
+     * `none` stops both the chaining and the elastic bounce at the root, which
+     * is the only place either can strand the user.
+     */
+    overscroll-behavior: none;
+  }
+
+  /* Inner panes keep their own bounce but never hand a gesture upward: a list
+     that has reached its end should stop, not start moving the page behind it. */
+  [data-shell-scroll],
+  aside [class*="overflow-y-auto"] {
+    overscroll-behavior: contain;
   }
 
   /**
@@ -260,18 +283,18 @@
     background:
       radial-gradient(
         1100px 720px at 12% -8%,
-        color-mix(in oklab, var(--accent-seed) 22%, transparent),
-        transparent 64%
+        color-mix(in oklab, var(--accent-seed) 34%, transparent),
+        transparent 66%
       ),
       radial-gradient(
         900px 620px at 88% 4%,
-        color-mix(in oklab, var(--accent-seed) 15%, transparent),
-        transparent 60%
+        color-mix(in oklab, var(--accent-seed) 24%, transparent),
+        transparent 62%
       ),
       radial-gradient(
         1000px 800px at 50% 108%,
-        color-mix(in oklab, var(--accent-seed) 12%, transparent),
-        transparent 62%
+        color-mix(in oklab, var(--accent-seed) 20%, transparent),
+        transparent 64%
       );
   }
 
@@ -361,33 +384,93 @@
   box-shadow: var(--shadow-highlight);
 }
 
+/**
+ * THE MATERIALS — gradient-filled glass, not flat washes.
+ *
+ * Apple's rule (WWDC "Materials"): a translucent surface is lit. Real glass is
+ * brighter where light strikes it and settles darker below, so each surface is
+ * a vertical gradient between two tints of the same material rather than one
+ * flat colour, with a bright top edge where the light catches. A single flat
+ * alpha reads as a sheet of tinted plastic; the gradient plus the edge is what
+ * makes it read as a material.
+ *
+ * Weight encodes hierarchy, also from that talk: the shell is the heaviest and
+ * most tinted because it is structure and nothing is read on it, and the levels
+ * above it get progressively lighter and less coloured because they carry text.
+ * A light translucent surface is never stacked on another — controls sit on
+ * cards, cards on the shell, and each step is denser than the one beneath.
+ */
+
 /* Level 1 — the shell. Quietest material; it must recede. */
 .glass-shell {
-  background: var(--color-glass-1);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--accent-seed) 11%, var(--color-glass-1)),
+      color-mix(in oklab, var(--accent-seed) 5%, var(--color-glass-1))
+    );
   backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.5);
   -webkit-backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.5);
 }
 
 /* Level 2 — primary surfaces. Cards and panels. */
 .glass-card {
-  background: var(--color-glass-2);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--accent-seed) 7%, var(--color-glass-2)),
+      color-mix(in oklab, var(--accent-seed) 3%, var(--color-glass-2))
+    );
   border: 1px solid var(--color-line);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-highlight), var(--shadow-sm);
+  /* The top edge is brighter than the rest of the border — light catching the
+     lip of the material, which is what stops it reading as a drawn rectangle. */
+  box-shadow:
+    inset 0 1px 0 light-dark(rgb(255 255 255 / 0.85), rgb(255 255 255 / 0.07)),
+    var(--shadow-sm);
 }
 
 /* Level 3/4 — controls. Denser material so text on them stays legible. */
 .glass-control {
-  background: var(--color-glass-3);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--accent-seed) 4%, var(--color-glass-3)),
+      color-mix(in oklab, var(--accent-seed) 2%, var(--color-glass-3))
+    );
   border: 1px solid var(--color-line);
 }
 
 /* Temporary layers — sheets, dropdowns, dialogs. Densest, because they must
-   read against arbitrary content beneath them. */
+   read against arbitrary content beneath them, and because a dialog is the one
+   surface where losing a word to the background is unacceptable. A bigger
+   surface reads as thicker: more blur and a deeper shadow than a chip. */
 .glass-overlay {
-  background: var(--color-glass-4);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--accent-seed) 4%, var(--color-glass-4)),
+      color-mix(in oklab, var(--accent-seed) 2%, var(--color-glass-4))
+    );
   backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.8);
   -webkit-backdrop-filter: blur(var(--blur-glass-strong)) saturate(1.8);
+  box-shadow:
+    inset 0 1px 0 light-dark(rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.08)),
+    var(--shadow-lg);
+}
+
+/* Level 5 — opaque, and still part of the material system. Dense tables and
+   long-form text sit here because translucency costs contrast exactly where
+   legibility matters most (ADR-011); the tint keeps them from reading as plain
+   white boxes punched through the glass. */
+.verity-solid {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--accent-seed) 4%, var(--color-surface)),
+      color-mix(in oklab, var(--accent-seed) 1.5%, var(--color-surface))
+    );
+  box-shadow: inset 0 1px 0 light-dark(rgb(255 255 255 / 0.7), rgb(255 255 255 / 0.05));
 }
 
 .verity-scrim { background: light-dark(rgb(24 24 27 / 0.16), rgb(6 6 8 / 0.5)); }

@@ -113,16 +113,17 @@ export function Modal({
       aria-labelledby={titleId}
       aria-describedby={description ? descriptionId : undefined}
       className={
-        "m-auto w-[calc(100vw-2rem)] rounded-2xl border border-line p-0 " +
-        "text-text shadow-[var(--shadow-lg)] backdrop:bg-[rgba(15,17,21,0.45)] " +
-        "backdrop:backdrop-blur-[2px] open:animate-none " +
+        // `glass-overlay` rather than a solid fill: a dialog is the densest
+        // material in the ladder, not an opaque box dropped on the page.
+        "glass-overlay m-auto w-[calc(100vw-2rem)] rounded-2xl border border-line p-0 " +
+        "text-text backdrop:bg-[rgba(15,17,21,0.32)] " +
+        "backdrop:backdrop-blur-[3px] open:animate-none " +
         (width === "sm"
           ? "max-w-[420px] "
           : width === "lg"
             ? "max-w-[900px] "
             : "max-w-[640px] ")
       }
-      style={{ background: "var(--color-surface)" }}
     >
       <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
         <div className="min-w-0">

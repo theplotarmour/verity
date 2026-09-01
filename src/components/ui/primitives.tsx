@@ -59,9 +59,13 @@ export function Surface({
 }) {
   if (solid) {
     return (
+      // Opaque, because ADR-011 keeps dense content off the glass — but still
+      // a MATERIAL: a tinted vertical gradient rather than a flat white box, so
+      // a solid surface belongs to the same system as the translucent ones
+      // instead of looking like a hole cut in them.
       <div
         className={cx(
-          "rounded-xl bg-surface shadow-sm",
+          "verity-solid rounded-xl shadow-sm",
           bordered && "border border-line",
           className,
         )}

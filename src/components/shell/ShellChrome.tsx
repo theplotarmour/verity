@@ -112,7 +112,16 @@ export function ShellChrome({
                     onClick={() => setNavOpen(false)}
                     aria-current={current ? "page" : undefined}
                     className={
-                      "flex h-[52px] items-center gap-3.5 rounded-lg px-3.5 text-[15px] no-underline " +
+                      // 52px per item put ~1200px of navigation into a 626px
+                      // column on a 800px-tall window, so half the menu sat
+                      // below the fold behind a SECOND scrollbar. Reaching it
+                      // meant scrolling the sidebar, and once that hit its end
+                      // the wheel did nothing at all while the pointer stayed
+                      // over it — which reads as the page being stuck, and a
+                      // reload does not help because the pointer has not moved.
+                      // 42px and a tighter icon gap fit the whole menu without
+                      // dropping below the 40px comfortable-target floor.
+                      "flex h-[42px] items-center gap-3 rounded-lg px-3 text-[14px] no-underline " +
                       "transition-[background-color,color] duration-200 " +
                       (current
                         ? "bg-accent-subtle font-medium text-text shadow-[inset_0_1px_0_var(--color-accent-line)]"
@@ -122,7 +131,7 @@ export function ShellChrome({
                     {item.icon && (
                       <Icon
                         name={item.icon}
-                        size={21}
+                        size={19}
                         className={current ? "text-accent" : "text-text-tertiary"}
                       />
                     )}
@@ -285,6 +294,11 @@ export function ShellChrome({
             not create a second one unless a dense region owns its own (D13). */}
         <main
           id="main"
+          // The page's real scroll container: html and body are 100dvh with
+          // overflow hidden, so nothing scrolls the document. Marked so a modal
+          // can freeze THIS while it is open — locking document.body, which is
+          // what a dialog normally does, achieves nothing here.
+          data-shell-scroll=""
           className="min-h-0 min-w-0 flex-1 overflow-y-auto px-5 pb-10 pt-6 sm:px-8 lg:px-8 lg:pt-0"
         >
           {children}
