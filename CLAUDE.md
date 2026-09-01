@@ -146,6 +146,13 @@ every test still passes. Supabase's default `postgres` role has `rolbypassrls = 
 and must never carry application traffic.
 
 - `DATABASE_URL` -> `verity_app` (`NOSUPERUSER NOBYPASSRLS`), the runtime connection.
+  Point it at the pooler in **transaction mode (port 6543)** with `pgbouncer=true`.
+  Session mode (5432) pins one server connection per client for that client's whole
+  life out of a 15-connection project pool, and took production down with
+  `EMAXCONNSESSION` once several serverless instances were live. `withTenant` is
+  transaction-mode-safe by construction — the tenant GUC is `set_config(..., true)`
+  and the only lock is `pg_advisory_xact_lock`, both transaction-scoped. Do not
+  reintroduce session state that outlives a transaction.
 - `DIRECT_URL` -> `postgres`, used only by `prisma migrate`.
 - `assertRlsEnforceable()` in `src/server/platform/tenancy.ts` refuses a bypassing role
   at startup and in the isolation test. Do not weaken or bypass it.

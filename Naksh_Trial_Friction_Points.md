@@ -10,8 +10,11 @@
 
 ### 🔴 PgBouncer Connection Pool Exhaustion (`EMAXCONNSESSION`)
 *   **Symptom**: The application threw `FATAL: max clients reached in session mode (limit: 15)` and froze.
-*   **Root Cause**: The Next.js dev server was configured with `connection_limit=10` in `.env`. When run alongside Vitest/Playwright tests, the background processes exceeded the Supabase developer tier limit of 15 active sessions.
-*   **Current Status**: Mitigated temporarily by killing zombie node processes. Needs permanent lowering of `connection_limit=3` in local `.env` files.
+*   **Root Cause (as first diagnosed, 2026-08-29)**: `connection_limit=10` in `.env`, with the dev server running alongside Vitest/Playwright, exceeding the 15-session pool.
+*   **Actual root cause (2026-09-01)**: `DATABASE_URL` pointed at port **5432, the pooler in session mode**. Session mode pins one server connection per client for that client's entire life, out of a pool of 15 for the whole project — so the limit is reached by a handful of processes no matter how the client-side `connection_limit` is tuned. Lowering it only delays the failure. It then recurred in production on Vercel, where each serverless instance is another such client.
+*   **Why 5432 was chosen**: `.env.example` asserted that "transaction-mode pooling (6543) cannot start" the interactive transaction `withTenant` needs. That is false. Transaction mode holds a connection for the life of a transaction and releases it at COMMIT; what it cannot carry is session state held *between* transactions, and nothing here keeps any — the tenant GUC is `set_config(..., true)` and the only lock is `pg_advisory_xact_lock`, both transaction-scoped.
+*   **Fix**: `DATABASE_URL` moved to port **6543** (transaction mode) with `pgbouncer=true` and `connection_limit=5`. Verified against the live database first: the GUC round-trips inside `withTenant`, RLS filters correctly, and eight concurrent tenant-scoped transactions all succeed.
+*   **Status**: Fixed.
 
 ---
 

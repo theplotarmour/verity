@@ -89,7 +89,7 @@ the problem.**
 | `DATABASE_URL` role | `verity_app.<project-ref>` | **Correct** — runtime role |
 | `DIRECT_URL` role | `postgres.<project-ref>` | **Correct** — migration role |
 | Host | `aws-1-ap-south-1.pooler.supabase.com` | Same for both; correct |
-| Port | `5432` (session mode) both | Correct for Prisma |
+| Port | `5432` (session mode) both | **Wrong for the runtime** — corrected 2026-09-01. `DATABASE_URL` is now `6543` (transaction mode) with `pgbouncer=true`; session mode exhausts its 15-connection pool because it pins one connection per client for the client's whole life. `DIRECT_URL` stays unpooled for migrations. |
 | Pool params | `connection_limit=10&pool_timeout=20` on runtime only | Reasonable |
 | Password length | runtime 64 chars · migration 12 chars | Structurally plausible; the runtime value is simply **wrong**, not malformed |
 

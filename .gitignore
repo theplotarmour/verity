@@ -85,3 +85,4 @@ deploy/backups/
 # every run makes every diff unreadable.
 temporary screenshots/
 .playwright-cli/
+.env*.local
