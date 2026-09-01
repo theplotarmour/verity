@@ -85,6 +85,22 @@ export function Combobox({
     above: boolean;
   } | null>(null);
 
+  /**
+   * Where the list is mounted: the nearest <dialog> ancestor, or the body.
+   *
+   * It CANNOT always be the body. A dialog opened with showModal() is promoted
+   * to the browser's TOP LAYER, which is painted above the entire document and
+   * is not reachable by z-index — so a list portalled to the body while a modal
+   * is open renders underneath it and is invisible. That is the second half of
+   * the reported fault: portalling out of the modal's scroll container fixed
+   * the clipping and made the list disappear instead.
+   *
+   * Mounting into the dialog element itself puts the list in the top layer with
+   * it, while still being outside the dialog's scrolling body — so neither the
+   * clipping nor the stacking problem applies.
+   */
+  const [host, setHost] = useState<HTMLElement | null>(null);
+
   const measure = useCallback(() => {
     const field = rootRef.current;
     if (!field) return;
@@ -109,6 +125,7 @@ export function Combobox({
   // Before paint, so the list never appears at the wrong place for a frame.
   useLayoutEffect(() => {
     if (!open) return;
+    setHost(rootRef.current?.closest("dialog") ?? document.body);
     measure();
     // Capture phase: an ancestor scrolling is exactly the case that moves the
     // field, and scroll events on it do not bubble to window.
@@ -303,7 +320,7 @@ export function Combobox({
 
       {open &&
         anchor &&
-        typeof document !== "undefined" &&
+        host &&
         createPortal(
           <ul
             ref={listRef}
@@ -363,7 +380,7 @@ export function Combobox({
               </li>
             ))}
           </ul>,
-          document.body,
+          host,
         )}
 
     </div>
