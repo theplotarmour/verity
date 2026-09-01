@@ -18,4 +18,9 @@ Module._resolveFilename = function (request, ...rest) {
 };
 
 require("tsx/cjs");
-require(path.resolve(__dirname, process.argv[2]));
+
+// The script name is consumed here, so the script itself sees its own
+// arguments at the usual offsets rather than one place to the right.
+const script = process.argv[2];
+process.argv.splice(1, 2, path.resolve(__dirname, script));
+require(path.resolve(__dirname, script));
