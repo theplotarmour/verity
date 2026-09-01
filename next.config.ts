@@ -8,7 +8,14 @@ const nextConfig: NextConfig = {
   // minimal node_modules subset — the officially documented shape for
   // running Next.js outside Vercel without copying the full node_modules
   // tree into the runtime image.
-  output: 'standalone',
+  //
+  // NOT on Vercel. Vercel builds its own lambdas from the ordinary trace
+  // output and its onBuildComplete step reads `.next/next-server.js.nft.json`;
+  // standalone mode writes tracing into `.next/standalone` instead and never
+  // emits that file, so the deploy fails with ENOENT after a successful
+  // compile. Standalone is for the Docker image, which is exactly the case
+  // where VERCEL is unset.
+  ...(process.env.VERCEL ? {} : { output: 'standalone' as const }),
   // Prisma's generated client ships a native query-engine binary that Next's
   // dependency tracer does not always follow (it is loaded dynamically, not
   // `require()`d statically) — without this, `.next/standalone` builds but
