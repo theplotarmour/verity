@@ -16,6 +16,7 @@ import {
   StatRow,
 } from "@/components/ui/primitives";
 import { FormCombobox } from "@/components/ui/Combobox";
+import { Modal } from "@/components/ui/Modal";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -59,6 +60,54 @@ type Movement = "receive" | "issue" | "transfer";
 type Correction = "adjust" | "damaged" | "returned";
 
 /**
+ * The six ways stock changes, in the order a clerk meets them.
+ *
+ * Movements first, because they are the ordinary day: goods arriving, going
+ * out, or moving between godowns. Corrections after, because each asserts
+ * something unusual — the record was wrong, or something happened to the goods
+ * — and all three demand a reason.
+ *
+ * The note is carried here rather than in the panel titles it replaced, so a
+ * tab explains itself before the form is filled instead of after.
+ */
+const TABS: Array<{
+  key: Movement | Correction;
+  label: string;
+  note: string;
+}> = [
+  {
+    key: "receive",
+    label: "Receive",
+    note: "Stock arriving into a godown. Costed at what you paid, which sets the weighted average for everything already there.",
+  },
+  {
+    key: "issue",
+    label: "Issue",
+    note: "Stock leaving a godown. Costed at the weighted average, not at a price you type.",
+  },
+  {
+    key: "transfer",
+    label: "Transfer",
+    note: "The same boards, a different godown. Nothing is bought or sold and the value does not change.",
+  },
+  {
+    key: "adjust",
+    label: "Stock count",
+    note: "The shelf and the record disagree. This says the record was wrong, so it needs a reason.",
+  },
+  {
+    key: "damaged",
+    label: "Damaged",
+    note: "Boards that can no longer be sold. Written off at what they cost, not at what they would have fetched.",
+  },
+  {
+    key: "returned",
+    label: "Returned",
+    note: "Goods coming back into a godown. A stock event, not a refund — the money side is a credit note.",
+  },
+];
+
+/**
  * The stock board.
  *
  * Three questions in the order they get asked: what is it all worth, what has
@@ -86,8 +135,8 @@ export function StockBoard({
 }) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
-  const [movement, setMovement] = useState<Movement | null>(null);
-  const [correction, setCorrection] = useState<Correction | null>(null);
+  const [updating, setUpdating] = useState(false);
+  const [tab, setTab] = useState<Movement | Correction>("receive");
   const [pending, startTransition] = useTransition();
 
   const totalValuePaise = useMemo(
@@ -117,8 +166,7 @@ export function StockBoard({
     startTransition(async () => {
       const result = await runCommand(key, input, "/stock");
       if (result.ok) {
-        setMovement(null);
-        setCorrection(null);
+        setUpdating(false);
         router.refresh();
       } else {
         setFailure(result);
@@ -162,84 +210,86 @@ export function StockBoard({
       </div>
 
       {canMove && (
-        <div className="mb-4 flex justify-end gap-2">
-          {(["receive", "issue", "transfer"] as const).map((kind) => (
-            <Button
-              key={kind}
-              variant={movement === kind ? "primary" : "secondary"}
-              onClick={() => setMovement(movement === kind ? null : kind)}
-            >
-              {kind === "receive"
-                ? "Receive"
-                : kind === "issue"
-                  ? "Issue"
-                  : "Transfer"}
-            </Button>
-          ))}
+        <div className="mb-4 flex justify-end">
+          <Button variant="primary" onClick={() => setUpdating(true)}>
+            Update stock
+          </Button>
         </div>
       )}
 
-      {canMove && (
-        <div className="mb-4 flex justify-end gap-2">
-          {(["adjust", "damaged", "returned"] as const).map((kind) => (
-            <Button
-              key={kind}
-              variant={correction === kind ? "primary" : "secondary"}
-              onClick={() => setCorrection(correction === kind ? null : kind)}
-            >
-              {kind === "adjust"
-                ? "Stock count"
-                : kind === "damaged"
-                  ? "Damaged"
-                  : "Returned"}
-            </Button>
-          ))}
-        </div>
-      )}
-
-      {correction && (
-        <div className="mb-6">
-          <Panel
-            title={
-              correction === "adjust"
-                ? "Correct a stock count"
-                : correction === "damaged"
-                  ? "Write off damaged stock"
-                  : "Take returned stock back in"
-            }
+      {/* SIX BUTTONS BECAME ONE.
+          Receiving, issuing, transferring, counting, writing off and taking
+          back are six ways of saying "the stock changed", and six buttons on a
+          board made the reader choose a verb before they had read a number.
+          One control opens the change, and the six live as tabs inside it —
+          which is also where the difference between them is visible, since the
+          forms differ by two fields. */}
+      <Modal
+        open={updating}
+        onClose={() => setUpdating(false)}
+        title="Update stock"
+        description="Movements change what is on hand. Corrections say the record was wrong, or that something happened to the goods."
+        width="lg"
+      >
+        <div className="flex flex-col gap-5">
+          <div
+            role="tablist"
+            aria-label="Kind of stock update"
+            className="-mx-1 flex gap-1 overflow-x-auto px-1"
           >
-            <CorrectionForm
-              correction={correction}
-              godowns={godowns}
-              boards={boards}
-              pending={pending}
-              onSubmit={run}
-            />
-          </Panel>
-        </div>
-      )}
+            {TABS.map((entry) => {
+              const current = tab === entry.key;
+              return (
+                <button
+                  key={entry.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={current}
+                  aria-controls="stock-update-panel"
+                  onClick={() => setTab(entry.key)}
+                  className={
+                    "whitespace-nowrap rounded-lg px-3 py-2 text-[13px] transition-colors " +
+                    "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-subtle)] " +
+                    (current
+                      ? "bg-accent-subtle font-medium text-text"
+                      : "text-text-secondary hover:bg-glass-2 hover:text-text")
+                  }
+                >
+                  {entry.label}
+                </button>
+              );
+            })}
+          </div>
 
-      {movement && (
-        <div className="mb-6">
-          <Panel
-            title={
-              movement === "receive"
-                ? "Receive stock"
-                : movement === "issue"
-                  ? "Issue stock"
-                  : "Transfer between godowns"
-            }
-          >
-            <MovementForm
-              movement={movement}
-              godowns={godowns}
-              boards={boards}
-              pending={pending}
-              onSubmit={run}
-            />
-          </Panel>
+          <div id="stock-update-panel" role="tabpanel">
+            <p className="m-0 mb-4 text-[13px] text-text-secondary">
+              {TABS.find((entry) => entry.key === tab)!.note}
+            </p>
+            {tab === "receive" || tab === "issue" || tab === "transfer" ? (
+              <MovementForm
+                // Keyed so switching tabs starts a clean form. Carrying a
+                // half-typed issue across into a transfer would submit fields
+                // the clerk never looked at.
+                key={tab}
+                movement={tab}
+                godowns={godowns}
+                boards={boards}
+                pending={pending}
+                onSubmit={run}
+              />
+            ) : (
+              <CorrectionForm
+                key={tab}
+                correction={tab}
+                godowns={godowns}
+                boards={boards}
+                pending={pending}
+                onSubmit={run}
+              />
+            )}
+          </div>
         </div>
-      )}
+      </Modal>
 
       {short.length > 0 && (
         <div className="mb-4">
