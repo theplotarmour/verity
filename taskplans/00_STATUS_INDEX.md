@@ -112,6 +112,19 @@ for its specific trigger condition.
 | 78_erpclaw_capability_hr.md | future capability — trigger: a client needing employee lifecycle beyond Resource |
 | 79_erpclaw_capability_payroll.md | future capability — trigger: a concrete Indian payroll client; needs statutory rewrite first |
 | 80_erpclaw_capability_advanced_accounting.md | future capability — trigger: enterprise consolidation/lease-accounting demand |
-| 81_erpclaw_ai_operating_rules.md | cross-cutting rules — trigger: an assistant/command layer gets built |
-| 82_erpclaw_client_capability_builder_skill.md | tooling — trigger: the next real client-capability build, per its own Phase 2 rollout |
+| 81_erpclaw_ai_operating_rules.md | cross-cutting rules — trigger: an assistant/command layer gets built. Amended 2026-09-03 (rules 8–14, folded in from the full ERPClaw corpus and the user's own synthesis) |
+| 82_erpclaw_client_capability_builder_skill.md | tooling — trigger: the next real client-capability build, per its own Phase 2 rollout. Amended 2026-09-03 (sharper anti-patterns, business-invariant/idempotency/config-ownership/lifecycle-first rules) |
 | 83_erpclaw_vertical_module_registry.md | reference table — not a build plan for any row |
+| 84_verity_ai_agent_system.md | **requires ADR** — added 2026-09-03; do not implement until the agent-channel-authority ADR is written and accepted |
+| 85_foundation_conformance_acceptance_script.md | genuinely new gap — added 2026-09-03; trigger: next capability or plywood retrofit |
+| 86_dashboard_and_panel_state_model.md | genuinely new gap — added 2026-09-03; trigger: next Overview page work, or Task 90 |
+| 87_import_export_migration_framework.md | genuinely new gap — added 2026-09-03; trigger: first real external-data client onboarding |
+| 88_reconciliation_as_a_platform_pattern.md | genuinely new gap — added 2026-09-03; trigger: second reconciliation instance (likely bank statements, Task 87) |
+| 89_period_locking_as_a_platform_pattern.md | genuinely new gap — added 2026-09-03; trigger: payroll (Task 79) or a second finance-heavy client |
+| 90_attention_platform_concept.md | **requires ADR** if generalized — added 2026-09-03; trigger: two capabilities independently wanting it |
+| 91_bulk_operations_and_partial_failure.md | genuinely new gap — added 2026-09-03; trigger: Task 84 or Task 87, whichever starts first |
+| 92_business_timeline_view.md | check Task 38's actual output first — added 2026-09-03; may be presentation-layer only |
+| 93_progressive_setup_capability_readiness.md | genuinely new gap — added 2026-09-03; trigger: next real tenant onboarding, build one concrete instance before generalizing |
+| 94_incomplete_information_states.md | genuinely new gap — added 2026-09-03 (2nd round); trigger: a capability field that genuinely needs Unknown/Missing/Pending distinct from empty |
+| 95_verity_ai_long_term_vision.md | aspirational, not a build plan — added 2026-09-03 (2nd round); subordinate to Task 84's ADR gate; phase 6 needs its own future ADR |
+| 96_pending_roadmap_phases.md | sequencing doc for Tasks 72–95 — added 2026-09-03; does not itself authorize starting any phase |
