@@ -67,8 +67,26 @@ export function ShellChrome({
     return () => window.removeEventListener("keydown", onKey);
   }, [navOpen]);
 
-  const isCurrent = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
+  /**
+   * Which nav item LOOKS active, tracked separately from `pathname`.
+   *
+   * `usePathname()` only updates once the target page has actually committed
+   * — the whole gap this exists to close is that a click felt like it did
+   * nothing until the new page's server work finished. Set optimistically on
+   * click, so the highlight moves in the same frame as the click; cleared the
+   * moment `pathname` catches up, so a cancelled or redirected navigation
+   * doesn't strand it lit. `(shell)/loading.tsx` covers the content area for
+   * the same gap; this covers the nav.
+   */
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
+
+  const isCurrent = (href: string) => {
+    if (pendingHref) return pendingHref === href;
+    return href === "/" ? pathname === "/" : pathname.startsWith(href);
+  };
 
   /**
    * The navigation list.
@@ -109,7 +127,10 @@ export function ShellChrome({
                 <li key={item.href}>
                   <Link
                     href={item.href}
-                    onClick={() => setNavOpen(false)}
+                    onClick={() => {
+                      setNavOpen(false);
+                      if (!current) setPendingHref(item.href);
+                    }}
                     aria-current={current ? "page" : undefined}
                     className={
                       // 52px per item put ~1200px of navigation into a 626px
