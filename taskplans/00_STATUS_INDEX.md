@@ -129,3 +129,5 @@ for its specific trigger condition.
 | 95_verity_ai_long_term_vision.md | aspirational, not a build plan — added 2026-09-03 (2nd round); subordinate to Task 84's ADR gate; phase 6 needs its own future ADR |
 | 96_pending_roadmap_phases.md | sequencing doc for Tasks 72–95 — added 2026-09-03; does not itself authorize starting any phase |
 | 97_deep_codebase_cleanup.md | investigation-backed cleanup plan — added 2026-09-03; src/ is clean, findings are root-level docs/config only, nothing executed |
+| 98_liquid_glass_react_extraction.md | reference assessment — added 2026-09-03; one narrow candidate (a single signature surface), platform-wide adoption explicitly rejected on performance/ADR-011 grounds |
+| 99_verity_custom_skills_plan.md | skills roadmap — added 2026-09-03; 8 candidates, none built, priority ranked, each traced to a real session event |
