@@ -23,7 +23,7 @@ Nothing below can start until these are made; none of them is
 implementation work.
 
 - ~~Write and accept Task 84's ADR.~~ **Done 2026-09-03** — `CLAUDE.md`
-  ADR-013. Phase 3 is now buildable.
+  ADR-017. Phase 3 is now buildable.
 - **Task 90 (Attention):** decide platform-contribution-point vs.
   capability-local before Phase 2 produces its first real attention
   sources — otherwise Phase 2 builds something Task 90 has to unwind.

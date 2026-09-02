@@ -225,7 +225,15 @@ any requirement written because it is "common in ERP/SaaS" rather than traced to
   becomes `#00D1B2`; neutrals are reconciled to the sheet; semantic success is retuned away from the
   accent hue so status and theme cannot read as one signal; the mark is monochrome everywhere,
   including favicon and app icon. Supersedes ADR-011 in part — accent default only.
-- **ADR-013** The AI/assistant channel (`PolicyChannel: "agent"` in `policy.ts`) executes every
+
+  **This list stops at ADR-012 and is stale.** The canonical ADR register is
+  `verity-spec/17_decisions/adr/` (`adr-001.md`…`adr-017.md` as of 2026-09-03) — ADR-013 (Global HQ
+  Operator Security Model), ADR-014 (DEC-001 scope), ADR-015 (scheduled work trigger), ADR-016 (the
+  scheduler may enumerate tenants), and ADR-017 (below) are all ACCEPTED there and are not
+  summarized here. Treat this section as a curated highlight reel of ADRs relevant to day-to-day
+  work in this repo, never as the complete list — check the register before assuming an ADR number
+  is unused, the mistake that made ADR-017 necessary as a correction to begin with.
+- **ADR-017** The AI/assistant channel (`PolicyChannel: "agent"` in `policy.ts`) executes every
   action as the calling human's own `ActorContext` — same tenant, same membership, same role, same
   grants, same `enforcePolicy()` gate every other caller passes through. `channel` is recorded on
   the decision and audit trail for provenance only and is consulted by no authorization rule. There
@@ -233,7 +241,10 @@ any requirement written because it is "common in ERP/SaaS" rather than traced to
   runtime (`command.ts`, `policy.ts`, and `policy-engine.test.ts`'s four-channel parity assertion)
   before this ADR — the ADR ratifies it as constitutional rather than changing anything. Gates
   `taskplans/84_verity_ai_agent_system.md`; nothing in that file's six implementation areas may
-  proceed without this holding.
+  proceed without this holding. Full text: `verity-spec/17_decisions/adr/adr-017.md`. (Briefly
+  misnumbered ADR-013 on first write — that number was already taken by the accepted Global HQ
+  Operator Security Model decision; corrected same day, before any dependent work shipped beyond
+  this file and the taskplans below.)
 
 ## Identity shape (already decided, do not re-litigate)
 

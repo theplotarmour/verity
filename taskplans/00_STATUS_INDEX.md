@@ -115,7 +115,7 @@ for its specific trigger condition.
 | 81_erpclaw_ai_operating_rules.md | cross-cutting rules — trigger: an assistant/command layer gets built. Amended 2026-09-03 (rules 8–14, folded in from the full ERPClaw corpus and the user's own synthesis) |
 | 82_erpclaw_client_capability_builder_skill.md | tooling — trigger: the next real client-capability build, per its own Phase 2 rollout. Amended 2026-09-03 (sharper anti-patterns, business-invariant/idempotency/config-ownership/lifecycle-first rules) |
 | 83_erpclaw_vertical_module_registry.md | reference table — not a build plan for any row |
-| 84_verity_ai_agent_system.md | ADR-013 accepted 2026-09-03 (`CLAUDE.md`) — six areas now buildable per Task 96 Phase 3, not yet started |
+| 84_verity_ai_agent_system.md | ADR-017 accepted 2026-09-03 (`CLAUDE.md`) — six areas now buildable per Task 96 Phase 3, not yet started |
 | 85_foundation_conformance_acceptance_script.md | genuinely new gap — added 2026-09-03; trigger: next capability or plywood retrofit |
 | 86_dashboard_and_panel_state_model.md | genuinely new gap — added 2026-09-03; trigger: next Overview page work, or Task 90 |
 | 87_import_export_migration_framework.md | genuinely new gap — added 2026-09-03; trigger: first real external-data client onboarding |

@@ -1,15 +1,15 @@
 # Task 84 — Verity AI agent system: six implementation areas
 
-Authority: `CLAUDE.md` ADR-013 (accepted 2026-09-03 — the gate below is
+Authority: `CLAUDE.md` ADR-017 (accepted 2026-09-03 — the gate below is
 now cleared). `taskplans/81_erpclaw_ai_operating_rules.md` (the rules this
 builds against). `src/server/platform/command.ts`, `src/server/platform/
 policy.ts` (the runtime this builds on — read in full 2026-09-02/03).
 `erpclaw-prd/00-product-vision.md` §5.1 (AI-first but ledger-hard).
 
-## Status: PENDING — ADR-013 accepted; the six areas below are now
+## Status: PENDING — ADR-017 accepted; the six areas below are now
 buildable, in the stated dependency order. Still not started.
 
-The gate that blocked this is cleared: `CLAUDE.md` ADR-013 ratifies "the
+The gate that blocked this is cleared: `CLAUDE.md` ADR-017 ratifies "the
 agent channel authenticates and authorizes as the calling human's own
 `ActorContext`, never elevated" as constitutional. What follows is
 implementation work, sequenced per Task 96 Phase 3 — not yet begun.
@@ -41,7 +41,7 @@ That sentence, or one very close to it, is the ADR's actual content.
 ## The ADR-first gate — cleared 2026-09-03
 
 Was: write the ADR, get it accepted, only then treat the six areas as
-buildable. Done: `CLAUDE.md` ADR-013 is that ADR, accepted. The six areas
+buildable. Done: `CLAUDE.md` ADR-017 is that ADR, accepted. The six areas
 are buildable work now, not a design sketch — still not started, and
 still subject to their own stated dependency order below.
 
