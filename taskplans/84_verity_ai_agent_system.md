@@ -1,18 +1,18 @@
-# Task 84 — Verity AI agent system: ADR-first gate, six implementation areas
+# Task 84 — Verity AI agent system: six implementation areas
 
-Authority: `taskplans/81_erpclaw_ai_operating_rules.md` (the rules this
+Authority: `CLAUDE.md` ADR-013 (accepted 2026-09-03 — the gate below is
+now cleared). `taskplans/81_erpclaw_ai_operating_rules.md` (the rules this
 builds against). `src/server/platform/command.ts`, `src/server/platform/
 policy.ts` (the runtime this builds on — read in full 2026-09-02/03).
 `erpclaw-prd/00-product-vision.md` §5.1 (AI-first but ledger-hard).
 
-## Status: PENDING — gated on an ADR that does not exist yet. Do not
-implement.
+## Status: PENDING — ADR-013 accepted; the six areas below are now
+buildable, in the stated dependency order. Still not started.
 
-This file records the design conversation and the six areas it produced.
-It is not a green light. Per `CLAUDE.md`'s own stop conditions, "a new
-platform primitive appears necessary" and "an unresolved ADR affects the
-work" both apply here — classify this as **requires ADR**, not as
-ready-to-build, until that ADR is written and accepted.
+The gate that blocked this is cleared: `CLAUDE.md` ADR-013 ratifies "the
+agent channel authenticates and authorizes as the calling human's own
+`ActorContext`, never elevated" as constitutional. What follows is
+implementation work, sequenced per Task 96 Phase 3 — not yet begun.
 
 ## The one fact that already decides the hard part
 
@@ -38,19 +38,12 @@ The user's own framing lands on exactly this, independently: *"AI is an
 interface to Verity's existing authority, not a new authority layer."*
 That sentence, or one very close to it, is the ADR's actual content.
 
-## The ADR-first gate
+## The ADR-first gate — cleared 2026-09-03
 
-Before any of the six areas below is implemented:
-
-1. Write the ADR. One paragraph is enough: the agent channel authenticates
-   and authorizes as the calling human's `ActorContext`; `channel: "agent"`
-   is recorded for audit and consulted by no authorization decision; there
-   is no service-account or elevated-authority path for AI-issued commands.
-2. Get it accepted the way any ADR is — this is a security/authorization
-   decision, squarely inside `CLAUDE.md`'s "affecting product behavior,
-   not autonomous."
-3. Only then do the six areas become buildable work rather than a design
-   sketch.
+Was: write the ADR, get it accepted, only then treat the six areas as
+buildable. Done: `CLAUDE.md` ADR-013 is that ADR, accepted. The six areas
+are buildable work now, not a design sketch — still not started, and
+still subject to their own stated dependency order below.
 
 ## What "does things the user can't" actually means, once the gate holds
 

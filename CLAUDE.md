@@ -225,6 +225,15 @@ any requirement written because it is "common in ERP/SaaS" rather than traced to
   becomes `#00D1B2`; neutrals are reconciled to the sheet; semantic success is retuned away from the
   accent hue so status and theme cannot read as one signal; the mark is monochrome everywhere,
   including favicon and app icon. Supersedes ADR-011 in part — accent default only.
+- **ADR-013** The AI/assistant channel (`PolicyChannel: "agent"` in `policy.ts`) executes every
+  action as the calling human's own `ActorContext` — same tenant, same membership, same role, same
+  grants, same `enforcePolicy()` gate every other caller passes through. `channel` is recorded on
+  the decision and audit trail for provenance only and is consulted by no authorization rule. There
+  is no service-account, elevated, or agent-specific authority path. This was already true in the
+  runtime (`command.ts`, `policy.ts`, and `policy-engine.test.ts`'s four-channel parity assertion)
+  before this ADR — the ADR ratifies it as constitutional rather than changing anything. Gates
+  `taskplans/84_verity_ai_agent_system.md`; nothing in that file's six implementation areas may
+  proceed without this holding.
 
 ## Identity shape (already decided, do not re-litigate)
 
