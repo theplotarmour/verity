@@ -58,12 +58,25 @@ export function Modal({
   // synchronised here rather than by rendering the `open` attribute, because
   // the attribute opens a NON-modal dialog — no top layer, no backdrop, no
   // focus containment. Only showModal() gives those.
+  //
+  // `mounted` is a dependency here, not just a guard above. A Modal that is
+  // conditionally created already-open (e.g. `{order && <Modal open ...>}`,
+  // as the receive/edit forms do) returns null on its very first render —
+  // `ref.current` is still null then, so this effect's first run is a no-op.
+  // Once the `mounted` effect flips true, the dialog element finally exists,
+  // but `open` itself never changed (it was `true` from birth), so with only
+  // `[open]` as the dependency array this effect never fires again and
+  // `showModal()` is never called — the dialog mounts, sits in the DOM, and
+  // never opens. A Modal that instead stays permanently mounted and toggles
+  // `open` after the fact (Cancel, New order) never hit this, because `open`
+  // genuinely changes once the ref already exists — which is why only the
+  // conditionally-mounted forms were silently broken, not every modal.
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
     if (open && !dialog.open) dialog.showModal();
     if (!open && dialog.open) dialog.close();
-  }, [open]);
+  }, [open, mounted]);
 
   // The page behind a modal must not scroll: on a phone, a form with the
   // keyboard up otherwise scrolls the list underneath instead of the form.

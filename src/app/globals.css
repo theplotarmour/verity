@@ -320,15 +320,16 @@
   ::selection { background: var(--color-accent-subtle); color: var(--color-text); }
   :root { accent-color: var(--color-accent); caret-color: var(--color-accent); }
 
-  * { scrollbar-color: var(--color-line-strong) transparent; scrollbar-width: thin; }
-  ::-webkit-scrollbar { width: 11px; height: 11px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb {
-    background: var(--color-line-strong);
-    border: 3px solid transparent;
-    border-radius: 999px;
-    background-clip: content-box;
-  }
+  /**
+   * Scrollbars hidden everywhere. The scroll itself is untouched — wheel,
+   * trackpad, touch, and keyboard scrolling all still work; only the
+   * track/thumb no longer paints. `scrollbar-width: none` covers Firefox,
+   * `::-webkit-scrollbar { display: none }` covers Chromium/Safari, and
+   * `-ms-overflow-style: none` covers legacy Edge — the three mechanisms
+   * a hidden-but-functional scrollbar needs, none of them optional.
+   */
+  * { scrollbar-width: none; -ms-overflow-style: none; }
+  ::-webkit-scrollbar { display: none; }
 
   :focus-visible {
     outline: 2px solid var(--color-accent);
