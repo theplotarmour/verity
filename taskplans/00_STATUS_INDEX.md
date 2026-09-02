@@ -131,3 +131,4 @@ for its specific trigger condition.
 | 97_deep_codebase_cleanup.md | investigation-backed cleanup plan — added 2026-09-03; src/ is clean, findings are root-level docs/config only, nothing executed |
 | 98_liquid_glass_react_extraction.md | reference assessment — added 2026-09-03; one narrow candidate (a single signature surface), platform-wide adoption explicitly rejected on performance/ADR-011 grounds |
 | 99_verity_custom_skills_plan.md | skills roadmap — added 2026-09-03; 8 candidates, none built, priority ranked, each traced to a real session event |
+| 100_dashboard_intelligence_direction.md | dashboard direction doc — added 2026-09-03; overlaps Tasks 86/90/92, flags two real conflicts (sparklines need missing time-series infra, shadcn conflicts with the existing hand-built component layer) needing explicit decisions before either proceeds |

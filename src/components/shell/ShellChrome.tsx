@@ -207,13 +207,18 @@ export function ShellChrome({
      * push the page taller instead — the failure this replaces.
      */
     <div
+      data-shell-root=""
       className="flex h-dvh flex-col overflow-hidden lg:grid"
       style={{ gridTemplateColumns: "234px 1fr" }}
     >
       {/* ----------------------------- sidebar -----------------------------
           Header and account card are stable; the NAVIGATION REGION ALONE
-          scrolls, and only when the list outgrows the viewport (D12). */}
-      <aside className="glass-shell hidden min-h-0 flex-col border-r border-line px-4 pb-5 pt-7 lg:flex">
+          scrolls, and only when the list outgrows the viewport (D12). Hidden
+          from print entirely — see globals.css's `@media print` block for
+          why hiding it here isn't enough on its own (the grid/height chain
+          this root sits in needs resetting too, or the sidebar's gone but
+          the content still clips to one screen-height page). */}
+      <aside className="glass-shell hidden min-h-0 flex-col border-r border-line px-4 pb-5 pt-7 print:hidden lg:flex">
         <Link href="/" aria-label="Verity" className="mb-8 block shrink-0 px-2 no-underline">
           <VerityLockup size={30} className="text-text" />
         </Link>
@@ -226,7 +231,7 @@ export function ShellChrome({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Mobile bar. The mockups have no small-screen composition to copy, so
             this states the identity and offers the sheet, and nothing else. */}
-        <div className="glass-shell z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line px-4 lg:hidden">
+        <div className="glass-shell z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line px-4 print:hidden lg:hidden">
           <Link href="/" aria-label="Verity" className="no-underline">
             <VerityLockup size={22} className="text-text" />
           </Link>
@@ -244,7 +249,7 @@ export function ShellChrome({
         </div>
 
         {navOpen && (
-          <div className="fixed inset-0 z-40 flex flex-col lg:hidden">
+          <div className="fixed inset-0 z-40 flex flex-col print:hidden lg:hidden">
             {/* A scrim behind a temporary sheet. Under ADR-011 glass is a
                 material system rather than an exception, but this surface's
                 treatment is unchanged. */}
@@ -267,7 +272,7 @@ export function ShellChrome({
         {/* -------------------------- top bar ---------------------------
             Persistent chrome, as the boards draw it. It needs no `sticky`:
             the main region below owns the scroll, so this never travels. */}
-        <div className="hidden h-[84px] shrink-0 items-center gap-4 px-8 lg:flex">
+        <div className="hidden h-[84px] shrink-0 items-center gap-4 px-8 print:hidden lg:flex">
           {/* Search is centred and dominant, as the mockup draws it. It is a
               real control over the records already loaded on the page, not a
               platform-wide index — platform search is DEFERRED and drawing a
@@ -324,7 +329,7 @@ export function ShellChrome({
           // can freeze THIS while it is open — locking document.body, which is
           // what a dialog normally does, achieves nothing here.
           data-shell-scroll=""
-          className="min-h-0 min-w-0 flex-1 overflow-y-auto px-5 pb-10 pt-6 sm:px-8 lg:px-8 lg:pt-0"
+          className="min-h-0 min-w-0 flex-1 overflow-y-auto px-5 pb-10 pt-6 print:p-0 sm:px-8 lg:px-8 lg:pt-0"
         >
           {children}
         </main>

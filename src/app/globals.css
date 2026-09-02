@@ -697,4 +697,35 @@
   }
 }
 
+/**
+ * PRINT — only the printable content, never the app around it.
+ *
+ * `ShellChrome`'s own `print:hidden` on the sidebar and both top bars
+ * handles what's VISIBLE — this handles what's not obviously visible but
+ * still wrong: `html`/`body` are `height: 100dvh; overflow: hidden` (the
+ * app is a fixed-height single-scroller shell, never a scrolling document —
+ * see the overscroll comment above), and the shell root repeats the same
+ * `h-dvh overflow-hidden` so its own content scrolls instead of the page.
+ * A browser paginating for print measures exactly that chain of
+ * fixed-height, clipped ancestors and prints one screen-height page — the
+ * invoice's own lines past the fold silently vanish, not just the chrome
+ * around them. Every element in the chain up to the printable content
+ * needs `height: auto` and `overflow: visible`, or hiding the sidebar
+ * alone still ships a clipped invoice.
+ *
+ * The atmosphere and grain are already display:none under
+ * `prefers-reduced-transparency`, above — print gets the same treatment
+ * for the same reason: it's a screen material, and ink has no backdrop to
+ * filter.
+ */
+@media print {
+  html, body, [data-shell-root], [data-shell-scroll] {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .verity-atmosphere, .verity-grain {
+    display: none !important;
+  }
+}
+
 .tabular { font-variant-numeric: tabular-nums; }
