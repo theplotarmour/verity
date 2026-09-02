@@ -128,3 +128,4 @@ for its specific trigger condition.
 | 94_incomplete_information_states.md | genuinely new gap — added 2026-09-03 (2nd round); trigger: a capability field that genuinely needs Unknown/Missing/Pending distinct from empty |
 | 95_verity_ai_long_term_vision.md | aspirational, not a build plan — added 2026-09-03 (2nd round); subordinate to Task 84's ADR gate; phase 6 needs its own future ADR |
 | 96_pending_roadmap_phases.md | sequencing doc for Tasks 72–95 — added 2026-09-03; does not itself authorize starting any phase |
+| 97_deep_codebase_cleanup.md | investigation-backed cleanup plan — added 2026-09-03; src/ is clean, findings are root-level docs/config only, nothing executed |
