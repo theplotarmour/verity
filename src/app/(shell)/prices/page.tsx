@@ -75,6 +75,9 @@ export default async function PricesPage({
         name: product.name,
         brandName: brand.brandName,
         thicknessTenthMm: product.thicknessTenthMm ?? null,
+        sizeUnit: product.sizeUnit,
+        widthTenth: product.widthTenth,
+        heightTenth: product.heightTenth,
       })),
   );
 

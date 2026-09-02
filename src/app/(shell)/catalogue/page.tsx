@@ -9,7 +9,7 @@ import { CatalogueAdmin } from "./CatalogueAdmin";
 export const dynamic = "force-dynamic";
 
 /**
- * The board catalogue.
+ * The product catalogue.
  *
  * Withdrawn products are shown here and nowhere else, for the same reason the
  * menu shows retired dishes: a purchase order from last quarter references what
@@ -31,7 +31,7 @@ export default async function CataloguePage() {
     <>
       <PageHeader
         title="Catalogue"
-        description="Every board this business trades, by brand. A size is fixed at creation — an 18 mm board and a 12 mm board are two products, not one that was corrected."
+        description="Every board, plywood sheet, laminate and louvre this business trades, by brand. Each family is quoted in its own unit — feet for sheets, inches for louvres. A size is fixed at creation: an 18 mm board and a 12 mm board are two products, not one that was corrected."
       />
       <CatalogueAdmin catalogue={catalogue} />
     </>

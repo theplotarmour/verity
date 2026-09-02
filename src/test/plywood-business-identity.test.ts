@@ -350,8 +350,8 @@ describeDb("plywood business identity (slice 2)", () => {
       name: `Board ${randomUUID().slice(0, 8)}`,
       hsnCode: "44121000",
       thicknessTenthMm: 180,
-      widthMm: 2440,
-      heightMm: 1220,
+      widthTenth: 24400,
+      heightTenth: 12200,
       grade: "BWR",
     });
     const po = await executeCommand(owner, createPurchaseOrder, {
@@ -403,8 +403,8 @@ describeDb("plywood business identity (slice 2)", () => {
       name: `Board ${randomUUID().slice(0, 8)}`,
       hsnCode: "44121000",
       thicknessTenthMm: 120,
-      widthMm: 2440,
-      heightMm: 1220,
+      widthTenth: 24400,
+      heightTenth: 12200,
       grade: "MR",
     });
     const po = await executeCommand(owner, createPurchaseOrder, {

@@ -219,8 +219,8 @@ describeDb("capability: Plywood trading — catalogue and godowns", () => {
       name: "Sainik MR 710",
       hsnCode: "44121000",
       thicknessTenthMm: 180,
-      widthMm: 2440,
-      heightMm: 1220,
+      widthTenth: 24400,
+      heightTenth: 12200,
       grade: "MR",
       sheetWeightGrams: 28_000,
       reorderLevelUnits: 40,
@@ -229,11 +229,12 @@ describeDb("capability: Plywood trading — catalogue and godowns", () => {
     const catalogue = await executeQuery(owner, listCatalogue, { brandId: centuryId });
     const listed = catalogue[0]!.products.find((p) => p.id === product.id)!;
 
-    // 18.0 mm as 180 tenths, and an 8 ft x 4 ft sheet as millimetres. Exact
-    // integers, because a board's size is an exact fact.
+    // 18.0 mm as 180 tenths, and a 2440 x 1220 mm sheet as tenths of a
+    // millimetre. Exact integers, because a board's size is an exact fact.
     expect(listed.thicknessTenthMm).toBe(180);
-    expect(listed.widthMm).toBe(2440);
-    expect(listed.heightMm).toBe(1220);
+    expect(listed.sizeUnit).toBe("MM");
+    expect(listed.widthTenth).toBe(24400);
+    expect(listed.heightTenth).toBe(12200);
     expect(listed.hsnCode).toBe("44121000");
     expect(listed.unitLabel).toBe("sheets");
   });
@@ -247,8 +248,8 @@ describeDb("capability: Plywood trading — catalogue and godowns", () => {
         name: "Bad HSN board",
         hsnCode: "441",
         thicknessTenthMm: 120,
-        widthMm: 2440,
-        heightMm: 1220,
+      widthTenth: 24400,
+        heightTenth: 12200,
         grade: "MR",
       }),
     ).rejects.toThrow(/HSN|E_VALIDATION/);
@@ -259,8 +260,8 @@ describeDb("capability: Plywood trading — catalogue and godowns", () => {
         name: "Also bad HSN board",
         hsnCode: "4412100X",
         thicknessTenthMm: 120,
-        widthMm: 2440,
-        heightMm: 1220,
+      widthTenth: 24400,
+        heightTenth: 12200,
         grade: "MR",
       }),
     ).rejects.toThrow(/HSN|E_VALIDATION/);
@@ -273,8 +274,8 @@ describeDb("capability: Plywood trading — catalogue and godowns", () => {
         name: "Zero-thickness board",
         hsnCode: "4412",
         thicknessTenthMm: 0,
-        widthMm: 2440,
-        heightMm: 1220,
+      widthTenth: 24400,
+        heightTenth: 12200,
         grade: "MR",
       }),
     ).rejects.toThrow();
@@ -296,8 +297,8 @@ describeDb("capability: Plywood trading — catalogue and godowns", () => {
         name: "Orphan board",
         hsnCode: "4412",
         thicknessTenthMm: 120,
-        widthMm: 2440,
-        heightMm: 1220,
+      widthTenth: 24400,
+        heightTenth: 12200,
         grade: "MR",
       }),
     ).rejects.toThrow(/deactivated brand/);
@@ -309,8 +310,8 @@ describeDb("capability: Plywood trading — catalogue and godowns", () => {
       name: "Club Prime BWR",
       hsnCode: "4412",
       thicknessTenthMm: 190,
-      widthMm: 2440,
-      heightMm: 1220,
+      widthTenth: 24400,
+      heightTenth: 12200,
       grade: "BWR",
     });
 
@@ -339,8 +340,8 @@ describeDb("capability: Plywood trading — catalogue and godowns", () => {
       name: "Fixed-size board",
       hsnCode: "4412",
       thicknessTenthMm: 250,
-      widthMm: 2440,
-      heightMm: 1220,
+      widthTenth: 24400,
+      heightTenth: 12200,
       grade: "BWR",
     });
 
@@ -350,7 +351,7 @@ describeDb("capability: Plywood trading — catalogue and godowns", () => {
       // Not part of the command's input. Passed here on purpose: the assertion
       // is that offering it changes nothing, so a caller cannot smuggle a
       // dimension edit through a command that does not accept one.
-      ...({ thicknessTenthMm: 60, widthMm: 999 } as Record<string, number>),
+      ...({ thicknessTenthMm: 60, widthTenth: 999 } as Record<string, number>),
     } as Parameters<typeof editProduct.handler>[1]);
 
     const after = await withTenant(tenantId, (tx) =>
@@ -358,7 +359,7 @@ describeDb("capability: Plywood trading — catalogue and godowns", () => {
     );
     expect(after.name).toBe("Fixed-size board, renamed");
     expect(after.thicknessTenthMm).toBe(250);
-    expect(after.widthMm).toBe(2440);
+    expect(after.widthTenth).toBe(24400);
   });
 
   it("hides a deactivated product from the catalogue but keeps it retrievable", async () => {
@@ -367,8 +368,8 @@ describeDb("capability: Plywood trading — catalogue and godowns", () => {
       name: "Withdrawn line",
       hsnCode: "4412",
       thicknessTenthMm: 90,
-      widthMm: 2440,
-      heightMm: 1220,
+      widthTenth: 24400,
+      heightTenth: 12200,
       grade: "MR",
     });
     await executeCommand(owner, setProductActive, { productId: product.id, active: false });
@@ -448,8 +449,8 @@ describeDb("capability: Plywood trading — catalogue and godowns", () => {
         name: "Clerk's own board",
         hsnCode: "4412",
         thicknessTenthMm: 120,
-        widthMm: 2440,
-        heightMm: 1220,
+      widthTenth: 24400,
+        heightTenth: 12200,
         grade: "MR",
       }),
     ).rejects.toBeInstanceOf(ForbiddenError);

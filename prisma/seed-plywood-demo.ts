@@ -118,14 +118,25 @@ type Board = {
   brand: string;
   name: string;
   hsn: string;
-  thickness: number;
+  /** Tenths of a millimetre. Absent where the family does not quote one. */
+  thickness?: number;
+  /**
+   * Which family, which decides the unit the size below is read in. Laminates
+   * take no size at all here — the command fixes every laminate at 8 ft x 4 ft,
+   * which is the only size this business sells.
+   */
+  category: "BOARD" | "PLYWOOD" | "LAMINATE" | "LOUVRE";
+  /** Tenths of the family's unit: 80 is 8.0 ft, 960 is 96.0 in. */
+  width?: number;
+  height?: number;
+  unit?: string;
   grade: string;
   /** What the mill charges us, and what we charge a trade customer. */
   cost: number;
   price: number;
 };
 
-const BRANDS = ["Century", "Greenply", "Sainik", "Austin", "Duro"];
+const BRANDS = ["Century", "Greenply", "Sainik", "Austin", "Duro", "Kalinga Louvres"];
 
 /**
  * A real yard's range: the same grades in the thicknesses that actually sell.
@@ -133,26 +144,34 @@ const BRANDS = ["Century", "Greenply", "Sainik", "Austin", "Duro"];
  * under BWP, thicker dearer, and a working margin on every line.
  */
 const BOARDS: Board[] = [
-  { key: "cen-mr-6", brand: "Century", name: "MR Commercial Ply", hsn: "44121000", thickness: 60, grade: "MR", cost: 620, price: 780 },
-  { key: "cen-mr-12", brand: "Century", name: "MR Commercial Ply", hsn: "44121000", thickness: 120, grade: "MR", cost: 1020, price: 1290 },
-  { key: "cen-mr-19", brand: "Century", name: "MR Commercial Ply", hsn: "44121000", thickness: 190, grade: "MR", cost: 1480, price: 1850 },
-  { key: "cen-bwr-12", brand: "Century", name: "BWR Marine Ply", hsn: "44121000", thickness: 120, grade: "BWR", cost: 1340, price: 1690 },
-  { key: "cen-bwr-19", brand: "Century", name: "BWR Marine Ply", hsn: "44121000", thickness: 190, grade: "BWR", cost: 1920, price: 2420 },
-  { key: "grn-mr-6", brand: "Greenply", name: "MR Commercial Ply", hsn: "44121000", thickness: 60, grade: "MR", cost: 590, price: 745 },
-  { key: "grn-mr-12", brand: "Greenply", name: "MR Commercial Ply", hsn: "44121000", thickness: 120, grade: "MR", cost: 980, price: 1240 },
-  { key: "grn-mr-19", brand: "Greenply", name: "MR Commercial Ply", hsn: "44121000", thickness: 190, grade: "MR", cost: 1420, price: 1790 },
-  { key: "grn-bwp-19", brand: "Greenply", name: "BWP Gurjan Ply", hsn: "44121000", thickness: 190, grade: "BWP", cost: 2280, price: 2860 },
-  { key: "grn-bwp-25", brand: "Greenply", name: "BWP Gurjan Ply", hsn: "44121000", thickness: 250, grade: "BWP", cost: 2940, price: 3680 },
-  { key: "sai-mr-9", brand: "Sainik", name: "MR Ply 710", hsn: "44121000", thickness: 90, grade: "MR", cost: 760, price: 960 },
-  { key: "sai-mr-12", brand: "Sainik", name: "MR Ply 710", hsn: "44121000", thickness: 120, grade: "MR", cost: 940, price: 1180 },
-  { key: "sai-bwr-19", brand: "Sainik", name: "BWR Ply 710", hsn: "44121000", thickness: 190, grade: "BWR", cost: 1760, price: 2210 },
-  { key: "aus-blk-19", brand: "Austin", name: "Block Board", hsn: "44123900", thickness: 190, grade: "MR", cost: 1580, price: 1980 },
-  { key: "aus-blk-25", brand: "Austin", name: "Block Board", hsn: "44123900", thickness: 250, grade: "MR", cost: 1940, price: 2440 },
-  { key: "aus-flush-30", brand: "Austin", name: "Flush Door", hsn: "44182000", thickness: 300, grade: "BWR", cost: 2650, price: 3320 },
-  { key: "dur-mdf-9", brand: "Duro", name: "Plain MDF", hsn: "44111200", thickness: 90, grade: "MR", cost: 520, price: 665 },
-  { key: "dur-mdf-18", brand: "Duro", name: "Plain MDF", hsn: "44111200", thickness: 180, grade: "MR", cost: 880, price: 1120 },
-  { key: "dur-lam-1", brand: "Duro", name: "Laminate Sheet 1mm", hsn: "48239019", thickness: 10, grade: "MR", cost: 890, price: 1180 },
-  { key: "dur-ven-4", brand: "Duro", name: "Teak Veneer 4mm", hsn: "44083190", thickness: 40, grade: "MR", cost: 1650, price: 2150 },
+  { key: "cen-mr-6", brand: "Century", name: "MR Commercial Ply", hsn: "44121000", category: "PLYWOOD", width: 80, height: 40, thickness: 60, grade: "MR", cost: 620, price: 780 },
+  { key: "cen-mr-12", brand: "Century", name: "MR Commercial Ply", hsn: "44121000", category: "PLYWOOD", width: 80, height: 40, thickness: 120, grade: "MR", cost: 1020, price: 1290 },
+  { key: "cen-mr-19", brand: "Century", name: "MR Commercial Ply", hsn: "44121000", category: "PLYWOOD", width: 80, height: 40, thickness: 190, grade: "MR", cost: 1480, price: 1850 },
+  { key: "cen-bwr-12", brand: "Century", name: "BWR Marine Ply", hsn: "44121000", category: "PLYWOOD", width: 80, height: 40, thickness: 120, grade: "BWR", cost: 1340, price: 1690 },
+  { key: "cen-bwr-19", brand: "Century", name: "BWR Marine Ply", hsn: "44121000", category: "PLYWOOD", width: 80, height: 40, thickness: 190, grade: "BWR", cost: 1920, price: 2420 },
+  { key: "grn-mr-6", brand: "Greenply", name: "MR Commercial Ply", hsn: "44121000", category: "PLYWOOD", width: 80, height: 40, thickness: 60, grade: "MR", cost: 590, price: 745 },
+  { key: "grn-mr-12", brand: "Greenply", name: "MR Commercial Ply", hsn: "44121000", category: "PLYWOOD", width: 80, height: 40, thickness: 120, grade: "MR", cost: 980, price: 1240 },
+  { key: "grn-mr-19", brand: "Greenply", name: "MR Commercial Ply", hsn: "44121000", category: "PLYWOOD", width: 80, height: 40, thickness: 190, grade: "MR", cost: 1420, price: 1790 },
+  { key: "grn-bwp-19", brand: "Greenply", name: "BWP Gurjan Ply", hsn: "44121000", category: "PLYWOOD", width: 80, height: 40, thickness: 190, grade: "BWP", cost: 2280, price: 2860 },
+  { key: "grn-bwp-25", brand: "Greenply", name: "BWP Gurjan Ply", hsn: "44121000", category: "PLYWOOD", width: 80, height: 40, thickness: 250, grade: "BWP", cost: 2940, price: 3680 },
+  { key: "sai-mr-9", brand: "Sainik", name: "MR Ply 710", hsn: "44121000", category: "PLYWOOD", width: 80, height: 40, thickness: 90, grade: "MR", cost: 760, price: 960 },
+  { key: "sai-mr-12", brand: "Sainik", name: "MR Ply 710", hsn: "44121000", category: "PLYWOOD", width: 80, height: 40, thickness: 120, grade: "MR", cost: 940, price: 1180 },
+  { key: "sai-bwr-19", brand: "Sainik", name: "BWR Ply 710", hsn: "44121000", category: "PLYWOOD", width: 80, height: 40, thickness: 190, grade: "BWR", cost: 1760, price: 2210 },
+  { key: "aus-blk-19", brand: "Austin", name: "Block Board", hsn: "44123900", category: "BOARD", width: 80, height: 40, thickness: 190, grade: "MR", cost: 1580, price: 1980 },
+  { key: "aus-blk-25", brand: "Austin", name: "Block Board", hsn: "44123900", category: "BOARD", width: 80, height: 40, thickness: 250, grade: "MR", cost: 1940, price: 2440 },
+  { key: "aus-flush-30", brand: "Austin", name: "Flush Door", hsn: "44182000", category: "BOARD", width: 80, height: 40, thickness: 300, grade: "BWR", cost: 2650, price: 3320 },
+  { key: "dur-mdf-9", brand: "Duro", name: "Plain MDF", hsn: "44111200", category: "BOARD", width: 80, height: 40, thickness: 90, grade: "MR", cost: 520, price: 665 },
+  { key: "dur-mdf-18", brand: "Duro", name: "Plain MDF", hsn: "44111200", category: "BOARD", width: 80, height: 40, thickness: 180, grade: "MR", cost: 880, price: 1120 },
+  { key: "dur-lam-1", brand: "Duro", name: "Laminate Sheet 1mm", hsn: "48239019", category: "LAMINATE", thickness: 10, grade: "MR", cost: 890, price: 1180 },
+  { key: "dur-ven-4", brand: "Duro", name: "Teak Veneer 4mm", hsn: "44083190", category: "BOARD", width: 80, height: 40, thickness: 40, grade: "MR", cost: 1650, price: 2150 },
+  // Louvres are sold by the piece and quoted in inches — a different unit
+  // system from every row above, which is the whole reason the size carries
+  // its own unit.
+  { key: "kal-lou-96x4", brand: "Kalinga Louvres", name: "WPC Fluted Louvre", hsn: "39251000", category: "LOUVRE", width: 960, height: 40, unit: "pcs", grade: "WPC", cost: 640, price: 830 },
+  { key: "kal-lou-96x6", brand: "Kalinga Louvres", name: "WPC Fluted Louvre", hsn: "39251000", category: "LOUVRE", width: 960, height: 60, unit: "pcs", grade: "WPC", cost: 890, price: 1150 },
+  { key: "kal-lou-108x6", brand: "Kalinga Louvres", name: "WPC Fluted Louvre", hsn: "39251000", category: "LOUVRE", width: 1080, height: 60, unit: "pcs", grade: "WPC", cost: 1020, price: 1320 },
+  { key: "kal-lou-96x9", brand: "Kalinga Louvres", name: "Charcoal Louvre Panel", hsn: "39251000", category: "LOUVRE", width: 960, height: 90, unit: "pcs", grade: "WPC", cost: 1340, price: 1720 },
+  { key: "dur-lam-08", brand: "Duro", name: "Laminate Sheet 0.8mm", hsn: "48239019", category: "LAMINATE", thickness: 8, grade: "MR", cost: 720, price: 950 },
 ];
 
 const SUPPLIERS = [
@@ -210,13 +229,24 @@ async function main(): Promise<void> {
     legalName: "Shri Ganesh Timber Trading Co.",
     tradeName: "Shri Ganesh Timber",
   });
-  await executeCommand(OWNER, registerGstRegistration, {
-    // 07 is Delhi, and the state code is read from the GSTIN rather than
-    // stored beside it.
-    gstin: "07AAGCS4471P1ZV",
-    registrationType: "regular",
-    invoiceSeriesPrefix: "SGT",
-  });
+  // The wipe deliberately leaves the registration alone — it is the business's
+  // legal identity, not demo data, and dropping it on every reseed would mean
+  // re-registering a real GSTIN to look at test invoices. So a second run finds
+  // one already there, which is success, not a failure to report.
+  const [{ count }] = await admin.$queryRawUnsafe<Array<{ count: bigint }>>(
+    `SELECT count(*)::bigint AS count FROM "plywood_gst_registration"
+      WHERE tenant_id = $1::uuid AND active = true`,
+    TENANT_ID,
+  );
+  if (count === 0n) {
+    await executeCommand(OWNER, registerGstRegistration, {
+      // 07 is Delhi, and the state code is read from the GSTIN rather than
+      // stored beside it.
+      gstin: "07AAGCS4471P1ZV",
+      registrationType: "regular",
+      invoiceSeriesPrefix: "SGT",
+    });
+  }
   // Plywood and board products sit at 18%; laminate and MDF likewise. One rule per
   // HSN in the catalogue, so no invoice ever falls back to a configuration key.
   for (const hsn of [...new Set(BOARDS.map((board) => board.hsn))]) {
@@ -240,9 +270,13 @@ async function main(): Promise<void> {
       brandId: brandIds.get(board.brand)!,
       name: board.name,
       hsnCode: board.hsn,
-      thicknessTenthMm: board.thickness,
-      widthMm: 2440,
-      heightMm: 1220,
+      category: board.category,
+      ...(board.thickness ? { thicknessTenthMm: board.thickness } : {}),
+      // Absent for a laminate on purpose: the command fixes it at 8 ft x 4 ft,
+      // and sending a size here would be the form arguing with the rule.
+      ...(board.width ? { widthTenth: board.width } : {}),
+      ...(board.height ? { heightTenth: board.height } : {}),
+      ...(board.unit ? { unitLabel: board.unit } : {}),
       grade: board.grade,
     });
     productIds.set(board.key, product.id);

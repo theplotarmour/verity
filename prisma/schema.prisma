@@ -2103,8 +2103,21 @@ model PlywoodProduct {
   /// have no sheet dimensions at all. `plywood_product_dimensions_positive`
   /// allows NULL but still refuses zero or negative when a value is given.
   thicknessTenthMm  Int?     @map("thickness_tenth_mm")
-  widthMm           Int?     @map("width_mm")
-  heightMm          Int?     @map("height_mm")
+  /// BOARD, PLYWOOD, LAMINATE, LOUVRE or OTHER. What the trade calls this
+  /// thing, and — because each family is quoted in its own unit — what decides
+  /// how its size is read. A plain string, validated at the command layer
+  /// (`ProductCategory` in index.ts) and by a CHECK constraint, consistent with
+  /// every other closed set in this file.
+  category          String   @default("OTHER")
+  /// MM, FT or IN. The unit `widthTenth` and `heightTenth` are counted in.
+  /// Stored rather than derived from `category`, because it is a fact about
+  /// what was recorded — boards entered before the trade's own units were
+  /// modelled hold genuine millimetres, and rewriting them would be a lie.
+  sizeUnit          String   @default("MM") @map("size_unit")
+  /// Tenths of `sizeUnit`. 80 is 8.0 ft; 24400 is 2440.0 mm. Tenths for the
+  /// same reason thickness is: 8 ft is an exact fact and is not 2438.4 mm.
+  widthTenth        Int?     @map("width_tenth")
+  heightTenth       Int?     @map("height_tenth")
   /// BWR, MR, Marine. A free string: grades are the client's vocabulary and an
   /// enum here would need a platform migration the first time a supplier
   /// invents one.

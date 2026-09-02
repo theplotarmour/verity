@@ -107,8 +107,8 @@ describeDb("plywood tax (slice 6)", () => {
       name: `Board ${randomUUID().slice(0, 8)}`,
       hsnCode: "44121000",
       thicknessTenthMm: 180,
-      widthMm: 2440,
-      heightMm: 1220,
+      widthTenth: 24400,
+      heightTenth: 12200,
       grade: "BWR",
     });
     return product.id;
@@ -204,8 +204,8 @@ describeDb("plywood tax (slice 6)", () => {
       name: `Board ${randomUUID().slice(0, 8)}`,
       hsnCode,
       thicknessTenthMm: 180,
-      widthMm: 2440,
-      heightMm: 1220,
+      widthTenth: 24400,
+      heightTenth: 12200,
       grade: "BWR",
     });
     const order = await executeCommand(owner, createPurchaseOrder, {

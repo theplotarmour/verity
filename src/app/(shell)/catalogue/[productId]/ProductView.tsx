@@ -15,6 +15,11 @@ import { day, rupees, rupeesShort, sheets } from "@/components/ui/business/forma
 import { PURCHASE_STATE, SALES_STATE, present } from "@/components/ui/business/states";
 import { MOVEMENT_KIND, movementHref } from "@/components/ui/business/movements";
 import { Related } from "@/components/ui/business/Related";
+import {
+  CATEGORY_RULES,
+  formatProductSize,
+  type ProductCategory,
+} from "@/server/capabilities/plywood/product";
 
 type Product = Awaited<
   ReturnType<typeof import("@/server/capabilities/plywood").productDetail.handler>
@@ -26,16 +31,20 @@ function millimetres(tenths: number | null): string | null {
 }
 
 export function ProductView({ product }: { product: NonNullable<Product> }) {
+  // The size carries its own unit, because this business trades in three of
+  // them: feet for boards, plywood and laminates, inches for louvres, and
+  // millimetres for anything entered before the families were modelled.
   const size =
-    product.widthMm && product.heightMm
-      ? `${product.widthMm} × ${product.heightMm}mm`
+    product.widthTenth && product.heightTenth
+      ? formatProductSize(product)
       : null;
+  const family = CATEGORY_RULES[product.category as ProductCategory]?.label;
 
   return (
     <>
       <PageHeader
         title={product.name}
-        description={`${product.brandName} · ${product.grade}${size ? ` · ${size}` : ""}${
+        description={`${product.brandName}${family ? ` · ${family}` : ""} · ${product.grade}${size ? ` · ${size}` : ""}${
           millimetres(product.thicknessTenthMm) ? ` · ${millimetres(product.thicknessTenthMm)}` : ""
         }`}
       />

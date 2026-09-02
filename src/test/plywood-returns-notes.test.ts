@@ -100,8 +100,8 @@ describeDb("plywood returns and corrections (slice 5)", () => {
       name: `Board ${randomUUID().slice(0, 8)}`,
       hsnCode: "44121000",
       thicknessTenthMm: 180,
-      widthMm: 2440,
-      heightMm: 1220,
+      widthTenth: 24400,
+      heightTenth: 12200,
       grade: "BWR",
     });
     return product.id;

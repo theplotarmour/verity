@@ -250,8 +250,8 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
       grade: "BWR",
       // The Catalogue form sends tenths, converted from the millimetres typed.
       thicknessTenthMm: Math.round(18 * 10),
-      widthMm: 2440,
-      heightMm: 1220,
+      widthTenth: 24400,
+      heightTenth: 12200,
       reorderLevelUnits: 50,
     });
     productId = product.id;

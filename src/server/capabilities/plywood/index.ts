@@ -224,6 +224,21 @@ export const setBrandActive: CommandDefinition<
  * consistent with this capability's other closed-set fields (`grade`, order
  * `state`, movement `kind`), all plain strings.
  */
+export {
+  PRODUCT_CATEGORIES,
+  SIZE_UNITS,
+  CATEGORY_RULES,
+  formatProductSize,
+  type ProductCategory,
+  type SizeUnit,
+} from "./product";
+import {
+  CATEGORY_RULES,
+  PRODUCT_CATEGORIES,
+  type ProductCategory,
+  type SizeUnit,
+} from "./product";
+
 export const PRODUCT_TYPES = ["PHYSICAL", "SERVICE"] as const;
 export type ProductType = (typeof PRODUCT_TYPES)[number];
 
@@ -233,8 +248,9 @@ export const createProduct: CommandDefinition<
     name: string;
     hsnCode: string;
     thicknessTenthMm?: number;
-    widthMm?: number;
-    heightMm?: number;
+    category?: ProductCategory;
+    widthTenth?: number;
+    heightTenth?: number;
     grade: string;
     sheetWeightGrams?: number;
     reorderLevelUnits?: number;
@@ -256,8 +272,13 @@ export const createProduct: CommandDefinition<
     // dimensions at all — the database's own check constraint allows NULL
     // but still refuses zero or negative when a value is given.
     thicknessTenthMm: z.number().int().positive().optional(),
-    widthMm: z.number().int().positive().optional(),
-    heightMm: z.number().int().positive().optional(),
+    // Which family this is. The unit its size is quoted in follows from it —
+    // see CATEGORY_RULES — and is never accepted from the caller, so a louvre
+    // cannot arrive measured in feet.
+    category: z.enum(PRODUCT_CATEGORIES).optional(),
+    // Tenths of that unit: 80 is 8.0 ft, 960 is 96.0 in, 24400 is 2440.0 mm.
+    widthTenth: z.number().int().positive().optional(),
+    heightTenth: z.number().int().positive().optional(),
     grade: z.string().min(1).max(60),
     sheetWeightGrams: z.number().int().positive().optional(),
     reorderLevelUnits: z.number().int().min(0).optional(),
@@ -275,8 +296,41 @@ export const createProduct: CommandDefinition<
         "E_VALIDATION: cannot add a product to a deactivated brand",
       );
     }
+
+    const rules = CATEGORY_RULES[input.category ?? "OTHER"];
+
+    // A board with no thickness is the one mistake this catalogue cannot
+    // absorb: thickness is what tells two otherwise identical rows apart, and
+    // an order line for "Sainik 710" with no millimetres is a guess made in
+    // the godown. Checked only for a physical item — a service has no edge.
+    if (
+      rules.thickness === "required" &&
+      (input.type ?? "PHYSICAL") === "PHYSICAL" &&
+      input.thicknessTenthMm === undefined
+    ) {
+      throw new ValidationError(
+        `E_VALIDATION: a ${rules.label.toLowerCase()} needs a thickness in mm`,
+      );
+    }
+
+    // Both sides or neither. Half a size reads as a complete one on screen.
+    if ((input.widthTenth === undefined) !== (input.heightTenth === undefined)) {
+      throw new ValidationError(
+        "E_VALIDATION: give both the width and the height, or neither",
+      );
+    }
   },
   handler: async (ctx, input) => {
+    const category = input.category ?? "OTHER";
+    const rules = CATEGORY_RULES[category];
+    // The client sells one laminate size. Rather than trusting the form to
+    // send it, the command states it — so a laminate is 8 x 4 no matter which
+    // caller wrote it, and the CHECK constraint behind this agrees.
+    const size = rules.fixedSizeTenth ?? {
+      widthTenth: input.widthTenth ?? null,
+      heightTenth: input.heightTenth ?? null,
+    };
+
     const product = await ctx.tx.plywoodProduct.create({
       data: {
         tenantId: ctx.actor.tenantId,
@@ -284,8 +338,10 @@ export const createProduct: CommandDefinition<
         name: input.name,
         hsnCode: input.hsnCode,
         thicknessTenthMm: input.thicknessTenthMm ?? null,
-        widthMm: input.widthMm ?? null,
-        heightMm: input.heightMm ?? null,
+        category,
+        sizeUnit: rules.sizeUnit,
+        widthTenth: size.widthTenth,
+        heightTenth: size.heightTenth,
         grade: input.grade,
         sheetWeightGrams: input.sheetWeightGrams ?? null,
         reorderLevelUnits: input.reorderLevelUnits ?? 0,
@@ -312,6 +368,7 @@ export const editProduct: CommandDefinition<
     reorderLevelUnits?: number;
     unitLabel?: string;
     type?: ProductType;
+    category?: ProductCategory;
   },
   { id: string }
 > = {
@@ -337,6 +394,14 @@ export const editProduct: CommandDefinition<
      * found in a live tenant: "Custom Log Sawing & Sizing Service", PHYSICAL.
      */
     type: z.enum(PRODUCT_TYPES).optional(),
+    /**
+     * Correcting which family a product belongs to, for the same reason
+     * `type` is correctable: a laminate filed as a board is a data-entry slip,
+     * and being permanently stuck with it is not a rule anyone chose. Bounded
+     * by the same two guards — nothing may have moved, and the unit the size
+     * is quoted in may not change underneath a size that already exists.
+     */
+    category: z.enum(PRODUCT_CATEGORIES).optional(),
   }),
   handler: async (ctx, input) => {
     const before = await ctx.tx.plywoodProduct.findUniqueOrThrow({
@@ -360,9 +425,58 @@ export const editProduct: CommandDefinition<
       }
     }
 
+    // A family change moves the product between unit systems, so it carries
+    // the same history guard as a type change, plus one of its own.
+    let sizeChange: {
+      category: ProductCategory;
+      sizeUnit: SizeUnit;
+      widthTenth: number | null;
+      heightTenth: number | null;
+    } | null = null;
+
+    if (input.category !== undefined && input.category !== before.category) {
+      const movements = await ctx.tx.stockLedgerEntry.count({
+        where: { productId: input.productId },
+      });
+      if (movements > 0) {
+        throw new ValidationError(
+          `E_VALIDATION: ${before.name} already has ${movements} stock movement(s), ` +
+            "so it cannot be moved to another product family. Withdraw it and add it again.",
+        );
+      }
+
+      const rules = CATEGORY_RULES[input.category];
+      const hasSize = before.widthTenth != null && before.heightTenth != null;
+
+      // 8 ft is not 8 in. Re-labelling the unit while leaving the number alone
+      // would turn a stated size into a different one without anyone typing a
+      // digit, so the size has to go back through creation instead.
+      if (hasSize && rules.sizeUnit !== before.sizeUnit && !rules.fixedSizeTenth) {
+        throw new ValidationError(
+          `E_VALIDATION: a ${rules.label.toLowerCase()} is sized in ` +
+            `${rules.sizeUnit === "FT" ? "feet" : rules.sizeUnit === "IN" ? "inches" : "millimetres"}, ` +
+            `and ${before.name} is recorded in ` +
+            `${before.sizeUnit === "FT" ? "feet" : before.sizeUnit === "IN" ? "inches" : "millimetres"}. ` +
+            "Withdraw it and add it again at the right size.",
+        );
+      }
+
+      sizeChange = {
+        category: input.category,
+        sizeUnit: rules.sizeUnit,
+        widthTenth: rules.fixedSizeTenth
+          ? rules.fixedSizeTenth.widthTenth
+          : before.widthTenth,
+        heightTenth: rules.fixedSizeTenth
+          ? rules.fixedSizeTenth.heightTenth
+          : before.heightTenth,
+      };
+    }
+
     const after = await ctx.tx.plywoodProduct.update({
       where: { id: input.productId },
       data: {
+        ...(sizeChange === null ? {} : sizeChange),
         ...(input.name === undefined ? {} : { name: input.name }),
         ...(input.hsnCode === undefined ? {} : { hsnCode: input.hsnCode }),
         ...(input.grade === undefined ? {} : { grade: input.grade }),
@@ -393,12 +507,15 @@ export const editProduct: CommandDefinition<
           grade: before.grade,
           reorderLevelUnits: before.reorderLevelUnits,
           type: before.type,
+          category: before.category,
         },
         {
           name: after.name,
           hsnCode: after.hsnCode,
           grade: after.grade,
           reorderLevelUnits: after.reorderLevelUnits,
+          type: after.type,
+          category: after.category,
         },
       ),
     });
@@ -534,8 +651,10 @@ export const listCatalogue: QueryDefinition<
       name: string;
       hsnCode: string;
       thicknessTenthMm: number | null;
-      widthMm: number | null;
-      heightMm: number | null;
+      category: ProductCategory;
+      sizeUnit: SizeUnit;
+      widthTenth: number | null;
+      heightTenth: number | null;
       grade: string;
       unitLabel: string;
       reorderLevelUnits: number;
@@ -574,8 +693,10 @@ export const listCatalogue: QueryDefinition<
         name: product.name,
         hsnCode: product.hsnCode,
         thicknessTenthMm: product.thicknessTenthMm,
-        widthMm: product.widthMm,
-        heightMm: product.heightMm,
+        category: product.category as ProductCategory,
+        sizeUnit: product.sizeUnit as SizeUnit,
+        widthTenth: product.widthTenth,
+        heightTenth: product.heightTenth,
         grade: product.grade,
         unitLabel: product.unitLabel,
         reorderLevelUnits: product.reorderLevelUnits,

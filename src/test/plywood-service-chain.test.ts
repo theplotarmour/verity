@@ -204,8 +204,8 @@ describeDb("plywood: the whole chain, from purchase to payment", () => {
         name: "Sainik 710 BWR",
         hsnCode: "44121000",
         thicknessTenthMm: 180,
-        widthMm: 2440,
-        heightMm: 1220,
+      widthTenth: 24400,
+        heightTenth: 12200,
         grade: "BWR",
         reorderLevelUnits: 50,
       })

@@ -5,6 +5,7 @@ import {
   useEffect,
   useId,
   useRef,
+  useState,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -50,6 +51,8 @@ export function Modal({
   const ref = useRef<HTMLDialogElement | null>(null);
   const titleId = useId();
   const descriptionId = useId();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // `open` is React state; the dialog's own openness is DOM state. They are
   // synchronised here rather than by rendering the `open` attribute, because
@@ -95,9 +98,14 @@ export function Modal({
   );
 
   // Rendered into the body so an ancestor's `overflow: hidden`, `transform` or
-  // stacking context cannot clip or trap it. Skipped entirely before mount so
-  // this stays safe in a server-rendered tree.
-  if (typeof document === "undefined") return null;
+  // stacking context cannot clip or trap it.
+  //
+  // Gated on a MOUNTED flag rather than on `typeof document`. The document
+  // check is false on the server and true during hydration, so the client's
+  // first render emitted a <dialog> the server never sent — React reported it
+  // as a hydration mismatch on every page that holds a modal. A portal must
+  // wait for the effect pass, when the two trees have already agreed.
+  if (!mounted) return null;
 
   return createPortal(
     <dialog

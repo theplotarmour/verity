@@ -29,6 +29,7 @@ import {
   ENTITY_STOCK_BALANCE,
   ENTITY_SUPPLIER_PRICE,
 } from "./keys";
+import { formatProductSize } from "./product";
 import { applyMovement, serviceProductIds } from "./stock";
 
 /**
@@ -111,16 +112,26 @@ async function orderNumber(
 function describeProduct(product: {
   name: string;
   thicknessTenthMm?: number | null;
-  widthMm?: number | null;
-  heightMm?: number | null;
+  sizeUnit?: string | null;
+  widthTenth?: number | null;
+  heightTenth?: number | null;
   grade?: string | null;
 }): string {
   const parts = [product.name];
   if (product.thicknessTenthMm != null) {
     parts.push(`${(product.thicknessTenthMm / 10).toFixed(1)} mm`);
   }
-  if (product.widthMm != null && product.heightMm != null) {
-    parts.push(`${product.widthMm}×${product.heightMm}`);
+  // The size carries its unit, because "8 × 4" and "96 × 5" are the same
+  // shape of text and very different boards. A snapshot that dropped the unit
+  // would be ambiguous on the one document where it matters most.
+  if (product.widthTenth != null && product.heightTenth != null) {
+    parts.push(
+      formatProductSize({
+        sizeUnit: product.sizeUnit ?? "MM",
+        widthTenth: product.widthTenth,
+        heightTenth: product.heightTenth,
+      }),
+    );
   }
   if (product.grade) parts.push(product.grade);
   return parts.join(" · ");

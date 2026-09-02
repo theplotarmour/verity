@@ -11,6 +11,7 @@ import {
   Panel,
 } from "@/components/ui/primitives";
 import { Combobox } from "@/components/ui/Combobox";
+import { productLabel } from "@/server/capabilities/plywood/product";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -19,6 +20,9 @@ type Board = {
   name: string;
   brandName: string;
   thicknessTenthMm: number | null;
+  sizeUnit: string;
+  widthTenth: number | null;
+  heightTenth: number | null;
 };
 
 type Party = { id: string; displayName: string };
@@ -26,9 +30,7 @@ type Party = { id: string; displayName: string };
 type Agreed = { partyId: string; productId: string; pricePaise: number };
 
 function boardLabel(board: Board): string {
-  return board.thicknessTenthMm == null
-    ? board.name
-    : `${board.name} · ${(board.thicknessTenthMm / 10).toFixed(1)} mm`;
+  return productLabel(board);
 }
 
 /** Rupees as a plain editable string. Blank means "no agreed price". */

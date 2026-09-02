@@ -6,6 +6,7 @@ import { listLocations } from "@/server/capabilities/location";
 import { listCatalogue, lowStock, stockOnHand } from "@/server/capabilities/plywood";
 import { PageHeader, PermissionDenied } from "@/components/ui/primitives";
 import { StockBoard } from "./StockBoard";
+import { productLabel } from "@/server/capabilities/plywood/product";
 
 export const dynamic = "force-dynamic";
 
@@ -56,10 +57,9 @@ export default async function StockPage() {
         boards={catalogue.flatMap((brand) =>
           brand.products.map((product) => ({
             id: product.id,
-            label:
-              product.thicknessTenthMm == null
-                ? `${brand.brandName} · ${product.name}`
-                : `${brand.brandName} · ${product.name} · ${(product.thicknessTenthMm / 10).toFixed(1)} mm`,
+            // Thickness where a family has one, size where it does not — a
+            // louvre has no thickness and three of them share a name.
+            label: productLabel(product, brand.brandName),
             unitLabel: product.unitLabel,
           })),
         )}

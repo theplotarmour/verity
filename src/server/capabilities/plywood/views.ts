@@ -132,8 +132,10 @@ export const productDetail: QueryDefinition<
     grade: string;
     unitLabel: string;
     thicknessTenthMm: number | null;
-    widthMm: number | null;
-    heightMm: number | null;
+    category: string;
+    sizeUnit: string;
+    widthTenth: number | null;
+    heightTenth: number | null;
     reorderLevelUnits: number;
     active: boolean;
     onHandUnits: number;
@@ -351,8 +353,10 @@ export const productDetail: QueryDefinition<
       grade: product.grade,
       unitLabel: product.unitLabel,
       thicknessTenthMm: product.thicknessTenthMm,
-      widthMm: product.widthMm,
-      heightMm: product.heightMm,
+      category: product.category,
+      sizeUnit: product.sizeUnit,
+      widthTenth: product.widthTenth,
+      heightTenth: product.heightTenth,
       reorderLevelUnits: product.reorderLevelUnits,
       active: product.active,
       onHandUnits,
