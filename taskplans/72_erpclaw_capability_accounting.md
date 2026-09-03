@@ -4,7 +4,12 @@ Authority: `erpclaw-prd/05-verity-extraction-plan.md` §3.1 (ERPClaw source).
 Bible V2 Primitive 2 (Command/State/Event), ADR-005 (Tenant/Organization),
 INV-001 (tenant isolation), INV-002 (read-only closed states).
 
-## Status: PENDING — not in current scope
+## Status: BUILT, MVP scope, 2026-09-04 — built ahead of this file's own
+demand trigger under explicit product-owner override. See
+`src/server/capabilities/accounting/index.ts` for what shipped (chart of
+accounts, append-only balanced GL, reversal-only correction) and what
+didn't (fiscal-year close, budgets, dimensions, statement reports —
+tracked below as this file's own open scope, not silently claimed done).
 
 Verity's current objective is PLATFORM FOUNDATION READY (`CLAUDE.md` §Build
 priority, steps 1–9: tenancy, identity, authorization, entity runtime,

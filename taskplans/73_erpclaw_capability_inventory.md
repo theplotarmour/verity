@@ -3,7 +3,12 @@
 Authority: `erpclaw-prd/05-verity-extraction-plan.md` §3.2 (ERPClaw source).
 ADR-004 (Place/Address/Location/Geofence), ADR-008 (Resource), INV-001.
 
-## Status: PENDING — not in current scope
+## Status: BUILT, MVP scope, 2026-09-04 — built ahead of this file's own
+demand trigger under explicit product-owner override. See
+`src/server/capabilities/inventory/index.ts` for what shipped (item master,
+warehouse stock balance, append-only movement ledger) and what didn't (UoM
+conversions, batch/serial, reservations/pick lists, revaluation — this
+file's own open scope).
 
 Same foundation-first constraint as Task 72. **Trigger to start:** a second
 stock-heavy client appears after Shree Ganesh Timber Trade's plywood godown

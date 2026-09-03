@@ -3,7 +3,13 @@
 Authority: `erpclaw-prd/05-verity-extraction-plan.md` §3.7 (ERPClaw source).
 INV-001, Authorization shape §Restricted fields / `redactFields()`.
 
-## Status: PENDING — not in current scope
+## Status: BUILT, MVP scope, 2026-09-04 — built ahead of this file's own
+demand trigger under explicit product-owner override. See
+`src/server/capabilities/hr/index.ts` for what shipped (departments,
+employees as attributes on an existing Party, leave types/applications/
+append-only decisions) and what didn't (lifecycle events, documents,
+attendance, holiday lists, shift types, expense claims, field redaction for
+a not-yet-added sensitive field — this file's own open scope).
 
 No current client needs people-ops beyond `Resource`/`Party` (ADR-008).
 Step-14 territory.

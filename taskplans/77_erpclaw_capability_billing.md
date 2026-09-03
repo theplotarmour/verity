@@ -3,7 +3,12 @@
 Authority: `erpclaw-prd/05-verity-extraction-plan.md` §3.6 (ERPClaw source).
 INV-001.
 
-## Status: PENDING — not in current scope
+## Status: BUILT, MVP scope, 2026-09-04 — built ahead of this file's own
+demand trigger under explicit product-owner override. See
+`src/server/capabilities/billing/index.ts` for what shipped (meters,
+readings, flat rate-per-unit period invoicing, double-billing blocked by a
+DB constraint) and what didn't (rate tiers, time-of-use/demand pricing,
+prepaid credit, a tracked batch-run entity — this file's own open scope).
 
 No current client needs metered/recurring billing — Shree Ganesh Timber
 Trade is order-by-order plywood trading, not subscription. Step-14 territory.
