@@ -139,6 +139,12 @@ model Tenant {
   journalEntries JournalEntry[]
   journalLines   JournalLine[]
 
+  // Capability: inventory (Task 73). Back-relations only, as above.
+  inventoryItemGroups    InventoryItemGroup[]
+  inventoryItems         InventoryItem[]
+  inventoryStockBalances InventoryStockBalance[]
+  inventoryStockMovements InventoryStockMovement[]
+
   @@map("tenant")
 }
 
@@ -1110,6 +1116,10 @@ model Location {
   plywoodStockReservations PlywoodStockReservation[]
   plywoodGoodsReceipts     PlywoodGoodsReceipt[]
   plywoodGoodsIssues       PlywoodGoodsIssue[]
+
+  // Capability: inventory (Task 73). Back-relations only, as above.
+  inventoryStockBalances  InventoryStockBalance[]
+  inventoryStockMovements InventoryStockMovement[]
 
   @@unique([tenantId, id], name: "location_tenant_scoped_id")
   @@index([tenantId, organizationId])
@@ -3367,4 +3377,113 @@ model JournalLine {
   @@index([tenantId, accountId])
   @@index([tenantId, journalEntryId])
   @@map("journal_line")
+}
+
+// ===========================================================================
+// CAPABILITY: INVENTORY (Task 73) — MVP scope only.
+//
+// Item master, warehouse-scoped stock balances, and an append-only movement
+// ledger — the same shape plywood's `stock.ts` already proves at
+// client-private scale, generalized per Task 73's own scope. Warehouses
+// reuse the platform `Location` primitive (ADR-004) rather than a parallel
+// concept, per that taskplan's own "Verity fit" note.
+//
+// NOT built here: units-of-measure conversions, batch/serial tracking,
+// reservations/pick lists, revaluation, item alternatives/price lists — all
+// remain Task 73's own open scope, not silently claimed done.
+// ===========================================================================
+
+/// "Inventory" prefix throughout this capability's models — `StockBalance`
+/// and `Item` as bare names already belong to plywood's own schema above,
+/// and this is deliberately a SEPARATE, generic module (Task 73's own scope:
+/// "not a fork of plywood's model"), not a rename of it.
+model InventoryItemGroup {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  tenant Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  items  InventoryItem[]
+
+  @@unique([tenantId, name])
+  @@map("inventory_item_group")
+}
+
+/// Never deleted — a posted InventoryStockMovement references it forever, so
+/// a mis-entered item is deactivated (same shape as `PlywoodProduct.active`).
+model InventoryItem {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  itemGroupId  String?  @map("item_group_id") @db.Uuid
+  sku          String
+  name         String
+  unitLabel    String   @default("units") @map("unit_label")
+  reorderLevel Int      @default(0) @map("reorder_level")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant    Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  itemGroup InventoryItemGroup?      @relation(fields: [itemGroupId], references: [id], onDelete: SetNull)
+  balances  InventoryStockBalance[]
+  movements InventoryStockMovement[]
+
+  @@unique([tenantId, sku])
+  @@unique([tenantId, id], name: "inventory_item_tenant_scoped_id")
+  @@map("inventory_item")
+}
+
+/// Current on-hand quantity per item per location. Only ever changed
+/// alongside an `InventoryStockMovement` row, in the same command/
+/// transaction — never written to directly, per Task 73's own critical
+/// requirement ("direct stock ledger writes are never a user-facing
+/// workflow").
+model InventoryStockBalance {
+  id         String @id @default(uuid()) @db.Uuid
+  tenantId   String @map("tenant_id") @db.Uuid
+  itemId     String @map("item_id") @db.Uuid
+  locationId String @map("location_id") @db.Uuid
+  qty        Int    @default(0)
+
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  item     InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  location Location      @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, itemId, locationId])
+  @@map("inventory_stock_balance")
+}
+
+/// APPEND-ONLY, same reasoning as `JournalEntry`/`JournalLine` above: a stock
+/// movement is a historical fact. A wrong movement is corrected by posting an
+/// offsetting `Adjustment` movement, never by editing this row.
+model InventoryStockMovement {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  itemId     String   @map("item_id") @db.Uuid
+  locationId String   @map("location_id") @db.Uuid
+  /// Closed set owned by the capability (`MOVEMENT_KINDS`), same reasoning as
+  /// `Account.type` above: Receipt | Issue | Adjustment | Transfer.
+  kind       String
+  /// Signed: positive increases the balance, negative decreases it. One sign
+  /// convention for every kind rather than "Issue always subtracts," which
+  /// would make a return-of-issued-goods a special case instead of a normal
+  /// positive Receipt-shaped movement.
+  qty        Int
+  reference  String?
+  movedById  String   @map("moved_by_id") @db.Uuid
+  movedAt    DateTime @default(now()) @map("moved_at")
+
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  item     InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  location Location      @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([tenantId, itemId])
+  @@index([tenantId, locationId, movedAt])
+  @@map("inventory_stock_movement")
 }
