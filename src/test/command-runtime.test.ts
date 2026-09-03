@@ -10,11 +10,20 @@ import {
   ValidationError,
   clearHooks,
   executeCommand,
+  listCommands,
+  registerCommand,
+  clearCommands,
   registerHook,
   type ActorContext,
   type CommandDefinition,
 } from "@/server/platform/command";
-import { executeQuery, type QueryDefinition } from "@/server/platform/query";
+import {
+  executeQuery,
+  listQueries,
+  registerQuery,
+  clearQueries,
+  type QueryDefinition,
+} from "@/server/platform/query";
 import { activateCapability, invalidateCapabilityCache } from "@/server/platform/capability";
 
 /**
@@ -159,6 +168,31 @@ describeDb("command and query runtime", () => {
     await prisma.$disconnect();
   });
 
+  it("defaults an unset impact to routine by omission, not by value (Task 84 area 2)", () => {
+    // renameTenant never sets `impact` — the fixture predates the field,
+    // exactly like every real command shipped before it. The contract is
+    // "absent means routine," not "absent means an explicit routine value,"
+    // so the assertion is on the key being unset, not on it equalling
+    // "routine".
+    expect(renameTenant.impact).toBeUndefined();
+  });
+
+  it("lists every registered command and query (Task 84 area 1)", () => {
+    // This suite calls executeCommand/executeQuery with the fixture
+    // definitions directly, never through the registry — so this test
+    // registers them itself (cleaned up in afterAll) rather than assuming
+    // an earlier test's side effect left them there.
+    registerCommand(renameTenant);
+    registerQuery(readTenant);
+    try {
+      expect(listCommands().some((c) => c.key === renameTenant.key)).toBe(true);
+      expect(listQueries().some((q) => q.key === readTenant.key)).toBe(true);
+    } finally {
+      clearCommands();
+      clearQueries();
+    }
+  });
+
   it("runs a command end to end and returns its result", async () => {
     const out = await executeCommand(actor, renameTenant, { name: "Renamed One" });
     expect(out.name).toBe("Renamed One");
@@ -259,6 +293,25 @@ describeDb("command and query runtime", () => {
   it("refuses a query the actor may not read", async () => {
     const noPerms = { ...actor, roleId: null };
     await expect(executeQuery(noPerms, readTenant, {})).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it("accepts an explicit channel and still allows/denies identically to the default (Task 84 area 5)", async () => {
+    // `executeQuery` used to call `authorize()` directly; it now routes
+    // through `enforcePolicy` like `executeCommand` already did. These two
+    // assertions are the regression check that the swap changed nothing
+    // about who can read what — only that `channel` now exists at all.
+    const name = await executeQuery(
+      { ...actor, roleId: readerRole },
+      readTenant,
+      {},
+      "agent",
+    );
+    expect(typeof name).toBe("string");
+
+    const noPerms = { ...actor, roleId: null };
+    await expect(
+      executeQuery(noPerms, readTenant, {}, "agent"),
+    ).rejects.toBeInstanceOf(ForbiddenError);
   });
 
   it("keeps recorded events immutable", async () => {

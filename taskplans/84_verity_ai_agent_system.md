@@ -6,13 +6,18 @@ builds against). `src/server/platform/command.ts`, `src/server/platform/
 policy.ts` (the runtime this builds on — read in full 2026-09-02/03).
 `erpclaw-prd/00-product-vision.md` §5.1 (AI-first but ledger-hard).
 
-## Status: PENDING — ADR-017 accepted; the six areas below are now
-buildable, in the stated dependency order. Still not started.
+## Status: IN PROGRESS — areas 1, 2, 3, 5 built and tested 2026-09-03.
+Areas 4 (grounding enforcement) and 6 (chat surface) not started.
 
 The gate that blocked this is cleared: `CLAUDE.md` ADR-017 ratifies "the
 agent channel authenticates and authorizes as the calling human's own
-`ActorContext`, never elevated" as constitutional. What follows is
-implementation work, sequenced per Task 96 Phase 3 — not yet begun.
+`ActorContext`, never elevated" as constitutional. Areas 1/2/3/5 —
+`tool-manifest.ts`, `impact` on `CommandDefinition`, actor-scoped
+filtering, and `executeQuery`'s `channel` parameter — are built, unit-
+tested (`command-runtime.test.ts`, `tool-manifest.test.ts`), and verified
+live against the Shree Ganesh tenant (104 correctly-filtered tools for
+the owner role). Area 4 needs its own design pass; area 6 needs an LLM/
+provider decision. Neither started.
 
 ## The one fact that already decides the hard part
 
@@ -58,40 +63,60 @@ doesn't hold, cross-tenant reach, or a skipped `enforcePolicy()` call.
 
 ## The six implementation areas
 
-Each is buildable independently once the ADR gate clears; none is started
-now.
+Areas 1, 2, 3, and 5 are **built** (2026-09-03). 4 and 6 are not started.
 
-**1. Tool-manifest generator.** Every `CommandDefinition`/`QueryDefinition`
-already carries a zod `input` schema (`command.ts`, `query.ts`). Generate
-the LLM's tool schemas from those — one source of truth, never a
-hand-duplicated second copy of "what a sales order needs."
+**1. Tool-manifest generator — BUILT.** `src/server/platform/
+tool-manifest.ts`, `buildToolManifest(tx, actor)`. Every `CommandDefinition`/
+`QueryDefinition`'s zod `input` schema converted via zod v4's native
+`z.toJSONSchema()` — no new dependency, one source of truth, never a
+hand-duplicated second copy of "what a sales order needs." `listCommands`/
+`listQueries` added to `command.ts`/`query.ts` to enumerate the registry
+(neither existed before — only single-key lookup did).
 
-**2. Confirmation-class field on commands.** `CommandDefinition` has no
-`impact` field yet. Add `impact: "routine" | "destructive"` (Task 81 rule
-4/4a supplies the destructive checklist). A destructive command the agent
-selects returns a *proposal*; only an explicit human confirmation
-executes it via `executeCommand`.
+**2. Confirmation-class field on commands — BUILT.** `CommandDefinition`
+now carries `impact?: "routine" | "destructive"` (Task 81 rule 4/4a
+supplies the destructive checklist). Absent means routine — every command
+shipped before this field existed is routine by that checklist, so no
+retroactive tagging was needed. The proposal/confirm UI flow this enables
+is still area 6's job, not built here.
 
-**3. Actor-scoped tool visibility.** Filter the tool list per conversation
-by `permittedVerbs`/`grantedScopes` (already in `policy.ts`) — the model
-never sees a tool it holds no grant for. Defense-in-depth on top of the
-real gate in area 2/the existing pipeline, not a replacement for it.
+**3. Actor-scoped tool visibility — BUILT, combined with area 1.**
+`buildToolManifest` filters by the actor's actual grants before returning
+anything — not a separate pass, since an unfiltered manifest was never
+worth producing in the first place. Verified live against the Shree
+Ganesh tenant: 104 tools for the owner role, correctly zero for a
+no-role actor, correctly excludes a suspended capability's tools.
+**Performance finding, fixed in the same pass:** the first version called
+`permittedVerbs()` (a recursive role-composition query) once per
+registered command/query — confirmed live to time out a 15s interactive
+transaction against the real ~110-item registry. Fixed by calling
+`resolvePermissions` exactly once per manifest build and checking
+candidates against the in-memory result instead.
 
-**4. Grounding enforcement — the genuinely open problem.** Task 81 rule 1
-says "query before claiming." Nothing enforces that today; it is prompt
-convention until built. Real version: a create/update tool call
-referencing an entity by name should require that entity's ID came from a
-query result already surfaced in the same turn, not free-typed by the
-model. Unsolved, not a small addition — budget real design time here.
+**4. Grounding enforcement — the genuinely open problem. Still not
+started.** Task 81 rule 1 says "query before claiming." Nothing enforces
+that today; it is prompt convention until built. Real version: a
+create/update tool call referencing an entity by name should require
+that entity's ID came from a query result already surfaced in the same
+turn, not free-typed by the model. Unsolved, not a small addition —
+budget real design time here.
 
-**5. Query-channel parity gap.** `executeCommand` threads `channel`
-through to the audit row; `executeQuery` takes no `channel` parameter yet.
-Small, mechanical, but until it's added, agent-issued *reads* don't show
-up distinctly from human reads in audit.
+**5. Query-channel parity gap — BUILT.** `executeQuery` now takes a
+`channel: PolicyChannel = "api"` parameter. Building this surfaced a
+bigger gap than the "small, mechanical" framing suggested: `executeQuery`
+was calling `authorize()` directly (Layer 1 only), never `policy.ts`'s
+unified `enforcePolicy` the way `executeCommand` already did — exactly
+the "four different callers" problem `policy.ts`'s own module doc
+describes fixing for commands, never applied to reads. Fixed by routing
+`executeQuery` through `enforcePolicy` too. Confirmed behavior-preserving
+(`authorize()` and `evaluatePolicy`'s Layer 1 both resolve through the
+same `verity.resolve_permissions` function) and covered by the existing
+allow/deny tests in `command-runtime.test.ts`, which passed unchanged.
 
-**6. The chat surface itself.** New UI + a server route. Lives as a
-persistent shell region per Task 81 rule 10, not a modal. Nothing to reuse
-here — doesn't exist in any form today.
+**6. The chat surface itself — not started.** New UI + a server route.
+Lives as a persistent shell region per Task 81 rule 10, not a modal.
+Needs an LLM/provider decision this session made no assumption about —
+no AI SDK is installed. Nothing to reuse here.
 
 ## Dependency order
 

@@ -45,7 +45,12 @@ No trigger, no second client, no other phase required first.
 4. **Task 94** (incomplete-information states) — apply to plywood's own
    GST fields as the first concrete instance, per its own trigger.
 
-## Phase 2 — Plywood-scoped, single-client work
+## Phase 2 — Plywood-scoped, single-client work — SKIPPED 2026-09-03
+
+User instruction: Shree Ganesh isn't the priority right now; go straight
+to Phase 3. Left recorded below, not deleted — the checkpoint at the end
+of this phase (Task 90's trigger) just doesn't fire yet since the phase
+didn't run.
 
 No second client needed — these serve Shree Ganesh Timber Trading Co.
 directly and are real gaps in the one capability that exists.
@@ -64,16 +69,22 @@ pending goods issue, low stock), which could be enough signal to satisfy
 Task 90's "two independent capabilities want this" trigger without
 waiting for a second client. Revisit Phase 0's Task 90 decision here if so.
 
-## Phase 3 — AI agent, near-term (Task 84's six areas)
+## Phase 3 — AI agent, near-term (Task 84's six areas) — STARTED 2026-09-03
 
-Requires Phase 0's ADR. Internal order per Task 84's own dependency note:
+Requires Phase 0's ADR (cleared). Internal order per Task 84's own
+dependency note:
 
-8. Areas 1, 2, 3, 5 (tool-manifest generator, confirmation-class field,
-   actor-scoped tool visibility, query-channel parity) — independent of
-   each other, can proceed in any order or in parallel.
+8. ~~Areas 1, 2, 3, 5~~ **BUILT** (tool-manifest generator,
+   confirmation-class field, actor-scoped tool visibility, query-channel
+   parity) — see Task 84 for what shipped, including a real performance
+   finding (a naive per-item permission check timed out against the live
+   registry; fixed to one resolve-permissions call per manifest build)
+   and a real scope correction (`executeQuery` wasn't routed through the
+   unified `enforcePolicy` decision point at all before this).
 9. Area 4 (grounding enforcement) — the genuinely unsolved one; budget
-   real design time, expect it to reshape areas 1 and 6.
-10. Area 6 (the chat surface itself) — needs 1–5 to have something to call.
+   real design time, expect it to reshape areas 1 and 6. Not started.
+10. Area 6 (the chat surface itself) — needs 1–5 (have them) and an LLM/
+    provider decision (don't have one yet). Not started.
 11. **Task 91** (bulk operations + partial failure) — triggered by
     whichever of Task 84 or Task 87 lands first; likely lands here,
     against Task 84's multi-command turns, unless Task 87's import work

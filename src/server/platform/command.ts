@@ -86,6 +86,27 @@ export type CommandDefinition<TInput, TResult> = {
   /** Input contract (MET-ACT-001). */
   input: z.ZodType<TInput>;
   /**
+   * Confirmation class (Task 81 rules 4/4a). Absent means routine — every
+   * command shipped before this field existed is routine by Task 81's own
+   * checklist (close a period, restore, install/remove a capability, roll
+   * back a platform file, generate a bank-payment file, force-reinit,
+   * schema rollback, delete/rotate a credential, permanent-delete cleanup),
+   * so defaulting to routine describes the existing command set correctly
+   * rather than leaving a gap. A caller proposing a command through a
+   * surface that gates on impact (an agent, eventually) must treat
+   * `undefined` as `"routine"`, not as unknown.
+   */
+  impact?: "routine" | "destructive";
+  /**
+   * One sentence, business language (Task 81 rule 3), naming what this
+   * command does. Not user-facing copy in its own right — a caller building
+   * a tool manifest or a confirmation dialog needs SOME description to act
+   * on; `key` alone is an implementation detail, not a description. Absent
+   * on every command that predates this field; only worth adding where
+   * something actually reads it.
+   */
+  description?: string;
+  /**
    * Business invariants (MET-ACT-003). Throw ValidationError to abort; the
    * surrounding transaction rolls back.
    */
@@ -144,6 +165,15 @@ export function registerCommand<TInput, TResult>(def: CommandDefinition<TInput, 
 
 export function getCommand(key: string): CommandDefinition<unknown, unknown> | undefined {
   return registry.get(key);
+}
+
+/**
+ * Every registered command. For building a tool manifest (Task 84 area 1) —
+ * nothing in the request/response pipeline above needs this, only a caller
+ * that has to enumerate the whole registry rather than look one key up.
+ */
+export function listCommands(): CommandDefinition<unknown, unknown>[] {
+  return [...registry.values()];
 }
 
 /** Test seam: empties the command registry. */

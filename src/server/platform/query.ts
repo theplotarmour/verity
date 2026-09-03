@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { authorize, redactFields, scopeFilter } from "./authorization";
+import { redactFields, scopeFilter } from "./authorization";
 import { capabilityForEntity, requireCapabilityActive } from "./capability";
 import { withTenant, type TenantScopedClient } from "./tenancy";
 import { ValidationError, type ActorContext } from "./command";
+import { enforcePolicy, type PolicyChannel } from "./policy";
 
 /**
  * Query runtime.
@@ -43,6 +44,8 @@ export type QueryDefinition<TInput, TResult> = {
   /** EntityDefinition.key being read. */
   entity: string;
   input: z.ZodType<TInput>;
+  /** One sentence, business language — see the same field on CommandDefinition. */
+  description?: string;
   handler: (ctx: QueryContext, input: TInput) => Promise<TResult>;
 };
 
@@ -57,16 +60,30 @@ export function getQuery(key: string): QueryDefinition<unknown, unknown> | undef
   return registry.get(key);
 }
 
+/** Every registered query. Mirrors `listCommands` in `command.ts`, same reason. */
+export function listQueries(): QueryDefinition<unknown, unknown>[] {
+  return [...registry.values()];
+}
+
 /** Test seam: empties the query registry. */
 export function clearQueries(): void {
   registry.clear();
 }
 
-/** Runs a query: validate input, check Read permission, then read. */
+/**
+ * Runs a query: validate input, check Read permission, then read.
+ *
+ * `channel` defaults to `"api"`, matching `executeCommand`'s own default —
+ * a server action or route handler is the ordinary caller. Threaded through
+ * to `enforcePolicy` for the same reason `executeCommand` already does:
+ * recorded on the decision for audit, consulted by no authorization rule
+ * (`policy.ts`'s own module doc explains why that split matters).
+ */
 export async function executeQuery<TInput, TResult>(
   actor: ActorContext,
   def: QueryDefinition<TInput, TResult>,
   rawInput: unknown,
+  channel: PolicyChannel = "api",
 ): Promise<TResult> {
   return withTenant(actor.tenantId, async (tx) => {
     const parsed = def.input.safeParse(rawInput);
@@ -78,7 +95,12 @@ export async function executeQuery<TInput, TResult>(
     }
     const capability = await capabilityForEntity(tx, def.entity);
     if (capability) await requireCapabilityActive(tx, actor.tenantId, capability);
-    await authorize(tx, actor.roleId, "Read", def.entity);
+    // Was a direct `authorize()` call (Layer 1 only, no channel). Routed
+    // through the same decision point `executeCommand` uses instead —
+    // `enforcePolicy` throws ForbiddenError on deny exactly like `authorize`
+    // did, and Layer 1's grant resolution is the same `resolve_permissions`
+    // call either way, so this changes nothing about who can read what.
+    await enforcePolicy(tx, actor, { verb: "Read", entity: def.entity, channel });
 
     const ctx: QueryContext = {
       actor,
