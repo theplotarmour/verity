@@ -9,10 +9,8 @@ import { registerQuery, type QueryDefinition } from "@/server/platform/query";
  * Authority: `taskplans/78_erpclaw_capability_hr.md`. Same override as
  * Tasks 72/73, 2026-09-04.
  *
- * NOT REGISTERED, NOT WIRED IN — same reason as `../accounting` and
- * `../inventory`: schema exists, no applied migration, blocked on the same
- * shared-DB migration-checksum drift. See `../accounting/index.ts`'s module
- * doc for the full explanation.
+ * REGISTERED 2026-09-04, same as `../accounting`/`../inventory` — see that
+ * file's module doc for the migration-drift resolution, not repeated here.
  *
  * An `HrEmployee` is HR-specific attributes on an EXISTING `Party` — never a
  * second identity record (INV-003, ADR-008: HR sits above scheduling, does
@@ -296,7 +294,7 @@ export const leaveApplicationStatus: QueryDefinition<
 
 /* ============================== registration ============================== */
 
-/** NOT CALLED by `registry.ts` yet — see this file's module doc. */
+/** Called by `registry.ts`'s `installCapabilities()`. */
 export function registerHrCapability(): void {
   registerContribution({
     capabilityId: HR_CAPABILITY,

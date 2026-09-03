@@ -6,6 +6,10 @@ import { registerSchedulingCapability } from "./scheduling";
 import { registerApprovalCapability } from "./approval";
 import { registerDineinCapability } from "./dinein";
 import { registerPlywoodCapability } from "./plywood";
+import { registerAccountingCapability } from "./accounting";
+import { registerInventoryCapability } from "./inventory";
+import { registerHrCapability } from "./hr";
+import { registerBillingCapability } from "./billing";
 import { installStorage } from "@/server/storage";
 
 /**
@@ -34,4 +38,10 @@ export function installCapabilities(): void {
   registerApprovalCapability();
   registerDineinCapability();
   registerPlywoodCapability();
+  // Task 84 Phase 4, built ahead of demand under explicit product-owner
+  // override 2026-09-04 — see taskplans/96_pending_roadmap_phases.md.
+  registerAccountingCapability();
+  registerInventoryCapability();
+  registerHrCapability();
+  registerBillingCapability();
 }

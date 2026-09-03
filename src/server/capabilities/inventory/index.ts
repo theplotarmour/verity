@@ -10,12 +10,8 @@ import { registerQuery, type QueryDefinition } from "@/server/platform/query";
  * its stated demand trigger under the same explicit product-owner override
  * as Task 72 (accounting), 2026-09-04.
  *
- * NOT REGISTERED, same reason as `../accounting`: the Prisma schema exists
- * (`InventoryItem`/`InventoryItemGroup`/`InventoryStockBalance`/
- * `InventoryStockMovement`) but has NO applied migration — the same
- * pre-existing, unrelated migration-checksum drift on the shared database
- * blocks `prisma migrate dev`. See `../accounting/index.ts`'s module doc for
- * the full explanation; it is not repeated here.
+ * REGISTERED 2026-09-04, same as `../accounting` — see that file's module
+ * doc for the migration-drift resolution, not repeated here.
  *
  * NOT a fork of plywood's own godown/rack/stock model (`src/server/
  * capabilities/plywood/stock.ts`) — deliberately a separate, generic module
@@ -271,7 +267,7 @@ export const stockLedger: QueryDefinition<
 
 /* ============================== registration ============================== */
 
-/** NOT CALLED by `registry.ts` yet — see this file's module doc. */
+/** Called by `registry.ts`'s `installCapabilities()`. */
 export function registerInventoryCapability(): void {
   registerContribution({
     capabilityId: INVENTORY_CAPABILITY,

@@ -11,17 +11,13 @@ import { registerQuery, type QueryDefinition } from "@/server/platform/query";
  * explicit product-owner override 2026-09-04 — the taskplan's own trigger
  * language still applies to everything past this MVP slice.
  *
- * NOT REGISTERED in `src/server/capabilities/registry.ts` and NOT installed
- * by `installCapabilities()`. The Prisma schema for `Account`/`JournalEntry`/
- * `JournalLine` exists in `prisma/schema.prisma` but has NO applied
- * migration — a pre-existing, unrelated migration-checksum drift on the
- * shared database blocks `prisma migrate dev` from running, and the only
- * automated fix Prisma offers is a full destructive reset, which this
- * session refused without explicit authorization. Every command/query below
- * would throw at the first database call (`relation "account" does not
- * exist`) if it were ever reached — it cannot be, because nothing registers
- * it. Wiring this in is the very next step once the migration applies
- * cleanly; see the taskplan for the DB-side decision this is waiting on.
+ * REGISTERED 2026-09-04 via `registry.ts` (`registerAccountingCapability`),
+ * after the shared database's migration-checksum drift was resolved
+ * (`prisma migrate resolve --rolled-back` on a dead failed-attempt row, plus
+ * a checksum re-stamp on the successful row it duplicated — see
+ * `taskplans/96_pending_roadmap_phases.md` Phase 4 for the full account) and
+ * migration `20260904120000_capability_accounting_inventory_hr_billing`
+ * applied.
  *
  * SCOPE BUILT: chart of accounts, append-only journal entries with
  * balance-before-commit, reversal (never in-place correction), trial
@@ -290,11 +286,7 @@ export const accountLedger: QueryDefinition<
 
 /* ============================== registration ============================== */
 
-/**
- * NOT CALLED by `registry.ts` yet — see this file's module doc. Kept as a
- * real, callable function (not left unwritten) so wiring it in is a
- * one-line change once the migration applies, not a second design pass.
- */
+/** Called by `registry.ts`'s `installCapabilities()`. */
 export function registerAccountingCapability(): void {
   registerContribution({
     capabilityId: ACCOUNTING_CAPABILITY,

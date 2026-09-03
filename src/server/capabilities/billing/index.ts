@@ -9,9 +9,8 @@ import { registerQuery, type QueryDefinition } from "@/server/platform/query";
  * Authority: `taskplans/77_erpclaw_capability_billing.md`. Same override as
  * Tasks 72/73/78, 2026-09-04.
  *
- * NOT REGISTERED, NOT WIRED IN — same shared-DB migration-checksum blocker
- * as every other draft this session. See `../accounting/index.ts`'s module
- * doc for the full explanation.
+ * REGISTERED 2026-09-04, same as the other three — see `../accounting/
+ * index.ts`'s module doc for the migration-drift resolution.
  *
  * Deliberately separate from one-off sales invoicing (Task 74, not built —
  * different lifecycle, per Task 77's own scope). A `BillingMeter` bills a
@@ -256,7 +255,7 @@ export const periodInvoices: QueryDefinition<
 
 /* ============================== registration ============================== */
 
-/** NOT CALLED by `registry.ts` yet — see this file's module doc. */
+/** Called by `registry.ts`'s `installCapabilities()`. */
 export function registerBillingCapability(): void {
   registerContribution({
     capabilityId: BILLING_CAPABILITY,
