@@ -8,9 +8,9 @@ here).
 (`runCommandBatch`, `BatchResult`/`BatchOutcome`), wired into
 `agent-chat.ts`'s tool loop as its first consumer (trigger fired: Task 84
 landed first). Unit-tested in `src/test/command-runtime.test.ts`
-("runCommandBatch (Task 91)") — not yet run against the live DB this
-session due to an unrelated Supabase connectivity issue (see that file's
-own note); typecheck and lint are clean.
+("runCommandBatch (Task 91)") — verified live against the DB 2026-09-04
+(18/18 passing after an unrelated transient Supabase connectivity issue
+cleared); typecheck and lint clean.
 
 ## What's missing
 
