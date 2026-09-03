@@ -145,6 +145,13 @@ model Tenant {
   inventoryStockBalances InventoryStockBalance[]
   inventoryStockMovements InventoryStockMovement[]
 
+  // Capability: HR (Task 78). Back-relations only, as above.
+  hrDepartments        HrDepartment[]
+  hrEmployees          HrEmployee[]
+  hrLeaveTypes         HrLeaveType[]
+  hrLeaveApplications  HrLeaveApplication[]
+  hrLeaveDecisions     HrLeaveDecision[]
+
   @@map("tenant")
 }
 
@@ -221,6 +228,8 @@ model Party {
 
   user      User?
   resources Resource[]
+  // Capability: HR (Task 78). Back-relation only, as above.
+  hrEmployees HrEmployee[]
 
   @@index([email])
   @@index([phone])
@@ -3486,4 +3495,116 @@ model InventoryStockMovement {
   @@index([tenantId, itemId])
   @@index([tenantId, locationId, movedAt])
   @@map("inventory_stock_movement")
+}
+
+// ===========================================================================
+// CAPABILITY: HR (Task 78) — MVP scope only.
+//
+// "People operations before payroll" — Task 78's own framing. An Employee is
+// additional HR-specific attributes on an EXISTING Party, never a second
+// identity record (INV-003, ADR-008: HR sits above scheduling, does not
+// redefine Resource/Party). Leave decisions are a separate, append-only
+// table rather than a mutable status column on LeaveApplication, per Task
+// 78's own critical requirement ("no in-place status edits").
+//
+// NOT built here: designations/lifecycle events/documents, attendance,
+// holiday lists, shift types, expense claims — all remain Task 78's own
+// open scope.
+// ===========================================================================
+
+model HrDepartment {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employees HrEmployee[]
+
+  @@unique([tenantId, name])
+  @@map("hr_department")
+}
+
+/// The Party is the identity (INV-003); this row is what HR knows about them
+/// that a bare `TenantMembership` does not. Never deleted — deactivated, so
+/// leave history stays attributable.
+model HrEmployee {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  partyId        String   @map("party_id") @db.Uuid
+  departmentId   String?  @map("department_id") @db.Uuid
+  designation    String?
+  dateOfJoining  DateTime? @map("date_of_joining")
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  version        Int      @default(1)
+  customFields   Json     @default("{}") @map("custom_fields")
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  party       Party              @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  department  HrDepartment?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  leaveApps   HrLeaveApplication[]
+
+  @@unique([tenantId, partyId])
+  @@map("hr_employee")
+}
+
+model HrLeaveType {
+  id           String @id @default(uuid()) @db.Uuid
+  tenantId     String @map("tenant_id") @db.Uuid
+  name         String
+  daysPerYear  Int    @map("days_per_year")
+  active       Boolean @default(true)
+
+  tenant Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apps   HrLeaveApplication[]
+
+  @@unique([tenantId, name])
+  @@map("hr_leave_type")
+}
+
+/// Immutable once applied — a correction is a new application plus, if the
+/// first was already decided, a decision reversal is a fresh
+/// `HrLeaveDecision` row, never an edit of either.
+model HrLeaveApplication {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  employeeId  String   @map("employee_id") @db.Uuid
+  leaveTypeId String   @map("leave_type_id") @db.Uuid
+  fromDate    DateTime @map("from_date")
+  toDate      DateTime @map("to_date")
+  reason      String?
+  appliedAt   DateTime @default(now()) @map("applied_at")
+
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee  HrEmployee       @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  leaveType HrLeaveType      @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+  decisions HrLeaveDecision[]
+
+  @@index([tenantId, employeeId])
+  @@map("hr_leave_application")
+}
+
+/// APPEND-ONLY. One application may accumulate more than one decision row
+/// over time (e.g. approved, later revoked by a second decision) — the
+/// current status is "the latest row," never a field that gets overwritten.
+model HrLeaveDecision {
+  id                   String   @id @default(uuid()) @db.Uuid
+  tenantId             String   @map("tenant_id") @db.Uuid
+  leaveApplicationId   String   @map("leave_application_id") @db.Uuid
+  /// Closed set owned by the capability: Approved | Rejected | Revoked.
+  decision             String
+  decidedById          String   @map("decided_by_id") @db.Uuid
+  note                 String?
+  decidedAt            DateTime @default(now()) @map("decided_at")
+
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  leaveApplication  HrLeaveApplication @relation(fields: [leaveApplicationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, leaveApplicationId])
+  @@map("hr_leave_decision")
 }
