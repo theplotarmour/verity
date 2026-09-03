@@ -134,6 +134,11 @@ model Tenant {
   plywoodPaymentAllocations        PlywoodPaymentAllocation[]
   plywoodPurchaseBillConfirmations PlywoodPurchaseBillConfirmation[]
 
+  // Capability: accounting (Task 72). Back-relations only, as above.
+  accounts      Account[]
+  journalEntries JournalEntry[]
+  journalLines   JournalLine[]
+
   @@map("tenant")
 }
 
@@ -3268,4 +3273,98 @@ model PlywoodGstPortalRecord {
   @@unique([tenantId, id], name: "plywood_gst_portal_record_tenant_scoped_id")
   @@index([tenantId, periodKey])
   @@map("plywood_gst_portal_record")
+}
+
+// ===========================================================================
+// CAPABILITY: ACCOUNTING (Task 72) — MVP scope only.
+//
+// Chart of accounts and double-entry journal/GL, per Task 72's own scope.
+// NOT built here: fiscal-year period close, budgets, dimensions, or the
+// statement reports (P&L, balance sheet, cash flow) — those stay
+// `taskplans/72_erpclaw_capability_accounting.md`'s open follow-on, tracked
+// there rather than silently claimed done.
+//
+// Money is integer minor units (paise), same convention as plywood/dinein
+// above — this is not a new pattern, it is the existing one applied here.
+// ===========================================================================
+
+/// One entry in the chart of accounts. Never deleted — a posted JournalLine
+/// references it forever, so the account is deactivated instead (same shape
+/// as `PlywoodBrand.active`, `Asset.state`).
+model Account {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  /// Short human code, e.g. "1000" — sorts the chart the way an accountant
+  /// already expects, distinct from `name` which is the description.
+  code         String
+  name         String
+  /// Closed set, not a Postgres enum: matches the platform's own preference
+  /// (state `category`, `PolicyChannel`) for a small closed string set that a
+  /// capability owns rather than a database-level enum a migration must alter.
+  type         String
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lines  JournalLine[]
+
+  @@unique([tenantId, code])
+  @@unique([tenantId, id], name: "account_tenant_scoped_id")
+  @@index([tenantId, type])
+  @@map("account")
+}
+
+/// A posted journal entry. APPEND-ONLY (INV-002's pattern, extended per Task
+/// 72's own critical requirement: "corrections are reversal/amendment
+/// entries, never in-place edits"). No `active`, no `version` that increments
+/// on edit — nothing here is ever edited. A wrong entry is corrected by
+/// posting `reversalOfId` pointing back at it, never by touching the
+/// original row. The `postJournalEntry` command enforces balance (sum of
+/// debits equals sum of credits) before this row and its lines commit.
+model JournalEntry {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  memo         String?
+  postedAt     DateTime @default(now()) @map("posted_at")
+  /// Set only on a reversal entry, pointing at the entry it reverses. Not a
+  /// state transition — a JournalEntry has no state machine, it either exists
+  /// (posted) or is reversed by a SEPARATE, later entry that still leaves the
+  /// original readable and unchanged, which is the whole point.
+  reversalOfId String?  @map("reversal_of_id") @db.Uuid
+  postedById   String   @map("posted_by_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  reversalOf JournalEntry?  @relation("JournalEntryReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversedBy JournalEntry[] @relation("JournalEntryReversal")
+  lines      JournalLine[]
+
+  @@unique([tenantId, id], name: "journal_entry_tenant_scoped_id")
+  @@index([tenantId, postedAt])
+  @@map("journal_entry")
+}
+
+/// One debit or credit leg of a JournalEntry. APPEND-ONLY, same reasoning as
+/// JournalEntry — see there. Exactly one of `debitMinor`/`creditMinor` is
+/// non-zero per line; enforced by the command, not a CHECK constraint, since
+/// the command already has to compute the entry-level balance anyway and a
+/// second enforcement point would be a second place this rule could drift.
+model JournalLine {
+  id          String @id @default(uuid()) @db.Uuid
+  tenantId    String @map("tenant_id") @db.Uuid
+  journalEntryId String @map("journal_entry_id") @db.Uuid
+  accountId   String @map("account_id") @db.Uuid
+  debitMinor  Int    @default(0) @map("debit_minor")
+  creditMinor Int    @default(0) @map("credit_minor")
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  journalEntry JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  account      Account      @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, accountId])
+  @@index([tenantId, journalEntryId])
+  @@map("journal_line")
 }
