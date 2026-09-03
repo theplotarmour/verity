@@ -152,6 +152,12 @@ model Tenant {
   hrLeaveApplications  HrLeaveApplication[]
   hrLeaveDecisions     HrLeaveDecision[]
 
+  // Capability: billing (Task 77). Back-relations only, as above.
+  billingMeters         BillingMeter[]
+  billingMeterReadings  BillingMeterReading[]
+  billingPeriods        BillingPeriod[]
+  billingInvoices       BillingInvoice[]
+
   @@map("tenant")
 }
 
@@ -230,6 +236,8 @@ model Party {
   resources Resource[]
   // Capability: HR (Task 78). Back-relation only, as above.
   hrEmployees HrEmployee[]
+  // Capability: billing (Task 77). Back-relation only, as above.
+  billingMeters BillingMeter[]
 
   @@index([email])
   @@index([phone])
@@ -3607,4 +3615,91 @@ model HrLeaveDecision {
 
   @@index([tenantId, leaveApplicationId])
   @@map("hr_leave_decision")
+}
+
+// ===========================================================================
+// CAPABILITY: BILLING (Task 77) — MVP scope only.
+//
+// Metered/recurring billing, deliberately separate from one-off sales
+// invoicing (Task 74, not built) per Task 77's own scope. A Meter bills a
+// Party directly (unified identity, same reasoning as HrEmployee above) —
+// no generic Customer entity exists yet to route through instead.
+//
+// NOT built here: rate tiers / time-of-use / demand pricing (flat
+// rate-per-unit only), prepaid credit, a tracked BillingRun with per-target
+// resume/retry (Task 91's `runCommandBatch` is the natural fit for that —
+// call `generateInvoiceForMeter` once per meter through it rather than this
+// capability reinventing batch-progress tracking), adjustments. The
+// database's own unique constraint on (tenantId, meterId, billingPeriodId)
+// is what actually satisfies "a billing period cannot be invoiced twice" —
+// simpler and harder to get wrong than an application-level check.
+// ===========================================================================
+
+model BillingMeter {
+  id                String  @id @default(uuid()) @db.Uuid
+  tenantId          String  @map("tenant_id") @db.Uuid
+  partyId           String  @map("party_id") @db.Uuid
+  name              String
+  ratePerUnitMinor  Int     @map("rate_per_unit_minor")
+  active            Boolean @default(true)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  version           Int      @default(1)
+
+  tenant   Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  party    Party                 @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  readings BillingMeterReading[]
+  invoices BillingInvoice[]
+
+  @@index([tenantId, partyId])
+  @@map("billing_meter")
+}
+
+/// APPEND-ONLY — a meter reading is a historical fact, corrected by a later
+/// reading, never by editing this row.
+model BillingMeterReading {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  meterId       String   @map("meter_id") @db.Uuid
+  readingUnits  Int      @map("reading_units")
+  readAt        DateTime @default(now()) @map("read_at")
+  recordedById  String   @map("recorded_by_id") @db.Uuid
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  meter  BillingMeter @relation(fields: [meterId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, meterId, readAt])
+  @@map("billing_meter_reading")
+}
+
+model BillingPeriod {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  periodStart DateTime  @map("period_start")
+  periodEnd   DateTime  @map("period_end")
+  closedAt    DateTime? @map("closed_at")
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoices BillingInvoice[]
+
+  @@map("billing_period")
+}
+
+/// APPEND-ONLY, one per (meter, period) by unique constraint — the
+/// enforcement of "cannot be invoiced twice," not an application check.
+model BillingInvoice {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  meterId         String   @map("meter_id") @db.Uuid
+  billingPeriodId String   @map("billing_period_id") @db.Uuid
+  usageUnits      Int      @map("usage_units")
+  amountMinor     Int      @map("amount_minor")
+  generatedAt     DateTime @default(now()) @map("generated_at")
+
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  meter         BillingMeter  @relation(fields: [meterId], references: [id], onDelete: Restrict)
+  billingPeriod BillingPeriod @relation(fields: [billingPeriodId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, meterId, billingPeriodId])
+  @@map("billing_invoice")
 }
