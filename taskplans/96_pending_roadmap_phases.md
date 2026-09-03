@@ -69,10 +69,10 @@ pending goods issue, low stock), which could be enough signal to satisfy
 Task 90's "two independent capabilities want this" trigger without
 waiting for a second client. Revisit Phase 0's Task 90 decision here if so.
 
-## Phase 3 — AI agent, near-term (Task 84's six areas) — STARTED 2026-09-03
+## Phase 3 — AI agent, near-term (Task 84's six areas) — COMPLETE 2026-09-04
 
 Requires Phase 0's ADR (cleared). Internal order per Task 84's own
-dependency note:
+dependency note, followed exactly:
 
 8. ~~Areas 1, 2, 3, 5~~ **BUILT** (tool-manifest generator,
    confirmation-class field, actor-scoped tool visibility, query-channel
@@ -81,14 +81,23 @@ dependency note:
    registry; fixed to one resolve-permissions call per manifest build)
    and a real scope correction (`executeQuery` wasn't routed through the
    unified `enforcePolicy` decision point at all before this).
-9. Area 4 (grounding enforcement) — the genuinely unsolved one; budget
-   real design time, expect it to reshape areas 1 and 6. Not started.
-10. Area 6 (the chat surface itself) — needs 1–5 (have them) and an LLM/
-    provider decision (don't have one yet). Not started.
-11. **Task 91** (bulk operations + partial failure) — triggered by
-    whichever of Task 84 or Task 87 lands first; likely lands here,
-    against Task 84's multi-command turns, unless Task 87's import work
-    reaches this need first in Phase 2.
+9. ~~Area 4~~ **BUILT** (grounding enforcement, MVP scope — `*Id` fields
+   must trace to a same-turn query result; does not yet know WHICH entity
+   a field references, see Task 84 for the known gap).
+10. ~~Area 6~~ **BUILT** (chat surface — Groq, no new dependency, no new
+    secret; persistent dock in `ShellChrome`, not a modal).
+11. ~~Task 91~~ **BUILT** (bulk operations + partial failure) — Task 84
+    landed the trigger first, as this file predicted. `runCommandBatch`
+    consumed immediately by the agent's tool loop, which is also where it
+    now gates every destructive command behind `needs_approval` — area 6
+    had no confirm UI of its own, so this is that gate until one exists.
+
+**Checkpoint after Phase 3:** all four of this phase's items are code,
+typechecked and linted clean. DB-integration verification for Task 91's
+new tests is outstanding — blocked by a live Supabase connectivity issue
+during this session (statement timeouts on ordinary deletes), not by
+anything in the diff; retry `npx vitest run src/test/command-runtime.test.ts`
+once connectivity recovers.
 
 ## Phase 4 — Standing, second-client-triggered (not scheduled)
 

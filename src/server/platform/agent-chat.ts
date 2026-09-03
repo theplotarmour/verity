@@ -1,10 +1,11 @@
 import "server-only";
 import { withTenant } from "./tenancy";
 import { buildToolManifest, type ToolDescriptor } from "./tool-manifest";
-import { getCommand, executeCommand, type ActorContext } from "./command";
+import { getCommand, type ActorContext } from "./command";
 import { getQuery, executeQuery } from "./query";
 import { GroundingCache } from "./grounding";
 import { readAgentProviderConfig } from "./config";
+import { runCommandBatch } from "./batch";
 
 /**
  * Agent chat orchestrator — Task 84 area 6.
@@ -88,8 +89,10 @@ permissions as the person you are helping — never more, never less. Rules:
    tool to find the real ID. Never invent, guess, or reuse an ID from outside
    this conversation — the platform will reject it (E_UNGROUNDED) and you will
    have to query and retry.
-2. A tool marked (destructive) changes or removes something meaningfully. Say
-   plainly what you are about to do before calling it.
+2. A tool marked (destructive) will NOT run when you call it — it always
+   comes back "needs_approval". That is not a bug: tell the user plainly
+   what it would do and that they need to do it themselves in the app for
+   now. Do not retry a destructive call expecting a different result.
 3. If a tool call fails, read the error and decide whether to retry with
    corrected input or explain the failure to the user. Do not retry blindly.
 4. Keep answers short and in the platform's own terminology (Work, Party,
@@ -157,12 +160,16 @@ async function runTool(
 
   const command = getCommand(key);
   if (command) {
-    try {
-      const result = await executeCommand(actor, command, input, "agent", grounding);
-      return { key, kind: "command", input, ok: true, output: result };
-    } catch (err) {
-      return { key, kind: "command", input, ok: false, output: err instanceof Error ? err.message : String(err) };
+    // Task 91's batch runner, single-item. Not batching for its own sake —
+    // reusing it here is what makes a destructive command's gate ("never
+    // auto-executed, always needs_approval until a real confirm UI exists")
+    // one piece of logic instead of a second copy inside the chat loop.
+    const batch = await runCommandBatch(actor, command, [input], { channel: "agent", grounding });
+    const outcome = batch.items[0].outcome;
+    if (outcome.status === "succeeded") {
+      return { key, kind: "command", input, ok: true, output: outcome.result };
     }
+    return { key, kind: "command", input, ok: false, output: outcome.reason };
   }
 
   const query = getQuery(key);

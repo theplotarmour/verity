@@ -25,6 +25,7 @@ import {
   type QueryDefinition,
 } from "@/server/platform/query";
 import { activateCapability, invalidateCapabilityCache } from "@/server/platform/capability";
+import { runCommandBatch } from "@/server/platform/batch";
 
 /**
  * Command/query pipeline gate test.
@@ -326,5 +327,45 @@ describeDb("command and query runtime", () => {
     await expect(
       withTenant(tenantA, (tx) => tx.domainEvent.delete({ where: { id: event!.id } })),
     ).rejects.toThrow();
+  });
+
+  describe("runCommandBatch (Task 91)", () => {
+    it("reports each item's outcome individually, one bad item does not block the rest", async () => {
+      const batch = await runCommandBatch(actor, renameTenant, [
+        { name: "Batch One" },
+        { name: "no" }, // fails zod min(3)
+        { name: "Batch Three" },
+      ]);
+
+      expect(batch.total).toBe(3);
+      expect(batch.succeeded).toBe(2);
+      expect(batch.failed).toBe(1);
+      expect(batch.needsApproval).toBe(0);
+      expect(batch.items[0].outcome.status).toBe("succeeded");
+      expect(batch.items[1].outcome.status).toBe("failed");
+      expect(batch.items[2].outcome.status).toBe("succeeded");
+    });
+
+    it("never executes a destructive command unless explicitly confirmed", async () => {
+      const destructive: CommandDefinition<{ name: string }, { name: string }> = {
+        ...renameTenant,
+        key: "verity.test.rename_tenant_destructive",
+        impact: "destructive",
+      };
+
+      const deferred = await runCommandBatch(actor, destructive, [{ name: "Should Not Apply" }]);
+      expect(deferred.needsApproval).toBe(1);
+      expect(deferred.succeeded).toBe(0);
+      expect(deferred.items[0].outcome.status).toBe("needs_approval");
+
+      const before = await withTenant(tenantA, (tx) => tx.tenant.findUniqueOrThrow({ where: { id: tenantA } }));
+      expect(before.name).not.toBe("Should Not Apply");
+
+      const confirmed = await runCommandBatch(actor, destructive, [{ name: "Confirmed Apply" }], {
+        confirmed: true,
+      });
+      expect(confirmed.succeeded).toBe(1);
+      expect(confirmed.items[0].outcome.status).toBe("succeeded");
+    });
   });
 });
