@@ -522,7 +522,17 @@
   --glass-optics-strong: saturate(2.3);
 }
 
-/* Level 1 — the shell. Quietest material; it must recede. */
+/* Level 1 — the shell. Quietest material; it must recede.
+ *
+ * The top edge carries a two-channel dispersion instead of one flat
+ * highlight: real refraction bends short and long wavelengths by different
+ * amounts, so a lit edge on real glass is never perfectly white — it fringes
+ * warm above cool by a hairline. This is the static, zero-JS approximation
+ * of that (liquid-glass-react's technique is a live per-pixel RGB
+ * displacement map; this is two 1px inset lines standing in for it). One
+ * shell per page, so the two extra layers cost nothing ADR-011 constraint 2
+ * cares about — this is deliberately NOT repeated on .glass-card, which
+ * renders per table row. */
 .glass-shell {
   background:
     linear-gradient(
@@ -534,6 +544,10 @@
     var(--color-glass-1);
   backdrop-filter: blur(var(--blur-glass-strong)) var(--glass-optics);
   -webkit-backdrop-filter: blur(var(--blur-glass-strong)) var(--glass-optics);
+  box-shadow:
+    inset 0 1px 0 light-dark(rgb(255 200 170 / 0.22), rgb(255 200 170 / 0.03)),
+    inset 0 -1px 0 light-dark(rgb(170 200 255 / 0.16), rgb(170 200 255 / 0.025)),
+    var(--shadow-highlight);
 }
 
 /* Level 2 — primary surfaces. Cards and panels. */
@@ -594,8 +608,13 @@
     var(--color-glass-4);
   backdrop-filter: blur(var(--blur-glass-strong)) var(--glass-optics-strong);
   -webkit-backdrop-filter: blur(var(--blur-glass-strong)) var(--glass-optics-strong);
+  /* Dispersion fringe on the top edge — see .glass-shell for why. Overlays
+     are dialogs/dropdowns, never a per-row surface, so the same reasoning
+     that keeps this off .glass-card applies here too: cheap because rare. */
   box-shadow:
     inset 0 1px 0 light-dark(rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.05)),
+    inset 0 1.5px 0 light-dark(rgb(255 205 175 / 0.18), rgb(255 205 175 / 0.025)),
+    inset 0 -1px 0 light-dark(rgb(175 205 255 / 0.14), rgb(175 205 255 / 0.02)),
     var(--shadow-lg);
 }
 

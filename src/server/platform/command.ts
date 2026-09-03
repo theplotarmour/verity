@@ -6,6 +6,7 @@ import { withRequestContext } from "./observability";
 import { capabilityForEntity, requireCapabilityActive } from "./capability";
 import { CustomFieldValidationError } from "./entity";
 import { withTenant, type TenantScopedClient } from "./tenancy";
+import { assertGrounded, type GroundingCache } from "./grounding";
 
 /**
  * Command (Action) runtime.
@@ -198,6 +199,12 @@ export async function executeCommand<TInput, TResult>(
    * Defaults to `api`, which is what a server action or route handler is.
    */
   channel: PolicyChannel = "api",
+  /**
+   * Task 84 area 4. Only meaningful when `channel === "agent"`; every other
+   * caller passes nothing and the check below is skipped entirely. Owned by
+   * the agent turn that's calling this, never by the command itself.
+   */
+  grounding?: GroundingCache,
 ): Promise<TResult> {
   // One identifier for the whole execution, minted before any write. Every
   // audit row, event and security event below carries it, which is what makes
@@ -246,6 +253,12 @@ export async function executeCommand<TInput, TResult>(
       entity: def.entity,
       channel,
     });
+
+    // 2c. Task 84 area 4 — grounding. Not a MET-ACT step number of its own;
+    // it sits after authorization (a denied actor never reaches it) and
+    // before preconditions (a business-rule check should not run against an
+    // unproven ID). No-op for every channel but "agent".
+    if (channel === "agent" && grounding) assertGrounded(input, grounding);
 
     // 3. MET-ACT-003
     await def.preconditions?.(ctx, input);

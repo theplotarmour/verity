@@ -4,6 +4,7 @@ import { capabilityForEntity, requireCapabilityActive } from "./capability";
 import { withTenant, type TenantScopedClient } from "./tenancy";
 import { ValidationError, type ActorContext } from "./command";
 import { enforcePolicy, type PolicyChannel } from "./policy";
+import type { GroundingCache } from "./grounding";
 
 /**
  * Query runtime.
@@ -84,6 +85,10 @@ export async function executeQuery<TInput, TResult>(
   def: QueryDefinition<TInput, TResult>,
   rawInput: unknown,
   channel: PolicyChannel = "api",
+  /** Task 84 area 4 — records this query's result rows so a same-turn
+   *  agent command can prove an `*Id` field was actually seen, not
+   *  invented. Only meaningful when `channel === "agent"`. */
+  grounding?: GroundingCache,
 ): Promise<TResult> {
   return withTenant(actor.tenantId, async (tx) => {
     const parsed = def.input.safeParse(rawInput);
@@ -114,14 +119,22 @@ export async function executeQuery<TInput, TResult>(
     // Layer 3 on the common shape. Only a top-level array of plain objects is
     // handled; anything else is the handler's own responsibility, and silently
     // half-redacting a nested structure would be worse than not touching it.
-    if (Array.isArray(result) && result.every((r) => r && typeof r === "object")) {
-      return (await redactFields(
-        tx,
-        actor,
-        def.entity,
-        result as Array<Record<string, unknown>>,
-      )) as TResult;
-    }
-    return result;
+    const final =
+      Array.isArray(result) && result.every((r) => r && typeof r === "object")
+        ? ((await redactFields(
+            tx,
+            actor,
+            def.entity,
+            result as Array<Record<string, unknown>>,
+          )) as TResult)
+        : result;
+
+    // Task 84 area 4. Recorded AFTER redaction — a field the actor cannot
+    // read cannot ground anything either, and `redactFields` omits rather
+    // than nulls, so a redacted `id` (never realistic, but not assumed away)
+    // would simply not be present to record.
+    if (channel === "agent" && grounding) grounding.record(final);
+
+    return final;
   });
 }

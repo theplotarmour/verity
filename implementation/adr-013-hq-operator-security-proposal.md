@@ -1,3 +1,5 @@
+**Superseded — see `verity-spec/17_decisions/adr/adr-013.md` for the accepted decision.**
+
 # ADR-013 — Global HQ Operator Security Model
 
 ## PROPOSAL FOR REVIEW — NOT A DECISION
