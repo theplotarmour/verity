@@ -258,3 +258,22 @@ export const runtimeConfig: RuntimeConfig = loadConfig();
 export function readCronSecret(): string | undefined {
   return process.env.CRON_SECRET;
 }
+
+/**
+ * Task 84 area 6 provider config, read live like `readCronSecret` above and
+ * for the same reason: absent by default rather than validated at boot, so a
+ * deployment with no chat provider configured still starts. `OPENAI_API_KEY`/
+ * `OPENAI_BASE_URL`/`OPENAI_MODEL` already exist for a different purpose in
+ * `.env` (pointed at Groq's OpenAI-compatible endpoint) — reused here rather
+ * than adding a second, agent-specific env var name for the same shape of
+ * value.
+ */
+export function readAgentProviderConfig():
+  | { apiKey: string; baseUrl: string; model: string }
+  | undefined {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const baseUrl = process.env.OPENAI_BASE_URL;
+  const model = process.env.OPENAI_MODEL;
+  if (!apiKey || !baseUrl || !model) return undefined;
+  return { apiKey, baseUrl, model };
+}

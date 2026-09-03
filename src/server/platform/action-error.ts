@@ -3,6 +3,7 @@ import { ForbiddenError } from "./authorization";
 import { CapabilityError } from "./capability";
 import { ValidationError } from "./command";
 import { ConflictError, CustomFieldValidationError } from "./entity";
+import { GroundingError } from "./grounding";
 
 /**
  * The serialisable shape an interface receives when a platform call fails.
@@ -19,7 +20,13 @@ import { ConflictError, CustomFieldValidationError } from "./entity";
 
 export type ActionFailure = {
   ok: false;
-  code: "E_FORBIDDEN" | "E_VALIDATION" | "E_CONFLICT" | "E_CAPABILITY_INACTIVE" | "E_UNKNOWN";
+  code:
+    | "E_FORBIDDEN"
+    | "E_VALIDATION"
+    | "E_CONFLICT"
+    | "E_CAPABILITY_INACTIVE"
+    | "E_UNGROUNDED"
+    | "E_UNKNOWN";
   message: string;
   issues?: string[];
   /** Whether repeating the call could succeed without the user changing anything. */
@@ -48,6 +55,11 @@ export function toActionFailure(error: unknown): ActionFailure {
   }
   if (error instanceof ValidationError) {
     return { ok: false, code: "E_VALIDATION", message: error.message, issues: error.issues, retryable: false };
+  }
+  if (error instanceof GroundingError) {
+    // Retryable: the agent can query the entity and try again in the same
+    // conversation, unlike a genuine validation failure.
+    return { ok: false, code: "E_UNGROUNDED", message: error.message, issues: error.fields, retryable: true };
   }
   if (error instanceof ConflictError) {
     // Someone else changed the record; reloading and retrying can succeed.

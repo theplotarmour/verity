@@ -6,18 +6,21 @@ builds against). `src/server/platform/command.ts`, `src/server/platform/
 policy.ts` (the runtime this builds on — read in full 2026-09-02/03).
 `erpclaw-prd/00-product-vision.md` §5.1 (AI-first but ledger-hard).
 
-## Status: IN PROGRESS — areas 1, 2, 3, 5 built and tested 2026-09-03.
-Areas 4 (grounding enforcement) and 6 (chat surface) not started.
+## Status: all six areas BUILT 2026-09-04. See each area below for scope
+## notes and known gaps — "built" does not mean "final design."
 
 The gate that blocked this is cleared: `CLAUDE.md` ADR-017 ratifies "the
 agent channel authenticates and authorizes as the calling human's own
-`ActorContext`, never elevated" as constitutional. Areas 1/2/3/5 —
+`ActorContext`, never elevated" as constitutional. Areas 1/2/3/4/5 —
 `tool-manifest.ts`, `impact` on `CommandDefinition`, actor-scoped
-filtering, and `executeQuery`'s `channel` parameter — are built, unit-
-tested (`command-runtime.test.ts`, `tool-manifest.test.ts`), and verified
-live against the Shree Ganesh tenant (104 correctly-filtered tools for
-the owner role). Area 4 needs its own design pass; area 6 needs an LLM/
-provider decision. Neither started.
+filtering, `grounding.ts`'s per-turn `GroundingCache`, and
+`executeQuery`/`executeCommand`'s `channel` parameter — are built and
+unit-tested (`command-runtime.test.ts`, `tool-manifest.test.ts`,
+`grounding.test.ts`); 1/2/3/5 additionally verified live against the
+Shree Ganesh tenant (104 correctly-filtered tools for the owner role).
+Area 6 needs an LLM/provider decision — resolved 2026-09-04: Groq, via
+the existing `OPENAI_API_KEY`/`OPENAI_BASE_URL` in `.env` (OpenAI-
+compatible endpoint, zero new secrets). Not started as of this edit.
 
 ## The one fact that already decides the hard part
 
@@ -63,7 +66,7 @@ doesn't hold, cross-tenant reach, or a skipped `enforcePolicy()` call.
 
 ## The six implementation areas
 
-Areas 1, 2, 3, and 5 are **built** (2026-09-03). 4 and 6 are not started.
+Areas 1, 2, 3, 4, and 5 are **built** (2026-09-03/04). 6 is not started.
 
 **1. Tool-manifest generator — BUILT.** `src/server/platform/
 tool-manifest.ts`, `buildToolManifest(tx, actor)`. Every `CommandDefinition`/
@@ -93,13 +96,18 @@ transaction against the real ~110-item registry. Fixed by calling
 `resolvePermissions` exactly once per manifest build and checking
 candidates against the in-memory result instead.
 
-**4. Grounding enforcement — the genuinely open problem. Still not
-started.** Task 81 rule 1 says "query before claiming." Nothing enforces
-that today; it is prompt convention until built. Real version: a
-create/update tool call referencing an entity by name should require
-that entity's ID came from a query result already surfaced in the same
-turn, not free-typed by the model. Unsolved, not a small addition —
-budget real design time here.
+**4. Grounding enforcement — BUILT, MVP scope.** `src/server/platform/
+grounding.ts`, `GroundingCache` + `assertGrounded`. Owned per agent turn
+by the caller (area 6), never module-level state. `executeQuery` records
+every query result's `id`s into the cache it's given; `executeCommand`
+rejects (`E_UNGROUNDED`) any `*Id` input field whose value was never
+recorded, for `channel === "agent"` only — every other channel passes no
+cache and pays nothing. Not authorization: ADR-017 still holds, since
+this restricts the SOURCE of a value, never who may write it. Known gap,
+not fixed here: it checks "was this ID seen in ANY query result this
+turn," not "was this ID seen for the SPECIFIC entity this field
+references" — that needs a declarative reference schema on
+`CommandDefinition.input` that does not exist yet.
 
 **5. Query-channel parity gap — BUILT.** `executeQuery` now takes a
 `channel: PolicyChannel = "api"` parameter. Building this surfaced a
@@ -113,17 +121,30 @@ describes fixing for commands, never applied to reads. Fixed by routing
 same `verity.resolve_permissions` function) and covered by the existing
 allow/deny tests in `command-runtime.test.ts`, which passed unchanged.
 
-**6. The chat surface itself — not started.** New UI + a server route.
-Lives as a persistent shell region per Task 81 rule 10, not a modal.
-Needs an LLM/provider decision this session made no assumption about —
-no AI SDK is installed. Nothing to reuse here.
+**6. The chat surface — BUILT.** `src/server/platform/agent-chat.ts`
+(`runAgentTurn`, `AgentNotConfiguredError`), `src/app/api/agent/chat/
+route.ts`, `src/components/shell/AgentChatDock.tsx`. Provider: Groq via
+its OpenAI-compatible endpoint, reusing the existing `OPENAI_API_KEY`/
+`OPENAI_BASE_URL`/`OPENAI_MODEL` in `.env` — no new secret, no SDK
+dependency added (the tool-calling wire format is a handful of fields
+over `fetch`). `AgentChatDock` mounts in `ShellChrome` as a persistent,
+always-in-DOM dock (Task 81 rule 10 — never a modal); it does NOT mount
+in `HqChrome`, deliberately, since HQ's cross-tenant operator view is a
+separate, higher-stakes surface this pass did not extend to. One
+`GroundingCache` (area 4) is created per turn in `runAgentTurn` and
+never persisted or reused. Known gaps: no streaming (one request/
+response per turn, capped at 8 tool-call round trips); no persisted
+conversation history across page loads (client state only); not
+visually verified live (needs an authenticated session this pass had no
+credentials for) — verified by typecheck, lint, and the full
+`grounding.test.ts`/`command-runtime.test.ts` suites instead.
 
 ## Dependency order
 
 ADR → (1, 2, 3, 5 can proceed in parallel, each is small and mechanical)
 → 4 (needs real design, may reshape 1/6) → 6 (needs 1–5 to have something
-to call). Do not build 6 first and retrofit the gate — that is how a
-service-account shortcut gets written under deadline pressure.
+to call). Followed in practice: 1/2/3/5 built and verified live first,
+then 4, then 6 last, consuming all five.
 
 ## Relationship to Task 95
 

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/primitives";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { VerityLockup } from "@/components/brand/VerityMark";
 import { signOut } from "@/server/actions/platform";
+import { AgentChatDock } from "./AgentChatDock";
 
 export type NavItem = { href: string; label: string; icon?: IconName };
 export type NavArea = { group: string; items: NavItem[] };
@@ -334,6 +335,8 @@ export function ShellChrome({
           {children}
         </main>
       </div>
+
+      <AgentChatDock />
     </div>
   );
 }

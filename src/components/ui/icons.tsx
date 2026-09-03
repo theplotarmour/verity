@@ -52,7 +52,8 @@ export type IconName =
   | "chevronRight"
   | "building"
   | "check"
-  | "close";
+  | "close"
+  | "assistant";
 
 const PATHS: Record<IconName, string> = {
   // Navigation — board nav geometry.
@@ -121,6 +122,10 @@ const PATHS: Record<IconName, string> = {
   building: "M5 20V8l7-4 7 4v12M10 20v-5h4v5",
   check: "M5 12.5l4.5 4.5L19 7.5",
   close: "M6 6l12 12M18 6L6 18",
+  // Task 84 area 6 — the chat dock toggle. A speech bubble, not a spark or a
+  // robot head: the assistant is a conversation with the platform's own
+  // authority, not a separate branded feature (ADR-017).
+  assistant: "M4 5h16v11H9l-4 4z M8.5 9.5h7 M8.5 12.5h4.5",
 };
 
 export function Icon({
