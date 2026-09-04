@@ -76,7 +76,7 @@ export const importGstPortalRecords: CommandDefinition<
   },
   { periodKey: string; imported: number; replaced: number }
 > = {
-  key: "verity.plywood.import_gst_portal_records",
+  key: "verity.trading.import_gst_portal_records",
   entity: ENTITY_INVOICE,
   // Not Create: importing does not create an invoice, and giving this the same
   // verb as raising one would let anyone who may import also raise documents.
@@ -131,11 +131,11 @@ export const importGstPortalRecords: CommandDefinition<
       seen.add(key);
     }
 
-    const removed = await ctx.tx.plywoodGstPortalRecord.deleteMany({
+    const removed = await ctx.tx.tradingGstPortalRecord.deleteMany({
       where: { periodKey: input.periodKey },
     });
 
-    await ctx.tx.plywoodGstPortalRecord.createMany({
+    await ctx.tx.tradingGstPortalRecord.createMany({
       data: input.rows.map((row) => ({
         tenantId: ctx.actor.tenantId,
         periodKey: input.periodKey,
@@ -156,7 +156,7 @@ export const importGstPortalRecords: CommandDefinition<
     await recordActivity(ctx, {
       entityKey: ENTITY_INVOICE,
       entityId: ctx.actor.tenantId,
-      commandKey: "verity.plywood.import_gst_portal_records",
+      commandKey: "verity.trading.import_gst_portal_records",
       changes: [
         {
           field: `GST portal data for ${input.periodKey}`,
@@ -174,7 +174,7 @@ export const importGstPortalRecords: CommandDefinition<
       },
       events: [
         {
-          name: "verity.plywood.gst_portal_records_imported",
+          name: "verity.trading.gst_portal_records_imported",
           entityId: ctx.actor.tenantId,
         },
       ],
@@ -237,7 +237,7 @@ export const itcReconciliation: QueryDefinition<
     }>;
   }
 > = {
-  key: "verity.plywood.itc_reconciliation",
+  key: "verity.trading.itc_reconciliation",
   entity: ENTITY_INVOICE,
   input: z.object({ periodKey: PERIOD_KEY.optional() }),
   handler: async (ctx, input) => {
@@ -253,8 +253,8 @@ export const itcReconciliation: QueryDefinition<
     );
 
     const [portal, invoices] = await Promise.all([
-      ctx.tx.plywoodGstPortalRecord.findMany({ where: { periodKey } }),
-      ctx.tx.plywoodInvoice.findMany({
+      ctx.tx.tradingGstPortalRecord.findMany({ where: { periodKey } }),
+      ctx.tx.tradingInvoice.findMany({
         where: { supplierId: { not: null }, issuedAt: { gte: from, lt: to } },
         include: { supplier: { select: { displayName: true, gstin: true } } },
       }),

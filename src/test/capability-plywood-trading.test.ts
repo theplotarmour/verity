@@ -1,3 +1,4 @@
+import { TRADING_CAPABILITY } from "@/server/capabilities/trading";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
@@ -147,6 +148,7 @@ describeDb("capability: Plywood trading — purchase and sale", () => {
       await activateCapability(tx, tenantId, LOCATION_CAPABILITY);
       await activateCapability(tx, tenantId, ASSET_CAPABILITY);
       await activateCapability(tx, tenantId, EVIDENCE_CAPABILITY);
+      await activateCapability(tx, tenantId, TRADING_CAPABILITY);
       await activateCapability(tx, tenantId, PLYWOOD_CAPABILITY);
 
       organizationId = (await tx.organization.create({ data: { tenantId, name: "HQ" } })).id;
@@ -579,11 +581,11 @@ describeDb("capability: Plywood trading — purchase and sale", () => {
 
   it("shows another tenant none of this one's partners or orders (INV-001)", async () => {
     const seen = await withTenant(otherTenantId, async (tx) => ({
-      suppliers: await tx.plywoodSupplier.count(),
-      customers: await tx.plywoodCustomer.count(),
-      purchases: await tx.plywoodPurchaseOrder.count(),
-      sales: await tx.plywoodSalesOrder.count(),
-      holds: await tx.plywoodStockReservation.count(),
+      suppliers: await tx.tradingSupplier.count(),
+      customers: await tx.tradingCustomer.count(),
+      purchases: await tx.tradingPurchaseOrder.count(),
+      sales: await tx.tradingSalesOrder.count(),
+      holds: await tx.tradingStockReservation.count(),
     }));
     expect(seen).toEqual({ suppliers: 0, customers: 0, purchases: 0, sales: 0, holds: 0 });
   });

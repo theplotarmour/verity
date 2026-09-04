@@ -185,7 +185,7 @@ export async function nextDocumentNumber(
 }> {
   const locked = await tx.$queryRaw<{ id: string; next_number: number }[]>`
     SELECT id, next_number
-      FROM plywood_invoice_series
+      FROM trading_invoice_series
      WHERE series_key = ${seriesKey}
        AND financial_year = ${financialYear}
      FOR UPDATE`;
@@ -196,14 +196,14 @@ export async function nextDocumentNumber(
   if (locked[0]) {
     seriesId = locked[0].id;
     sequenceNumber = locked[0].next_number;
-    await tx.plywoodInvoiceSeries.update({
+    await tx.tradingInvoiceSeries.update({
       where: { id: seriesId },
       data: { nextNumber: sequenceNumber + 1, version: { increment: 1 } },
     });
   } else {
     // First invoice in this series this year. The unique index on
     // (tenant, series, year) is what resolves two callers racing to create it.
-    const created = await tx.plywoodInvoiceSeries.create({
+    const created = await tx.tradingInvoiceSeries.create({
       data: { tenantId, seriesKey, financialYear, nextNumber: 2 },
     });
     seriesId = created.id;
@@ -256,12 +256,12 @@ export async function issueSalesInvoice(
   input: { salesOrderId: string; seriesKey?: string },
 ): Promise<SalesInvoiceResult> {
   {
-    const order = await ctx.tx.plywoodSalesOrder.findUniqueOrThrow({
+    const order = await ctx.tx.tradingSalesOrder.findUniqueOrThrow({
       where: { id: input.salesOrderId },
       include: { lines: true, customer: true },
     });
 
-    const existing = await ctx.tx.plywoodInvoice.findFirst({
+    const existing = await ctx.tx.tradingInvoice.findFirst({
       where: { salesOrderId: order.id },
     });
     if (existing) {
@@ -355,7 +355,7 @@ export async function issueSalesInvoice(
     let sgstRateBp: number | undefined;
     let igstRateBp: number | undefined;
 
-    const registration = await ctx.tx.plywoodGstRegistration.findFirst({
+    const registration = await ctx.tx.tradingGstRegistration.findFirst({
       where: { active: true },
     });
     if (registration) {
@@ -423,7 +423,7 @@ export async function issueSalesInvoice(
       financialYear,
     );
 
-    const invoice = await ctx.tx.plywoodInvoice.create({
+    const invoice = await ctx.tx.tradingInvoice.create({
       data: {
         tenantId: ctx.actor.tenantId,
         seriesId: numbering.seriesId,
@@ -454,7 +454,7 @@ export async function issueSalesInvoice(
       },
     });
 
-    await ctx.tx.plywoodInvoiceLine.createMany({
+    await ctx.tx.tradingInvoiceLine.createMany({
       data: order.lines.map((line) => ({
         tenantId: ctx.actor.tenantId,
         invoiceId: invoice.id,
@@ -470,7 +470,7 @@ export async function issueSalesInvoice(
     // The customer now owes the invoice total. A debit from this business's
     // point of view, consistently — a ledger that flips perspective between
     // customers and suppliers is unreadable.
-    await ctx.tx.plywoodLedgerEntry.create({
+    await ctx.tx.tradingLedgerEntry.create({
       data: {
         tenantId: ctx.actor.tenantId,
         customerId: order.customerId,
@@ -493,7 +493,7 @@ export async function issueSalesInvoice(
     // invoice: the money moved, and the cash book on Transactions has to show
     // it moving.
     if (order.paymentTerms === "prepaid" && tax.totalPaise > 0) {
-      const payment = await ctx.tx.plywoodPayment.create({
+      const payment = await ctx.tx.tradingPayment.create({
         data: {
           tenantId: ctx.actor.tenantId,
           invoiceId: invoice.id,
@@ -505,7 +505,7 @@ export async function issueSalesInvoice(
           byUserId: ctx.actor.userId,
         },
       });
-      await ctx.tx.plywoodPaymentAllocation.create({
+      await ctx.tx.tradingPaymentAllocation.create({
         data: {
           tenantId: ctx.actor.tenantId,
           paymentId: payment.id,
@@ -513,7 +513,7 @@ export async function issueSalesInvoice(
           amountPaise: tax.totalPaise,
         },
       });
-      await ctx.tx.plywoodLedgerEntry.create({
+      await ctx.tx.tradingLedgerEntry.create({
         data: {
           tenantId: ctx.actor.tenantId,
           customerId: order.customerId,
@@ -539,7 +539,7 @@ export const raiseSalesInvoice: CommandDefinition<
   { salesOrderId: string; seriesKey?: string },
   SalesInvoiceResult
 > = {
-  key: "verity.plywood.raise_sales_invoice",
+  key: "verity.trading.raise_sales_invoice",
   entity: ENTITY_INVOICE,
   verb: "Create",
   input: z.object({
@@ -551,7 +551,7 @@ export const raiseSalesInvoice: CommandDefinition<
     return {
       result,
       events: [
-        { name: "verity.plywood.sales_invoice_raised", entityId: result.id },
+        { name: "verity.trading.sales_invoice_raised", entityId: result.id },
       ],
     };
   },
@@ -591,7 +591,7 @@ export const raisePurchaseInvoice: CommandDefinition<
   },
   { id: string; invoiceNumber: string }
 > = {
-  key: "verity.plywood.raise_purchase_invoice",
+  key: "verity.trading.raise_purchase_invoice",
   entity: ENTITY_INVOICE,
   verb: "Create",
   input: z.object({
@@ -608,11 +608,11 @@ export const raisePurchaseInvoice: CommandDefinition<
     seriesKey: z.string().min(1).max(20).optional(),
   }),
   handler: async (ctx, input) => {
-    const order = await ctx.tx.plywoodPurchaseOrder.findUniqueOrThrow({
+    const order = await ctx.tx.tradingPurchaseOrder.findUniqueOrThrow({
       where: { id: input.purchaseOrderId },
       include: { lines: true, supplier: true },
     });
-    const existing = await ctx.tx.plywoodInvoice.findFirst({
+    const existing = await ctx.tx.tradingInvoice.findFirst({
       where: { purchaseOrderId: order.id },
     });
     if (existing) {
@@ -637,7 +637,7 @@ export const raisePurchaseInvoice: CommandDefinition<
     // against nothing received is how a business pays for a delivery it never
     // got. A quantity or price DIFFERENCE is not refused here; that is a
     // conversation, and `purchaseMatch` names it.
-    const receiptCount = await ctx.tx.plywoodGoodsReceipt.count({
+    const receiptCount = await ctx.tx.tradingGoodsReceipt.count({
       where: { purchaseOrderId: order.id },
     });
     if (receiptCount === 0) {
@@ -698,7 +698,7 @@ export const raisePurchaseInvoice: CommandDefinition<
       );
     }
 
-    const invoice = await ctx.tx.plywoodInvoice.create({
+    const invoice = await ctx.tx.tradingInvoice.create({
       data: {
         tenantId: ctx.actor.tenantId,
         seriesId: numbering.seriesId,
@@ -735,7 +735,7 @@ export const raisePurchaseInvoice: CommandDefinition<
     // difference shown rather than hidden inside a line.
     const receivedLines = order.lines.filter((line) => line.qtyReceived > 0);
     if (receivedLines.length > 0) {
-      await ctx.tx.plywoodInvoiceLine.createMany({
+      await ctx.tx.tradingInvoiceLine.createMany({
         data: receivedLines.map((line) => ({
           tenantId: ctx.actor.tenantId,
           invoiceId: invoice.id,
@@ -750,7 +750,7 @@ export const raisePurchaseInvoice: CommandDefinition<
     }
 
     // This business now owes the supplier. Credit, from the same point of view.
-    await ctx.tx.plywoodLedgerEntry.create({
+    await ctx.tx.tradingLedgerEntry.create({
       data: {
         tenantId: ctx.actor.tenantId,
         supplierId: order.supplierId,
@@ -765,7 +765,7 @@ export const raisePurchaseInvoice: CommandDefinition<
       result: { id: invoice.id, invoiceNumber: numbering.invoiceNumber },
       events: [
         {
-          name: "verity.plywood.purchase_invoice_raised",
+          name: "verity.trading.purchase_invoice_raised",
           entityId: invoice.id,
         },
       ],
@@ -786,7 +786,7 @@ async function ratesFor(
   hsnCodes: string[],
   on: Date,
 ): Promise<{ cgstRateBp: number; sgstRateBp: number; igstRateBp: number }> {
-  const registration = await tx.plywoodGstRegistration.findFirst({
+  const registration = await tx.tradingGstRegistration.findFirst({
     where: { active: true },
   });
 
@@ -854,7 +854,7 @@ async function ratesFor(
  * business's own view of what it was charged, not the supplier's. That is
  * enough to owe money against and to chase a payment, and it is NOT enough to
  * claim input credit — a computed split filed as though a supplier had issued
- * it is a false return. So no `plywood_purchase_bill_confirmation` row is
+ * it is a false return. So no `trading_purchase_bill_confirmation` row is
  * written here, and every reader that files or claims must exclude bills that
  * have none. `confirmPurchaseBill` records the supplier's own document later.
  *
@@ -872,12 +872,12 @@ export async function issueProvisionalPurchaseBill(
   ctx: CommandContext,
   purchaseOrderId: string,
 ): Promise<{ id: string; invoiceNumber: string; totalPaise: number } | null> {
-  const order = await ctx.tx.plywoodPurchaseOrder.findUniqueOrThrow({
+  const order = await ctx.tx.tradingPurchaseOrder.findUniqueOrThrow({
     where: { id: purchaseOrderId },
     include: { lines: true, supplier: true },
   });
 
-  const existing = await ctx.tx.plywoodInvoice.findFirst({
+  const existing = await ctx.tx.tradingInvoice.findFirst({
     where: { purchaseOrderId: order.id },
   });
   if (existing) return null;
@@ -936,7 +936,7 @@ export async function issueProvisionalPurchaseBill(
     financialYear,
   );
 
-  const invoice = await ctx.tx.plywoodInvoice.create({
+  const invoice = await ctx.tx.tradingInvoice.create({
     data: {
       tenantId: ctx.actor.tenantId,
       seriesId: numbering.seriesId,
@@ -959,7 +959,7 @@ export async function issueProvisionalPurchaseBill(
     },
   });
 
-  await ctx.tx.plywoodInvoiceLine.createMany({
+  await ctx.tx.tradingInvoiceLine.createMany({
     data: received.map((line) => ({
       tenantId: ctx.actor.tenantId,
       invoiceId: invoice.id,
@@ -972,7 +972,7 @@ export async function issueProvisionalPurchaseBill(
     })),
   });
 
-  await ctx.tx.plywoodLedgerEntry.create({
+  await ctx.tx.tradingLedgerEntry.create({
     data: {
       tenantId: ctx.actor.tenantId,
       supplierId: order.supplierId,
@@ -1012,7 +1012,7 @@ export const raisePurchaseBillFromOrder: CommandDefinition<
   { purchaseOrderId: string },
   { id: string; invoiceNumber: string; totalPaise: number }
 > = {
-  key: "verity.plywood.raise_purchase_bill_from_order",
+  key: "verity.trading.raise_purchase_bill_from_order",
   entity: ENTITY_INVOICE,
   verb: "Create",
   input: z.object({ purchaseOrderId: z.string().uuid() }),
@@ -1028,7 +1028,7 @@ export const raisePurchaseBillFromOrder: CommandDefinition<
       result: bill,
       events: [
         {
-          name: "verity.plywood.purchase_bill_raised",
+          name: "verity.trading.purchase_bill_raised",
           entityId: bill.id,
         },
       ],
@@ -1039,7 +1039,7 @@ export const raisePurchaseBillFromOrder: CommandDefinition<
 /**
  * Records the supplier's own document against a bill this system raised.
  *
- * Not an edit. `plywood_invoice` is immutable by trigger and that rule is not
+ * Not an edit. `trading_invoice` is immutable by trigger and that rule is not
  * being weakened for convenience, so the supplier's number and figures are
  * appended as a confirmation and a money DIFFERENCE is corrected the way every
  * other posted difference is — a debit or credit note, which `raiseInvoiceNote`
@@ -1059,7 +1059,7 @@ export const confirmPurchaseBill: CommandDefinition<
   },
   { id: string; differencePaise: number }
 > = {
-  key: "verity.plywood.confirm_purchase_bill",
+  key: "verity.trading.confirm_purchase_bill",
   entity: ENTITY_INVOICE,
   verb: "Edit",
   input: z.object({
@@ -1073,7 +1073,7 @@ export const confirmPurchaseBill: CommandDefinition<
     totalPaise: z.number().int().min(0),
   }),
   handler: async (ctx, input) => {
-    const invoice = await ctx.tx.plywoodInvoice.findUniqueOrThrow({
+    const invoice = await ctx.tx.tradingInvoice.findUniqueOrThrow({
       where: { id: input.invoiceId },
       include: { confirmation: true },
     });
@@ -1110,7 +1110,7 @@ export const confirmPurchaseBill: CommandDefinition<
       );
     }
 
-    await ctx.tx.plywoodPurchaseBillConfirmation.create({
+    await ctx.tx.tradingPurchaseBillConfirmation.create({
       data: {
         tenantId: ctx.actor.tenantId,
         invoiceId: invoice.id,
@@ -1135,7 +1135,7 @@ export const confirmPurchaseBill: CommandDefinition<
       result: { id: invoice.id, differencePaise },
       events: [
         {
-          name: "verity.plywood.purchase_bill_confirmed",
+          name: "verity.trading.purchase_bill_confirmed",
           entityId: invoice.id,
           payload: { differencePaise },
         },
@@ -1150,11 +1150,11 @@ async function outstandingOnInvoice(
   invoiceId: string,
   totalPaise: number,
 ): Promise<number> {
-  const allocated = await tx.plywoodPaymentAllocation.aggregate({
+  const allocated = await tx.tradingPaymentAllocation.aggregate({
     where: { invoiceId },
     _sum: { amountPaise: true },
   });
-  const notes = await tx.plywoodInvoiceNote.aggregate({
+  const notes = await tx.tradingInvoiceNote.aggregate({
     where: { invoiceId },
     _sum: { totalPaise: true },
   });
@@ -1198,7 +1198,7 @@ export const recordPartyPayment: CommandDefinition<
     balancePaise: number;
   }
 > = {
-  key: "verity.plywood.record_party_payment",
+  key: "verity.trading.record_party_payment",
   entity: ENTITY_PAYMENT,
   verb: "Create",
   input: z.object({
@@ -1226,12 +1226,12 @@ export const recordPartyPayment: CommandDefinition<
     // because a foreign-key violation surfaces as a database error a user
     // cannot act on.
     if (customerId) {
-      await ctx.tx.plywoodCustomer.findUniqueOrThrow({ where: { id: customerId } });
+      await ctx.tx.tradingCustomer.findUniqueOrThrow({ where: { id: customerId } });
     } else if (supplierId) {
-      await ctx.tx.plywoodSupplier.findUniqueOrThrow({ where: { id: supplierId } });
+      await ctx.tx.tradingSupplier.findUniqueOrThrow({ where: { id: supplierId } });
     }
 
-    const payment = await ctx.tx.plywoodPayment.create({
+    const payment = await ctx.tx.tradingPayment.create({
       data: {
         tenantId: ctx.actor.tenantId,
         customerId,
@@ -1258,7 +1258,7 @@ export const recordPartyPayment: CommandDefinition<
     let remaining = input.amountPaise;
 
     if (settles) {
-      const open = await ctx.tx.plywoodInvoice.findMany({
+      const open = await ctx.tx.tradingInvoice.findMany({
         where: customerId ? { customerId } : { supplierId },
         orderBy: { issuedAt: "asc" },
       });
@@ -1271,7 +1271,7 @@ export const recordPartyPayment: CommandDefinition<
         );
         if (outstanding <= 0) continue;
         const amountPaise = Math.min(outstanding, remaining);
-        await ctx.tx.plywoodPaymentAllocation.create({
+        await ctx.tx.tradingPaymentAllocation.create({
           data: {
             tenantId: ctx.actor.tenantId,
             paymentId: payment.id,
@@ -1288,7 +1288,7 @@ export const recordPartyPayment: CommandDefinition<
     // ledger records that money moved against this party; how it was split
     // across their documents is the allocation table's job, and writing it
     // twice would double the balance.
-    await ctx.tx.plywoodLedgerEntry.create({
+    await ctx.tx.tradingLedgerEntry.create({
       data: {
         tenantId: ctx.actor.tenantId,
         customerId,
@@ -1321,7 +1321,7 @@ export const recordPartyPayment: CommandDefinition<
         }),
       },
       events: [
-        { name: "verity.plywood.payment_recorded", entityId: payment.id },
+        { name: "verity.trading.payment_recorded", entityId: payment.id },
       ],
     };
   },
@@ -1336,7 +1336,7 @@ export const recordPayment: CommandDefinition<
   },
   { id: string; outstandingPaise: number }
 > = {
-  key: "verity.plywood.record_payment",
+  key: "verity.trading.record_payment",
   entity: ENTITY_PAYMENT,
   verb: "Create",
   input: z.object({
@@ -1346,7 +1346,7 @@ export const recordPayment: CommandDefinition<
     reference: z.string().max(120).optional(),
   }),
   handler: async (ctx, input) => {
-    const invoice = await ctx.tx.plywoodInvoice.findUniqueOrThrow({
+    const invoice = await ctx.tx.tradingInvoice.findUniqueOrThrow({
       where: { id: input.invoiceId },
     });
 
@@ -1369,7 +1369,7 @@ export const recordPayment: CommandDefinition<
       );
     }
 
-    const payment = await ctx.tx.plywoodPayment.create({
+    const payment = await ctx.tx.tradingPayment.create({
       data: {
         tenantId: ctx.actor.tenantId,
         invoiceId: invoice.id,
@@ -1389,7 +1389,7 @@ export const recordPayment: CommandDefinition<
     // The allocation is what every outstanding read now sums. Without it this
     // payment would settle the invoice in the ledger and leave it looking
     // wholly unpaid on the desk.
-    await ctx.tx.plywoodPaymentAllocation.create({
+    await ctx.tx.tradingPaymentAllocation.create({
       data: {
         tenantId: ctx.actor.tenantId,
         paymentId: payment.id,
@@ -1399,7 +1399,7 @@ export const recordPayment: CommandDefinition<
     });
 
     // The mirror of the invoice entry, so the two sum to what is still owed.
-    await ctx.tx.plywoodLedgerEntry.create({
+    await ctx.tx.tradingLedgerEntry.create({
       data: {
         tenantId: ctx.actor.tenantId,
         customerId: invoice.customerId,
@@ -1418,7 +1418,7 @@ export const recordPayment: CommandDefinition<
         outstandingPaise: outstandingBefore - input.amountPaise,
       },
       events: [
-        { name: "verity.plywood.payment_recorded", entityId: payment.id },
+        { name: "verity.trading.payment_recorded", entityId: payment.id },
       ],
     };
   },
@@ -1440,7 +1440,7 @@ export async function partyBalancePaise(
 ): Promise<number> {
   const rows = await tx.$queryRaw<{ balance: bigint | null }[]>`
     SELECT COALESCE(SUM(CASE WHEN entry_type = 'debit' THEN amount_paise ELSE -amount_paise END), 0)::bigint AS balance
-      FROM plywood_ledger_entry
+      FROM trading_ledger_entry
      WHERE (${party.customerId ?? null}::uuid IS NULL OR customer_id = ${party.customerId ?? null}::uuid)
        AND (${party.supplierId ?? null}::uuid IS NULL OR supplier_id = ${party.supplierId ?? null}::uuid)
        AND (${party.customerId ?? null}::uuid IS NOT NULL OR customer_id IS NULL)
@@ -1459,11 +1459,11 @@ export const outstandingReceivables: QueryDefinition<
     oldestUnpaidAt: Date | null;
   }>
 > = {
-  key: "verity.plywood.outstanding_receivables",
+  key: "verity.trading.outstanding_receivables",
   entity: ENTITY_LEDGER_ENTRY,
   input: z.object({}),
   handler: async (ctx) => {
-    const invoices = await ctx.tx.plywoodInvoice.findMany({
+    const invoices = await ctx.tx.tradingInvoice.findMany({
       where: { customerId: { not: null } },
       include: { customer: { select: { displayName: true } }, allocations: true },
     });
@@ -1562,14 +1562,14 @@ export const unbilledMovements: QueryDefinition<
     }>;
   }
 > = {
-  key: "verity.plywood.unbilled_movements",
+  key: "verity.trading.unbilled_movements",
   entity: ENTITY_INVOICE,
   input: z.object({}),
   handler: async (ctx) => {
-    const salesOrders = await ctx.tx.plywoodSalesOrder.findMany({
+    const salesOrders = await ctx.tx.tradingSalesOrder.findMany({
       where: {
         state: { notIn: ["draft", "cancelled"] },
-        plywoodInvoices: { none: {} },
+        tradingInvoices: { none: {} },
         goodsIssues: { some: {} },
       },
       include: { lines: true, customer: { select: { displayName: true } } },
@@ -1577,13 +1577,13 @@ export const unbilledMovements: QueryDefinition<
       take: 50,
     });
 
-    const purchaseOrders = await ctx.tx.plywoodPurchaseOrder.findMany({
+    const purchaseOrders = await ctx.tx.tradingPurchaseOrder.findMany({
       where: {
         // Completed only. A part-received order has no bill BY DESIGN — one
         // invoice per order, raised when the last delivery lands — so listing
         // it here would report correct behaviour as a fault.
         state: "completed",
-        plywoodInvoices: { none: {} },
+        tradingInvoices: { none: {} },
         // A RECEIPT, not a received quantity. `qty_received` can be non-zero on
         // an order with no receipt document behind it — data written before
         // receipts became documents does exactly that — and the bill is raised
@@ -1649,11 +1649,11 @@ export const paymentJournal: QueryDefinition<
     settled: string[];
   }>
 > = {
-  key: "verity.plywood.payment_journal",
+  key: "verity.trading.payment_journal",
   entity: ENTITY_PAYMENT,
   input: z.object({ limit: z.number().int().min(1).max(500).optional() }),
   handler: async (ctx, input) => {
-    const payments = await ctx.tx.plywoodPayment.findMany({
+    const payments = await ctx.tx.tradingPayment.findMany({
       include: {
         customer: { select: { id: true, displayName: true } },
         supplier: { select: { id: true, displayName: true } },
@@ -1725,7 +1725,7 @@ export const partyBalances: QueryDefinition<
     sameBusinessAs: string | null;
   }>
 > = {
-  key: "verity.plywood.party_balances",
+  key: "verity.trading.party_balances",
   entity: ENTITY_LEDGER_ENTRY,
   input: z.object({ side: z.enum(["customer", "supplier"]).optional() }),
   handler: async (ctx, input) => {
@@ -1750,7 +1750,7 @@ export const partyBalances: QueryDefinition<
 
     // Suppliers that are the same business as a customer, both ways round, so
     // either row can name its counterpart without a second query per row.
-    const links = await ctx.tx.plywoodSupplier.findMany({
+    const links = await ctx.tx.tradingSupplier.findMany({
       where: { linkedCustomerId: { not: null } },
       select: { id: true, linkedCustomerId: true },
     });
@@ -1762,7 +1762,7 @@ export const partyBalances: QueryDefinition<
     }
 
     for (const side of sides) {
-      const invoices = await ctx.tx.plywoodInvoice.findMany({
+      const invoices = await ctx.tx.tradingInvoice.findMany({
         where:
           side === "customer"
             ? { customerId: { not: null } }
@@ -1835,7 +1835,7 @@ export const partyBalances: QueryDefinition<
       // same event as cash received FROM one: the first means they owe us that
       // money back, the second means they have paid ahead. Adding both to one
       // subtracted figure reversed the sign of a real obligation.
-      const payments = await ctx.tx.plywoodPayment.findMany({
+      const payments = await ctx.tx.tradingPayment.findMany({
         where:
           side === "customer"
             ? { customerId: { not: null } }
@@ -1906,11 +1906,11 @@ export const partyBalances: QueryDefinition<
         //
         // Prepaid orders are excluded: that money is already in hand and
         // counting it as owed would invent a debt.
-        const committed = await ctx.tx.plywoodSalesOrder.findMany({
+        const committed = await ctx.tx.tradingSalesOrder.findMany({
           where: {
             state: { notIn: ["draft", "cancelled"] },
             paymentTerms: "credit",
-            plywoodInvoices: { none: {} },
+            tradingInvoices: { none: {} },
           },
           include: { customer: { select: { id: true, displayName: true } } },
         });
@@ -1941,10 +1941,10 @@ export const partyBalances: QueryDefinition<
         // Delivered but not yet billed: sum over orders that have received
         // something and carry no invoice. This is the figure that keeps the
         // payables total honest on a part-delivered order.
-        const openOrders = await ctx.tx.plywoodPurchaseOrder.findMany({
+        const openOrders = await ctx.tx.tradingPurchaseOrder.findMany({
           where: {
             state: { notIn: ["draft", "cancelled"] },
-            plywoodInvoices: { none: {} },
+            tradingInvoices: { none: {} },
           },
           include: {
             lines: true,
@@ -2015,7 +2015,7 @@ export const partyLedger: QueryDefinition<
     }>;
   }
 > = {
-  key: "verity.plywood.party_ledger",
+  key: "verity.trading.party_ledger",
   entity: ENTITY_LEDGER_ENTRY,
   input: z.object({
     customerId: z.string().uuid().optional(),
@@ -2026,7 +2026,7 @@ export const partyLedger: QueryDefinition<
       throw new ValidationError("E_VALIDATION: name exactly one party");
     }
 
-    const entries = await ctx.tx.plywoodLedgerEntry.findMany({
+    const entries = await ctx.tx.tradingLedgerEntry.findMany({
       where: input.customerId
         ? { customerId: input.customerId }
         : { supplierId: input.supplierId },
@@ -2102,11 +2102,11 @@ export const invoiceDetail: QueryDefinition<
     }>;
   } | null
 > = {
-  key: "verity.plywood.invoice_detail",
+  key: "verity.trading.invoice_detail",
   entity: ENTITY_INVOICE,
   input: z.object({ invoiceId: z.string().uuid() }),
   handler: async (ctx, input) => {
-    const invoice = await ctx.tx.plywoodInvoice.findUnique({
+    const invoice = await ctx.tx.tradingInvoice.findUnique({
       where: { id: input.invoiceId },
       include: {
         lines: true,
@@ -2192,11 +2192,11 @@ export const listInvoices: QueryDefinition<
     provisional: boolean;
   }>
 > = {
-  key: "verity.plywood.list_invoices",
+  key: "verity.trading.list_invoices",
   entity: ENTITY_INVOICE,
   input: z.object({ unpaidOnly: z.boolean().optional() }),
   handler: async (ctx, input) => {
-    const invoices = await ctx.tx.plywoodInvoice.findMany({
+    const invoices = await ctx.tx.tradingInvoice.findMany({
       include: {
         allocations: true,
         confirmation: { select: { id: true } },
@@ -2278,7 +2278,7 @@ export const ownerConsole: QueryDefinition<
     eligibleItcPaise: number;
   }
 > = {
-  key: "verity.plywood.owner_console",
+  key: "verity.trading.owner_console",
   entity: ENTITY_INVOICE,
   input: z.object({}),
   handler: async (ctx) => {
@@ -2311,100 +2311,100 @@ export const ownerConsole: QueryDefinition<
     const godowns = reachable.length > 0 ? reachable : [NO_GODOWN];
 
     const rows = await ctx.tx.$queryRaw<Record<string, bigint | null>[]>`SELECT
-        (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
+        (SELECT COALESCE(SUM(total_paise), 0) FROM trading_invoice
           WHERE customer_id IS NOT NULL AND issued_at >= date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS sales_this_month,
         -- Real month-over-month delta (Task 100's dashboard rework) --
         -- the FULL prior calendar month, not "same number of days ago",
         -- because a delta against a partial month is not comparable.
-        (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
+        (SELECT COALESCE(SUM(total_paise), 0) FROM trading_invoice
           WHERE customer_id IS NOT NULL
             AND issued_at >= date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone} - interval '1 month'
             AND issued_at < date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS sales_last_month,
-        (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
+        (SELECT COALESCE(SUM(total_paise), 0) FROM trading_invoice
           WHERE customer_id IS NOT NULL AND issued_at >= date_trunc('day', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS todays_sales,
-        (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
+        (SELECT COALESCE(SUM(total_paise), 0) FROM trading_invoice
           WHERE supplier_id IS NOT NULL AND issued_at >= date_trunc('day', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS todays_purchases,
-        (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
+        (SELECT COALESCE(SUM(total_paise), 0) FROM trading_invoice
           WHERE supplier_id IS NOT NULL AND issued_at >= date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS purchases_this_month,
-        (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
+        (SELECT COALESCE(SUM(total_paise), 0) FROM trading_invoice
           WHERE supplier_id IS NOT NULL
             AND issued_at >= date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone} - interval '1 month'
             AND issued_at < date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS purchases_last_month,
-        (SELECT count(*) FROM plywood_sales_order
+        (SELECT count(*) FROM trading_sales_order
           WHERE state IN ('draft', 'pending_credit', 'approved', 'dispatching'))::bigint
           AS open_sales_orders,
-        (SELECT count(*) FROM plywood_sales_order WHERE state = 'pending_credit')::bigint
+        (SELECT count(*) FROM trading_sales_order WHERE state = 'pending_credit')::bigint
           AS awaiting_credit,
-        (SELECT count(*) FROM plywood_sales_order
+        (SELECT count(*) FROM trading_sales_order
           WHERE state IN ('approved', 'dispatching'))::bigint
           AS awaiting_goods_issue,
-        (SELECT count(*) FROM plywood_purchase_order
+        (SELECT count(*) FROM trading_purchase_order
           WHERE state IN ('submitted', 'receiving'))::bigint
           AS open_purchase_orders,
         -- Orders with something still owed, which is not the same as orders
         -- that are open: a fully received order stays open until it is closed
         -- out, and counting it as "pending receipt" would send someone to the
         -- gate for a lorry that already came.
-        (SELECT count(DISTINCT o.id) FROM plywood_purchase_order o
-           JOIN plywood_purchase_order_line l ON l.purchase_order_id = o.id
+        (SELECT count(DISTINCT o.id) FROM trading_purchase_order o
+           JOIN trading_purchase_order_line l ON l.purchase_order_id = o.id
           WHERE o.state IN ('submitted', 'receiving')
             AND l.qty_ordered > l.qty_received)::bigint
           AS pending_receipt,
         (SELECT COALESCE(SUM(GREATEST(l.qty_ordered - l.qty_received, 0)), 0)
-           FROM plywood_purchase_order o
-           JOIN plywood_purchase_order_line l ON l.purchase_order_id = o.id
+           FROM trading_purchase_order o
+           JOIN trading_purchase_order_line l ON l.purchase_order_id = o.id
           WHERE o.state IN ('submitted', 'receiving'))::bigint
           AS incoming_units,
         (SELECT COALESCE(SUM(qty_units * avg_unit_cost_paise), 0) FROM stock_balance
           WHERE location_id = ANY(${godowns}::uuid[]))::bigint
           AS stock_value,
-        (SELECT COALESCE(SUM(r.qty_units), 0) FROM plywood_stock_reservation r
+        (SELECT COALESCE(SUM(r.qty_units), 0) FROM trading_stock_reservation r
           WHERE r.released_at IS NULL
             AND r.location_id = ANY(${godowns}::uuid[]))::bigint
           AS reserved_units,
-        -- Settled amounts come from plywood_payment_allocation, not from
+        -- Settled amounts come from trading_payment_allocation, not from
         -- payments joined on invoice_id. Since Task 71 a payment names a PARTY
         -- and is allocated across their documents, so a settled invoice may
         -- have no payment pointing at it at all; the old join reported every
         -- such invoice as fully outstanding.
         (SELECT COALESCE(SUM(i.total_paise), 0) - COALESCE((
-           SELECT SUM(a.amount_paise) FROM plywood_payment_allocation a
-            JOIN plywood_invoice pi ON pi.id = a.invoice_id
+           SELECT SUM(a.amount_paise) FROM trading_payment_allocation a
+            JOIN trading_invoice pi ON pi.id = a.invoice_id
            WHERE pi.customer_id IS NOT NULL), 0)
-           FROM plywood_invoice i WHERE i.customer_id IS NOT NULL)::bigint
+           FROM trading_invoice i WHERE i.customer_id IS NOT NULL)::bigint
           AS receivables,
         -- Overdue is age, not a due-date column: this capability records no
         -- payment terms, so "older than 30 days and not settled" is stated as
         -- the rule rather than dressed up as a term the business never agreed.
         (SELECT COALESCE(SUM(i.total_paise - COALESCE((
-             SELECT SUM(a.amount_paise) FROM plywood_payment_allocation a WHERE a.invoice_id = i.id
+             SELECT SUM(a.amount_paise) FROM trading_payment_allocation a WHERE a.invoice_id = i.id
            ), 0)), 0)
-           FROM plywood_invoice i
+           FROM trading_invoice i
           WHERE i.customer_id IS NOT NULL
             AND i.issued_at < now() - interval '30 days'
             AND i.total_paise > COALESCE((
-              SELECT SUM(a.amount_paise) FROM plywood_payment_allocation a WHERE a.invoice_id = i.id), 0))::bigint
+              SELECT SUM(a.amount_paise) FROM trading_payment_allocation a WHERE a.invoice_id = i.id), 0))::bigint
           AS overdue_receivables,
         (SELECT COALESCE(SUM(i.total_paise), 0) - COALESCE((
-           SELECT SUM(a.amount_paise) FROM plywood_payment_allocation a
-            JOIN plywood_invoice pi ON pi.id = a.invoice_id
+           SELECT SUM(a.amount_paise) FROM trading_payment_allocation a
+            JOIN trading_invoice pi ON pi.id = a.invoice_id
            WHERE pi.supplier_id IS NOT NULL), 0)
-           FROM plywood_invoice i WHERE i.supplier_id IS NOT NULL)::bigint
+           FROM trading_invoice i WHERE i.supplier_id IS NOT NULL)::bigint
           AS payables,
         -- Money actually taken in today, from the payment itself rather than
         -- through an invoice: an advance is a collection even before it settles
         -- anything, and the old join could not see one.
-        (SELECT COALESCE(SUM(p.amount_paise), 0) FROM plywood_payment p
+        (SELECT COALESCE(SUM(p.amount_paise), 0) FROM trading_payment p
           WHERE p.customer_id IS NOT NULL AND p.direction = 'in'
             AND p.received_at >= date_trunc('day', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS collections_today,
-        (SELECT COALESCE(SUM(cgst_paise + sgst_paise + igst_paise), 0) FROM plywood_invoice
+        (SELECT COALESCE(SUM(cgst_paise + sgst_paise + igst_paise), 0) FROM trading_invoice
           WHERE customer_id IS NOT NULL AND issued_at >= date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS output_tax,
         -- CONFIRMED bills only. A provisional bill's tax split was computed
@@ -2412,20 +2412,20 @@ export const ownerConsole: QueryDefinition<
         -- and presenting it as eligible credit would overstate what can be
         -- claimed by exactly the amount nobody has evidence for.
         (SELECT COALESCE(SUM(i.cgst_paise + i.sgst_paise + i.igst_paise), 0)
-           FROM plywood_invoice i
-           JOIN plywood_purchase_bill_confirmation c ON c.invoice_id = i.id
+           FROM trading_invoice i
+           JOIN trading_purchase_bill_confirmation c ON c.invoice_id = i.id
           WHERE i.supplier_id IS NOT NULL
             AND i.issued_at >= date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS eligible_itc,
         -- Available, not on hand (rule freeze §4.2). Counting on-hand reports
         -- plenty while every sheet is already reserved, and the buyer finds
         -- out at goods issue, which is too late to buy anything.
-        (SELECT count(*) FROM plywood_product p
+        (SELECT count(*) FROM trading_product p
           WHERE p.active AND p.reorder_level_units > 0
             AND COALESCE((SELECT SUM(b.qty_units) FROM stock_balance b
                            WHERE b.product_id = p.id
                              AND b.location_id = ANY(${godowns}::uuid[])), 0)
-              - COALESCE((SELECT SUM(r.qty_units) FROM plywood_stock_reservation r
+              - COALESCE((SELECT SUM(r.qty_units) FROM trading_stock_reservation r
                            WHERE r.product_id = p.id AND r.released_at IS NULL
                              AND r.location_id = ANY(${godowns}::uuid[])), 0)
               < p.reorder_level_units)::bigint
@@ -2489,28 +2489,28 @@ export async function captureMetricSnapshot(
   const zone = org ? await effectiveTimeZone(tx, org.id) : "UTC";
 
   const rows = await tx.$queryRaw<Record<string, bigint | null>[]>`SELECT
-      (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
+      (SELECT COALESCE(SUM(total_paise), 0) FROM trading_invoice
         WHERE customer_id IS NOT NULL AND issued_at >= date_trunc('day', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
         AS sales_today,
       (SELECT COALESCE(SUM(qty_units * avg_unit_cost_paise), 0) FROM stock_balance)::bigint
         AS stock_value,
       (SELECT COALESCE(SUM(i.total_paise), 0) - COALESCE((
-          SELECT SUM(a.amount_paise) FROM plywood_payment_allocation a
-          JOIN plywood_invoice pi ON pi.id = a.invoice_id
+          SELECT SUM(a.amount_paise) FROM trading_payment_allocation a
+          JOIN trading_invoice pi ON pi.id = a.invoice_id
           WHERE pi.customer_id IS NOT NULL), 0)
-        FROM plywood_invoice i WHERE i.customer_id IS NOT NULL)::bigint
+        FROM trading_invoice i WHERE i.customer_id IS NOT NULL)::bigint
         AS receivables,
       (SELECT COALESCE(SUM(i.total_paise), 0) - COALESCE((
-          SELECT SUM(a.amount_paise) FROM plywood_payment_allocation a
-          JOIN plywood_invoice pi ON pi.id = a.invoice_id
+          SELECT SUM(a.amount_paise) FROM trading_payment_allocation a
+          JOIN trading_invoice pi ON pi.id = a.invoice_id
           WHERE pi.supplier_id IS NOT NULL), 0)
-        FROM plywood_invoice i WHERE i.supplier_id IS NOT NULL)::bigint
+        FROM trading_invoice i WHERE i.supplier_id IS NOT NULL)::bigint
         AS payables`;
 
   const row = rows[0] ?? {};
   const n = (key: string) => Number(row[key] ?? 0);
 
-  const snapshot = await tx.plywoodMetricSnapshot.upsert({
+  const snapshot = await tx.tradingMetricSnapshot.upsert({
     where: { tenantId_snapshotDate: { tenantId, snapshotDate: new Date(new Date().toISOString().slice(0, 10)) } },
     create: {
       tenantId,
@@ -2528,7 +2528,7 @@ export async function captureMetricSnapshot(
     },
   });
 
-  return { events: [{ name: "verity.plywood.metric_snapshot_captured", entityId: snapshot.id }] };
+  return { events: [{ name: "verity.trading.metric_snapshot_captured", entityId: snapshot.id }] };
 }
 
 export const metricsHistory: QueryDefinition<
@@ -2541,11 +2541,11 @@ export const metricsHistory: QueryDefinition<
     payablesPaise: number;
   }>
 > = {
-  key: "verity.plywood.metrics_history",
+  key: "verity.trading.metrics_history",
   entity: ENTITY_INVOICE,
   input: z.object({ days: z.number().int().min(1).max(365).optional() }),
   handler: async (ctx, input) => {
-    const rows = await ctx.tx.plywoodMetricSnapshot.findMany({
+    const rows = await ctx.tx.tradingMetricSnapshot.findMany({
       orderBy: { snapshotDate: "desc" },
       take: input.days ?? 90,
     });
@@ -2563,9 +2563,9 @@ export const metricsHistory: QueryDefinition<
 
 /**
  * Real weekly totals — Overview dashboard rework. Not a fabricated smooth
- * line: `plywood_invoice` already holds real historical rows with real
+ * line: `trading_invoice` already holds real historical rows with real
  * timestamps, so a live `GROUP BY` week gives a real multi-point series
- * immediately, without waiting for `PlywoodMetricSnapshot` (Task 100) to
+ * immediately, without waiting for `TradingMetricSnapshot` (Task 100) to
  * accumulate. Same `charts.tsx` rule as everywhere else — every value real.
  */
 async function weeklyTotals(
@@ -2590,7 +2590,7 @@ async function weeklyTotals(
      )
      SELECT COALESCE(SUM(i.total_paise), 0)::bigint AS total
        FROM weeks w
-       LEFT JOIN plywood_invoice i
+       LEFT JOIN trading_invoice i
               ON date_trunc('week', i.issued_at AT TIME ZONE $1) = w.week_start
              AND i.${partyColumn} IS NOT NULL
       GROUP BY w.week_start
@@ -2602,7 +2602,7 @@ async function weeklyTotals(
 }
 
 export const weeklySalesTotals: QueryDefinition<{ weeks?: number }, number[]> = {
-  key: "verity.plywood.weekly_sales_totals",
+  key: "verity.trading.weekly_sales_totals",
   entity: ENTITY_INVOICE,
   input: z.object({ weeks: z.number().int().min(1).max(52).optional() }),
   handler: async (ctx, input) => {
@@ -2612,7 +2612,7 @@ export const weeklySalesTotals: QueryDefinition<{ weeks?: number }, number[]> = 
 };
 
 export const weeklyPurchaseTotals: QueryDefinition<{ weeks?: number }, number[]> = {
-  key: "verity.plywood.weekly_purchase_totals",
+  key: "verity.trading.weekly_purchase_totals",
   entity: ENTITY_INVOICE,
   input: z.object({ weeks: z.number().int().min(1).max(52).optional() }),
   handler: async (ctx, input) => {
@@ -2637,12 +2637,12 @@ export const topCustomers: QueryDefinition<
   { limit?: number },
   Array<{ customerId: string; name: string; totalPaise: number; orders: number }>
 > = {
-  key: "verity.plywood.top_customers",
+  key: "verity.trading.top_customers",
   entity: ENTITY_INVOICE,
   input: z.object({ limit: z.number().int().min(1).max(20).optional() }),
   handler: async (ctx, input) => {
     const monthStart = await zoneMonthStart(ctx.tx, await businessZone(ctx));
-    const grouped = await ctx.tx.plywoodInvoice.groupBy({
+    const grouped = await ctx.tx.tradingInvoice.groupBy({
       by: ["customerId"],
       where: { customerId: { not: null }, issuedAt: { gte: monthStart } },
       _sum: { totalPaise: true },
@@ -2650,7 +2650,7 @@ export const topCustomers: QueryDefinition<
       orderBy: { _sum: { totalPaise: "desc" } },
       take: input.limit ?? 5,
     });
-    const customers = await ctx.tx.plywoodCustomer.findMany({
+    const customers = await ctx.tx.tradingCustomer.findMany({
       where: { id: { in: grouped.map((g) => g.customerId!) } },
       select: { id: true, displayName: true },
     });
@@ -2668,19 +2668,19 @@ export const topItems: QueryDefinition<
   { limit?: number },
   Array<{ productId: string; name: string; unitLabel: string; totalPaise: number; qtyUnits: number }>
 > = {
-  key: "verity.plywood.top_items",
+  key: "verity.trading.top_items",
   entity: ENTITY_INVOICE,
   input: z.object({ limit: z.number().int().min(1).max(20).optional() }),
   handler: async (ctx, input) => {
     const monthStart = await zoneMonthStart(ctx.tx, await businessZone(ctx));
-    const grouped = await ctx.tx.plywoodInvoiceLine.groupBy({
+    const grouped = await ctx.tx.tradingInvoiceLine.groupBy({
       by: ["productId"],
       where: { invoice: { customerId: { not: null }, issuedAt: { gte: monthStart } } },
       _sum: { lineTotalPaise: true, qtyUnits: true },
       orderBy: { _sum: { lineTotalPaise: "desc" } },
       take: input.limit ?? 5,
     });
-    const products = await ctx.tx.plywoodProduct.findMany({
+    const products = await ctx.tx.tradingProduct.findMany({
       where: { id: { in: grouped.map((g) => g.productId) } },
       select: { id: true, name: true, unitLabel: true },
     });
@@ -2711,7 +2711,7 @@ export const recentActivityFeed: QueryDefinition<
     kind: "change" | "fact";
   }>
 > = {
-  key: "verity.plywood.recent_activity_feed",
+  key: "verity.trading.recent_activity_feed",
   entity: ENTITY_INVOICE,
   input: z.object({ limit: z.number().int().min(1).max(100).optional() }),
   handler: async (ctx, input) => {
@@ -2766,7 +2766,7 @@ export const marginReport: QueryDefinition<
     marginBp: number;
   }
 > = {
-  key: "verity.plywood.margin_report",
+  key: "verity.trading.margin_report",
   entity: ENTITY_INVOICE,
   input: z.object({ sinceDays: z.number().int().min(1).max(3650).optional() }),
   handler: async (ctx, input) => {
@@ -2775,7 +2775,7 @@ export const marginReport: QueryDefinition<
     const [revenueRows, costRows] = await Promise.all([
       ctx.tx.$queryRaw<{ revenue: bigint | null }[]>`
         SELECT COALESCE(SUM(taxable_paise), 0)::bigint AS revenue
-          FROM plywood_invoice
+          FROM trading_invoice
          WHERE customer_id IS NOT NULL AND issued_at >= ${since}`,
       ctx.tx.$queryRaw<{ cost: bigint | null }[]>`
         SELECT COALESCE(SUM(-qty_delta_units * unit_cost_paise), 0)::bigint AS cost
@@ -2853,7 +2853,7 @@ export const purchaseMatch: QueryDefinition<
     /// scope was there to withhold.
   } | null
 > = {
-  key: "verity.plywood.purchase_match",
+  key: "verity.trading.purchase_match",
   entity: ENTITY_PURCHASE_ORDER,
   input: z.object({ purchaseOrderId: z.string().uuid() }),
   handler: async (ctx, input) => {
@@ -2866,19 +2866,19 @@ export const purchaseMatch: QueryDefinition<
     // findFirst with the scope in the predicate, not findUniqueOrThrow then a
     // check: a read that returns the row and refuses afterwards has already
     // read it, and the difference matters when the caller logs the error.
-    const order = await ctx.tx.plywoodPurchaseOrder.findFirst({
+    const order = await ctx.tx.tradingPurchaseOrder.findFirst({
       where: { id: input.purchaseOrderId, locationId: { in: reachable } },
       include: { lines: true, supplier: { select: { displayName: true } } },
     });
     if (!order) return null;
 
-    const receipts = await ctx.tx.plywoodGoodsReceipt.findMany({
+    const receipts = await ctx.tx.tradingGoodsReceipt.findMany({
       where: { purchaseOrderId: order.id },
       include: { lines: { select: { id: true } } },
       orderBy: { receivedAt: "asc" },
     });
 
-    const invoices = await ctx.tx.plywoodInvoice.findMany({
+    const invoices = await ctx.tx.tradingInvoice.findMany({
       where: { purchaseOrderId: order.id },
       select: { totalPaise: true },
     });
@@ -2983,7 +2983,7 @@ export const purchaseReviewQueue: QueryDefinition<
     blockers: string[];
   }>
 > = {
-  key: "verity.plywood.purchase_review_queue",
+  key: "verity.trading.purchase_review_queue",
   entity: ENTITY_PURCHASE_ORDER,
   input: z.object({}),
   handler: async (ctx) => {
@@ -2997,7 +2997,7 @@ export const purchaseReviewQueue: QueryDefinition<
       ctx.actor,
       ENTITY_PURCHASE_ORDER,
     );
-    const orders = await ctx.tx.plywoodPurchaseOrder.findMany({
+    const orders = await ctx.tx.tradingPurchaseOrder.findMany({
       where: {
         state: { in: ["receiving", "completed"] },
         locationId: { in: reachable },
@@ -3005,7 +3005,7 @@ export const purchaseReviewQueue: QueryDefinition<
       include: {
         lines: true,
         supplier: { select: { id: true, displayName: true } },
-        plywoodInvoices: { orderBy: { issuedAt: "desc" } },
+        tradingInvoices: { orderBy: { issuedAt: "desc" } },
       },
       orderBy: { createdAt: "asc" },
     });
@@ -3023,8 +3023,8 @@ export const purchaseReviewQueue: QueryDefinition<
         (sum, line) => sum + line.qtyOrdered * line.unitCostPaise,
         0,
       );
-      const invoice = order.plywoodInvoices[0] ?? null;
-      const invoicedTotalPaise = order.plywoodInvoices.reduce(
+      const invoice = order.tradingInvoices[0] ?? null;
+      const invoicedTotalPaise = order.tradingInvoices.reduce(
         (sum, row) => sum + row.totalPaise,
         0,
       );
@@ -3096,7 +3096,7 @@ export const goodsReceiptDetail: QueryDefinition<
     /// reader's scope — indistinguishable on purpose.
   } | null
 > = {
-  key: "verity.plywood.goods_receipt_detail",
+  key: "verity.trading.goods_receipt_detail",
   entity: ENTITY_PURCHASE_ORDER,
   input: z.object({ receiptId: z.string().uuid() }),
   handler: async (ctx, input) => {
@@ -3108,7 +3108,7 @@ export const goodsReceiptDetail: QueryDefinition<
       ctx.actor,
       ENTITY_PURCHASE_ORDER,
     );
-    const receipt = await ctx.tx.plywoodGoodsReceipt.findFirst({
+    const receipt = await ctx.tx.tradingGoodsReceipt.findFirst({
       where: {
         id: input.receiptId,
         purchaseOrder: { locationId: { in: reachable } },
@@ -3183,7 +3183,7 @@ export const raiseInvoiceNote: CommandDefinition<
   },
   { id: string; noteNumber: string; totalPaise: number }
 > = {
-  key: "verity.plywood.raise_invoice_note",
+  key: "verity.trading.raise_invoice_note",
   entity: ENTITY_INVOICE,
   verb: "Create",
   input: z.object({
@@ -3195,7 +3195,7 @@ export const raiseInvoiceNote: CommandDefinition<
     reason: z.string().min(3).max(400),
   }),
   handler: async (ctx, input) => {
-    const invoice = await ctx.tx.plywoodInvoice.findUniqueOrThrow({
+    const invoice = await ctx.tx.tradingInvoice.findUniqueOrThrow({
       where: { id: input.invoiceId },
       include: { notes: true },
     });
@@ -3239,7 +3239,7 @@ export const raiseInvoiceNote: CommandDefinition<
       financialYear,
     );
 
-    const note = await ctx.tx.plywoodInvoiceNote.create({
+    const note = await ctx.tx.tradingInvoiceNote.create({
       data: {
         tenantId: ctx.actor.tenantId,
         invoiceId: invoice.id,
@@ -3260,7 +3260,7 @@ export const raiseInvoiceNote: CommandDefinition<
     // The party ledger moves the opposite way to the invoice it corrects. A
     // customer credit note reduces what they owe; a supplier one reduces what
     // this business owes.
-    await ctx.tx.plywoodLedgerEntry.create({
+    await ctx.tx.tradingLedgerEntry.create({
       data: {
         tenantId: ctx.actor.tenantId,
         customerId: invoice.customerId,
@@ -3279,8 +3279,8 @@ export const raiseInvoiceNote: CommandDefinition<
         {
           name:
             input.noteType === "credit"
-              ? "verity.plywood.credit_note_raised"
-              : "verity.plywood.debit_note_raised",
+              ? "verity.trading.credit_note_raised"
+              : "verity.trading.debit_note_raised",
           entityId: note.id,
           payload: { invoiceNumber: invoice.invoiceNumber, totalPaise },
         },

@@ -73,12 +73,12 @@ export const salesAnalysis: QueryDefinition<
     }>;
   }
 > = {
-  key: "verity.plywood.sales_analysis",
+  key: "verity.trading.sales_analysis",
   entity: ENTITY_INVOICE,
   input: z.object({ sinceDays: z.number().int().min(1).max(3650).optional() }),
   handler: async (ctx, input) => {
     const from = windowStart(await businessZone(ctx), input.sinceDays);
-    const invoices = await ctx.tx.plywoodInvoice.findMany({
+    const invoices = await ctx.tx.tradingInvoice.findMany({
       where: { customerId: { not: null }, issuedAt: { gte: from } },
       include: {
         lines: true,
@@ -180,12 +180,12 @@ export const purchaseAnalysis: QueryDefinition<
     }>;
   }
 > = {
-  key: "verity.plywood.purchase_analysis",
+  key: "verity.trading.purchase_analysis",
   entity: ENTITY_PURCHASE_ORDER,
   input: z.object({ sinceDays: z.number().int().min(1).max(3650).optional() }),
   handler: async (ctx, input) => {
     const from = windowStart(await businessZone(ctx), input.sinceDays);
-    const orders = await ctx.tx.plywoodPurchaseOrder.findMany({
+    const orders = await ctx.tx.tradingPurchaseOrder.findMany({
       // Drafts are excluded: a draft is a note to self, not a purchase, and
       // counting one as spend reports money the business has not committed.
       where: { createdAt: { gte: from }, state: { not: "draft" } },
@@ -333,7 +333,7 @@ export const inventoryAnalysis: QueryDefinition<
     adjustmentCount: number;
   }
 > = {
-  key: "verity.plywood.inventory_analysis",
+  key: "verity.trading.inventory_analysis",
   entity: ENTITY_STOCK_BALANCE,
   input: z.object({ sinceDays: z.number().int().min(1).max(3650).optional() }),
   handler: async (ctx, input) => {
@@ -465,11 +465,11 @@ export const financeAgeing: QueryDefinition<
     payableTotalPaise: number;
   }
 > = {
-  key: "verity.plywood.finance_ageing",
+  key: "verity.trading.finance_ageing",
   entity: ENTITY_INVOICE,
   input: z.object({}),
   handler: async (ctx) => {
-    const invoices = await ctx.tx.plywoodInvoice.findMany({
+    const invoices = await ctx.tx.tradingInvoice.findMany({
       include: {
         payments: { select: { amountPaise: true } },
         notes: { select: { noteType: true, totalPaise: true } },

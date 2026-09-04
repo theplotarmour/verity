@@ -1,3 +1,4 @@
+import { TRADING_CAPABILITY } from "@/server/capabilities/trading";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
@@ -150,6 +151,7 @@ describeDb("capability: Plywood trading — stock", () => {
       await activateCapability(tx, tenantId, LOCATION_CAPABILITY);
       await activateCapability(tx, tenantId, ASSET_CAPABILITY);
       await activateCapability(tx, tenantId, EVIDENCE_CAPABILITY);
+      await activateCapability(tx, tenantId, TRADING_CAPABILITY);
       await activateCapability(tx, tenantId, PLYWOOD_CAPABILITY);
 
       organizationId = (await tx.organization.create({ data: { tenantId, name: "HQ" } })).id;

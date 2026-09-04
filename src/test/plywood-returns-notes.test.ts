@@ -1,3 +1,4 @@
+import { TRADING_CAPABILITY } from "@/server/capabilities/trading";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -124,6 +125,7 @@ describeDb("plywood returns and corrections (slice 5)", () => {
       await activateCapability(tx, tenantId, LOCATION_CAPABILITY);
       await activateCapability(tx, tenantId, ASSET_CAPABILITY);
       await activateCapability(tx, tenantId, EVIDENCE_CAPABILITY);
+      await activateCapability(tx, tenantId, TRADING_CAPABILITY);
       await activateCapability(tx, tenantId, PLYWOOD_CAPABILITY);
 
       await setConfig(tx, tenantId, CONFIG_TENANT_STATE_CODE, "07", "Tenant");
@@ -344,7 +346,7 @@ describeDb("plywood returns and corrections (slice 5)", () => {
       // The invoice is untouched — it is what the customer holds and what was
       // reported. The note is what changed.
       const stored = await withTenant(tenantId, (tx) =>
-        tx.plywoodInvoice.findUniqueOrThrow({ where: { id: invoice.id } }),
+        tx.tradingInvoice.findUniqueOrThrow({ where: { id: invoice.id } }),
       );
       expect(stored.totalPaise).toBe(invoice.totalPaise);
 
@@ -363,7 +365,7 @@ describeDb("plywood returns and corrections (slice 5)", () => {
       });
 
       const stored = await withTenant(tenantId, (tx) =>
-        tx.plywoodInvoiceNote.findUniqueOrThrow({ where: { id: note.id } }),
+        tx.tradingInvoiceNote.findUniqueOrThrow({ where: { id: note.id } }),
       );
       // 9% + 9% on 1,000 rupees. Recomputing from today's configuration would
       // let a rate change between the sale and the correction produce a note
@@ -424,7 +426,7 @@ describeDb("plywood returns and corrections (slice 5)", () => {
       const admin = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL });
       try {
         await expect(
-          admin.$executeRaw`UPDATE plywood_invoice_note SET reason = 'edited' WHERE id = ${note.id}::uuid`,
+          admin.$executeRaw`UPDATE trading_invoice_note SET reason = 'edited' WHERE id = ${note.id}::uuid`,
         ).rejects.toThrow(/posted financial document/);
       } finally {
         await admin.$disconnect();
@@ -441,7 +443,7 @@ describeDb("plywood returns and corrections (slice 5)", () => {
       });
 
       const entries = await withTenant(tenantId, (tx) =>
-        tx.plywoodLedgerEntry.findMany({ where: { customerId }, orderBy: { occurredAt: "asc" } }),
+        tx.tradingLedgerEntry.findMany({ where: { customerId }, orderBy: { occurredAt: "asc" } }),
       );
       const credit = entries.find((entry) => entry.narration?.startsWith("CN/"));
       expect(credit).toBeDefined();

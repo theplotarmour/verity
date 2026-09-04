@@ -52,8 +52,8 @@ export async function sellerIdentity(
   tx: TenantScopedClient,
 ): Promise<SellerIdentity> {
   const [profile, registration] = await Promise.all([
-    tx.plywoodBusinessProfile.findFirst(),
-    tx.plywoodGstRegistration.findFirst({ where: { active: true } }),
+    tx.tradingBusinessProfile.findFirst(),
+    tx.tradingGstRegistration.findFirst({ where: { active: true } }),
   ]);
 
   return {
@@ -75,7 +75,7 @@ export const setBusinessProfile: CommandDefinition<
   },
   { id: string; legalName: string }
 > = {
-  key: "verity.plywood.set_business_profile",
+  key: "verity.trading.set_business_profile",
   entity: ENTITY_BUSINESS_PROFILE,
   verb: "Edit",
   input: z.object({
@@ -95,13 +95,13 @@ export const setBusinessProfile: CommandDefinition<
     currencyCode: z.string().length(3).optional(),
   }),
   handler: async (ctx, input) => {
-    const existing = await ctx.tx.plywoodBusinessProfile.findFirst();
+    const existing = await ctx.tx.tradingBusinessProfile.findFirst();
 
     // Upsert by tenant rather than by id: there is exactly one profile per
     // tenant, and asking a caller to know its id to change the trade name
     // would be a foreign key masquerading as a form field.
     const profile = existing
-      ? await ctx.tx.plywoodBusinessProfile.update({
+      ? await ctx.tx.tradingBusinessProfile.update({
           where: { id: existing.id },
           data: {
             legalName: input.legalName,
@@ -114,7 +114,7 @@ export const setBusinessProfile: CommandDefinition<
             ...(input.currencyCode ? { currencyCode: input.currencyCode } : {}),
           },
         })
-      : await ctx.tx.plywoodBusinessProfile.create({
+      : await ctx.tx.tradingBusinessProfile.create({
           data: {
             tenantId: ctx.actor.tenantId,
             legalName: input.legalName,
@@ -130,7 +130,7 @@ export const setBusinessProfile: CommandDefinition<
       result: { id: profile.id, legalName: profile.legalName },
       events: [
         {
-          name: "verity.plywood.business_profile_set",
+          name: "verity.trading.business_profile_set",
           entityId: profile.id,
           payload: { legalName: profile.legalName },
         },
@@ -147,7 +147,7 @@ export const registerGstRegistration: CommandDefinition<
   },
   { id: string; gstin: string; stateCode: string }
 > = {
-  key: "verity.plywood.register_gst_registration",
+  key: "verity.trading.register_gst_registration",
   entity: ENTITY_GST_REGISTRATION,
   verb: "Create",
   input: z.object({
@@ -167,7 +167,7 @@ export const registerGstRegistration: CommandDefinition<
     // CGST+SGST against IGST on every invoice the business ever raises.
     const stateCode = input.gstin.slice(0, 2);
 
-    const active = await ctx.tx.plywoodGstRegistration.findFirst({
+    const active = await ctx.tx.tradingGstRegistration.findFirst({
       where: { active: true },
     });
     if (active) {
@@ -177,7 +177,7 @@ export const registerGstRegistration: CommandDefinition<
       );
     }
 
-    const registration = await ctx.tx.plywoodGstRegistration.create({
+    const registration = await ctx.tx.tradingGstRegistration.create({
       data: {
         tenantId: ctx.actor.tenantId,
         gstin: input.gstin,
@@ -195,7 +195,7 @@ export const registerGstRegistration: CommandDefinition<
       },
       events: [
         {
-          name: "verity.plywood.gst_registration_added",
+          name: "verity.trading.gst_registration_added",
           entityId: registration.id,
           // The GSTIN is not a secret — it is printed on every invoice — but
           // the event carries the state code because that is the fact other
@@ -224,13 +224,13 @@ export const businessSettings: QueryDefinition<
     outstanding: string[];
   }
 > = {
-  key: "verity.plywood.business_settings",
+  key: "verity.trading.business_settings",
   entity: ENTITY_BUSINESS_PROFILE,
   input: z.object({}),
   handler: async (ctx) => {
     const [profile, registration] = await Promise.all([
-      ctx.tx.plywoodBusinessProfile.findFirst(),
-      ctx.tx.plywoodGstRegistration.findFirst({ where: { active: true } }),
+      ctx.tx.tradingBusinessProfile.findFirst(),
+      ctx.tx.tradingGstRegistration.findFirst({ where: { active: true } }),
     ]);
 
     // Named steps rather than a boolean "configured": the specification's §3
@@ -292,7 +292,7 @@ export const onboardingChecklist: QueryDefinition<
     }>;
   }
 > = {
-  key: "verity.plywood.onboarding_checklist",
+  key: "verity.trading.onboarding_checklist",
   entity: ENTITY_BUSINESS_PROFILE,
   input: z.object({}),
   handler: async (ctx) => {
@@ -306,8 +306,8 @@ export const onboardingChecklist: QueryDefinition<
       customers,
       orders,
     ] = await Promise.all([
-      ctx.tx.plywoodBusinessProfile.findFirst({ select: { id: true } }),
-      ctx.tx.plywoodGstRegistration.findFirst({
+      ctx.tx.tradingBusinessProfile.findFirst({ select: { id: true } }),
+      ctx.tx.tradingGstRegistration.findFirst({
         where: { active: true },
         select: { id: true },
       }),
@@ -316,10 +316,10 @@ export const onboardingChecklist: QueryDefinition<
       // configured team — it is a role that grants nothing, and counting it
       // as done would tick a step that leaves everyone locked out.
       ctx.tx.role.count({ where: { permissions: { some: {} } } }),
-      ctx.tx.plywoodProduct.count({ where: { active: true } }),
-      ctx.tx.plywoodSupplier.count({ where: { active: true } }),
-      ctx.tx.plywoodCustomer.count({ where: { active: true } }),
-      ctx.tx.plywoodPurchaseOrder.count(),
+      ctx.tx.tradingProduct.count({ where: { active: true } }),
+      ctx.tx.tradingSupplier.count({ where: { active: true } }),
+      ctx.tx.tradingCustomer.count({ where: { active: true } }),
+      ctx.tx.tradingPurchaseOrder.count(),
     ]);
 
     const steps = [

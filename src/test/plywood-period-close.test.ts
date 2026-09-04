@@ -1,3 +1,4 @@
+import { TRADING_CAPABILITY } from "@/server/capabilities/trading";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -19,7 +20,7 @@ import { clearScopeResolvers } from "@/server/platform/authorization";
 import { clearTransitionGuards } from "@/server/platform/state";
 import { clearContributions } from "@/server/platform/contribution";
 import { provisionIdentity } from "@/server/platform/identity";
-import { businessPeriodKey, businessPeriodWindow } from "@/server/capabilities/plywood/clock";
+import { businessPeriodKey, businessPeriodWindow } from "@/server/capabilities/trading/clock";
 
 /** The zone this test's tenant reckons in; every period assertion uses it. */
 const TENANT_ZONE = "Asia/Kolkata";
@@ -139,6 +140,7 @@ describeDb("plywood period close (slice 7)", () => {
       await activateCapability(tx, tenantId, LOCATION_CAPABILITY);
       await activateCapability(tx, tenantId, ASSET_CAPABILITY);
       await activateCapability(tx, tenantId, EVIDENCE_CAPABILITY);
+      await activateCapability(tx, tenantId, TRADING_CAPABILITY);
       await activateCapability(tx, tenantId, PLYWOOD_CAPABILITY);
 
       await setConfig(tx, tenantId, CONFIG_TENANT_STATE_CODE, "07", "Tenant");
@@ -349,7 +351,7 @@ describeDb("plywood period close (slice 7)", () => {
       const thisMonth = businessPeriodKey(TENANT_ZONE, new Date());
       await withTenant(tenantId, async (tx) => {
         const { startsAt, endsAt } = businessPeriodWindow(TENANT_ZONE, thisMonth);
-        await tx.plywoodAccountingPeriod.create({
+        await tx.tradingAccountingPeriod.create({
           data: {
             tenantId,
             periodKey: thisMonth,
@@ -385,7 +387,7 @@ describeDb("plywood period close (slice 7)", () => {
         ).rejects.toThrow(/reopen .* with a reason/);
       } finally {
         await withTenant(tenantId, (tx) =>
-          tx.plywoodAccountingPeriod.deleteMany({ where: { periodKey: thisMonth } }),
+          tx.tradingAccountingPeriod.deleteMany({ where: { periodKey: thisMonth } }),
         );
       }
     });
@@ -406,7 +408,7 @@ describeDb("plywood period close (slice 7)", () => {
       const thisMonth = businessPeriodKey(TENANT_ZONE, new Date());
       await withTenant(tenantId, async (tx) => {
         const [year, month] = thisMonth.split("-").map(Number);
-        await tx.plywoodAccountingPeriod.create({
+        await tx.tradingAccountingPeriod.create({
           data: {
             tenantId, periodKey: thisMonth,
             startsAt: new Date(Date.UTC(year!, month! - 1, 1)),
@@ -433,7 +435,7 @@ describeDb("plywood period close (slice 7)", () => {
         ).rejects.toThrow(/is closed|nothing has been issued/);
       } finally {
         await withTenant(tenantId, (tx) =>
-          tx.plywoodAccountingPeriod.deleteMany({ where: { periodKey: thisMonth } }),
+          tx.tradingAccountingPeriod.deleteMany({ where: { periodKey: thisMonth } }),
         );
       }
     });
@@ -454,7 +456,7 @@ describeDb("plywood period close (slice 7)", () => {
       });
 
       const period = await withTenant(tenantId, (tx) =>
-        tx.plywoodAccountingPeriod.findFirstOrThrow({ where: { periodKey: previous } }),
+        tx.tradingAccountingPeriod.findFirstOrThrow({ where: { periodKey: previous } }),
       );
       expect(period.state).toBe("open");
       expect(period.reopenedBy).toBe(owner.userId);
@@ -474,7 +476,7 @@ describeDb("plywood period close (slice 7)", () => {
       try {
         await expect(
           admin.$executeRaw`
-            INSERT INTO plywood_accounting_period
+            INSERT INTO trading_accounting_period
               (id, tenant_id, period_key, starts_at, ends_at, state, reopened_at)
             VALUES
               (gen_random_uuid(), ${tenantId}::uuid, '2019-01', '2019-01-01', '2019-02-01', 'open', now())`,

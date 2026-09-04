@@ -214,7 +214,7 @@ export async function assertTradeable(
   productId: string,
   locationId: string,
 ): Promise<void> {
-  const product = await tx.plywoodProduct.findUnique({
+  const product = await tx.tradingProduct.findUnique({
     where: { id: productId },
   });
   if (!product)
@@ -248,7 +248,7 @@ export async function serviceProductIds(
   productIds: string[],
 ): Promise<Set<string>> {
   if (productIds.length === 0) return new Set();
-  const rows = await tx.plywoodProduct.findMany({
+  const rows = await tx.tradingProduct.findMany({
     where: { id: { in: productIds }, type: "SERVICE" },
     select: { id: true },
   });
@@ -268,7 +268,7 @@ export const receiveStock: CommandDefinition<
   },
   { ledgerId: string; onHandUnits: number }
 > = {
-  key: "verity.plywood.receive_stock",
+  key: "verity.trading.receive_stock",
   entity: ENTITY_STOCK_LEDGER,
   verb: "Create",
   input: z.object({
@@ -287,7 +287,7 @@ export const receiveStock: CommandDefinition<
     return {
       result: { ledgerId: moved.ledgerId, onHandUnits: moved.onHandUnits },
       events: [
-        { name: "verity.plywood.stock_received", entityId: moved.ledgerId },
+        { name: "verity.trading.stock_received", entityId: moved.ledgerId },
       ],
     };
   },
@@ -303,7 +303,7 @@ export const issueStock: CommandDefinition<
   },
   { ledgerId: string; unitCostPaise: number; onHandUnits: number }
 > = {
-  key: "verity.plywood.issue_stock",
+  key: "verity.trading.issue_stock",
   entity: ENTITY_STOCK_LEDGER,
   verb: "Create",
   input: z.object({ ...movementInput, reason: z.string().max(400).optional() }),
@@ -318,7 +318,7 @@ export const issueStock: CommandDefinition<
     return {
       result: moved,
       events: [
-        { name: "verity.plywood.stock_issued", entityId: moved.ledgerId },
+        { name: "verity.trading.stock_issued", entityId: moved.ledgerId },
       ],
     };
   },
@@ -334,7 +334,7 @@ export const transferStock: CommandDefinition<
   },
   { outLedgerId: string; inLedgerId: string }
 > = {
-  key: "verity.plywood.transfer_stock",
+  key: "verity.trading.transfer_stock",
   entity: ENTITY_STOCK_LEDGER,
   verb: "Create",
   input: z.object({
@@ -376,7 +376,7 @@ export const transferStock: CommandDefinition<
       result: { outLedgerId: out.ledgerId, inLedgerId: incoming.ledgerId },
       events: [
         {
-          name: "verity.plywood.stock_transferred",
+          name: "verity.trading.stock_transferred",
           entityId: incoming.ledgerId,
         },
       ],
@@ -395,7 +395,7 @@ export const adjustStock: CommandDefinition<
   },
   { ledgerId: string; onHandUnits: number }
 > = {
-  key: "verity.plywood.adjust_stock",
+  key: "verity.trading.adjust_stock",
   entity: ENTITY_STOCK_LEDGER,
   // An adjustment is not an ordinary movement: it is someone asserting that the
   // system is wrong. ActionExecute rather than Create, so it can be granted to
@@ -427,7 +427,7 @@ export const adjustStock: CommandDefinition<
     await recordActivity(ctx, {
       entityKey: ENTITY_STOCK_BALANCE,
       entityId: balance?.id ?? moved.ledgerId,
-      commandKey: "verity.plywood.adjust_stock",
+      commandKey: "verity.trading.adjust_stock",
       changes: diffFields(
         { qtyUnits: balance?.qtyUnits ?? 0 },
         { qtyUnits: moved.onHandUnits },
@@ -437,7 +437,7 @@ export const adjustStock: CommandDefinition<
     return {
       result: { ledgerId: moved.ledgerId, onHandUnits: moved.onHandUnits },
       events: [
-        { name: "verity.plywood.stock_adjusted", entityId: moved.ledgerId },
+        { name: "verity.trading.stock_adjusted", entityId: moved.ledgerId },
       ],
     };
   },
@@ -453,7 +453,7 @@ export const recordDamagedStock: CommandDefinition<
   },
   { ledgerId: string; onHandUnits: number }
 > = {
-  key: "verity.plywood.record_damaged_stock",
+  key: "verity.trading.record_damaged_stock",
   entity: ENTITY_STOCK_LEDGER,
   verb: "ActionExecute",
   input: z.object({ ...movementInput, reason: z.string().min(3).max(400) }),
@@ -468,7 +468,7 @@ export const recordDamagedStock: CommandDefinition<
     return {
       result: { ledgerId: moved.ledgerId, onHandUnits: moved.onHandUnits },
       events: [
-        { name: "verity.plywood.stock_damaged", entityId: moved.ledgerId },
+        { name: "verity.trading.stock_damaged", entityId: moved.ledgerId },
       ],
     };
   },
@@ -504,7 +504,7 @@ export const recordReturnedStock: CommandDefinition<
   },
   { ledgerId: string; onHandUnits: number }
 > = {
-  key: "verity.plywood.record_returned_stock",
+  key: "verity.trading.record_returned_stock",
   entity: ENTITY_STOCK_LEDGER,
   verb: "ActionExecute",
   input: z.object({
@@ -520,7 +520,7 @@ export const recordReturnedStock: CommandDefinition<
       { type: string; id: string; number?: string | null } | undefined;
 
     if (input.goodsIssueId) {
-      const issue = await ctx.tx.plywoodGoodsIssue.findUniqueOrThrow({
+      const issue = await ctx.tx.tradingGoodsIssue.findUniqueOrThrow({
         where: { id: input.goodsIssueId },
         include: { lines: true },
       });
@@ -580,7 +580,7 @@ export const recordReturnedStock: CommandDefinition<
       result: { ledgerId: moved.ledgerId, onHandUnits: moved.onHandUnits },
       events: [
         {
-          name: "verity.plywood.stock_returned",
+          name: "verity.trading.stock_returned",
           entityId: moved.ledgerId,
           payload: source ? { goodsIssueNumber: source.number } : {},
         },
@@ -597,7 +597,6 @@ export const stockOnHand: QueryDefinition<
     productId: string;
     productName: string;
     brandName: string;
-    grade: string;
     unitLabel: string;
     locationId: string;
     locationName: string;
@@ -606,7 +605,7 @@ export const stockOnHand: QueryDefinition<
     valuePaise: number;
   }>
 > = {
-  key: "verity.plywood.stock_on_hand",
+  key: "verity.trading.stock_on_hand",
   entity: ENTITY_STOCK_BALANCE,
   input: z.object({
     locationId: z.string().uuid().optional(),
@@ -641,7 +640,6 @@ export const stockOnHand: QueryDefinition<
         productId: balance.productId,
         productName: balance.product.name,
         brandName: balance.product.brand.name,
-        grade: balance.product.grade,
         unitLabel: balance.product.unitLabel,
         locationId: balance.locationId,
         locationName: balance.location.name,
@@ -674,7 +672,7 @@ export const lowStock: QueryDefinition<
     reorderLevelUnits: number;
   }>
 > = {
-  key: "verity.plywood.low_stock",
+  key: "verity.trading.low_stock",
   entity: ENTITY_STOCK_BALANCE,
   input: z.object({}),
   handler: async (ctx) => {
@@ -686,7 +684,7 @@ export const lowStock: QueryDefinition<
       ctx.actor,
       ENTITY_STOCK_BALANCE,
     );
-    const products = await ctx.tx.plywoodProduct.findMany({
+    const products = await ctx.tx.tradingProduct.findMany({
       // A service has no reorder level worth sweeping — it never holds stock.
       where: { active: true, reorderLevelUnits: { gt: 0 }, type: "PHYSICAL" },
       include: {
@@ -704,7 +702,7 @@ export const lowStock: QueryDefinition<
     // Authority: taskplans/45_plywood_workflow_program.md §4.2:
     //   available = on_hand - reserved
     //   low_stock = available < reorder_level
-    const held = await ctx.tx.plywoodStockReservation.groupBy({
+    const held = await ctx.tx.tradingStockReservation.groupBy({
       by: ["productId"],
       where: { releasedAt: null, locationId: { in: reachable } },
       _sum: { qtyUnits: true },
@@ -749,7 +747,7 @@ export const productMovements: QueryDefinition<
     occurredAt: Date;
   }>
 > = {
-  key: "verity.plywood.product_movements",
+  key: "verity.trading.product_movements",
   entity: ENTITY_STOCK_LEDGER,
   input: z.object({
     productId: z.string().uuid(),

@@ -1,3 +1,4 @@
+import { TRADING_CAPABILITY } from "@/server/capabilities/trading";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
@@ -97,6 +98,7 @@ describeDb("capability: Plywood trading — catalogue and godowns", () => {
       await activateCapability(tx, tenantId, LOCATION_CAPABILITY);
       await activateCapability(tx, tenantId, ASSET_CAPABILITY);
       await activateCapability(tx, tenantId, EVIDENCE_CAPABILITY);
+      await activateCapability(tx, tenantId, TRADING_CAPABILITY);
       await activateCapability(tx, tenantId, PLYWOOD_CAPABILITY);
 
       organizationId = (
@@ -355,11 +357,14 @@ describeDb("capability: Plywood trading — catalogue and godowns", () => {
     } as Parameters<typeof editProduct.handler>[1]);
 
     const after = await withTenant(tenantId, (tx) =>
-      tx.plywoodProduct.findUniqueOrThrow({ where: { id: product.id } }),
+      tx.tradingProduct.findUniqueOrThrow({
+        where: { id: product.id },
+        include: { plywoodDetail: true },
+      }),
     );
     expect(after.name).toBe("Fixed-size board, renamed");
-    expect(after.thicknessTenthMm).toBe(250);
-    expect(after.widthTenth).toBe(24400);
+    expect(after.plywoodDetail?.thicknessTenthMm).toBe(250);
+    expect(after.plywoodDetail?.widthTenth).toBe(24400);
   });
 
   it("hides a deactivated product from the catalogue but keeps it retrievable", async () => {
@@ -458,8 +463,8 @@ describeDb("capability: Plywood trading — catalogue and godowns", () => {
 
   it("shows another tenant nothing of this one's catalogue or godowns (INV-001)", async () => {
     const seen = await withTenant(otherTenantId, async (tx) => ({
-      brands: await tx.plywoodBrand.count(),
-      products: await tx.plywoodProduct.count(),
+      brands: await tx.tradingBrand.count(),
+      products: await tx.tradingProduct.count(),
       racks: await tx.godownRack.count(),
     }));
     expect(seen).toEqual({ brands: 0, products: 0, racks: 0 });
@@ -470,9 +475,9 @@ describeDb("capability: Plywood trading — catalogue and godowns", () => {
     // no scope at all, where the policy must refuse rather than default to
     // something. INV-001 fails closed or it does not hold.
     await expect(
-      prisma.plywoodBrand.create({ data: { tenantId, name: "Unscoped write" } }),
+      prisma.tradingBrand.create({ data: { tenantId, name: "Unscoped write" } }),
     ).rejects.toThrow();
 
-    expect(await prisma.plywoodBrand.count()).toBe(0);
+    expect(await prisma.tradingBrand.count()).toBe(0);
   });
 });

@@ -187,6 +187,7 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
       "verity.capability.location",
       "verity.capability.asset",
       "verity.capability.evidence",
+      "verity.capability.trading",
       "verity.capability.plywood",
     ]) {
       await ui("verity.platform.set_capability_state", { capabilityId, enabled: true });
@@ -205,19 +206,19 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
     // Strings, because that is what a text box sends. The capability coerces
     // rather than trusting JavaScript to fold a string through its arithmetic.
     await ui("verity.platform.set_configuration", {
-      key: "verity.plywood.tax.state_code",
+      key: "verity.trading.tax.state_code",
       value: "07",
     });
     await ui("verity.platform.set_configuration", {
-      key: "verity.plywood.tax.cgst_rate_bp",
+      key: "verity.trading.tax.cgst_rate_bp",
       value: "900",
     });
     await ui("verity.platform.set_configuration", {
-      key: "verity.plywood.tax.sgst_rate_bp",
+      key: "verity.trading.tax.sgst_rate_bp",
       value: "900",
     });
     await ui("verity.platform.set_configuration", {
-      key: "verity.plywood.tax.igst_rate_bp",
+      key: "verity.trading.tax.igst_rate_bp",
       value: "1800",
     });
 
@@ -240,9 +241,9 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
       return location.id;
     });
 
-    await ui("verity.plywood.define_godown_rack", { locationId: godownId, rackLabel: "A-01" });
+    await ui("verity.trading.define_godown_rack", { locationId: godownId, rackLabel: "A-01" });
 
-    const brand = await ui<{ id: string }>("verity.plywood.create_brand", { name: "Century Ply" });
+    const brand = await ui<{ id: string }>("verity.trading.create_brand", { name: "Century Ply" });
     const product = await ui<{ id: string }>("verity.plywood.create_product", {
       brandId: brand.id,
       name: "Sainik 710 BWR",
@@ -266,14 +267,14 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
   /* -------------------------- 4. partners and prices ------------------------ */
 
   it("4 — adds a supplier and a customer with their agreed prices", async () => {
-    const supplier = await ui<{ id: string }>("verity.plywood.create_supplier", {
+    const supplier = await ui<{ id: string }>("verity.trading.create_supplier", {
       displayName: "Century Distributors",
       gstin: "07AABCU9603R1ZM",
       stateCode: "07",
     });
     supplierId = supplier.id;
 
-    const customer = await ui<{ id: string }>("verity.plywood.create_customer", {
+    const customer = await ui<{ id: string }>("verity.trading.create_customer", {
       displayName: "Sharma Timber Mart",
       gstin: "07AAACS1429B1ZL",
       stateCode: "07",
@@ -281,25 +282,25 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
     });
     customerId = customer.id;
 
-    await ui("verity.plywood.set_supplier_price", {
+    await ui("verity.trading.set_supplier_price", {
       supplierId,
       productId,
       negotiatedCostPaise: paise(920),
     });
-    await ui("verity.plywood.set_customer_price", {
+    await ui("verity.trading.set_customer_price", {
       customerId,
       productId,
       customPricePaise: paise(1280),
     });
 
     // Raising a limit is its own control, held separately from ordinary edits.
-    await ui("verity.plywood.set_credit_limit", {
+    await ui("verity.trading.set_credit_limit", {
       customerId,
       creditLimitPaise: paise(800_000),
     });
 
     const customers = await read<Array<{ id: string; creditLimitPaise: number }>>(
-      "verity.plywood.list_customers",
+      "verity.trading.list_customers",
       {},
     );
     expect(customers.find((row) => row.id === customerId)!.creditLimitPaise).toBe(paise(800_000));
@@ -309,7 +310,7 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
 
   it("5 — orders and receives, with the cost left blank so the agreed price applies", async () => {
     const order = await ui<{ id: string; totalCostPaise: number }>(
-      "verity.plywood.create_purchase_order",
+      "verity.trading.create_purchase_order",
       {
         supplierId,
         locationId: godownId,
@@ -322,8 +323,8 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
     purchaseOrderId = order.id;
     expect(order.totalCostPaise).toBe(200 * paise(920));
 
-    await ui("verity.plywood.submit_purchase_order", { orderId: purchaseOrderId });
-    const received = await ui<{ state: string }>("verity.plywood.receive_goods", {
+    await ui("verity.trading.submit_purchase_order", { orderId: purchaseOrderId });
+    const received = await ui<{ state: string }>("verity.trading.receive_goods", {
       orderId: purchaseOrderId,
       lines: [{ productId, qtyReceived: 200 }],
     });
@@ -333,27 +334,27 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
   /* ------------------------------ 6. corrections ---------------------------- */
 
   it("6 — records a stock count, damage and a return from the Stock screen", async () => {
-    await ui("verity.plywood.adjust_stock", {
+    await ui("verity.trading.adjust_stock", {
       productId,
       locationId: godownId,
       qtyUnits: 3,
       direction: "out",
       reason: "Physical count on 28 August found three short",
     });
-    await ui("verity.plywood.record_damaged_stock", {
+    await ui("verity.trading.record_damaged_stock", {
       productId,
       locationId: godownId,
       qtyUnits: 2,
       reason: "Water damage in the corner stack",
     });
-    await ui("verity.plywood.record_returned_stock", {
+    await ui("verity.trading.record_returned_stock", {
       productId,
       locationId: godownId,
       qtyUnits: 5,
       reason: "Customer returned five sheets, unopened",
     });
 
-    const onHand = await read<Array<{ qtyUnits: number }>>("verity.plywood.stock_on_hand", {
+    const onHand = await read<Array<{ qtyUnits: number }>>("verity.trading.stock_on_hand", {
       productId,
     });
     expect(onHand[0]!.qtyUnits).toBe(200 - 3 - 2 + 5);
@@ -362,7 +363,7 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
   /* --------------------------------- 7. sale -------------------------------- */
 
   it("7 — takes an order, holds the stock and dispatches it", async () => {
-    const order = await ui<{ id: string; state: string }>("verity.plywood.create_sales_order", {
+    const order = await ui<{ id: string; state: string }>("verity.trading.create_sales_order", {
       customerId,
       locationId: godownId,
       reference: "SO-8891",
@@ -372,15 +373,15 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
     salesOrderId = order.id;
     expect(order.state).toBe("approved");
 
-    await ui("verity.plywood.reserve_for_order", { orderId: salesOrderId });
+    await ui("verity.trading.reserve_for_order", { orderId: salesOrderId });
 
     const availability = await read<Array<{ productId: string; availableUnits: number }>>(
-      "verity.plywood.stock_availability",
+      "verity.trading.stock_availability",
       { locationId: godownId },
     );
     expect(availability.find((row) => row.productId === productId)!.availableUnits).toBe(140);
 
-    await ui("verity.plywood.dispatch_order", { orderId: salesOrderId });
+    await ui("verity.trading.dispatch_order", { orderId: salesOrderId });
   });
 
   /* ------------------------------- 8. logistics ----------------------------- */
@@ -395,7 +396,7 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
 
   it("9 — invoices the sale, records the supplier bill and takes the money", async () => {
     const invoice = await ui<{ id: string; invoiceNumber: string; totalPaise: number }>(
-      "verity.plywood.raise_sales_invoice",
+      "verity.trading.raise_sales_invoice",
       { salesOrderId },
     );
     invoiceId = invoice.id;
@@ -406,19 +407,19 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
     expect(invoice.totalPaise).toBe(taxable + Math.round(taxable * 0.09) * 2);
 
     // Payables, from the Finance screen. The amount is the supplier's figure.
-    await ui("verity.plywood.raise_purchase_invoice", {
+    await ui("verity.trading.raise_purchase_invoice", {
       purchaseOrderId,
       supplierInvoiceTotalPaise: 200 * paise(920),
     });
 
     const half = Math.floor(invoice.totalPaise / 2);
-    await ui("verity.plywood.record_payment", {
+    await ui("verity.trading.record_payment", {
       invoiceId,
       amountPaise: half,
       method: "bank",
       reference: "UTR-77120",
     });
-    const settled = await ui<{ outstandingPaise: number }>("verity.plywood.record_payment", {
+    const settled = await ui<{ outstandingPaise: number }>("verity.trading.record_payment", {
       invoiceId,
       amountPaise: invoice.totalPaise - half,
       method: "upi",
@@ -430,19 +431,19 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
 
   it("10 — every reporting screen answers, and the ledger balances", async () => {
     const invoiceView = await read<{ lines: Array<{ hsnCode: string }>; interState: boolean }>(
-      "verity.plywood.invoice_detail",
+      "verity.trading.invoice_detail",
       { invoiceId },
     );
     // The printable invoice has what a GST invoice legally needs.
     expect(invoiceView.lines[0]!.hsnCode).toBe("44121000");
     expect(invoiceView.interState).toBe(false);
 
-    const ledger = await read<{ balancePaise: number }>("verity.plywood.party_ledger", {
+    const ledger = await read<{ balancePaise: number }>("verity.trading.party_ledger", {
       customerId,
     });
     expect(ledger.balancePaise).toBe(0);
 
-    const payable = await read<{ balancePaise: number }>("verity.plywood.party_ledger", {
+    const payable = await read<{ balancePaise: number }>("verity.trading.party_ledger", {
       supplierId,
     });
     // Negative: this business owes the supplier. Debit and credit are named from
@@ -453,12 +454,12 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
       receivablesPaise: number;
       payablesPaise: number;
       lowStockBoards: number;
-    }>("verity.plywood.owner_console", {});
+    }>("verity.trading.owner_console", {});
     expect(console_.receivablesPaise).toBe(0);
     expect(console_.payablesPaise).toBe(200 * paise(920));
 
     const margin = await read<{ marginPaise: number; costingMethod: string }>(
-      "verity.plywood.margin_report",
+      "verity.trading.margin_report",
       { sinceDays: 1 },
     );
     expect(margin.costingMethod).toBe("Weighted average cost");
@@ -467,29 +468,29 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
 
   it("11 — cancels an order and a purchase, releasing what they held", async () => {
     // The two cancellation controls, which had no screen until now.
-    const spare = await ui<{ id: string }>("verity.plywood.create_sales_order", {
+    const spare = await ui<{ id: string }>("verity.trading.create_sales_order", {
       customerId,
       locationId: godownId,
       lines: [{ productId, qtyOrdered: 5 }],
     });
-    await ui("verity.plywood.reserve_for_order", { orderId: spare.id });
-    await ui("verity.plywood.cancel_sales_order", {
+    await ui("verity.trading.reserve_for_order", { orderId: spare.id });
+    await ui("verity.trading.cancel_sales_order", {
       orderId: spare.id,
       reason: "Customer changed their mind",
     });
 
     const availability = await read<Array<{ productId: string; reservedUnits: number }>>(
-      "verity.plywood.stock_availability",
+      "verity.trading.stock_availability",
       { locationId: godownId },
     );
     expect(availability.find((row) => row.productId === productId)!.reservedUnits).toBe(0);
 
-    const spareOrder = await ui<{ id: string }>("verity.plywood.create_purchase_order", {
+    const spareOrder = await ui<{ id: string }>("verity.trading.create_purchase_order", {
       supplierId,
       locationId: godownId,
       lines: [{ productId, qtyOrdered: 10 }],
     });
-    await ui("verity.plywood.cancel_purchase_order", {
+    await ui("verity.trading.cancel_purchase_order", {
       orderId: spareOrder.id,
       reason: "Supplier cannot supply before the season",
     });

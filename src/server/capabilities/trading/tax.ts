@@ -70,7 +70,7 @@ export async function resolveTaxRate(
   if (input.hsnCode.length >= 4) candidates.push(input.hsnCode.slice(0, 4));
 
   for (const hsn of candidates) {
-    const rule = await tx.plywoodTaxRule.findFirst({
+    const rule = await tx.tradingTaxRule.findFirst({
       where: {
         registrationId: input.registrationId,
         hsnCode: hsn,
@@ -103,7 +103,7 @@ export const setTaxRule: CommandDefinition<
   },
   { id: string; hsnCode: string; supersededRuleId: string | null }
 > = {
-  key: "verity.plywood.set_tax_rule",
+  key: "verity.trading.set_tax_rule",
   entity: ENTITY_GST_REGISTRATION,
   verb: "Edit",
   input: z.object({
@@ -116,7 +116,7 @@ export const setTaxRule: CommandDefinition<
     authority: z.string().max(200).optional(),
   }),
   handler: async (ctx, input) => {
-    const registration = await ctx.tx.plywoodGstRegistration.findFirst({
+    const registration = await ctx.tx.tradingGstRegistration.findFirst({
       where: { active: true },
     });
     if (!registration) {
@@ -132,7 +132,7 @@ export const setTaxRule: CommandDefinition<
     // Supersede rather than overwrite. The old rate stays in force for the
     // invoices raised under it — that is the whole reason these rows are
     // dated, and rewriting one would restate a filed return.
-    const current = await ctx.tx.plywoodTaxRule.findFirst({
+    const current = await ctx.tx.tradingTaxRule.findFirst({
       where: {
         registrationId: registration.id,
         hsnCode: input.hsnCode,
@@ -145,13 +145,13 @@ export const setTaxRule: CommandDefinition<
           "E_VALIDATION: a new rate must take effect after the one it supersedes",
         );
       }
-      await ctx.tx.plywoodTaxRule.update({
+      await ctx.tx.tradingTaxRule.update({
         where: { id: current.id },
         data: { effectiveTo: effectiveFrom },
       });
     }
 
-    const rule = await ctx.tx.plywoodTaxRule.create({
+    const rule = await ctx.tx.tradingTaxRule.create({
       data: {
         tenantId: ctx.actor.tenantId,
         registrationId: registration.id,
@@ -178,7 +178,7 @@ export const setTaxRule: CommandDefinition<
       },
       events: [
         {
-          name: "verity.plywood.tax_rule_set",
+          name: "verity.trading.tax_rule_set",
           entityId: rule.id,
           payload: { hsnCode: rule.hsnCode, rateBp: input.rateBp },
         },
@@ -237,7 +237,7 @@ export const taxSummary: QueryDefinition<
     exceptions: Array<{ kind: string; detail: string; documentNumber: string }>;
   }
 > = {
-  key: "verity.plywood.tax_summary",
+  key: "verity.trading.tax_summary",
   entity: ENTITY_INVOICE,
   input: z.object({
     from: z.string().datetime().optional(),
@@ -251,7 +251,7 @@ export const taxSummary: QueryDefinition<
     const from = input.from ? new Date(input.from) : startOfBusinessMonth(zone, now);
     const to = input.to ? new Date(input.to) : now;
 
-    const invoices = await ctx.tx.plywoodInvoice.findMany({
+    const invoices = await ctx.tx.tradingInvoice.findMany({
       where: { issuedAt: { gte: from, lte: to } },
       include: {
         notes: true,
@@ -421,7 +421,7 @@ export const gstr1Working: QueryDefinition<
     validations: string[];
   }
 > = {
-  key: "verity.plywood.gstr1_working",
+  key: "verity.trading.gstr1_working",
   entity: ENTITY_INVOICE,
   input: z.object({
     from: z.string().datetime().optional(),
@@ -435,7 +435,7 @@ export const gstr1Working: QueryDefinition<
       : startOfBusinessMonth(zone, now);
     const to = input.to ? new Date(input.to) : now;
 
-    const invoices = await ctx.tx.plywoodInvoice.findMany({
+    const invoices = await ctx.tx.tradingInvoice.findMany({
       where: { issuedAt: { gte: from, lte: to }, customerId: { not: null } },
       include: { customer: true, lines: true },
       orderBy: { sequenceNumber: "asc" },
@@ -584,7 +584,7 @@ export const gstr3bWorking: QueryDefinition<
     blockers: string[];
   }
 > = {
-  key: "verity.plywood.gstr3b_working",
+  key: "verity.trading.gstr3b_working",
   entity: ENTITY_INVOICE,
   input: z.object({
     from: z.string().datetime().optional(),
@@ -598,7 +598,7 @@ export const gstr3bWorking: QueryDefinition<
       : startOfBusinessMonth(zone, now);
     const to = input.to ? new Date(input.to) : now;
 
-    const invoices = await ctx.tx.plywoodInvoice.findMany({
+    const invoices = await ctx.tx.tradingInvoice.findMany({
       where: { issuedAt: { gte: from, lte: to } },
       include: { notes: true, customer: true, supplier: true },
     });
@@ -705,7 +705,7 @@ export const gstr3bWorking: QueryDefinition<
  *
  * The registration as a person describes it, and the rate rules behind it.
  * Explicitly NOT a configuration-key screen: the specification names
- * `verity.plywood.tax.cgst_rate_bp` as the thing a client must never be shown,
+ * `verity.trading.tax.cgst_rate_bp` as the thing a client must never be shown,
  * because a rate is a business fact with a date, not a setting with a value.
  *
  * Rules are returned with their effective dates and their supersession state,
@@ -736,16 +736,16 @@ export const taxSettings: QueryDefinition<
     }>;
   }
 > = {
-  key: "verity.plywood.tax_settings",
+  key: "verity.trading.tax_settings",
   entity: ENTITY_GST_REGISTRATION,
   input: z.object({}),
   handler: async (ctx) => {
-    const registration = await ctx.tx.plywoodGstRegistration.findFirst({
+    const registration = await ctx.tx.tradingGstRegistration.findFirst({
       where: { active: true },
     });
     if (!registration) return { registration: null, rules: [] };
 
-    const rules = await ctx.tx.plywoodTaxRule.findMany({
+    const rules = await ctx.tx.tradingTaxRule.findMany({
       where: { registrationId: registration.id },
       orderBy: [{ hsnCode: "asc" }, { effectiveFrom: "desc" }],
     });

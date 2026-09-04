@@ -27,8 +27,8 @@ describe("order state vocabulary (U0-2)", () => {
     let purchases: { state: string }[];
     try {
       [sales, purchases] = await Promise.all([
-        admin.$queryRaw<{ state: string }[]>`SELECT DISTINCT state FROM plywood_sales_order`,
-        admin.$queryRaw<{ state: string }[]>`SELECT DISTINCT state FROM plywood_purchase_order`,
+        admin.$queryRaw<{ state: string }[]>`SELECT DISTINCT state FROM trading_sales_order`,
+        admin.$queryRaw<{ state: string }[]>`SELECT DISTINCT state FROM trading_purchase_order`,
       ]);
     } finally {
       await admin.$disconnect();

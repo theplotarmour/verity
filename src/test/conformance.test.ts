@@ -429,8 +429,8 @@ describeDb("conformance: database enforcement", () => {
         "activity",
         "domain_event",
         "evidence",
-        "plywood_invoice",
-        "plywood_ledger_entry",
+        "trading_invoice",
+        "trading_ledger_entry",
         "security_audit_event",
         "stock_ledger_entry",
       ]);

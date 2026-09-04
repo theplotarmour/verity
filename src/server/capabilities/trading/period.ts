@@ -70,7 +70,7 @@ export async function assertPeriodOpen(
   // on every document write, so getting it wrong files a real invoice into the
   // wrong month.
   const periodKey = periodKeyOf(on, await tenantZone(tx));
-  const period = await tx.plywoodAccountingPeriod.findFirst({
+  const period = await tx.tradingAccountingPeriod.findFirst({
     where: { periodKey },
   });
   if (period?.state === "closed") throw new PeriodClosedError(periodKey);
@@ -94,7 +94,7 @@ export const closeChecklist: QueryDefinition<
     ready: boolean;
   }
 > = {
-  key: "verity.plywood.close_checklist",
+  key: "verity.trading.close_checklist",
   entity: ENTITY_ACCOUNTING_PERIOD,
   input: z.object({
     periodKey: z
@@ -108,11 +108,11 @@ export const closeChecklist: QueryDefinition<
     const periodKey = input.periodKey ?? periodKeyOf(new Date(), zone);
     const { startsAt, endsAt } = businessPeriodWindow(zone, periodKey);
 
-    const period = await ctx.tx.plywoodAccountingPeriod.findFirst({
+    const period = await ctx.tx.tradingAccountingPeriod.findFirst({
       where: { periodKey },
     });
 
-    const invoices = await ctx.tx.plywoodInvoice.findMany({
+    const invoices = await ctx.tx.tradingInvoice.findMany({
       where: { issuedAt: { gte: startsAt, lt: endsAt } },
       include: { customer: true, lines: true },
     });
@@ -159,16 +159,16 @@ export const closeChecklist: QueryDefinition<
     // An order that shipped goods and was never invoiced is revenue sitting
     // outside the period it belongs to. This is the one blocker that is about
     // something MISSING rather than something wrong.
-    // `PlywoodSalesOrder` carries no back-relation to its invoices, so the
+    // `TradingSalesOrder` carries no back-relation to its invoices, so the
     // set of invoiced orders is fetched and subtracted rather than expressed
     // as a `none` filter.
-    const fulfilled = await ctx.tx.plywoodSalesOrder.findMany({
+    const fulfilled = await ctx.tx.tradingSalesOrder.findMany({
       where: { state: "completed", updatedAt: { gte: startsAt, lt: endsAt } },
       select: { id: true },
     });
     const invoicedOrderIds = new Set(
       (
-        await ctx.tx.plywoodInvoice.findMany({
+        await ctx.tx.tradingInvoice.findMany({
           where: { salesOrderId: { in: fulfilled.map((order) => order.id) } },
           select: { salesOrderId: true },
         })
@@ -200,7 +200,7 @@ export const closePeriod: CommandDefinition<
   { periodKey: string; force?: boolean },
   { periodKey: string; state: string; blockersOverridden: number }
 > = {
-  key: "verity.plywood.close_period",
+  key: "verity.trading.close_period",
   entity: ENTITY_ACCOUNTING_PERIOD,
   verb: "ActionExecute",
   input: z.object({
@@ -224,7 +224,7 @@ export const closePeriod: CommandDefinition<
       );
     }
 
-    const existing = await ctx.tx.plywoodAccountingPeriod.findFirst({
+    const existing = await ctx.tx.tradingAccountingPeriod.findFirst({
       where: { periodKey: input.periodKey },
     });
     if (existing?.state === "closed") {
@@ -245,11 +245,11 @@ export const closePeriod: CommandDefinition<
 
     const closedAt = new Date();
     const period = existing
-      ? await ctx.tx.plywoodAccountingPeriod.update({
+      ? await ctx.tx.tradingAccountingPeriod.update({
           where: { id: existing.id },
           data: { state: "closed", closedAt, closedBy: ctx.actor.userId },
         })
-      : await ctx.tx.plywoodAccountingPeriod.create({
+      : await ctx.tx.tradingAccountingPeriod.create({
           data: {
             tenantId: ctx.actor.tenantId,
             periodKey: input.periodKey,
@@ -269,7 +269,7 @@ export const closePeriod: CommandDefinition<
       },
       events: [
         {
-          name: "verity.plywood.period_closed",
+          name: "verity.trading.period_closed",
           entityId: period.id,
           payload: {
             periodKey: period.periodKey,
@@ -285,7 +285,7 @@ export const reopenPeriod: CommandDefinition<
   { periodKey: string; reason: string },
   { periodKey: string; state: string }
 > = {
-  key: "verity.plywood.reopen_period",
+  key: "verity.trading.reopen_period",
   entity: ENTITY_ACCOUNTING_PERIOD,
   verb: "ActionExecute",
   input: z.object({
@@ -296,7 +296,7 @@ export const reopenPeriod: CommandDefinition<
     reason: z.string().min(3).max(400),
   }),
   handler: async (ctx, input) => {
-    const period = await ctx.tx.plywoodAccountingPeriod.findFirst({
+    const period = await ctx.tx.tradingAccountingPeriod.findFirst({
       where: { periodKey: input.periodKey },
     });
     if (!period || period.state !== "closed") {
@@ -305,7 +305,7 @@ export const reopenPeriod: CommandDefinition<
       );
     }
 
-    const reopened = await ctx.tx.plywoodAccountingPeriod.update({
+    const reopened = await ctx.tx.tradingAccountingPeriod.update({
       where: { id: period.id },
       data: {
         state: "open",
@@ -319,7 +319,7 @@ export const reopenPeriod: CommandDefinition<
       result: { periodKey: reopened.periodKey, state: reopened.state },
       events: [
         {
-          name: "verity.plywood.period_reopened",
+          name: "verity.trading.period_reopened",
           entityId: reopened.id,
           // The reason travels with the event, so an operational audit shows
           // WHY a reported month was opened again without a second lookup.

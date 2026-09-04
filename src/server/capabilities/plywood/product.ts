@@ -1,10 +1,12 @@
 /**
- * The product families this business trades, and the units each is quoted in.
- *
- * Its own module rather than a section of index.ts because `trading.ts` needs
- * the size formatter for order-line snapshots, and index.ts imports trading.ts
- * — a helper living in index.ts would be an import cycle.
+ * The plywood-specific product taxonomy: families, units, and the rules that
+ * connect them. Everything genuinely generic (the size formatter itself) now
+ * lives in `../trading/format` (ADR-018) — this module re-exports it so
+ * existing callers of `formatProductSize` from here keep working.
  */
+
+import { formatProductSize } from "../trading/format";
+export { formatProductSize };
 
 /**
  * The four families this business actually trades, plus a catch-all.
@@ -62,22 +64,6 @@ export const CATEGORY_RULES: Record<
   LOUVRE: { label: "Louvre", sizeUnit: "IN", thickness: "optional" },
   OTHER: { label: "Other", sizeUnit: "MM", thickness: "optional" },
 };
-
-/** "8 x 4 ft", "96 x 5 in", "2440 x 1220 mm" — one dash when there is no size. */
-export function formatProductSize(product: {
-  sizeUnit: string;
-  widthTenth: number | null;
-  heightTenth: number | null;
-}): string {
-  if (product.widthTenth == null || product.heightTenth == null) return "\u2014";
-  // Tenths print as tenths only when the tenth is real: "8" not "8.0", but
-  // "7.5" when the yard genuinely cut a half.
-  const show = (tenth: number) =>
-    tenth % 10 === 0 ? String(tenth / 10) : (tenth / 10).toFixed(1);
-  const unit =
-    product.sizeUnit === "FT" ? "ft" : product.sizeUnit === "IN" ? "in" : "mm";
-  return `${show(product.widthTenth)} \u00d7 ${show(product.heightTenth)} ${unit}`;
-}
 
 /**
  * How a product is named in a dropdown, a price row or an order line.

@@ -1,3 +1,4 @@
+import { TRADING_CAPABILITY } from "@/server/capabilities/trading";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
@@ -116,6 +117,7 @@ describeDb("plywood: the whole chain, from purchase to payment", () => {
       await activateCapability(tx, tenantId, LOCATION_CAPABILITY);
       await activateCapability(tx, tenantId, ASSET_CAPABILITY);
       await activateCapability(tx, tenantId, EVIDENCE_CAPABILITY);
+      await activateCapability(tx, tenantId, TRADING_CAPABILITY);
       await activateCapability(tx, tenantId, PLYWOOD_CAPABILITY);
 
       await setConfig(tx, tenantId, CONFIG_TENANT_STATE_CODE, "07", "Tenant");
@@ -140,7 +142,7 @@ describeDb("plywood: the whole chain, from purchase to payment", () => {
       // may run each step. The per-stage suites hold the authorization refusals.
       const role = await tx.role.create({ data: { tenantId, name: "Owner" }, select: { id: true } });
       const entities = await tx.entityDefinition.findMany({
-        where: { capability: PLYWOOD_CAPABILITY },
+        where: { capability: { in: [PLYWOOD_CAPABILITY, TRADING_CAPABILITY] } },
         select: { key: true },
       });
       await tx.permission.createMany({
@@ -411,12 +413,12 @@ describeDb("plywood: the whole chain, from purchase to payment", () => {
     try {
       await admin.$executeRaw`DELETE FROM tenant WHERE id = ${tenantId}::uuid`;
       const survivors = await admin.$queryRaw<{ table_name: string; rows: bigint }[]>`
-        SELECT 'plywood_product' AS table_name, count(*)::bigint AS rows FROM plywood_product WHERE tenant_id = ${tenantId}::uuid
+        SELECT 'trading_product' AS table_name, count(*)::bigint AS rows FROM trading_product WHERE tenant_id = ${tenantId}::uuid
         UNION ALL SELECT 'stock_ledger_entry', count(*)::bigint FROM stock_ledger_entry WHERE tenant_id = ${tenantId}::uuid
         UNION ALL SELECT 'stock_balance', count(*)::bigint FROM stock_balance WHERE tenant_id = ${tenantId}::uuid
-        UNION ALL SELECT 'plywood_sales_order', count(*)::bigint FROM plywood_sales_order WHERE tenant_id = ${tenantId}::uuid
-        UNION ALL SELECT 'plywood_invoice', count(*)::bigint FROM plywood_invoice WHERE tenant_id = ${tenantId}::uuid
-        UNION ALL SELECT 'plywood_ledger_entry', count(*)::bigint FROM plywood_ledger_entry WHERE tenant_id = ${tenantId}::uuid`;
+        UNION ALL SELECT 'trading_sales_order', count(*)::bigint FROM trading_sales_order WHERE tenant_id = ${tenantId}::uuid
+        UNION ALL SELECT 'trading_invoice', count(*)::bigint FROM trading_invoice WHERE tenant_id = ${tenantId}::uuid
+        UNION ALL SELECT 'trading_ledger_entry', count(*)::bigint FROM trading_ledger_entry WHERE tenant_id = ${tenantId}::uuid`;
       expect(survivors.map((row) => ({ ...row, rows: Number(row.rows) }))).toEqual(
         survivors.map((row) => ({ ...row, rows: 0 })),
       );

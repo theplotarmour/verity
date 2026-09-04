@@ -1,3 +1,4 @@
+import { TRADING_CAPABILITY } from "@/server/capabilities/trading";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -157,6 +158,7 @@ describeDb("plywood integrity foundation (slice 1)", () => {
       await activateCapability(tx, tenantId, LOCATION_CAPABILITY);
       await activateCapability(tx, tenantId, ASSET_CAPABILITY);
       await activateCapability(tx, tenantId, EVIDENCE_CAPABILITY);
+      await activateCapability(tx, tenantId, TRADING_CAPABILITY);
       await activateCapability(tx, tenantId, PLYWOOD_CAPABILITY);
 
       await setConfig(tx, tenantId, CONFIG_TENANT_STATE_CODE, "07", "Tenant");
@@ -451,7 +453,7 @@ describeDb("plywood integrity foundation (slice 1)", () => {
       try {
         // A correction a migration could quietly make is not a correction.
         await expect(
-          admin.$executeRaw`UPDATE plywood_invoice SET total_paise = 1 WHERE id = ${invoiceId}::uuid`,
+          admin.$executeRaw`UPDATE trading_invoice SET total_paise = 1 WHERE id = ${invoiceId}::uuid`,
         ).rejects.toThrow(/posted financial document/);
       } finally {
         await admin.$disconnect();
@@ -462,10 +464,10 @@ describeDb("plywood integrity foundation (slice 1)", () => {
       const admin = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL });
       try {
         await expect(
-          admin.$executeRaw`UPDATE plywood_invoice_line SET qty_units = 999 WHERE invoice_id = ${invoiceId}::uuid`,
+          admin.$executeRaw`UPDATE trading_invoice_line SET qty_units = 999 WHERE invoice_id = ${invoiceId}::uuid`,
         ).rejects.toThrow(/posted financial document/);
         await expect(
-          admin.$executeRaw`UPDATE plywood_payment SET amount_paise = 1 WHERE id = ${paymentId}::uuid`,
+          admin.$executeRaw`UPDATE trading_payment SET amount_paise = 1 WHERE id = ${paymentId}::uuid`,
         ).rejects.toThrow(/posted financial document/);
       } finally {
         await admin.$disconnect();
@@ -476,7 +478,7 @@ describeDb("plywood integrity foundation (slice 1)", () => {
       const admin = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL });
       try {
         await expect(
-          admin.$executeRaw`UPDATE plywood_invoice SET total_paise = 1 WHERE id = ${invoiceId}::uuid`,
+          admin.$executeRaw`UPDATE trading_invoice SET total_paise = 1 WHERE id = ${invoiceId}::uuid`,
         ).rejects.toThrow(/credit or debit note/);
       } finally {
         await admin.$disconnect();
@@ -511,10 +513,10 @@ describeDb("plywood integrity foundation (slice 1)", () => {
     // check before either writes. Proven by bypassing the application entirely.
     const admin = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL });
     try {
-      const row = await admin.plywoodInvoice.findUniqueOrThrow({ where: { id: first.id } });
+      const row = await admin.tradingInvoice.findUniqueOrThrow({ where: { id: first.id } });
       await expect(
         admin.$executeRaw`
-          INSERT INTO plywood_invoice (
+          INSERT INTO trading_invoice (
             id, tenant_id, series_id, customer_id, sales_order_id, invoice_number,
             sequence_number, financial_year, place_of_supply_state_code, supply_state_code,
             taxable_paise, cgst_paise, sgst_paise, igst_paise, total_paise, updated_at

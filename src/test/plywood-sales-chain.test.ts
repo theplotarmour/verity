@@ -1,3 +1,4 @@
+import { TRADING_CAPABILITY } from "@/server/capabilities/trading";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -121,6 +122,7 @@ describeDb("plywood sales chain (slice 4)", () => {
       await activateCapability(tx, tenantId, LOCATION_CAPABILITY);
       await activateCapability(tx, tenantId, ASSET_CAPABILITY);
       await activateCapability(tx, tenantId, EVIDENCE_CAPABILITY);
+      await activateCapability(tx, tenantId, TRADING_CAPABILITY);
       await activateCapability(tx, tenantId, PLYWOOD_CAPABILITY);
 
       await setConfig(tx, tenantId, CONFIG_TENANT_STATE_CODE, "07", "Tenant");
@@ -340,7 +342,7 @@ describeDb("plywood sales chain (slice 4)", () => {
       const admin = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL });
       try {
         await expect(
-          admin.$executeRaw`UPDATE plywood_goods_issue SET collected_by = 'edited' WHERE id = ${issued.issueId}::uuid`,
+          admin.$executeRaw`UPDATE trading_goods_issue SET collected_by = 'edited' WHERE id = ${issued.issueId}::uuid`,
         ).rejects.toThrow(/posted financial document/);
       } finally {
         await admin.$disconnect();
@@ -369,7 +371,7 @@ describeDb("plywood sales chain (slice 4)", () => {
       // 25 issued at 1,500 is 37,500 taxable — not 40 at 1,500. Billing the
       // ordered quantity charges a customer for boards still in the godown.
       const stored = await withTenant(tenantId, (tx) =>
-        tx.plywoodInvoice.findUniqueOrThrow({
+        tx.tradingInvoice.findUniqueOrThrow({
           where: { id: invoice.id },
           include: { lines: true },
         }),

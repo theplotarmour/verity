@@ -36,7 +36,7 @@ export type ConfigKeyInfo = {
 };
 
 /**
- * `verity.plywood.tax.cgst_rate_bp` -> { groupSlug: "plywood", fieldLabel:
+ * `verity.trading.tax.cgst_rate_bp` -> { groupSlug: "trading", fieldLabel:
  * "Tax Cgst Rate (%)", isBasisPoints: true }.
  *
  * Basis points is the one convention worth special-casing generically: any
@@ -80,10 +80,13 @@ export function configKeyInfo(key: string): ConfigKeyInfo {
  * for a command that may not even exist would be worse than an empty cell.
  */
 const ACTION_EXECUTE_LABELS: Record<string, string> = {
-  "verity.plywood.customer": "Set customer credit limits",
-  "verity.plywood.purchase_order": "Submit, receive goods & cancel purchase orders",
-  "verity.plywood.sales_order": "Approve credit, dispatch & cancel sales orders",
-  "verity.plywood.stock_ledger": "Adjust, write off & return stock",
+  // ADR-018 renamed these entities verity.plywood.* -> verity.trading.*;
+  // Permission rows are migrated forward (unlike audit history, a grant is
+  // current state, not a fact about the past), so only the new key is listed.
+  "verity.trading.customer": "Set customer credit limits",
+  "verity.trading.purchase_order": "Submit, receive goods & cancel purchase orders",
+  "verity.trading.sales_order": "Approve credit, dispatch & cancel sales orders",
+  "verity.trading.stock_ledger": "Adjust, write off & return stock",
   "verity.approval.request": "Decide pending approvals",
   "verity.dinein.menu_item": "Retire or restore menu items",
   "verity.dinein.table": "Move tables on the floor plan",

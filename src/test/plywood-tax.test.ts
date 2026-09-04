@@ -1,3 +1,4 @@
+import { TRADING_CAPABILITY } from "@/server/capabilities/trading";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -131,6 +132,7 @@ describeDb("plywood tax (slice 6)", () => {
       await activateCapability(tx, tenantId, LOCATION_CAPABILITY);
       await activateCapability(tx, tenantId, ASSET_CAPABILITY);
       await activateCapability(tx, tenantId, EVIDENCE_CAPABILITY);
+      await activateCapability(tx, tenantId, TRADING_CAPABILITY);
       await activateCapability(tx, tenantId, PLYWOOD_CAPABILITY);
 
       await setConfig(tx, tenantId, CONFIG_TENANT_STATE_CODE, "07", "Tenant");
@@ -267,7 +269,7 @@ describeDb("plywood tax (slice 6)", () => {
       await executeCommand(owner, setTaxRule, { hsnCode: "44129900", rateBp: 1200 });
 
       const registration = await withTenant(tenantId, (tx) =>
-        tx.plywoodGstRegistration.findFirstOrThrow({ where: { active: true } }),
+        tx.tradingGstRegistration.findFirstOrThrow({ where: { active: true } }),
       );
       const specific = await withTenant(tenantId, (tx) =>
         resolveTaxRate(tx, { registrationId: registration.id, hsnCode: "44129900", on: new Date() }),
@@ -284,7 +286,7 @@ describeDb("plywood tax (slice 6)", () => {
 
     it("refuses rather than returning zero when no rule is in force", async () => {
       const registration = await withTenant(tenantId, (tx) =>
-        tx.plywoodGstRegistration.findFirstOrThrow({ where: { active: true } }),
+        tx.tradingGstRegistration.findFirstOrThrow({ where: { active: true } }),
       );
 
       // A missing rate used to mean a zero-tax invoice, which is
@@ -308,7 +310,7 @@ describeDb("plywood tax (slice 6)", () => {
       expect(result.supersededRuleId).not.toBeNull();
 
       const registration = await withTenant(tenantId, (tx) =>
-        tx.plywoodGstRegistration.findFirstOrThrow({ where: { active: true } }),
+        tx.tradingGstRegistration.findFirstOrThrow({ where: { active: true } }),
       );
       // Today still resolves to 18%; tomorrow to 12%. The old row is closed,
       // not rewritten — rewriting it would restate a filed return.
@@ -347,7 +349,7 @@ describeDb("plywood tax (slice 6)", () => {
       const invoice = await sell(productId, customerId);
 
       const stored = await withTenant(tenantId, (tx) =>
-        tx.plywoodInvoice.findUniqueOrThrow({ where: { id: invoice.id } }),
+        tx.tradingInvoice.findUniqueOrThrow({ where: { id: invoice.id } }),
       );
       expect(stored.cgstPaise).toBeGreaterThan(0);
       expect(stored.sgstPaise).toBe(stored.cgstPaise);
@@ -361,7 +363,7 @@ describeDb("plywood tax (slice 6)", () => {
       const invoice = await sell(productId, customerId);
 
       const stored = await withTenant(tenantId, (tx) =>
-        tx.plywoodInvoice.findUniqueOrThrow({ where: { id: invoice.id } }),
+        tx.tradingInvoice.findUniqueOrThrow({ where: { id: invoice.id } }),
       );
       // 18% either way. Interstate is the two halves expressed once, derived
       // rather than stored twice so the two cannot drift apart.

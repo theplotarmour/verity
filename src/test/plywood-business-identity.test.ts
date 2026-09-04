@@ -1,3 +1,4 @@
+import { TRADING_CAPABILITY } from "@/server/capabilities/trading";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -196,6 +197,7 @@ describeDb("plywood business identity (slice 2)", () => {
       await activateCapability(tx, tenantId, LOCATION_CAPABILITY);
       await activateCapability(tx, tenantId, ASSET_CAPABILITY);
       await activateCapability(tx, tenantId, EVIDENCE_CAPABILITY);
+      await activateCapability(tx, tenantId, TRADING_CAPABILITY);
       await activateCapability(tx, tenantId, PLYWOOD_CAPABILITY);
 
       // Rates still come from configuration until slice 6 replaces them with
@@ -378,7 +380,7 @@ describeDb("plywood business identity (slice 2)", () => {
     const invoice = issued.invoicing!;
 
     const stored = await withTenant(tenantId, (tx) =>
-      tx.plywoodInvoice.findUniqueOrThrow({ where: { id: invoice.id } }),
+      tx.tradingInvoice.findUniqueOrThrow({ where: { id: invoice.id } }),
     );
     expect(stored.sellerGstinSnapshot).toBe("07AAACN1234K1Z5");
     expect(stored.sellerLegalNameSnapshot).toBe("Naksh Plywood Private Limited");
@@ -392,7 +394,7 @@ describeDb("plywood business identity (slice 2)", () => {
       legalName: "Naksh Boards and Plywood Private Limited",
     });
     const after = await withTenant(tenantId, (tx) =>
-      tx.plywoodInvoice.findUniqueOrThrow({ where: { id: invoice.id } }),
+      tx.tradingInvoice.findUniqueOrThrow({ where: { id: invoice.id } }),
     );
     expect(after.sellerLegalNameSnapshot).toBe("Naksh Plywood Private Limited");
   });

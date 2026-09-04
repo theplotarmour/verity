@@ -123,7 +123,7 @@ export default async function OverviewPage() {
   const items = itemsPanel.status === "ok" ? itemsPanel.data : [];
 
   const businessName = await withTenant(actor.tenantId, async (tx) => {
-    const profile = await tx.plywoodBusinessProfile.findFirst({
+    const profile = await tx.tradingBusinessProfile.findFirst({
       select: { tradeName: true, legalName: true },
     });
     if (profile?.tradeName) return profile.tradeName;

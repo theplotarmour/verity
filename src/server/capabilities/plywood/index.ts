@@ -5,238 +5,61 @@ import {
   ValidationError,
   type CommandDefinition,
 } from "@/server/platform/command";
-import { registerBusinessIdentity } from "./business";
-import { registerTax } from "./tax";
-import { registerBusinessActivities } from "./activities";
-import { registerReports } from "./reports";
-import { registerItc } from "./itc";
-import { reachableGodownIds } from "./scope";
-import { registerPeriods } from "./period";
-import {
-  goodsReceiptDetail,
-  purchaseMatch,
-  purchaseReviewQueue,
-  raiseInvoiceNote,
-} from "./finance";
-import {
-  godownDetail,
-  productDetail,
-  supplierPrices,
-  customerPrices,
-  sellableStock,
-  stockLedger,
-} from "./views";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import { diffFields, recordActivity } from "@/server/platform/audit";
 import { notify } from "@/server/platform/notification";
-import { withTenant, type TenantScopedClient } from "@/server/platform/tenancy";
+import { withTenant } from "@/server/platform/tenancy";
+import { PLYWOOD_CAPABILITY } from "./keys";
+import { productDetail } from "./views";
 import {
-  ENTITY_BRAND,
-  ENTITY_ACCOUNTING_PERIOD,
-  ENTITY_BUSINESS_PROFILE,
-  ENTITY_GODOWN_RACK,
+  registerTradingCapability,
   ENTITY_PRODUCT,
+  ENTITY_SUPPLIER,
+  ENTITY_PURCHASE_ORDER,
+  ENTITY_CUSTOMER,
+  ENTITY_SALES_ORDER,
   ENTITY_STOCK_BALANCE,
   ENTITY_STOCK_LEDGER,
-  ENTITY_CUSTOMER,
-  ENTITY_GST_REGISTRATION,
-  ENTITY_PURCHASE_ORDER,
-  ENTITY_SALES_ORDER,
-  ENTITY_SUPPLIER,
   ENTITY_INVOICE,
-  ENTITY_LEDGER_ENTRY,
   ENTITY_PAYMENT,
+  ENTITY_LEDGER_ENTRY,
   ENTITY_SUPPLIER_PRICE,
+  ENTITY_GST_REGISTRATION,
+  ENTITY_BUSINESS_PROFILE,
   HSN_CODE,
-  PLYWOOD_CAPABILITY,
-} from "./keys";
-import {
-  adjustStock,
-  issueStock,
-  lowStock,
-  productMovements,
-  receiveStock,
-  recordDamagedStock,
-  recordReturnedStock,
-  stockOnHand,
-  transferStock,
-} from "./stock";
-import {
-  approveCredit,
-  cancelPurchaseOrder,
-  cancelSalesOrder,
-  createCustomer,
-  createPurchaseOrder,
-  createSalesOrder,
-  createSupplier,
-  editSalesOrder,
-  editPurchaseOrder,
-  removeCustomer,
-  editCustomer,
-  removeSupplier,
-  editSupplier,
-  dispatchOrder,
-  customerDetail,
-  listCustomers,
-  listSuppliers,
-  supplierDetail,
-  openOrders,
-  purchaseOrderDetail,
-  receiveGoods,
-  linkSupplierToCustomer,
-  reserveForOrder,
-  salesOrderDetail,
-  setCreditLimit,
-  setCustomerPrice,
-  setSupplierPrice,
-  setPriceSheet,
-  stockAvailability,
-  submitPurchaseOrder,
-  needsAttention,
-} from "./trading";
-import {
-  invoiceDetail,
-  listInvoices,
-  outstandingReceivables,
-  partyBalances,
-  paymentJournal,
-  unbilledMovements,
-  partyLedger,
-  raisePurchaseInvoice,
-  marginReport,
-  ownerConsole,
-  raiseSalesInvoice,
-  recordPayment,
-  recordPartyPayment,
-  confirmPurchaseBill,
-  raisePurchaseBillFromOrder,
   captureMetricSnapshot,
-  metricsHistory,
-  weeklySalesTotals,
-  weeklyPurchaseTotals,
-  topCustomers,
-  topItems,
-  recentActivityFeed,
-} from "./finance";
+  stockOnHand as tradingStockOnHand,
+} from "../trading";
 
 /**
- * CAPABILITY: Plywood trading — `verity.capability.plywood`
+ * CAPABILITY: Plywood — `verity.capability.plywood`
  *
- * Built for a plywood, laminate, MDF and board trading business (plywood.md),
- * and reusable by the next board trader without a fork: brands, sizes, grades,
- * godowns and racks are all data.
+ * ADR-018 shrank this to plywood's own board-dimension/grade taxonomy —
+ * everything generic (parties, orders, invoicing, GST, payments, ledger,
+ * stock, brands, godown racks) now lives in `../trading`
+ * (`verity.capability.trading`), which this capability depends on
+ * (`CapabilityDefinition.dependencies`, DB-trigger-enforced) and re-exports
+ * wholesale below, so nothing importing from `@/server/capabilities/plywood`
+ * had to change.
  *
- * BUILT IN STAGES. `implementation/plywood-gap-analysis.md` §6 sequences them and
- * `implementation/plywood-decisions.md` records the six decisions they turn on.
- *   1 — catalogue and godown racks (this file)
- *   2 — the stock ledger and weighted average cost (`stock.ts`)
- *   3, 4 — suppliers, customers, purchase and sales orders (`trading.ts`)
- * Finance, the dashboard and the service-chain fixture follow. Logistics was
- * removed in slice 2: stock leaves a godown through a Goods Issue and nothing
- * else, or the stock ledger cannot be proven.
- *
- * This file holds the catalogue and the capability's registration; each later
- * stage is its own module so the capability can grow without one file becoming
- * the place everything is looked for.
- *
- * WHAT THIS CAPABILITY REUSES
- * A godown is a `Location` (ADR-004), not a new primitive — the capability adds
- * only the rack inside it, which no existing primitive carries. That reuse is
- * declared as a capability dependency in the install migration rather than
- * discovered at runtime by a failing foreign key.
- *
- * WHAT THIS CAPABILITY DOES NOT TOUCH
- * Nothing in `src/server/platform/`. Every mutation is a registered command,
- * every read a registered query, and tenant isolation comes from the ordinary
- * RLS policy on each new table.
+ * WHAT THIS CAPABILITY STILL OWNS
+ * `createProduct`/`editProduct`/`setProductActive`/`listCatalogue` — each
+ * writes/reads BOTH the generic `TradingProduct` base row (name, brand, HSN,
+ * type, reorder level, unit label) and this capability's own
+ * `PlywoodProductDetail` extension (thickness, category, size, grade) in one
+ * transaction, so the UI-facing "create a product" contract is exactly what
+ * it was before the split — one call, one form, one product.
  */
 
+export * from "../trading";
 export * from "./keys";
-export * from "./business";
-export * from "./tax";
-export * from "./period";
-export * from "./stock";
-export * from "./trading";
-export * from "./finance";
 export * from "./views";
-export * from "./activities";
-export * from "./reports";
-export * from "./itc";
-
-/* ================================= brands ================================= */
-
-export const createBrand: CommandDefinition<{ name: string }, { id: string }> =
-  {
-    key: "verity.plywood.create_brand",
-    entity: ENTITY_BRAND,
-    verb: "Create",
-    input: z.object({ name: z.string().min(1).max(120) }),
-    preconditions: async (ctx, input) => {
-      // The unique index would catch this, but a named failure reads better than
-      // a constraint violation on a screen.
-      const clash = await ctx.tx.plywoodBrand.findFirst({
-        where: { name: input.name },
-      });
-      if (clash)
-        throw new ValidationError(
-          "E_VALIDATION: a brand with that name already exists",
-        );
-    },
-    handler: async (ctx, input) => {
-      const brand = await ctx.tx.plywoodBrand.create({
-        data: { tenantId: ctx.actor.tenantId, name: input.name },
-      });
-      return {
-        result: { id: brand.id },
-        events: [{ name: "verity.plywood.brand_created", entityId: brand.id }],
-      };
-    },
-  };
-
-export const setBrandActive: CommandDefinition<
-  { brandId: string; active: boolean },
-  { id: string }
-> = {
-  key: "verity.plywood.set_brand_active",
-  entity: ENTITY_BRAND,
-  verb: "Edit",
-  input: z.object({ brandId: z.string().uuid(), active: z.boolean() }),
-  handler: async (ctx, input) => {
-    // Deactivated, never deleted. A brand that has been traded is referenced by
-    // products, and eventually by ledger history that must stay readable.
-    const brand = await ctx.tx.plywoodBrand.update({
-      where: { id: input.brandId },
-      data: { active: input.active, version: { increment: 1 } },
-    });
-    return {
-      result: { id: brand.id },
-      events: [
-        {
-          name: input.active
-            ? "verity.plywood.brand_activated"
-            : "verity.plywood.brand_deactivated",
-          entityId: brand.id,
-        },
-      ],
-    };
-  },
-};
-
-/* ================================ products ================================ */
-
-/**
- * PHYSICAL holds stock; SERVICE (sawing, estimating, rentals) never does —
- * see `stock.ts`'s `assertTradeable` and the reservation/dispatch/receive
- * loops in `trading.ts`. A TS union validated by `PRODUCT_TYPES` below, the
- * same shape as `MovementKind` in `stock.ts` — not a Postgres enum, kept
- * consistent with this capability's other closed-set fields (`grade`, order
- * `state`, movement `kind`), all plain strings.
- */
 export {
   PRODUCT_CATEGORIES,
   SIZE_UNITS,
   CATEGORY_RULES,
   formatProductSize,
+  productLabel,
   type ProductCategory,
   type SizeUnit,
 } from "./product";
@@ -249,6 +72,8 @@ import {
 
 export const PRODUCT_TYPES = ["PHYSICAL", "SERVICE"] as const;
 export type ProductType = (typeof PRODUCT_TYPES)[number];
+
+/* ================================ products ================================ */
 
 export const createProduct: CommandDefinition<
   {
@@ -294,7 +119,7 @@ export const createProduct: CommandDefinition<
     type: z.enum(PRODUCT_TYPES).optional(),
   }),
   preconditions: async (ctx, input) => {
-    const brand = await ctx.tx.plywoodBrand.findUnique({
+    const brand = await ctx.tx.tradingBrand.findUnique({
       where: { id: input.brandId },
     });
     if (!brand)
@@ -339,12 +164,23 @@ export const createProduct: CommandDefinition<
       heightTenth: input.heightTenth ?? null,
     };
 
-    const product = await ctx.tx.plywoodProduct.create({
+    // One transaction, two tables: the generic base and plywood's own
+    // dimension/grade extension (ADR-018). The UI still sees one call.
+    const product = await ctx.tx.tradingProduct.create({
       data: {
         tenantId: ctx.actor.tenantId,
         brandId: input.brandId,
         name: input.name,
         hsnCode: input.hsnCode,
+        reorderLevelUnits: input.reorderLevelUnits ?? 0,
+        unitLabel: input.unitLabel ?? "sheets",
+        type: input.type ?? "PHYSICAL",
+      },
+    });
+    await ctx.tx.plywoodProductDetail.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        productId: product.id,
         thicknessTenthMm: input.thicknessTenthMm ?? null,
         category,
         sizeUnit: rules.sizeUnit,
@@ -352,9 +188,6 @@ export const createProduct: CommandDefinition<
         heightTenth: size.heightTenth,
         grade: input.grade,
         sheetWeightGrams: input.sheetWeightGrams ?? null,
-        reorderLevelUnits: input.reorderLevelUnits ?? 0,
-        unitLabel: input.unitLabel ?? "sheets",
-        type: input.type ?? "PHYSICAL",
       },
     });
     return {
@@ -412,9 +245,11 @@ export const editProduct: CommandDefinition<
     category: z.enum(PRODUCT_CATEGORIES).optional(),
   }),
   handler: async (ctx, input) => {
-    const before = await ctx.tx.plywoodProduct.findUniqueOrThrow({
+    const before = await ctx.tx.tradingProduct.findUniqueOrThrow({
       where: { id: input.productId },
+      include: { plywoodDetail: true },
     });
+    const beforeDetail = before.plywoodDetail;
 
     // A type change is only safe while the product has no stock history. Once
     // sheets have moved, calling it a service would orphan those movements —
@@ -442,7 +277,10 @@ export const editProduct: CommandDefinition<
       heightTenth: number | null;
     } | null = null;
 
-    if (input.category !== undefined && input.category !== before.category) {
+    if (
+      input.category !== undefined &&
+      input.category !== beforeDetail?.category
+    ) {
       const movements = await ctx.tx.stockLedgerEntry.count({
         where: { productId: input.productId },
       });
@@ -454,17 +292,27 @@ export const editProduct: CommandDefinition<
       }
 
       const rules = CATEGORY_RULES[input.category];
-      const hasSize = before.widthTenth != null && before.heightTenth != null;
+      const hasSize =
+        beforeDetail?.widthTenth != null && beforeDetail?.heightTenth != null;
 
       // 8 ft is not 8 in. Re-labelling the unit while leaving the number alone
       // would turn a stated size into a different one without anyone typing a
       // digit, so the size has to go back through creation instead.
-      if (hasSize && rules.sizeUnit !== before.sizeUnit && !rules.fixedSizeTenth) {
+      if (
+        hasSize &&
+        rules.sizeUnit !== beforeDetail?.sizeUnit &&
+        !rules.fixedSizeTenth
+      ) {
+        const fromUnit =
+          beforeDetail?.sizeUnit === "FT"
+            ? "feet"
+            : beforeDetail?.sizeUnit === "IN"
+              ? "inches"
+              : "millimetres";
         throw new ValidationError(
           `E_VALIDATION: a ${rules.label.toLowerCase()} is sized in ` +
             `${rules.sizeUnit === "FT" ? "feet" : rules.sizeUnit === "IN" ? "inches" : "millimetres"}, ` +
-            `and ${before.name} is recorded in ` +
-            `${before.sizeUnit === "FT" ? "feet" : before.sizeUnit === "IN" ? "inches" : "millimetres"}. ` +
+            `and ${before.name} is recorded in ${fromUnit}. ` +
             "Withdraw it and add it again at the right size.",
         );
       }
@@ -474,23 +322,18 @@ export const editProduct: CommandDefinition<
         sizeUnit: rules.sizeUnit,
         widthTenth: rules.fixedSizeTenth
           ? rules.fixedSizeTenth.widthTenth
-          : before.widthTenth,
+          : (beforeDetail?.widthTenth ?? null),
         heightTenth: rules.fixedSizeTenth
           ? rules.fixedSizeTenth.heightTenth
-          : before.heightTenth,
+          : (beforeDetail?.heightTenth ?? null),
       };
     }
 
-    const after = await ctx.tx.plywoodProduct.update({
+    const after = await ctx.tx.tradingProduct.update({
       where: { id: input.productId },
       data: {
-        ...(sizeChange === null ? {} : sizeChange),
         ...(input.name === undefined ? {} : { name: input.name }),
         ...(input.hsnCode === undefined ? {} : { hsnCode: input.hsnCode }),
-        ...(input.grade === undefined ? {} : { grade: input.grade }),
-        ...(input.sheetWeightGrams === undefined
-          ? {}
-          : { sheetWeightGrams: input.sheetWeightGrams }),
         ...(input.reorderLevelUnits === undefined
           ? {}
           : { reorderLevelUnits: input.reorderLevelUnits }),
@@ -499,6 +342,16 @@ export const editProduct: CommandDefinition<
           : { unitLabel: input.unitLabel }),
         ...(input.type === undefined ? {} : { type: input.type }),
         version: { increment: 1 },
+      },
+    });
+    await ctx.tx.plywoodProductDetail.update({
+      where: { productId: input.productId },
+      data: {
+        ...(sizeChange === null ? {} : sizeChange),
+        ...(input.grade === undefined ? {} : { grade: input.grade }),
+        ...(input.sheetWeightGrams === undefined
+          ? {}
+          : { sheetWeightGrams: input.sheetWeightGrams }),
       },
     });
 
@@ -512,18 +365,18 @@ export const editProduct: CommandDefinition<
         {
           name: before.name,
           hsnCode: before.hsnCode,
-          grade: before.grade,
+          grade: beforeDetail?.grade,
           reorderLevelUnits: before.reorderLevelUnits,
           type: before.type,
-          category: before.category,
+          category: beforeDetail?.category,
         },
         {
           name: after.name,
           hsnCode: after.hsnCode,
-          grade: after.grade,
+          grade: input.grade ?? beforeDetail?.grade,
           reorderLevelUnits: after.reorderLevelUnits,
           type: after.type,
-          category: after.category,
+          category: input.category ?? beforeDetail?.category,
         },
       ),
     });
@@ -553,7 +406,7 @@ export const setProductActive: CommandDefinition<
   verb: "Edit",
   input: z.object({ productId: z.string().uuid(), active: z.boolean() }),
   handler: async (ctx, input) => {
-    const product = await ctx.tx.plywoodProduct.update({
+    const product = await ctx.tx.tradingProduct.update({
       where: { id: input.productId },
       data: { active: input.active, version: { increment: 1 } },
     });
@@ -571,82 +424,7 @@ export const setProductActive: CommandDefinition<
   },
 };
 
-/* ============================== godown racks ============================== */
-
-export const defineGodownRack: CommandDefinition<
-  { locationId: string; rackLabel: string },
-  { id: string }
-> = {
-  key: "verity.plywood.define_godown_rack",
-  entity: ENTITY_GODOWN_RACK,
-  verb: "Create",
-  input: z.object({
-    locationId: z.string().uuid(),
-    rackLabel: z.string().min(1).max(60),
-  }),
-  preconditions: async (ctx, input) => {
-    // The composite foreign key would reject a cross-tenant Location, but a
-    // named precondition is a better error than a constraint violation.
-    const location = await ctx.tx.location.findUnique({
-      where: { id: input.locationId },
-    });
-    if (!location)
-      throw new ValidationError(
-        "E_VALIDATION: godown not found in this tenant",
-      );
-    const clash = await ctx.tx.godownRack.findFirst({
-      where: { locationId: input.locationId, rackLabel: input.rackLabel },
-    });
-    if (clash)
-      throw new ValidationError(
-        "E_VALIDATION: that rack already exists in this godown",
-      );
-  },
-  handler: async (ctx, input) => {
-    const rack = await ctx.tx.godownRack.create({
-      data: {
-        tenantId: ctx.actor.tenantId,
-        locationId: input.locationId,
-        rackLabel: input.rackLabel,
-      },
-    });
-    return {
-      result: { id: rack.id },
-      events: [
-        { name: "verity.plywood.godown_rack_defined", entityId: rack.id },
-      ],
-    };
-  },
-};
-
-export const setGodownRackActive: CommandDefinition<
-  { rackId: string; active: boolean },
-  { id: string }
-> = {
-  key: "verity.plywood.set_godown_rack_active",
-  entity: ENTITY_GODOWN_RACK,
-  verb: "Edit",
-  input: z.object({ rackId: z.string().uuid(), active: z.boolean() }),
-  handler: async (ctx, input) => {
-    const rack = await ctx.tx.godownRack.update({
-      where: { id: input.rackId },
-      data: { active: input.active, version: { increment: 1 } },
-    });
-    return {
-      result: { id: rack.id },
-      events: [
-        {
-          name: input.active
-            ? "verity.plywood.godown_rack_activated"
-            : "verity.plywood.godown_rack_retired",
-          entityId: rack.id,
-        },
-      ],
-    };
-  },
-};
-
-/* ================================ queries ================================= */
+/* ================================= queries ================================= */
 
 export const listCatalogue: QueryDefinition<
   { includeInactive?: boolean; brandId?: string },
@@ -678,7 +456,7 @@ export const listCatalogue: QueryDefinition<
     brandId: z.string().uuid().optional(),
   }),
   handler: async (ctx, input) => {
-    const brands = await ctx.tx.plywoodBrand.findMany({
+    const brands = await ctx.tx.tradingBrand.findMany({
       where: {
         ...(input.includeInactive ? {} : { active: true }),
         ...(input.brandId ? { id: input.brandId } : {}),
@@ -688,6 +466,7 @@ export const listCatalogue: QueryDefinition<
         products: {
           where: input.includeInactive ? {} : { active: true },
           orderBy: [{ name: "asc" }],
+          include: { plywoodDetail: true },
         },
       },
     });
@@ -700,12 +479,12 @@ export const listCatalogue: QueryDefinition<
         id: product.id,
         name: product.name,
         hsnCode: product.hsnCode,
-        thicknessTenthMm: product.thicknessTenthMm,
-        category: product.category as ProductCategory,
-        sizeUnit: product.sizeUnit as SizeUnit,
-        widthTenth: product.widthTenth,
-        heightTenth: product.heightTenth,
-        grade: product.grade,
+        thicknessTenthMm: product.plywoodDetail?.thicknessTenthMm ?? null,
+        category: (product.plywoodDetail?.category ?? "OTHER") as ProductCategory,
+        sizeUnit: (product.plywoodDetail?.sizeUnit ?? "MM") as SizeUnit,
+        widthTenth: product.plywoodDetail?.widthTenth ?? null,
+        heightTenth: product.plywoodDetail?.heightTenth ?? null,
+        grade: product.plywoodDetail?.grade ?? "",
         unitLabel: product.unitLabel,
         reorderLevelUnits: product.reorderLevelUnits,
         active: product.active,
@@ -715,68 +494,54 @@ export const listCatalogue: QueryDefinition<
   },
 };
 
-export const listGodownRacks: QueryDefinition<
-  { locationId?: string; includeInactive?: boolean },
+/**
+ * `trading.stockOnHand`, augmented with plywood's `grade` — the one field
+ * the stock board (`StockBoard.tsx`) actually renders per row that the
+ * generic query cannot know about. Shadows the star-re-exported binding
+ * from `../trading` (ES module semantics: a local export always wins over
+ * one brought in by `export *`), so anything importing `stockOnHand` from
+ * `@/server/capabilities/plywood` gets this version. Registered under its
+ * own key — `verity.trading.stock_on_hand` is already taken by the
+ * ungraded version `registerTradingCapability()` registers.
+ */
+export const stockOnHand: QueryDefinition<
+  { locationId?: string; productId?: string },
   Array<{
+    productId: string;
+    productName: string;
+    brandName: string;
+    grade: string;
+    unitLabel: string;
     locationId: string;
     locationName: string;
-    racks: Array<{ id: string; rackLabel: string; active: boolean }>;
+    qtyUnits: number;
+    avgUnitCostPaise: number;
+    valuePaise: number;
   }>
 > = {
-  key: "verity.plywood.list_godown_racks",
-  entity: ENTITY_GODOWN_RACK,
-  input: z.object({
-    locationId: z.string().uuid().optional(),
-    includeInactive: z.boolean().optional(),
-  }),
+  key: "verity.plywood.stock_on_hand",
+  entity: ENTITY_STOCK_BALANCE,
+  input: tradingStockOnHand.input,
   handler: async (ctx, input) => {
-    // Layer 2. Audit finding F-09: rack layout is a map of another branch's
-    // godown, and it was readable tenant-wide.
-    const reachable = await reachableGodownIds(
-      ctx.tx,
-      ctx.actor,
-      ENTITY_GODOWN_RACK,
-    );
-    const racks = await ctx.tx.godownRack.findMany({
-      where: {
-        locationId: { in: reachable },
-        ...(input.locationId ? { locationId: input.locationId } : {}),
-        ...(input.includeInactive ? {} : { active: true }),
-      },
-      orderBy: [{ locationId: "asc" }, { rackLabel: "asc" }],
-      include: { location: { select: { id: true, name: true } } },
+    const rows = await tradingStockOnHand.handler(ctx, input);
+    if (rows.length === 0) return [];
+    const details = await ctx.tx.plywoodProductDetail.findMany({
+      where: { productId: { in: [...new Set(rows.map((r) => r.productId))] } },
+      select: { productId: true, grade: true },
     });
-
-    // Grouped in code rather than by a second query: the row count here is
-    // racks in one business's godowns, and a join already carried the name.
-    const byLocation = new Map<
-      string,
-      {
-        locationId: string;
-        locationName: string;
-        racks: Array<{ id: string; rackLabel: string; active: boolean }>;
-      }
-    >();
-    for (const rack of racks) {
-      const existing = byLocation.get(rack.locationId) ?? {
-        locationId: rack.locationId,
-        locationName: rack.location.name,
-        racks: [],
-      };
-      existing.racks.push({
-        id: rack.id,
-        rackLabel: rack.rackLabel,
-        active: rack.active,
-      });
-      byLocation.set(rack.locationId, existing);
-    }
-    return [...byLocation.values()];
+    const gradeOf = new Map(details.map((d) => [d.productId, d.grade]));
+    return rows.map((row) => ({
+      ...row,
+      grade: gradeOf.get(row.productId) ?? "",
+    }));
   },
 };
 
 /* ============================== registration ============================== */
 
 export function registerPlywoodCapability(): void {
+  registerTradingCapability();
+
   registerContribution({
     capabilityId: PLYWOOD_CAPABILITY,
     navigation: [
@@ -1005,7 +770,7 @@ export function registerPlywoodCapability(): void {
           withTenant(tenantId, async (tx) => {
             const rows = await tx.$queryRaw<{ count: bigint }[]>`
               SELECT count(*)::bigint AS count
-                FROM plywood_product p
+                FROM trading_product p
                WHERE p.active
                  AND p.reorder_level_units > 0
                  AND COALESCE((
@@ -1038,7 +803,7 @@ export function registerPlywoodCapability(): void {
                    p.name,
                    COALESCE((SELECT sum(b.qty_units) FROM stock_balance b WHERE b.product_id = p.id), 0) AS on_hand,
                    p.reorder_level_units
-              FROM plywood_product p
+              FROM trading_product p
              WHERE p.active
                AND p.reorder_level_units > 0
                AND COALESCE((SELECT sum(b.qty_units) FROM stock_balance b WHERE b.product_id = p.id), 0)
@@ -1102,98 +867,18 @@ export function registerPlywoodCapability(): void {
         // Daily — a metric snapshot is a business-day fact, not something
         // that needs frequent/hourly resolution. Task 100's own missing
         // prerequisite for a real sparkline: see captureMetricSnapshot's
-        // module comment in finance.ts for the full reasoning.
+        // module comment in trading/finance.ts for the full reasoning.
         cadence: "daily",
         run: async ({ tx, tenantId }) => captureMetricSnapshot(tx, tenantId),
       },
     ],
   });
 
-  registerBusinessIdentity();
-  registerTax();
-  registerBusinessActivities();
-  registerReports();
-  registerItc();
-  registerPeriods();
-  registerCommand(createBrand);
-  registerCommand(setBrandActive);
   registerCommand(createProduct);
   registerCommand(editProduct);
   registerCommand(setProductActive);
-  registerCommand(defineGodownRack);
-  registerCommand(setGodownRackActive);
-  registerCommand(receiveStock);
-  registerCommand(issueStock);
-  registerCommand(transferStock);
-  registerCommand(adjustStock);
-  registerCommand(recordDamagedStock);
-  registerCommand(recordReturnedStock);
-  registerCommand(createSupplier);
-  registerCommand(editSalesOrder);
-  registerCommand(editPurchaseOrder);
-  registerCommand(removeCustomer);
-  registerCommand(editCustomer);
-  registerCommand(removeSupplier);
-  registerCommand(editSupplier);
-  registerCommand(setSupplierPrice);
-  registerCommand(setPriceSheet);
-  registerCommand(createCustomer);
-  registerCommand(setCustomerPrice);
-  registerCommand(setCreditLimit);
-  registerCommand(createPurchaseOrder);
-  registerCommand(submitPurchaseOrder);
-  registerCommand(receiveGoods);
-  registerCommand(linkSupplierToCustomer);
-  registerCommand(cancelPurchaseOrder);
-  registerCommand(createSalesOrder);
-  registerCommand(approveCredit);
-  registerCommand(reserveForOrder);
-  registerCommand(dispatchOrder);
-  registerCommand(cancelSalesOrder);
-  registerCommand(raiseSalesInvoice);
-  registerCommand(raisePurchaseInvoice);
-  registerCommand(recordPayment);
-  registerCommand(recordPartyPayment);
-  registerCommand(confirmPurchaseBill);
-  registerCommand(raisePurchaseBillFromOrder);
-  registerCommand(raiseInvoiceNote);
 
   registerQuery(listCatalogue);
-  registerQuery(listGodownRacks);
-  registerQuery(stockOnHand);
-  registerQuery(lowStock);
-  registerQuery(productMovements);
-  registerQuery(purchaseMatch);
-  registerQuery(goodsReceiptDetail);
-  registerQuery(listSuppliers);
-  registerQuery(supplierDetail);
-  registerQuery(listCustomers);
-  registerQuery(customerDetail);
   registerQuery(productDetail);
-  registerQuery(supplierPrices);
-  registerQuery(customerPrices);
-  registerQuery(godownDetail);
-  registerQuery(stockLedger);
-  registerQuery(sellableStock);
-  registerQuery(purchaseReviewQueue);
-  registerQuery(purchaseOrderDetail);
-  registerQuery(salesOrderDetail);
-  registerQuery(openOrders);
-  registerQuery(stockAvailability);
-  registerQuery(listInvoices);
-  registerQuery(invoiceDetail);
-  registerQuery(outstandingReceivables);
-  registerQuery(partyLedger);
-  registerQuery(partyBalances);
-  registerQuery(paymentJournal);
-  registerQuery(unbilledMovements);
-  registerQuery(ownerConsole);
-  registerQuery(metricsHistory);
-  registerQuery(weeklySalesTotals);
-  registerQuery(weeklyPurchaseTotals);
-  registerQuery(topCustomers);
-  registerQuery(topItems);
-  registerQuery(recentActivityFeed);
-  registerQuery(needsAttention);
-  registerQuery(marginReport);
+  registerQuery(stockOnHand);
 }

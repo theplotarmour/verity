@@ -1,3 +1,4 @@
+import { TRADING_CAPABILITY } from "@/server/capabilities/trading";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
@@ -154,6 +155,7 @@ describeDb("capability: Plywood trading — finance", () => {
       await activateCapability(tx, tenantId, LOCATION_CAPABILITY);
       await activateCapability(tx, tenantId, ASSET_CAPABILITY);
       await activateCapability(tx, tenantId, EVIDENCE_CAPABILITY);
+      await activateCapability(tx, tenantId, TRADING_CAPABILITY);
       await activateCapability(tx, tenantId, PLYWOOD_CAPABILITY);
 
       // The rates and the business's own state are configuration; the
@@ -168,18 +170,23 @@ describeDb("capability: Plywood trading — finance", () => {
         await tx.location.create({ data: { tenantId, organizationId, name: "Okhla" } })
       ).id;
 
-      const brand = await tx.plywoodBrand.create({ data: { tenantId, name: "Century Ply" } });
+      const brand = await tx.tradingBrand.create({ data: { tenantId, name: "Century Ply" } });
       productId = (
-        await tx.plywoodProduct.create({
+        await tx.tradingProduct.create({
           data: {
             tenantId,
             brandId: brand.id,
             name: "Sainik 710",
             hsnCode: "44121000",
-            thicknessTenthMm: 180,
-      widthTenth: 24400,
-            heightTenth: 12200,
-            grade: "BWR",
+            plywoodDetail: {
+              create: {
+                tenant: { connect: { id: tenantId } },
+                thicknessTenthMm: 180,
+                widthTenth: 24400,
+                heightTenth: 12200,
+                grade: "BWR",
+              },
+            },
           },
         })
       ).id;
@@ -263,7 +270,7 @@ describeDb("capability: Plywood trading — finance", () => {
     unitPricePaise = 100_000,
   ): Promise<string> {
     return withTenant(tenantId, async (tx) => {
-      const order = await tx.plywoodSalesOrder.create({
+      const order = await tx.tradingSalesOrder.create({
         data: {
           tenantId,
           customerId,
@@ -272,7 +279,7 @@ describeDb("capability: Plywood trading — finance", () => {
           totalPricePaise: qtyOrdered * unitPricePaise,
         },
       });
-      await tx.plywoodSalesOrderLine.create({
+      await tx.tradingSalesOrderLine.create({
         data: {
           tenantId,
           salesOrderId: order.id,
@@ -336,7 +343,7 @@ describeDb("capability: Plywood trading — finance", () => {
 
     // And the whole series really is gapless.
     const issued = await withTenant(tenantId, (tx) =>
-      tx.plywoodInvoice.findMany({
+      tx.tradingInvoice.findMany({
         where: { financialYear: year },
         orderBy: { sequenceNumber: "asc" },
         select: { sequenceNumber: true },
@@ -383,7 +390,7 @@ describeDb("capability: Plywood trading — finance", () => {
     const invoice = await executeCommand(finance, raiseSalesInvoice, { salesOrderId: orderId });
 
     await withTenant(tenantId, (tx) =>
-      tx.plywoodCustomer.update({ where: { id: customerId }, data: { stateCode: "27" } }),
+      tx.tradingCustomer.update({ where: { id: customerId }, data: { stateCode: "27" } }),
     );
 
     // Snapshotted, so a customer relocating cannot retrospectively change how an
@@ -470,7 +477,7 @@ describeDb("capability: Plywood trading — finance", () => {
 
     await expect(
       withTenant(tenantId, (tx) =>
-        tx.$executeRaw`UPDATE plywood_ledger_entry SET amount_paise = 1 WHERE customer_id = ${customerId}::uuid`,
+        tx.$executeRaw`UPDATE trading_ledger_entry SET amount_paise = 1 WHERE customer_id = ${customerId}::uuid`,
       ),
     ).rejects.toThrow(/append-only/);
   });
@@ -482,7 +489,7 @@ describeDb("capability: Plywood trading — finance", () => {
 
     await expect(
       withTenant(tenantId, (tx) =>
-        tx.$executeRaw`DELETE FROM plywood_invoice WHERE id = ${invoice.id}::uuid`,
+        tx.$executeRaw`DELETE FROM trading_invoice WHERE id = ${invoice.id}::uuid`,
       ),
     ).rejects.toThrow(/append-only/);
   });
@@ -595,9 +602,9 @@ describeDb("capability: Plywood trading — finance", () => {
 
   it("shows another tenant no invoices, payments or ledger entries (INV-001)", async () => {
     const seen = await withTenant(otherTenantId, async (tx) => ({
-      invoices: await tx.plywoodInvoice.count(),
-      payments: await tx.plywoodPayment.count(),
-      ledger: await tx.plywoodLedgerEntry.count(),
+      invoices: await tx.tradingInvoice.count(),
+      payments: await tx.tradingPayment.count(),
+      ledger: await tx.tradingLedgerEntry.count(),
     }));
     expect(seen).toEqual({ invoices: 0, payments: 0, ledger: 0 });
   });

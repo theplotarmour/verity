@@ -1,3 +1,4 @@
+import { TRADING_CAPABILITY } from "@/server/capabilities/trading";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -118,6 +119,7 @@ describeDb("plywood purchase chain (slice 3)", () => {
       await activateCapability(tx, tenantId, LOCATION_CAPABILITY);
       await activateCapability(tx, tenantId, ASSET_CAPABILITY);
       await activateCapability(tx, tenantId, EVIDENCE_CAPABILITY);
+      await activateCapability(tx, tenantId, TRADING_CAPABILITY);
       await activateCapability(tx, tenantId, PLYWOOD_CAPABILITY);
 
       await setConfig(tx, tenantId, CONFIG_TENANT_STATE_CODE, "07", "Tenant");
@@ -256,7 +258,7 @@ describeDb("plywood purchase chain (slice 3)", () => {
       const admin = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL });
       try {
         await expect(
-          admin.$executeRaw`UPDATE plywood_goods_receipt SET supplier_challan_number = 'edited' WHERE id = ${received.receiptId}::uuid`,
+          admin.$executeRaw`UPDATE trading_goods_receipt SET supplier_challan_number = 'edited' WHERE id = ${received.receiptId}::uuid`,
         ).rejects.toThrow(/posted financial document/);
       } finally {
         await admin.$disconnect();

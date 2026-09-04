@@ -474,7 +474,7 @@ export const listBusinessActivities: QueryDefinition<
     grantCount: number;
   }>
 > = {
-  key: "verity.plywood.list_business_activities",
+  key: "verity.trading.list_business_activities",
   // Read on the product: anyone who can see the catalogue may see what the
   // activities are called. Editing a role is gated by the platform's own
   // Role permission on the commands themselves.
@@ -521,7 +521,7 @@ export const setRoleActivity: CommandDefinition<
   { roleId: string; activityKey: string; enabled: boolean },
   { granted: number; revoked: number }
 > = {
-  key: "verity.plywood.set_role_activity",
+  key: "verity.trading.set_role_activity",
   entity: ENTITY_ROLE,
   verb: "Edit",
   input: z.object({
@@ -600,7 +600,7 @@ export const setRoleActivity: CommandDefinition<
     await recordActivity(ctx, {
       entityKey: ENTITY_ROLE,
       entityId: role.id,
-      commandKey: "verity.plywood.set_role_activity",
+      commandKey: "verity.trading.set_role_activity",
       // The business label, not the grants. This row is read by whoever asks
       // later why somebody could do something, and "Take sales orders" answers
       // that question where five verb-entity pairs do not.
@@ -616,7 +616,7 @@ export const setRoleActivity: CommandDefinition<
     return {
       result: { granted, revoked },
       events: [
-        { name: "verity.plywood.role_activity_changed", entityId: role.id },
+        { name: "verity.trading.role_activity_changed", entityId: role.id },
       ],
     };
   },

@@ -32,7 +32,7 @@ import {
   ENTITY_STOCK_BALANCE,
   ENTITY_SUPPLIER_PRICE,
 } from "./keys";
-import { formatProductSize } from "./product";
+import { formatProductSize } from "./format";
 import { applyMovement, serviceProductIds } from "./stock";
 
 /**
@@ -150,7 +150,7 @@ export const createSupplier: CommandDefinition<
   },
   { id: string }
 > = {
-  key: "verity.plywood.create_supplier",
+  key: "verity.trading.create_supplier",
   entity: ENTITY_SUPPLIER,
   verb: "Create",
   input: z.object({
@@ -161,7 +161,7 @@ export const createSupplier: CommandDefinition<
     stateCode: STATE_CODE.optional(),
   }),
   handler: async (ctx, input) => {
-    const supplier = await ctx.tx.plywoodSupplier.create({
+    const supplier = await ctx.tx.tradingSupplier.create({
       data: {
         tenantId: ctx.actor.tenantId,
         displayName: input.displayName,
@@ -189,14 +189,14 @@ export const createSupplier: CommandDefinition<
     // — the same firm twice on the selling side is exactly the confusion this
     // is meant to remove.
     const existing = input.gstin
-      ? await ctx.tx.plywoodCustomer.findFirst({
+      ? await ctx.tx.tradingCustomer.findFirst({
           where: { gstin: input.gstin },
         })
       : null;
 
     const customer =
       existing ??
-      (await ctx.tx.plywoodCustomer.create({
+      (await ctx.tx.tradingCustomer.create({
         data: {
           tenantId: ctx.actor.tenantId,
           displayName: input.displayName,
@@ -213,11 +213,11 @@ export const createSupplier: CommandDefinition<
 
     // Only when that customer is not already the other half of a different
     // supplier — one firm cannot be two suppliers, and the unique index says so.
-    const alreadyLinked = await ctx.tx.plywoodSupplier.findFirst({
+    const alreadyLinked = await ctx.tx.tradingSupplier.findFirst({
       where: { linkedCustomerId: customer.id },
     });
     if (!alreadyLinked) {
-      await ctx.tx.plywoodSupplier.update({
+      await ctx.tx.tradingSupplier.update({
         where: { id: supplier.id },
         data: { linkedCustomerId: customer.id },
       });
@@ -226,12 +226,12 @@ export const createSupplier: CommandDefinition<
     return {
       result: { id: supplier.id },
       events: [
-        { name: "verity.plywood.supplier_created", entityId: supplier.id },
+        { name: "verity.trading.supplier_created", entityId: supplier.id },
         ...(existing
           ? []
           : [
               {
-                name: "verity.plywood.customer_created",
+                name: "verity.trading.customer_created",
                 entityId: customer.id,
               },
             ]),
@@ -268,7 +268,7 @@ export const editSupplier: CommandDefinition<
   },
   { id: string }
 > = {
-  key: "verity.plywood.edit_supplier",
+  key: "verity.trading.edit_supplier",
   entity: ENTITY_SUPPLIER,
   verb: "Edit",
   input: z.object({
@@ -282,15 +282,15 @@ export const editSupplier: CommandDefinition<
   }),
   handler: async (ctx, input) => {
     const { supplierId, ...changes } = input;
-    await ctx.tx.plywoodSupplier.findUniqueOrThrow({ where: { id: supplierId } });
-    await ctx.tx.plywoodSupplier.update({
+    await ctx.tx.tradingSupplier.findUniqueOrThrow({ where: { id: supplierId } });
+    await ctx.tx.tradingSupplier.update({
       where: { id: supplierId },
       data: { ...changes, version: { increment: 1 } },
     });
     return {
       result: { id: supplierId },
       events: [
-        { name: "verity.plywood.supplier_edited", entityId: supplierId },
+        { name: "verity.trading.supplier_edited", entityId: supplierId },
       ],
     };
   },
@@ -300,31 +300,31 @@ export const removeSupplier: CommandDefinition<
   { supplierId: string },
   { id: string; deleted: boolean }
 > = {
-  key: "verity.plywood.remove_supplier",
+  key: "verity.trading.remove_supplier",
   entity: ENTITY_SUPPLIER,
   verb: "Edit",
   input: z.object({ supplierId: z.string().uuid() }),
   handler: async (ctx, input) => {
-    const supplier = await ctx.tx.plywoodSupplier.findUniqueOrThrow({
+    const supplier = await ctx.tx.tradingSupplier.findUniqueOrThrow({
       where: { id: input.supplierId },
       include: {
         orders: { select: { id: true }, take: 1 },
-        plywoodInvoices: { select: { id: true }, take: 1 },
-        plywoodLedgerEntries: { select: { id: true }, take: 1 },
-        plywoodPayments: { select: { id: true }, take: 1 },
+        tradingInvoices: { select: { id: true }, take: 1 },
+        tradingLedgerEntries: { select: { id: true }, take: 1 },
+        tradingPayments: { select: { id: true }, take: 1 },
       },
     });
 
     const traded =
       supplier.orders.length > 0 ||
-      supplier.plywoodInvoices.length > 0 ||
-      supplier.plywoodLedgerEntries.length > 0 ||
-      supplier.plywoodPayments.length > 0;
+      supplier.tradingInvoices.length > 0 ||
+      supplier.tradingLedgerEntries.length > 0 ||
+      supplier.tradingPayments.length > 0;
 
     if (traded) {
       // History exists, so the row stays and stops being offered. Deleting it
       // would orphan orders, bills and ledger entries that explain money.
-      await ctx.tx.plywoodSupplier.update({
+      await ctx.tx.tradingSupplier.update({
         where: { id: supplier.id },
         data: { active: false, version: { increment: 1 } },
       });
@@ -332,7 +332,7 @@ export const removeSupplier: CommandDefinition<
         result: { id: supplier.id, deleted: false },
         events: [
           {
-            name: "verity.plywood.supplier_deactivated",
+            name: "verity.trading.supplier_deactivated",
             entityId: supplier.id,
           },
         ],
@@ -340,14 +340,14 @@ export const removeSupplier: CommandDefinition<
     }
 
     // Never traded with: a typo or a duplicate, with nothing to protect.
-    await ctx.tx.plywoodSupplierPrice.deleteMany({
+    await ctx.tx.tradingSupplierPrice.deleteMany({
       where: { supplierId: supplier.id },
     });
-    await ctx.tx.plywoodSupplier.delete({ where: { id: supplier.id } });
+    await ctx.tx.tradingSupplier.delete({ where: { id: supplier.id } });
     return {
       result: { id: supplier.id, deleted: true },
       events: [
-        { name: "verity.plywood.supplier_deleted", entityId: supplier.id },
+        { name: "verity.trading.supplier_deleted", entityId: supplier.id },
       ],
     };
   },
@@ -367,7 +367,7 @@ export const editCustomer: CommandDefinition<
   },
   { id: string }
 > = {
-  key: "verity.plywood.edit_customer",
+  key: "verity.trading.edit_customer",
   entity: ENTITY_CUSTOMER,
   verb: "Edit",
   input: z.object({
@@ -382,15 +382,15 @@ export const editCustomer: CommandDefinition<
   }),
   handler: async (ctx, input) => {
     const { customerId, ...changes } = input;
-    await ctx.tx.plywoodCustomer.findUniqueOrThrow({ where: { id: customerId } });
-    await ctx.tx.plywoodCustomer.update({
+    await ctx.tx.tradingCustomer.findUniqueOrThrow({ where: { id: customerId } });
+    await ctx.tx.tradingCustomer.update({
       where: { id: customerId },
       data: { ...changes, version: { increment: 1 } },
     });
     return {
       result: { id: customerId },
       events: [
-        { name: "verity.plywood.customer_edited", entityId: customerId },
+        { name: "verity.trading.customer_edited", entityId: customerId },
       ],
     };
   },
@@ -400,29 +400,29 @@ export const removeCustomer: CommandDefinition<
   { customerId: string },
   { id: string; deleted: boolean }
 > = {
-  key: "verity.plywood.remove_customer",
+  key: "verity.trading.remove_customer",
   entity: ENTITY_CUSTOMER,
   verb: "Edit",
   input: z.object({ customerId: z.string().uuid() }),
   handler: async (ctx, input) => {
-    const customer = await ctx.tx.plywoodCustomer.findUniqueOrThrow({
+    const customer = await ctx.tx.tradingCustomer.findUniqueOrThrow({
       where: { id: input.customerId },
       include: {
         orders: { select: { id: true }, take: 1 },
-        plywoodInvoices: { select: { id: true }, take: 1 },
-        plywoodLedgerEntries: { select: { id: true }, take: 1 },
-        plywoodPayments: { select: { id: true }, take: 1 },
+        tradingInvoices: { select: { id: true }, take: 1 },
+        tradingLedgerEntries: { select: { id: true }, take: 1 },
+        tradingPayments: { select: { id: true }, take: 1 },
       },
     });
 
     const traded =
       customer.orders.length > 0 ||
-      customer.plywoodInvoices.length > 0 ||
-      customer.plywoodLedgerEntries.length > 0 ||
-      customer.plywoodPayments.length > 0;
+      customer.tradingInvoices.length > 0 ||
+      customer.tradingLedgerEntries.length > 0 ||
+      customer.tradingPayments.length > 0;
 
     if (traded) {
-      await ctx.tx.plywoodCustomer.update({
+      await ctx.tx.tradingCustomer.update({
         where: { id: customer.id },
         data: { active: false, version: { increment: 1 } },
       });
@@ -430,7 +430,7 @@ export const removeCustomer: CommandDefinition<
         result: { id: customer.id, deleted: false },
         events: [
           {
-            name: "verity.plywood.customer_deactivated",
+            name: "verity.trading.customer_deactivated",
             entityId: customer.id,
           },
         ],
@@ -440,18 +440,18 @@ export const removeCustomer: CommandDefinition<
     // A supplier may be pointing at this customer as their own selling side.
     // The link is cleared rather than the delete being refused: the supplier is
     // untouched, and the link described a customer that no longer exists.
-    await ctx.tx.plywoodSupplier.updateMany({
+    await ctx.tx.tradingSupplier.updateMany({
       where: { linkedCustomerId: customer.id },
       data: { linkedCustomerId: null },
     });
-    await ctx.tx.plywoodCustomerPrice.deleteMany({
+    await ctx.tx.tradingCustomerPrice.deleteMany({
       where: { customerId: customer.id },
     });
-    await ctx.tx.plywoodCustomer.delete({ where: { id: customer.id } });
+    await ctx.tx.tradingCustomer.delete({ where: { id: customer.id } });
     return {
       result: { id: customer.id, deleted: true },
       events: [
-        { name: "verity.plywood.customer_deleted", entityId: customer.id },
+        { name: "verity.trading.customer_deleted", entityId: customer.id },
       ],
     };
   },
@@ -485,7 +485,7 @@ export const setPriceSheet: CommandDefinition<
   },
   { saved: number; removed: number }
 > = {
-  key: "verity.plywood.set_price_sheet",
+  key: "verity.trading.set_price_sheet",
   entity: ENTITY_SUPPLIER_PRICE,
   verb: "Edit",
   input: z.object({
@@ -502,7 +502,7 @@ export const setPriceSheet: CommandDefinition<
   }),
   handler: async (ctx, input) => {
     if (input.side === "supplier") {
-      const supplier = await ctx.tx.plywoodSupplier.findUnique({
+      const supplier = await ctx.tx.tradingSupplier.findUnique({
         where: { id: input.partyId },
       });
       if (!supplier) {
@@ -511,7 +511,7 @@ export const setPriceSheet: CommandDefinition<
         );
       }
     } else {
-      const customer = await ctx.tx.plywoodCustomer.findUnique({
+      const customer = await ctx.tx.tradingCustomer.findUnique({
         where: { id: input.partyId },
       });
       if (!customer) {
@@ -527,12 +527,12 @@ export const setPriceSheet: CommandDefinition<
     for (const row of input.prices) {
       if (row.pricePaise === null) {
         if (input.side === "supplier") {
-          const { count } = await ctx.tx.plywoodSupplierPrice.deleteMany({
+          const { count } = await ctx.tx.tradingSupplierPrice.deleteMany({
             where: { supplierId: input.partyId, productId: row.productId },
           });
           removed += count;
         } else {
-          const { count } = await ctx.tx.plywoodCustomerPrice.deleteMany({
+          const { count } = await ctx.tx.tradingCustomerPrice.deleteMany({
             where: { customerId: input.partyId, productId: row.productId },
           });
           removed += count;
@@ -541,7 +541,7 @@ export const setPriceSheet: CommandDefinition<
       }
 
       if (input.side === "supplier") {
-        await ctx.tx.plywoodSupplierPrice.upsert({
+        await ctx.tx.tradingSupplierPrice.upsert({
           where: {
             tenantId_supplierId_productId: {
               tenantId: ctx.actor.tenantId,
@@ -561,7 +561,7 @@ export const setPriceSheet: CommandDefinition<
           },
         });
       } else {
-        await ctx.tx.plywoodCustomerPrice.upsert({
+        await ctx.tx.tradingCustomerPrice.upsert({
           where: {
             tenantId_customerId_productId: {
               tenantId: ctx.actor.tenantId,
@@ -590,8 +590,8 @@ export const setPriceSheet: CommandDefinition<
         {
           name:
             input.side === "supplier"
-              ? "verity.plywood.supplier_price_set"
-              : "verity.plywood.customer_price_set",
+              ? "verity.trading.supplier_price_set"
+              : "verity.trading.customer_price_set",
           entityId: input.partyId,
           payload: { saved, removed },
         },
@@ -604,7 +604,7 @@ export const setSupplierPrice: CommandDefinition<
   { supplierId: string; productId: string; negotiatedCostPaise: number },
   { id: string }
 > = {
-  key: "verity.plywood.set_supplier_price",
+  key: "verity.trading.set_supplier_price",
   entity: ENTITY_SUPPLIER_PRICE,
   verb: "Edit",
   input: z.object({
@@ -616,7 +616,7 @@ export const setSupplierPrice: CommandDefinition<
     // Upsert rather than create-or-fail: a negotiated price is one current fact
     // per supplier per board, and the history of what it used to be lives in the
     // activity stream and in the orders that were placed at it.
-    const price = await ctx.tx.plywoodSupplierPrice.upsert({
+    const price = await ctx.tx.tradingSupplierPrice.upsert({
       where: {
         tenantId_supplierId_productId: {
           tenantId: ctx.actor.tenantId,
@@ -638,7 +638,7 @@ export const setSupplierPrice: CommandDefinition<
     return {
       result: { id: price.id },
       events: [
-        { name: "verity.plywood.supplier_price_set", entityId: price.id },
+        { name: "verity.trading.supplier_price_set", entityId: price.id },
       ],
     };
   },
@@ -657,7 +657,7 @@ export const createCustomer: CommandDefinition<
   },
   { id: string }
 > = {
-  key: "verity.plywood.create_customer",
+  key: "verity.trading.create_customer",
   entity: ENTITY_CUSTOMER,
   verb: "Create",
   input: z.object({
@@ -669,7 +669,7 @@ export const createCustomer: CommandDefinition<
     creditLimitPaise: z.number().int().min(0).optional(),
   }),
   handler: async (ctx, input) => {
-    const customer = await ctx.tx.plywoodCustomer.create({
+    const customer = await ctx.tx.tradingCustomer.create({
       data: {
         tenantId: ctx.actor.tenantId,
         displayName: input.displayName,
@@ -685,7 +685,7 @@ export const createCustomer: CommandDefinition<
     return {
       result: { id: customer.id },
       events: [
-        { name: "verity.plywood.customer_created", entityId: customer.id },
+        { name: "verity.trading.customer_created", entityId: customer.id },
       ],
     };
   },
@@ -695,7 +695,7 @@ export const setCreditLimit: CommandDefinition<
   { customerId: string; creditLimitPaise: number },
   { id: string }
 > = {
-  key: "verity.plywood.set_credit_limit",
+  key: "verity.trading.set_credit_limit",
   entity: ENTITY_CUSTOMER,
   // Granting credit is not editing a phone number. ActionExecute so it can be
   // held by the owner and finance without also withholding ordinary edits.
@@ -705,10 +705,10 @@ export const setCreditLimit: CommandDefinition<
     creditLimitPaise: z.number().int().min(0),
   }),
   handler: async (ctx, input) => {
-    const before = await ctx.tx.plywoodCustomer.findUniqueOrThrow({
+    const before = await ctx.tx.tradingCustomer.findUniqueOrThrow({
       where: { id: input.customerId },
     });
-    const after = await ctx.tx.plywoodCustomer.update({
+    const after = await ctx.tx.tradingCustomer.update({
       where: { id: input.customerId },
       data: {
         creditLimitPaise: input.creditLimitPaise,
@@ -721,7 +721,7 @@ export const setCreditLimit: CommandDefinition<
     await recordActivity(ctx, {
       entityKey: ENTITY_CUSTOMER,
       entityId: after.id,
-      commandKey: "verity.plywood.set_credit_limit",
+      commandKey: "verity.trading.set_credit_limit",
       changes: diffFields(
         { creditLimitPaise: before.creditLimitPaise },
         { creditLimitPaise: after.creditLimitPaise },
@@ -730,7 +730,7 @@ export const setCreditLimit: CommandDefinition<
 
     return {
       result: { id: after.id },
-      events: [{ name: "verity.plywood.credit_limit_set", entityId: after.id }],
+      events: [{ name: "verity.trading.credit_limit_set", entityId: after.id }],
     };
   },
 };
@@ -739,7 +739,7 @@ export const setCustomerPrice: CommandDefinition<
   { customerId: string; productId: string; customPricePaise: number },
   { id: string }
 > = {
-  key: "verity.plywood.set_customer_price",
+  key: "verity.trading.set_customer_price",
   entity: ENTITY_CUSTOMER_PRICE,
   verb: "Edit",
   input: z.object({
@@ -748,7 +748,7 @@ export const setCustomerPrice: CommandDefinition<
     customPricePaise: z.number().int().min(0),
   }),
   handler: async (ctx, input) => {
-    const price = await ctx.tx.plywoodCustomerPrice.upsert({
+    const price = await ctx.tx.tradingCustomerPrice.upsert({
       where: {
         tenantId_customerId_productId: {
           tenantId: ctx.actor.tenantId,
@@ -770,7 +770,7 @@ export const setCustomerPrice: CommandDefinition<
     return {
       result: { id: price.id },
       events: [
-        { name: "verity.plywood.customer_price_set", entityId: price.id },
+        { name: "verity.trading.customer_price_set", entityId: price.id },
       ],
     };
   },
@@ -792,7 +792,7 @@ export const createPurchaseOrder: CommandDefinition<
   },
   { id: string; totalCostPaise: number }
 > = {
-  key: "verity.plywood.create_purchase_order",
+  key: "verity.trading.create_purchase_order",
   entity: ENTITY_PURCHASE_ORDER,
   verb: "Create",
   input: z.object({
@@ -817,7 +817,7 @@ export const createPurchaseOrder: CommandDefinition<
       .min(1),
   }),
   preconditions: async (ctx, input) => {
-    const supplier = await ctx.tx.plywoodSupplier.findUnique({
+    const supplier = await ctx.tx.tradingSupplier.findUnique({
       where: { id: input.supplierId },
     });
     if (!supplier)
@@ -838,7 +838,7 @@ export const createPurchaseOrder: CommandDefinition<
       );
   },
   handler: async (ctx, input) => {
-    const products = await ctx.tx.plywoodProduct.findMany({
+    const products = await ctx.tx.tradingProduct.findMany({
       where: {
         id: { in: input.lines.map((line) => line.productId) },
         active: true,
@@ -853,7 +853,7 @@ export const createPurchaseOrder: CommandDefinition<
       );
     }
 
-    const negotiated = await ctx.tx.plywoodSupplierPrice.findMany({
+    const negotiated = await ctx.tx.tradingSupplierPrice.findMany({
       where: { supplierId: input.supplierId },
     });
 
@@ -912,7 +912,7 @@ export const createPurchaseOrder: CommandDefinition<
       input.locationId,
     );
 
-    const order = await ctx.tx.plywoodPurchaseOrder.create({
+    const order = await ctx.tx.tradingPurchaseOrder.create({
       data: {
         tenantId: ctx.actor.tenantId,
         supplierId: input.supplierId,
@@ -929,7 +929,7 @@ export const createPurchaseOrder: CommandDefinition<
     // of the relation and refuses it as a nested field — the composite key that
     // makes a cross-tenant line impossible also makes the nested form
     // unavailable. Same transaction either way.
-    await ctx.tx.plywoodPurchaseOrderLine.createMany({
+    await ctx.tx.tradingPurchaseOrderLine.createMany({
       data: priced.map((line) => ({
         ...line,
         tenantId: ctx.actor.tenantId,
@@ -940,7 +940,7 @@ export const createPurchaseOrder: CommandDefinition<
     return {
       result: { id: order.id, totalCostPaise },
       events: [
-        { name: "verity.plywood.purchase_order_created", entityId: order.id },
+        { name: "verity.trading.purchase_order_created", entityId: order.id },
       ],
     };
   },
@@ -950,12 +950,12 @@ export const submitPurchaseOrder: CommandDefinition<
   { orderId: string },
   { id: string }
 > = {
-  key: "verity.plywood.submit_purchase_order",
+  key: "verity.trading.submit_purchase_order",
   entity: ENTITY_PURCHASE_ORDER,
   verb: "ActionExecute",
   input: z.object({ orderId: z.string().uuid() }),
   handler: async (ctx, input) => {
-    const order = await ctx.tx.plywoodPurchaseOrder.findUniqueOrThrow({
+    const order = await ctx.tx.tradingPurchaseOrder.findUniqueOrThrow({
       where: { id: input.orderId },
       include: { lines: true },
     });
@@ -965,7 +965,7 @@ export const submitPurchaseOrder: CommandDefinition<
       fromKey: order.state,
       toKey: "submitted",
     });
-    await ctx.tx.plywoodPurchaseOrder.update({
+    await ctx.tx.tradingPurchaseOrder.update({
       where: { id: order.id },
       data: { state: "submitted", version: { increment: 1 } },
     });
@@ -973,7 +973,7 @@ export const submitPurchaseOrder: CommandDefinition<
       result: { id: order.id },
       events: [
         moved.event,
-        { name: "verity.plywood.purchase_order_submitted", entityId: order.id },
+        { name: "verity.trading.purchase_order_submitted", entityId: order.id },
       ],
     };
   },
@@ -996,7 +996,7 @@ export const linkSupplierToCustomer: CommandDefinition<
   { supplierId: string; customerId?: string },
   { supplierId: string; customerId: string | null }
 > = {
-  key: "verity.plywood.link_supplier_to_customer",
+  key: "verity.trading.link_supplier_to_customer",
   entity: ENTITY_SUPPLIER,
   verb: "Edit",
   input: z.object({
@@ -1004,12 +1004,12 @@ export const linkSupplierToCustomer: CommandDefinition<
     customerId: z.string().uuid().optional(),
   }),
   handler: async (ctx, input) => {
-    const supplier = await ctx.tx.plywoodSupplier.findUniqueOrThrow({
+    const supplier = await ctx.tx.tradingSupplier.findUniqueOrThrow({
       where: { id: input.supplierId },
     });
 
     if (input.customerId) {
-      const customer = await ctx.tx.plywoodCustomer.findUnique({
+      const customer = await ctx.tx.tradingCustomer.findUnique({
         where: { id: input.customerId },
       });
       if (!customer) {
@@ -1019,7 +1019,7 @@ export const linkSupplierToCustomer: CommandDefinition<
       }
       // Checked here as well as by the unique index, so the refusal names the
       // supplier already holding the link rather than surfacing a constraint.
-      const taken = await ctx.tx.plywoodSupplier.findFirst({
+      const taken = await ctx.tx.tradingSupplier.findFirst({
         where: { linkedCustomerId: input.customerId, id: { not: supplier.id } },
       });
       if (taken) {
@@ -1042,7 +1042,7 @@ export const linkSupplierToCustomer: CommandDefinition<
       }
     }
 
-    await ctx.tx.plywoodSupplier.update({
+    await ctx.tx.tradingSupplier.update({
       where: { id: supplier.id },
       data: {
         linkedCustomerId: input.customerId ?? null,
@@ -1058,8 +1058,8 @@ export const linkSupplierToCustomer: CommandDefinition<
       events: [
         {
           name: input.customerId
-            ? "verity.plywood.supplier_linked_to_customer"
-            : "verity.plywood.supplier_unlinked_from_customer",
+            ? "verity.trading.supplier_linked_to_customer"
+            : "verity.trading.supplier_unlinked_from_customer",
           entityId: supplier.id,
         },
       ],
@@ -1097,7 +1097,7 @@ export const editPurchaseOrder: CommandDefinition<
   },
   { id: string; totalCostPaise: number }
 > = {
-  key: "verity.plywood.edit_purchase_order",
+  key: "verity.trading.edit_purchase_order",
   entity: ENTITY_PURCHASE_ORDER,
   verb: "Edit",
   input: z.object({
@@ -1116,7 +1116,7 @@ export const editPurchaseOrder: CommandDefinition<
       .optional(),
   }),
   handler: async (ctx, input) => {
-    const order = await ctx.tx.plywoodPurchaseOrder.findUniqueOrThrow({
+    const order = await ctx.tx.tradingPurchaseOrder.findUniqueOrThrow({
       where: { id: input.orderId },
       include: { lines: true },
     });
@@ -1146,7 +1146,7 @@ export const editPurchaseOrder: CommandDefinition<
     let totalCostPaise = order.totalCostPaise;
 
     if (input.lines) {
-      const products = await ctx.tx.plywoodProduct.findMany({
+      const products = await ctx.tx.tradingProduct.findMany({
         where: { id: { in: input.lines.map((line) => line.productId) }, active: true },
       });
       if (products.length !== new Set(input.lines.map((l) => l.productId)).size) {
@@ -1154,7 +1154,7 @@ export const editPurchaseOrder: CommandDefinition<
           "E_VALIDATION: a board on this order is unknown or withdrawn",
         );
       }
-      const negotiated = await ctx.tx.plywoodSupplierPrice.findMany({
+      const negotiated = await ctx.tx.tradingSupplierPrice.findMany({
         where: { supplierId: order.supplierId },
       });
 
@@ -1187,17 +1187,17 @@ export const editPurchaseOrder: CommandDefinition<
         };
       });
 
-      await ctx.tx.plywoodPurchaseOrderLine.deleteMany({
+      await ctx.tx.tradingPurchaseOrderLine.deleteMany({
         where: { purchaseOrderId: order.id },
       });
-      await ctx.tx.plywoodPurchaseOrderLine.createMany({ data: priced });
+      await ctx.tx.tradingPurchaseOrderLine.createMany({ data: priced });
       totalCostPaise = priced.reduce(
         (sum, line) => sum + line.qtyOrdered * line.unitCostPaise,
         0,
       );
     }
 
-    await ctx.tx.plywoodPurchaseOrder.update({
+    await ctx.tx.tradingPurchaseOrder.update({
       where: { id: order.id },
       data: {
         ...(input.reference === undefined ? {} : { reference: input.reference }),
@@ -1209,7 +1209,7 @@ export const editPurchaseOrder: CommandDefinition<
     return {
       result: { id: order.id, totalCostPaise },
       events: [
-        { name: "verity.plywood.purchase_order_edited", entityId: order.id },
+        { name: "verity.trading.purchase_order_edited", entityId: order.id },
       ],
     };
   },
@@ -1230,7 +1230,7 @@ export const editSalesOrder: CommandDefinition<
   },
   { id: string; totalPricePaise: number }
 > = {
-  key: "verity.plywood.edit_sales_order",
+  key: "verity.trading.edit_sales_order",
   entity: ENTITY_SALES_ORDER,
   verb: "Edit",
   input: z.object({
@@ -1250,7 +1250,7 @@ export const editSalesOrder: CommandDefinition<
       .optional(),
   }),
   handler: async (ctx, input) => {
-    const order = await ctx.tx.plywoodSalesOrder.findUniqueOrThrow({
+    const order = await ctx.tx.tradingSalesOrder.findUniqueOrThrow({
       where: { id: input.orderId },
       include: { lines: true },
     });
@@ -1270,7 +1270,7 @@ export const editSalesOrder: CommandDefinition<
     }
     // Stock is held against the CURRENT lines. Changing them under a live hold
     // would leave sheets reserved for quantities the order no longer asks for.
-    const held = await ctx.tx.plywoodStockReservation.count({
+    const held = await ctx.tx.tradingStockReservation.count({
       where: { salesOrderId: order.id, releasedAt: null },
     });
     if (held > 0 && input.lines) {
@@ -1291,7 +1291,7 @@ export const editSalesOrder: CommandDefinition<
     let totalPricePaise = order.totalPricePaise;
 
     if (input.lines) {
-      const products = await ctx.tx.plywoodProduct.findMany({
+      const products = await ctx.tx.tradingProduct.findMany({
         where: { id: { in: input.lines.map((line) => line.productId) }, active: true },
       });
       if (products.length !== new Set(input.lines.map((l) => l.productId)).size) {
@@ -1299,7 +1299,7 @@ export const editSalesOrder: CommandDefinition<
           "E_VALIDATION: a board on this order is unknown or withdrawn",
         );
       }
-      const agreed = await ctx.tx.plywoodCustomerPrice.findMany({
+      const agreed = await ctx.tx.tradingCustomerPrice.findMany({
         where: { customerId: order.customerId },
       });
 
@@ -1332,17 +1332,17 @@ export const editSalesOrder: CommandDefinition<
         };
       });
 
-      await ctx.tx.plywoodSalesOrderLine.deleteMany({
+      await ctx.tx.tradingSalesOrderLine.deleteMany({
         where: { salesOrderId: order.id },
       });
-      await ctx.tx.plywoodSalesOrderLine.createMany({ data: priced });
+      await ctx.tx.tradingSalesOrderLine.createMany({ data: priced });
       totalPricePaise = priced.reduce(
         (sum, line) => sum + line.qtyOrdered * line.unitPricePaise,
         0,
       );
     }
 
-    await ctx.tx.plywoodSalesOrder.update({
+    await ctx.tx.tradingSalesOrder.update({
       where: { id: order.id },
       data: {
         ...(input.reference === undefined ? {} : { reference: input.reference }),
@@ -1357,7 +1357,7 @@ export const editSalesOrder: CommandDefinition<
     return {
       result: { id: order.id, totalPricePaise },
       events: [
-        { name: "verity.plywood.sales_order_edited", entityId: order.id },
+        { name: "verity.trading.sales_order_edited", entityId: order.id },
       ],
     };
   },
@@ -1382,7 +1382,7 @@ export const receiveGoods: CommandDefinition<
     billingRefusal: string | null;
   }
 > = {
-  key: "verity.plywood.receive_goods",
+  key: "verity.trading.receive_goods",
   entity: ENTITY_PURCHASE_ORDER,
   verb: "ActionExecute",
   input: z.object({
@@ -1401,7 +1401,7 @@ export const receiveGoods: CommandDefinition<
       .min(1),
   }),
   handler: async (ctx, input) => {
-    const order = await ctx.tx.plywoodPurchaseOrder.findUniqueOrThrow({
+    const order = await ctx.tx.tradingPurchaseOrder.findUniqueOrThrow({
       where: { id: input.orderId },
       include: { lines: true },
     });
@@ -1445,7 +1445,7 @@ export const receiveGoods: CommandDefinition<
       financialYear,
     );
 
-    const receipt = await ctx.tx.plywoodGoodsReceipt.create({
+    const receipt = await ctx.tx.tradingGoodsReceipt.create({
       data: {
         tenantId: ctx.actor.tenantId,
         purchaseOrderId: order.id,
@@ -1478,7 +1478,7 @@ export const receiveGoods: CommandDefinition<
         );
       }
 
-      await ctx.tx.plywoodPurchaseOrderLine.update({
+      await ctx.tx.tradingPurchaseOrderLine.update({
         where: { id: line.id },
         data: { qtyReceived: { increment: received.qtyReceived } },
       });
@@ -1508,7 +1508,7 @@ export const receiveGoods: CommandDefinition<
     // Written after the movements so a refused over-receipt leaves no line
     // behind. The whole handler is one transaction, so this is about reading
     // order rather than durability.
-    await ctx.tx.plywoodGoodsReceiptLine.createMany({
+    await ctx.tx.tradingGoodsReceiptLine.createMany({
       data: input.lines.map((received) => {
         const line = order.lines.find(
           (candidate) => candidate.productId === received.productId,
@@ -1526,7 +1526,7 @@ export const receiveGoods: CommandDefinition<
       }),
     });
 
-    const after = await ctx.tx.plywoodPurchaseOrderLine.findMany({
+    const after = await ctx.tx.tradingPurchaseOrderLine.findMany({
       where: { purchaseOrderId: order.id },
     });
     const complete = after.every((line) => line.qtyReceived >= line.qtyOrdered);
@@ -1540,7 +1540,7 @@ export const receiveGoods: CommandDefinition<
         fromKey: order.state,
         toKey: target,
       });
-      await ctx.tx.plywoodPurchaseOrder.update({
+      await ctx.tx.tradingPurchaseOrder.update({
         where: { id: order.id },
         data: { state: target, version: { increment: 1 } },
       });
@@ -1591,15 +1591,15 @@ export const receiveGoods: CommandDefinition<
         ...stateEvents,
         {
           name: complete
-            ? "verity.plywood.purchase_order_completed"
-            : "verity.plywood.goods_partially_received",
+            ? "verity.trading.purchase_order_completed"
+            : "verity.trading.goods_partially_received",
           entityId: order.id,
           payload: { receiptNumber: receipt.receiptNumber },
         },
         ...(billing
           ? [
               {
-                name: "verity.plywood.purchase_bill_raised",
+                name: "verity.trading.purchase_bill_raised",
                 entityId: order.id,
                 payload: { invoiceNumber: billing.invoiceNumber },
               },
@@ -1614,7 +1614,7 @@ export const cancelPurchaseOrder: CommandDefinition<
   { orderId: string; reason: string },
   { id: string }
 > = {
-  key: "verity.plywood.cancel_purchase_order",
+  key: "verity.trading.cancel_purchase_order",
   entity: ENTITY_PURCHASE_ORDER,
   verb: "ActionExecute",
   input: z.object({
@@ -1622,7 +1622,7 @@ export const cancelPurchaseOrder: CommandDefinition<
     reason: z.string().min(3).max(400),
   }),
   handler: async (ctx, input) => {
-    const order = await ctx.tx.plywoodPurchaseOrder.findUniqueOrThrow({
+    const order = await ctx.tx.tradingPurchaseOrder.findUniqueOrThrow({
       where: { id: input.orderId },
     });
     await transition(ctx, {
@@ -1631,21 +1631,21 @@ export const cancelPurchaseOrder: CommandDefinition<
       fromKey: order.state,
       toKey: "cancelled",
     });
-    await ctx.tx.plywoodPurchaseOrder.update({
+    await ctx.tx.tradingPurchaseOrder.update({
       where: { id: order.id },
       data: { state: "cancelled", version: { increment: 1 } },
     });
     await recordActivity(ctx, {
       entityKey: ENTITY_PURCHASE_ORDER,
       entityId: input.orderId,
-      commandKey: "verity.plywood.cancel_purchase_order",
+      commandKey: "verity.trading.cancel_purchase_order",
       changes: diffFields({ cancelReason: "" }, { cancelReason: input.reason }),
     });
     return {
       result: { id: input.orderId },
       events: [
         {
-          name: "verity.plywood.purchase_order_cancelled",
+          name: "verity.trading.purchase_order_cancelled",
           entityId: input.orderId,
         },
       ],
@@ -1702,7 +1702,7 @@ export async function customerExposurePaise(
 ): Promise<number> {
   // Term 1 — unallocated receivables. Gross of tax: the customer owes the
   // total on the document, not its taxable value.
-  const invoices = await tx.plywoodInvoice.findMany({
+  const invoices = await tx.tradingInvoice.findMany({
     where: { customerId },
     select: {
       totalPaise: true,
@@ -1735,16 +1735,16 @@ export async function customerExposurePaise(
   // Term 2 — approved but not yet invoiced. `COMMITTED_ORDER_STATES` is the
   // set of states in which the business has promised to supply; a draft has
   // promised nothing and a cancelled order has withdrawn the promise.
-  const orders = await tx.plywoodSalesOrder.findMany({
+  const orders = await tx.tradingSalesOrder.findMany({
     where: { customerId, state: { in: [...COMMITTED_ORDER_STATES] } },
     select: { id: true, totalPricePaise: true },
   });
 
-  // `PlywoodSalesOrder` carries no back-relation to its invoices, so the
+  // `TradingSalesOrder` carries no back-relation to its invoices, so the
   // invoiced value is fetched once for the whole set rather than per order.
   const invoicedByOrder = new Map<string, number>();
   if (orders.length > 0) {
-    const raised = await tx.plywoodInvoice.findMany({
+    const raised = await tx.tradingInvoice.findMany({
       where: { salesOrderId: { in: orders.map((order) => order.id) } },
       select: { salesOrderId: true, totalPaise: true },
     });
@@ -1799,7 +1799,7 @@ export const createSalesOrder: CommandDefinition<
   },
   { id: string; totalPricePaise: number; state: string }
 > = {
-  key: "verity.plywood.create_sales_order",
+  key: "verity.trading.create_sales_order",
   entity: ENTITY_SALES_ORDER,
   verb: "Create",
   input: z.object({
@@ -1830,7 +1830,7 @@ export const createSalesOrder: CommandDefinition<
           "with no stated ground cannot be told apart from an under-declared one",
       );
     }
-    const customer = await ctx.tx.plywoodCustomer.findUnique({
+    const customer = await ctx.tx.tradingCustomer.findUnique({
       where: { id: input.customerId },
     });
     if (!customer)
@@ -1848,7 +1848,7 @@ export const createSalesOrder: CommandDefinition<
       );
   },
   handler: async (ctx, input) => {
-    const products = await ctx.tx.plywoodProduct.findMany({
+    const products = await ctx.tx.tradingProduct.findMany({
       where: {
         id: { in: input.lines.map((line) => line.productId) },
         active: true,
@@ -1863,7 +1863,7 @@ export const createSalesOrder: CommandDefinition<
       );
     }
 
-    const agreed = await ctx.tx.plywoodCustomerPrice.findMany({
+    const agreed = await ctx.tx.tradingCustomerPrice.findMany({
       where: { customerId: input.customerId },
     });
 
@@ -1917,7 +1917,7 @@ export const createSalesOrder: CommandDefinition<
       input.locationId,
     );
 
-    const order = await ctx.tx.plywoodSalesOrder.create({
+    const order = await ctx.tx.tradingSalesOrder.create({
       data: {
         tenantId: ctx.actor.tenantId,
         customerId: input.customerId,
@@ -1935,7 +1935,7 @@ export const createSalesOrder: CommandDefinition<
     });
 
     // Separately, for the same reason as a purchase order's lines.
-    await ctx.tx.plywoodSalesOrderLine.createMany({
+    await ctx.tx.tradingSalesOrderLine.createMany({
       data: priced.map((line) => ({
         ...line,
         tenantId: ctx.actor.tenantId,
@@ -1955,7 +1955,7 @@ export const createSalesOrder: CommandDefinition<
       fromKey: order.state,
       toKey: target,
     });
-    await ctx.tx.plywoodSalesOrder.update({
+    await ctx.tx.tradingSalesOrder.update({
       where: { id: order.id },
       data: { state: target, version: { increment: 1 } },
     });
@@ -1968,7 +1968,7 @@ export const createSalesOrder: CommandDefinition<
     return {
       result: { id: order.id, totalPricePaise, state: target },
       events: [
-        { name: "verity.plywood.sales_order_created", entityId: order.id },
+        { name: "verity.trading.sales_order_created", entityId: order.id },
       ],
     };
   },
@@ -1978,7 +1978,7 @@ export const approveCredit: CommandDefinition<
   { orderId: string; reason: string },
   { id: string }
 > = {
-  key: "verity.plywood.approve_credit",
+  key: "verity.trading.approve_credit",
   entity: ENTITY_SALES_ORDER,
   verb: "ActionExecute",
   input: z.object({
@@ -1986,7 +1986,7 @@ export const approveCredit: CommandDefinition<
     reason: z.string().min(3).max(400),
   }),
   handler: async (ctx, input) => {
-    const order = await ctx.tx.plywoodSalesOrder.findUniqueOrThrow({
+    const order = await ctx.tx.tradingSalesOrder.findUniqueOrThrow({
       where: { id: input.orderId },
     });
     await transition(ctx, {
@@ -1995,7 +1995,7 @@ export const approveCredit: CommandDefinition<
       fromKey: order.state,
       toKey: "approved",
     });
-    await ctx.tx.plywoodSalesOrder.update({
+    await ctx.tx.tradingSalesOrder.update({
       where: { id: order.id },
       data: { state: "approved", version: { increment: 1 } },
     });
@@ -2004,7 +2004,7 @@ export const approveCredit: CommandDefinition<
     await recordActivity(ctx, {
       entityKey: ENTITY_SALES_ORDER,
       entityId: input.orderId,
-      commandKey: "verity.plywood.approve_credit",
+      commandKey: "verity.trading.approve_credit",
       changes: diffFields(
         { creditOverrideReason: "" },
         { creditOverrideReason: input.reason },
@@ -2013,7 +2013,7 @@ export const approveCredit: CommandDefinition<
     return {
       result: { id: input.orderId },
       events: [
-        { name: "verity.plywood.credit_approved", entityId: input.orderId },
+        { name: "verity.trading.credit_approved", entityId: input.orderId },
       ],
     };
   },
@@ -2073,7 +2073,7 @@ export async function availableUnits(
   const balance = await tx.stockBalance.findFirst({
     where: { productId, locationId },
   });
-  const held = await tx.plywoodStockReservation.aggregate({
+  const held = await tx.tradingStockReservation.aggregate({
     where: { productId, locationId, releasedAt: null },
     _sum: { qtyUnits: true },
   });
@@ -2090,12 +2090,12 @@ export const reserveForOrder: CommandDefinition<
   { orderId: string },
   { reserved: Array<{ productId: string; qtyUnits: number }> }
 > = {
-  key: "verity.plywood.reserve_for_order",
+  key: "verity.trading.reserve_for_order",
   entity: ENTITY_RESERVATION,
   verb: "Create",
   input: z.object({ orderId: z.string().uuid() }),
   handler: async (ctx, input) => {
-    const order = await ctx.tx.plywoodSalesOrder.findUniqueOrThrow({
+    const order = await ctx.tx.tradingSalesOrder.findUniqueOrThrow({
       where: { id: input.orderId },
       include: { lines: true, reservations: { where: { releasedAt: null } } },
     });
@@ -2174,7 +2174,7 @@ export const reserveForOrder: CommandDefinition<
               : ""),
         );
       }
-      await ctx.tx.plywoodStockReservation.create({
+      await ctx.tx.tradingStockReservation.create({
         data: {
           tenantId: ctx.actor.tenantId,
           productId: line.productId,
@@ -2192,14 +2192,14 @@ export const reserveForOrder: CommandDefinition<
       fromKey: order.state,
       toKey: "dispatching",
     });
-    await ctx.tx.plywoodSalesOrder.update({
+    await ctx.tx.tradingSalesOrder.update({
       where: { id: order.id },
       data: { state: "dispatching", version: { increment: 1 } },
     });
 
     return {
       result: { reserved },
-      events: [{ name: "verity.plywood.stock_reserved", entityId: order.id }],
+      events: [{ name: "verity.trading.stock_reserved", entityId: order.id }],
     };
   },
 };
@@ -2217,7 +2217,7 @@ export const reserveForOrder: CommandDefinition<
  * invoice could be raised for the quantity ORDERED rather than the quantity
  * that actually left the yard.
  *
- * The old key is kept — `verity.plywood.dispatch_order` — because it is what
+ * The old key is kept — `verity.trading.dispatch_order` — because it is what
  * the existing screens and journeys call, and a rename is a migration of every
  * caller for no behavioural gain. The vocabulary in the result and the events
  * is the specification's.
@@ -2253,7 +2253,7 @@ export const dispatchOrder: CommandDefinition<
     invoicingRefusal: string | null;
   }
 > = {
-  key: "verity.plywood.dispatch_order",
+  key: "verity.trading.dispatch_order",
   entity: ENTITY_SALES_ORDER,
   verb: "ActionExecute",
   input: z.object({
@@ -2272,7 +2272,7 @@ export const dispatchOrder: CommandDefinition<
       .optional(),
   }),
   handler: async (ctx, input) => {
-    const order = await ctx.tx.plywoodSalesOrder.findUniqueOrThrow({
+    const order = await ctx.tx.tradingSalesOrder.findUniqueOrThrow({
       where: { id: input.orderId },
       include: { lines: true, reservations: { where: { releasedAt: null } } },
     });
@@ -2320,7 +2320,7 @@ export const dispatchOrder: CommandDefinition<
       financialYear,
     );
 
-    const issue = await ctx.tx.plywoodGoodsIssue.create({
+    const issue = await ctx.tx.tradingGoodsIssue.create({
       data: {
         tenantId: ctx.actor.tenantId,
         salesOrderId: order.id,
@@ -2372,7 +2372,7 @@ export const dispatchOrder: CommandDefinition<
         unitCostPaise = movement.unitCostPaise;
       }
 
-      await ctx.tx.plywoodGoodsIssueLine.create({
+      await ctx.tx.tradingGoodsIssueLine.create({
         data: {
           tenantId: ctx.actor.tenantId,
           issueId: issue.id,
@@ -2385,7 +2385,7 @@ export const dispatchOrder: CommandDefinition<
         },
       });
 
-      await ctx.tx.plywoodSalesOrderLine.update({
+      await ctx.tx.tradingSalesOrderLine.update({
         where: { id: orderLine.id },
         data: { qtyShipped: { increment: line.qtyIssued } },
       });
@@ -2395,13 +2395,13 @@ export const dispatchOrder: CommandDefinition<
     // which is what the old command did, because it always issued everything —
     // would free stock the customer is still owed, and the next order would
     // quietly take it.
-    const after = await ctx.tx.plywoodSalesOrderLine.findMany({
+    const after = await ctx.tx.tradingSalesOrderLine.findMany({
       where: { salesOrderId: order.id },
     });
     const fulfilled = after.every((line) => line.qtyShipped >= line.qtyOrdered);
 
     for (const line of requested) {
-      const held = await ctx.tx.plywoodStockReservation.findFirst({
+      const held = await ctx.tx.tradingStockReservation.findFirst({
         where: {
           salesOrderId: order.id,
           productId: line.productId,
@@ -2414,12 +2414,12 @@ export const dispatchOrder: CommandDefinition<
       if (remaining > 0) {
         // The hold shrinks by what left. Reservations are immutable only once
         // released; a live hold is a running quantity.
-        await ctx.tx.plywoodStockReservation.update({
+        await ctx.tx.tradingStockReservation.update({
           where: { id: held.id },
           data: { qtyUnits: remaining },
         });
       } else {
-        await ctx.tx.plywoodStockReservation.update({
+        await ctx.tx.tradingStockReservation.update({
           where: { id: held.id },
           data: {
             releasedAt: issuedAt,
@@ -2437,7 +2437,7 @@ export const dispatchOrder: CommandDefinition<
         fromKey: order.state,
         toKey: target,
       });
-      await ctx.tx.plywoodSalesOrder.update({
+      await ctx.tx.tradingSalesOrder.update({
         where: { id: order.id },
         data: { state: target, version: { increment: 1 } },
       });
@@ -2480,15 +2480,15 @@ export const dispatchOrder: CommandDefinition<
       events: [
         {
           name: fulfilled
-            ? "verity.plywood.sales_order_fulfilled"
-            : "verity.plywood.goods_partially_issued",
+            ? "verity.trading.sales_order_fulfilled"
+            : "verity.trading.goods_partially_issued",
           entityId: order.id,
           payload: { issueNumber: issue.issueNumber },
         },
         ...(invoicing
           ? [
               {
-                name: "verity.plywood.sales_invoice_raised",
+                name: "verity.trading.sales_invoice_raised",
                 entityId: order.id,
                 payload: { invoiceNumber: invoicing.invoiceNumber },
               },
@@ -2503,7 +2503,7 @@ export const cancelSalesOrder: CommandDefinition<
   { orderId: string; reason: string },
   { id: string }
 > = {
-  key: "verity.plywood.cancel_sales_order",
+  key: "verity.trading.cancel_sales_order",
   entity: ENTITY_SALES_ORDER,
   verb: "ActionExecute",
   input: z.object({
@@ -2513,11 +2513,11 @@ export const cancelSalesOrder: CommandDefinition<
   handler: async (ctx, input) => {
     // Releasing the hold is the point of cancelling. Stock held for an order
     // nobody is going to fulfil is stock the business cannot sell.
-    await ctx.tx.plywoodStockReservation.updateMany({
+    await ctx.tx.tradingStockReservation.updateMany({
       where: { salesOrderId: input.orderId, releasedAt: null },
       data: { releasedAt: new Date(), releaseReason: input.reason },
     });
-    const order = await ctx.tx.plywoodSalesOrder.findUniqueOrThrow({
+    const order = await ctx.tx.tradingSalesOrder.findUniqueOrThrow({
       where: { id: input.orderId },
     });
     await transition(ctx, {
@@ -2526,14 +2526,14 @@ export const cancelSalesOrder: CommandDefinition<
       fromKey: order.state,
       toKey: "cancelled",
     });
-    await ctx.tx.plywoodSalesOrder.update({
+    await ctx.tx.tradingSalesOrder.update({
       where: { id: order.id },
       data: { state: "cancelled", version: { increment: 1 } },
     });
     return {
       result: { id: order.id },
       events: [
-        { name: "verity.plywood.sales_order_cancelled", entityId: order.id },
+        { name: "verity.trading.sales_order_cancelled", entityId: order.id },
       ],
     };
   },
@@ -2560,11 +2560,11 @@ export const listSuppliers: QueryDefinition<
     linkedCustomerName: string | null;
   }>
 > = {
-  key: "verity.plywood.list_suppliers",
+  key: "verity.trading.list_suppliers",
   entity: ENTITY_SUPPLIER,
   input: z.object({ includeInactive: z.boolean().optional() }),
   handler: async (ctx, input) => {
-    const suppliers = await ctx.tx.plywoodSupplier.findMany({
+    const suppliers = await ctx.tx.tradingSupplier.findMany({
       where: input.includeInactive ? {} : { active: true },
       orderBy: { displayName: "asc" },
       include: {
@@ -2575,7 +2575,7 @@ export const listSuppliers: QueryDefinition<
         // Included rather than aggregated per supplier: the running balance is
         // a sum over the party's own entries, and one pass beats one query
         // per row on a list screen.
-        plywoodLedgerEntries: {
+        tradingLedgerEntries: {
           select: { entryType: true, amountPaise: true },
         },
         linkedCustomer: { select: { id: true, displayName: true } },
@@ -2589,7 +2589,7 @@ export const listSuppliers: QueryDefinition<
       stateCode: supplier.stateCode,
       active: supplier.active,
       openOrders: supplier.orders.length,
-      outstandingPaise: supplier.plywoodLedgerEntries.reduce(
+      outstandingPaise: supplier.tradingLedgerEntries.reduce(
         (sum, entry) =>
           sum +
           (entry.entryType === "debit"
@@ -2621,11 +2621,11 @@ export const listCustomers: QueryDefinition<
     active: boolean;
   }>
 > = {
-  key: "verity.plywood.list_customers",
+  key: "verity.trading.list_customers",
   entity: ENTITY_CUSTOMER,
   input: z.object({ includeInactive: z.boolean().optional() }),
   handler: async (ctx, input) => {
-    const customers = await ctx.tx.plywoodCustomer.findMany({
+    const customers = await ctx.tx.tradingCustomer.findMany({
       where: input.includeInactive ? {} : { active: true },
       orderBy: { displayName: "asc" },
       select: {
@@ -2728,7 +2728,7 @@ export const purchaseOrderDetail: QueryDefinition<
     }>;
   } | null
 > = {
-  key: "verity.plywood.purchase_order_detail",
+  key: "verity.trading.purchase_order_detail",
   entity: ENTITY_PURCHASE_ORDER,
   input: z.object({ orderId: z.string().uuid() }),
   handler: async (ctx, input) => {
@@ -2744,7 +2744,7 @@ export const purchaseOrderDetail: QueryDefinition<
       ctx.actor,
       ENTITY_PURCHASE_ORDER,
     );
-    const order = await ctx.tx.plywoodPurchaseOrder.findFirst({
+    const order = await ctx.tx.tradingPurchaseOrder.findFirst({
       where: { id: input.orderId, locationId: { in: reachable } },
       include: {
         lines: true,
@@ -2754,7 +2754,7 @@ export const purchaseOrderDetail: QueryDefinition<
           orderBy: { receivedAt: "desc" },
           include: { lines: { select: { qtyReceived: true } } },
         },
-        plywoodInvoices: {
+        tradingInvoices: {
           orderBy: { issuedAt: "desc" },
           include: {
             payments: { select: { amountPaise: true } },
@@ -2814,7 +2814,7 @@ export const purchaseOrderDetail: QueryDefinition<
           0,
         ),
       })),
-      invoices: order.plywoodInvoices.map((invoice) => {
+      invoices: order.tradingInvoices.map((invoice) => {
         const paid = invoice.payments.reduce(
           (sum, payment) => sum + payment.amountPaise,
           0,
@@ -2918,7 +2918,7 @@ export const salesOrderDetail: QueryDefinition<
     }>;
   } | null
 > = {
-  key: "verity.plywood.sales_order_detail",
+  key: "verity.trading.sales_order_detail",
   entity: ENTITY_SALES_ORDER,
   input: z.object({ orderId: z.string().uuid() }),
   handler: async (ctx, input) => {
@@ -2929,7 +2929,7 @@ export const salesOrderDetail: QueryDefinition<
       ctx.actor,
       ENTITY_SALES_ORDER,
     );
-    const order = await ctx.tx.plywoodSalesOrder.findFirst({
+    const order = await ctx.tx.tradingSalesOrder.findFirst({
       where: { id: input.orderId, locationId: { in: reachable } },
       include: {
         lines: true,
@@ -2942,7 +2942,7 @@ export const salesOrderDetail: QueryDefinition<
           orderBy: { issuedAt: "desc" },
           include: { lines: { select: { qtyIssued: true } } },
         },
-        plywoodInvoices: {
+        tradingInvoices: {
           orderBy: { issuedAt: "desc" },
           include: {
             payments: { select: { amountPaise: true } },
@@ -3037,7 +3037,7 @@ export const salesOrderDetail: QueryDefinition<
         issuedAt: issue.issuedAt,
         qtyUnits: issue.lines.reduce((sum, line) => sum + line.qtyIssued, 0),
       })),
-      invoices: order.plywoodInvoices.map((invoice) => {
+      invoices: order.tradingInvoices.map((invoice) => {
         const paid = invoice.payments.reduce(
           (sum, payment) => sum + payment.amountPaise,
           0,
@@ -3142,7 +3142,7 @@ export const openOrders: QueryDefinition<
     }>;
   }
 > = {
-  key: "verity.plywood.open_orders",
+  key: "verity.trading.open_orders",
   entity: ENTITY_SALES_ORDER,
   input: z.object({}),
   handler: async (ctx) => {
@@ -3161,7 +3161,7 @@ export const openOrders: QueryDefinition<
       ENTITY_SALES_ORDER,
     );
 
-    const purchases = await ctx.tx.plywoodPurchaseOrder.findMany({
+    const purchases = await ctx.tx.tradingPurchaseOrder.findMany({
       where: {
         // Audit finding U0-2: select what is NOT finished, rather than what is
         // on a known-open list. A hard-coded open list silently drops any row
@@ -3175,7 +3175,7 @@ export const openOrders: QueryDefinition<
       include: { lines: true, supplier: { select: { displayName: true } } },
       orderBy: { createdAt: "desc" },
     });
-    const sales = await ctx.tx.plywoodSalesOrder.findMany({
+    const sales = await ctx.tx.tradingSalesOrder.findMany({
       where: {
         // U0-2, selling side. See the note above.
         state: { notIn: ["completed", "cancelled"] },
@@ -3306,7 +3306,7 @@ export const needsAttention: QueryDefinition<
     href: string;
   }>
 > = {
-  key: "verity.plywood.needs_attention",
+  key: "verity.trading.needs_attention",
   entity: ENTITY_INVOICE,
   input: z.object({}),
   handler: async (ctx) => {
@@ -3399,7 +3399,7 @@ export const stockAvailability: QueryDefinition<
     availableUnits: number;
   }>
 > = {
-  key: "verity.plywood.stock_availability",
+  key: "verity.trading.stock_availability",
   entity: ENTITY_RESERVATION,
   input: z.object({ locationId: z.string().uuid() }),
   handler: async (ctx, input) => {
@@ -3419,7 +3419,7 @@ export const stockAvailability: QueryDefinition<
       where: { locationId: input.locationId },
       include: { product: { select: { name: true } } },
     });
-    const holds = await ctx.tx.plywoodStockReservation.groupBy({
+    const holds = await ctx.tx.tradingStockReservation.groupBy({
       by: ["productId"],
       where: { locationId: input.locationId, releasedAt: null },
       _sum: { qtyUnits: true },
@@ -3522,11 +3522,11 @@ export const supplierDetail: QueryDefinition<
     }>;
   } | null
 > = {
-  key: "verity.plywood.supplier_detail",
+  key: "verity.trading.supplier_detail",
   entity: ENTITY_SUPPLIER,
   input: z.object({ supplierId: z.string().uuid() }),
   handler: async (ctx, input) => {
-    const supplier = await ctx.tx.plywoodSupplier.findUnique({
+    const supplier = await ctx.tx.tradingSupplier.findUnique({
       where: { id: input.supplierId },
       include: {
         pricing: { include: { product: { select: { name: true } } } },
@@ -3536,14 +3536,14 @@ export const supplierDetail: QueryDefinition<
             lines: { select: { qtyOrdered: true, qtyReceived: true } },
           },
         },
-        plywoodInvoices: {
+        tradingInvoices: {
           orderBy: { issuedAt: "desc" },
           include: {
             payments: { orderBy: { receivedAt: "desc" } },
             notes: { select: { noteType: true, totalPaise: true } },
           },
         },
-        plywoodLedgerEntries: { orderBy: { occurredAt: "asc" } },
+        tradingLedgerEntries: { orderBy: { occurredAt: "asc" } },
       },
     });
     if (!supplier) return null;
@@ -3567,7 +3567,7 @@ export const supplierDetail: QueryDefinition<
       email: supplier.email,
       stateCode: supplier.stateCode,
       active: supplier.active,
-      outstandingPaise: supplier.plywoodLedgerEntries.reduce(
+      outstandingPaise: supplier.tradingLedgerEntries.reduce(
         (sum, entry) =>
           sum +
           (entry.entryType === "debit"
@@ -3607,7 +3607,7 @@ export const supplierDetail: QueryDefinition<
         receivedUnits: order.lines.reduce((u, line) => u + line.qtyReceived, 0),
         createdAt: order.createdAt,
       })),
-      invoices: supplier.plywoodInvoices.map((invoice) => {
+      invoices: supplier.tradingInvoices.map((invoice) => {
         const paid = invoice.payments.reduce(
           (p, payment) => p + payment.amountPaise,
           0,
@@ -3632,7 +3632,7 @@ export const supplierDetail: QueryDefinition<
           salesOrderId: invoice.salesOrderId,
         };
       }),
-      payments: supplier.plywoodInvoices.flatMap((invoice) =>
+      payments: supplier.tradingInvoices.flatMap((invoice) =>
         invoice.payments.map((payment) => ({
           id: payment.id,
           invoiceId: invoice.id,
@@ -3643,7 +3643,7 @@ export const supplierDetail: QueryDefinition<
           receivedAt: payment.receivedAt,
         })),
       ),
-      ledger: supplier.plywoodLedgerEntries.map((entry) => {
+      ledger: supplier.tradingLedgerEntries.map((entry) => {
         running +=
           entry.entryType === "debit" ? entry.amountPaise : -entry.amountPaise;
         return {
@@ -3741,11 +3741,11 @@ export const customerDetail: QueryDefinition<
     }>;
   } | null
 > = {
-  key: "verity.plywood.customer_detail",
+  key: "verity.trading.customer_detail",
   entity: ENTITY_CUSTOMER,
   input: z.object({ customerId: z.string().uuid() }),
   handler: async (ctx, input) => {
-    const customer = await ctx.tx.plywoodCustomer.findUnique({
+    const customer = await ctx.tx.tradingCustomer.findUnique({
       where: { id: input.customerId },
       include: {
         pricing: { include: { product: { select: { name: true } } } },
@@ -3762,14 +3762,14 @@ export const customerDetail: QueryDefinition<
             },
           },
         },
-        plywoodInvoices: {
+        tradingInvoices: {
           orderBy: { issuedAt: "desc" },
           include: {
             payments: { orderBy: { receivedAt: "desc" } },
             notes: { select: { noteType: true, totalPaise: true } },
           },
         },
-        plywoodLedgerEntries: { orderBy: { occurredAt: "asc" } },
+        tradingLedgerEntries: { orderBy: { occurredAt: "asc" } },
       },
     });
     if (!customer) return null;
@@ -3801,7 +3801,7 @@ export const customerDetail: QueryDefinition<
         0,
         customer.creditLimitPaise - exposurePaise,
       ),
-      outstandingPaise: customer.plywoodLedgerEntries.reduce(
+      outstandingPaise: customer.tradingLedgerEntries.reduce(
         (sum, entry) =>
           sum +
           (entry.entryType === "debit"
@@ -3831,7 +3831,7 @@ export const customerDetail: QueryDefinition<
         issuedUnits: order.lines.reduce((u, line) => u + line.qtyShipped, 0),
         createdAt: order.createdAt,
       })),
-      invoices: customer.plywoodInvoices.map((invoice) => {
+      invoices: customer.tradingInvoices.map((invoice) => {
         const paid = invoice.payments.reduce(
           (p, payment) => p + payment.amountPaise,
           0,
@@ -3856,7 +3856,7 @@ export const customerDetail: QueryDefinition<
           salesOrderId: invoice.salesOrderId,
         };
       }),
-      payments: customer.plywoodInvoices.flatMap((invoice) =>
+      payments: customer.tradingInvoices.flatMap((invoice) =>
         invoice.payments.map((payment) => ({
           id: payment.id,
           invoiceId: invoice.id,
@@ -3867,7 +3867,7 @@ export const customerDetail: QueryDefinition<
           receivedAt: payment.receivedAt,
         })),
       ),
-      ledger: customer.plywoodLedgerEntries.map((entry) => {
+      ledger: customer.tradingLedgerEntries.map((entry) => {
         running +=
           entry.entryType === "debit" ? entry.amountPaise : -entry.amountPaise;
         return {

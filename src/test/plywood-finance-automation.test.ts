@@ -1,3 +1,4 @@
+import { TRADING_CAPABILITY } from "@/server/capabilities/trading";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -131,6 +132,7 @@ describeDb("plywood finance automation (Task 71)", () => {
       await activateCapability(tx, tenantId, LOCATION_CAPABILITY);
       await activateCapability(tx, tenantId, ASSET_CAPABILITY);
       await activateCapability(tx, tenantId, EVIDENCE_CAPABILITY);
+      await activateCapability(tx, tenantId, TRADING_CAPABILITY);
       await activateCapability(tx, tenantId, PLYWOOD_CAPABILITY);
 
       await setConfig(tx, tenantId, CONFIG_TENANT_STATE_CODE, "07", "Tenant");
@@ -477,7 +479,7 @@ describeDb("plywood finance automation (Task 71)", () => {
       });
 
       await withTenant(tenantId, async (tx) => {
-        const line = await tx.plywoodPurchaseOrderLine.findFirstOrThrow({
+        const line = await tx.tradingPurchaseOrderLine.findFirstOrThrow({
           where: { purchaseOrderId: order.id },
         });
         // 12.5% off ₹1,000 is ₹875. The NET is what unitCostPaise holds, so
@@ -487,7 +489,7 @@ describeDb("plywood finance automation (Task 71)", () => {
         expect(line.listUnitCostPaise).toBe(100_000);
         expect(line.discountBps).toBe(1250);
 
-        const stored = await tx.plywoodPurchaseOrder.findUniqueOrThrow({
+        const stored = await tx.tradingPurchaseOrder.findUniqueOrThrow({
           where: { id: order.id },
         });
         expect(stored.totalCostPaise).toBe(10 * 87_500);

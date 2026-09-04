@@ -106,6 +106,7 @@ regeneration — read that instead of re-deriving triage from scratch.
 | 91_bulk_operations_and_partial_failure.md | **BUILT 2026-09-04** — `src/server/platform/batch.ts`, consumed by Task 84's agent loop; trigger (Task 84 landing first) fired same day it was written |
 | 92_business_timeline_view.md | **PARTIALLY BUILT, confirmed 2026-09-04** — infrastructure (Task 38's `reconstructHistory`, `ActivityLog`) already existed; a real bug found and fixed (fact entries showed a raw event name). Coverage beyond purchase/sales orders still open |
 | 94_incomplete_information_states.md | **MECHANISM DECIDED 2026-09-04** — `Select`-type companion status field, no new primitive; taught in Task 82's skill; no plywood retrofit performed (its own non-goal) |
+| ADR-018 (trading capability extraction) | **BUILT 2026-09-04** — `src/server/capabilities/trading/` extracted from `plywood` (28 of 29 `Plywood*` models were already generic); `plywood` now depends on `trading` and keeps only `PlywoodProductDetail` (board dimension/grade). Explicit product-owner override of taskplans 74/75's "wait for 72/73 settled" gate, given the auto-parts client concretely arriving; see `verity-spec/17_decisions/adr/adr-018.md` for the full reasoning and what was rejected. Migration `20260904180000_trading_capability_extraction` renames tables (data-preserving), backfills the new detail table, and activates `trading` for every tenant that already had `plywood` active. |
 
 ## Pending
 
@@ -116,9 +117,9 @@ This table is the flat list; that file is the sequencing.
 
 | File | Reason pending |
 |---|---|
-| 74_erpclaw_capability_selling.md | needs Tasks 72/73 *settled* (real use, not just built), per its own text — not merely "second client" anymore |
-| 75_erpclaw_capability_buying.md | same — needs 72/73 settled, plus plywood's purchase-chain "stabilized enough to generalize from" |
-| 76_erpclaw_capability_payments.md | needs Task 72 "fixed" per its own text; requirements usable now as a plywood finance.ts review checklist |
+| 74_erpclaw_capability_selling.md | superseded in large part by ADR-018 (2026-09-04) — see below; any scope beyond what `trading` now provides stays open |
+| 75_erpclaw_capability_buying.md | superseded in large part by ADR-018 (2026-09-04) — see below; any scope beyond what `trading` now provides stays open |
+| 76_erpclaw_capability_payments.md | superseded in large part by ADR-018 (2026-09-04) — see below; any scope beyond what `trading` now provides stays open |
 | 79_erpclaw_capability_payroll.md | no Indian statutory spec (PF/ESI/TDS/Form 16) exists to build against — real research needed first, not code |
 | 80_erpclaw_capability_advanced_accounting.md | needs Task 72 settled + an enterprise consolidation/lease-accounting client; neither present |
 | 81_erpclaw_ai_operating_rules.md | **trigger fired 2026-09-04** (Task 84's chat surface is the assistant/command layer this was written for) — 16 rules not yet audited against what actually shipped |
