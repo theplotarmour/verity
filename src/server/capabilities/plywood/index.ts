@@ -109,6 +109,8 @@ import {
   recordPartyPayment,
   confirmPurchaseBill,
   raisePurchaseBillFromOrder,
+  captureMetricSnapshot,
+  metricsHistory,
 } from "./finance";
 
 /**
@@ -1088,6 +1090,16 @@ export function registerPlywoodCapability(): void {
           };
         },
       },
+      {
+        key: "verity.plywood.capture_metric_snapshot",
+        label: "Capture today's business metrics for the trend history",
+        // Daily — a metric snapshot is a business-day fact, not something
+        // that needs frequent/hourly resolution. Task 100's own missing
+        // prerequisite for a real sparkline: see captureMetricSnapshot's
+        // module comment in finance.ts for the full reasoning.
+        cadence: "daily",
+        run: async ({ tx, tenantId }) => captureMetricSnapshot(tx, tenantId),
+      },
     ],
   });
 
@@ -1170,5 +1182,6 @@ export function registerPlywoodCapability(): void {
   registerQuery(paymentJournal);
   registerQuery(unbilledMovements);
   registerQuery(ownerConsole);
+  registerQuery(metricsHistory);
   registerQuery(marginReport);
 }

@@ -5,8 +5,42 @@ below). Checked against `src/components/ui/charts.tsx` (existing chart
 primitives, read in full) and the Spinner/shadcn finding from this same
 session's nav-loading work.
 
-## Status: PENDING — direction document. Two of its premises conflict
-with decisions Verity has already made; flagged, not silently overridden.
+## Status: Both flagged decisions made 2026-09-04.
+
+**Metrics-history capability: BUILT.** `PlywoodMetricSnapshot` table +
+daily capture job (`verity.plywood.capture_metric_snapshot`) + a
+`metricsHistory` query, reusing the exact SQL expressions `ownerConsole`
+already uses for stock value/receivables/payables (source-of-truth
+discipline) at whole-tenant scope. This is the actual unblocking
+prerequisite this file itself identified as missing from the original
+writeup. **Not yet applied to the live database** — schema-changing SQL,
+same permission boundary as every migration this session; run `npx prisma
+db execute --file pending-metric-snapshot-migration.sql --url
+"%DIRECT_URL%"` (file at the repo root) to apply it, then move its content
+into a proper `prisma/migrations/<timestamp>_.../migration.sql` and
+`prisma migrate resolve --applied` it, same as every other migration this
+session — not done yet because resolving it before the SQL is actually
+applied would desync `migrate status` again. **Sparklines/
+trend charts themselves are still NOT built** — a real trend needs real
+elapsed days of accumulated history, which no build session can
+manufacture without violating `charts.tsx`'s own "no sample data, no
+smoothing, no projected series" rule. That part waits on time passing with
+the capture job running, not on more code.
+
+**shadcn/ui adoption: decided NO.** Verity keeps its existing hand-built
+component layer as the only one. Reasoning: the file's own analysis
+already showed installing shadcn "underneath" means either running two
+component systems in parallel (real maintenance cost, no corresponding
+benefit for an existing product) or a large deliberate migration of
+already-working primitives — neither justified by anything currently
+blocked on it. `react-map-gl`/MapLibre, Recharts, and the other named
+libraries remain reference choices for when their actual prerequisite
+(multi-region client data, real time-series data) exists, per this file's
+own re-ranked priority list — none installed now.
+
+The non-conflicting parts of this file (asymmetric layout, intelligent
+cards, per-role views) remain buildable whenever Overview work is next a
+priority — no blocker, not done in this pass.
 
 ## The core idea, worth keeping in one sentence
 

@@ -133,6 +133,7 @@ model Tenant {
   plywoodGstPortalRecords          PlywoodGstPortalRecord[]
   plywoodPaymentAllocations        PlywoodPaymentAllocation[]
   plywoodPurchaseBillConfirmations PlywoodPurchaseBillConfirmation[]
+  plywoodMetricSnapshots           PlywoodMetricSnapshot[]
 
   // Capability: accounting (Task 72). Back-relations only, as above.
   accounts      Account[]
@@ -3702,4 +3703,42 @@ model BillingInvoice {
 
   @@unique([tenantId, meterId, billingPeriodId])
   @@map("billing_invoice")
+}
+
+// ===========================================================================
+// PLYWOOD METRIC SNAPSHOTS (Task 100) — the missing prerequisite the
+// dashboard-direction writeup didn't name.
+//
+// `charts.tsx`'s own rule: "no sample data, no smoothing, no projected
+// series". A sparkline needs a real time series; every Overview number
+// today is a live aggregate, not retained history. This table is that
+// history, captured once daily by a scheduled job
+// (`verity.plywood.capture_metric_snapshot`) reusing the exact same SQL
+// expressions `ownerConsole` already uses for stock value/receivables/
+// payables (source-of-truth discipline, Task 82's skill) — just at
+// whole-tenant scope, since a scheduled job has no actor to scope by
+// godown, and a business snapshot should track the whole business anyway.
+//
+// Deliberately capability-private (plywood), not a platform primitive —
+// same "one client's need means platform primitive" discipline as every
+// other capability this session, applied to Task 100's own reasoning
+// about not adopting shadcn/a chart library ahead of real need either.
+// ===========================================================================
+
+model PlywoodMetricSnapshot {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  /// One row per tenant per calendar day (business timezone) — the unique
+  /// constraint below is what makes daily capture idempotent under retry.
+  snapshotDate     DateTime @map("snapshot_date") @db.Date
+  salesTodayPaise  Int      @map("sales_today_paise")
+  stockValuePaise  Int      @map("stock_value_paise")
+  receivablesPaise Int      @map("receivables_paise")
+  payablesPaise    Int      @map("payables_paise")
+  capturedAt       DateTime @default(now()) @map("captured_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, snapshotDate])
+  @@map("plywood_metric_snapshot")
 }

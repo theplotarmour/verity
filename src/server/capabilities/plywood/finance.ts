@@ -19,6 +19,7 @@ import {
 import { type QueryDefinition } from "@/server/platform/query";
 import { resolveConfig } from "@/server/platform/capability";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
+import { effectiveTimeZone } from "@/server/platform/temporal";
 import {
   CONFIG_CGST_RATE_BP,
   CONFIG_IGST_RATE_BP,
@@ -2433,6 +2434,108 @@ export const ownerConsole: QueryDefinition<
       outputTaxPaise: n("output_tax"),
       eligibleItcPaise: n("eligible_itc"),
     };
+  },
+};
+
+/**
+ * Daily metric-history capture — Task 100's own missing prerequisite for a
+ * real trend line. A scheduled job (not a query — no actor to scope by
+ * godown, and a business snapshot should track the whole business, not one
+ * actor's visible slice), so this reuses the SAME source-of-truth SQL
+ * expressions `ownerConsole` computes above (stock value, receivables,
+ * payables, today's sales) — same tables, same arithmetic, just at
+ * whole-tenant scope instead of godown-filtered. Never a second, subtly
+ * different definition of the same number (Task 82's own rule).
+ *
+ * Upserts by (tenantId, snapshotDate), so a retried or re-run capture on the
+ * same business day is a no-op update, never a duplicate row — the same
+ * idempotency discipline every scheduled job in this capability already
+ * follows (see the low-stock sweep in `index.ts`).
+ *
+ * Deliberately captures data only. Nothing in `charts.tsx`/Overview reads
+ * this table yet — a real trend needs real elapsed days, which a build
+ * session cannot manufacture; wiring a sparkline to a one-point series
+ * would be exactly the "drawing rather than a measurement" `charts.tsx`
+ * already refuses. `metricsHistory` below exists so that once real history
+ * has accumulated, reading it is a one-query problem, not a new one.
+ */
+export async function captureMetricSnapshot(
+  tx: TenantScopedClient,
+  tenantId: string,
+): Promise<{ events: Array<{ name: string; entityId: string }> }> {
+  const org = await tx.organization.findFirst({ where: { tenantId }, select: { id: true } });
+  const zone = org ? await effectiveTimeZone(tx, org.id) : "UTC";
+
+  const rows = await tx.$queryRaw<Record<string, bigint | null>[]>`SELECT
+      (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
+        WHERE customer_id IS NOT NULL AND issued_at >= date_trunc('day', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
+        AS sales_today,
+      (SELECT COALESCE(SUM(qty_units * avg_unit_cost_paise), 0) FROM stock_balance)::bigint
+        AS stock_value,
+      (SELECT COALESCE(SUM(i.total_paise), 0) - COALESCE((
+          SELECT SUM(a.amount_paise) FROM plywood_payment_allocation a
+          JOIN plywood_invoice pi ON pi.id = a.invoice_id
+          WHERE pi.customer_id IS NOT NULL), 0)
+        FROM plywood_invoice i WHERE i.customer_id IS NOT NULL)::bigint
+        AS receivables,
+      (SELECT COALESCE(SUM(i.total_paise), 0) - COALESCE((
+          SELECT SUM(a.amount_paise) FROM plywood_payment_allocation a
+          JOIN plywood_invoice pi ON pi.id = a.invoice_id
+          WHERE pi.supplier_id IS NOT NULL), 0)
+        FROM plywood_invoice i WHERE i.supplier_id IS NOT NULL)::bigint
+        AS payables`;
+
+  const row = rows[0] ?? {};
+  const n = (key: string) => Number(row[key] ?? 0);
+
+  const snapshot = await tx.plywoodMetricSnapshot.upsert({
+    where: { tenantId_snapshotDate: { tenantId, snapshotDate: new Date(new Date().toISOString().slice(0, 10)) } },
+    create: {
+      tenantId,
+      snapshotDate: new Date(new Date().toISOString().slice(0, 10)),
+      salesTodayPaise: n("sales_today"),
+      stockValuePaise: n("stock_value"),
+      receivablesPaise: n("receivables"),
+      payablesPaise: n("payables"),
+    },
+    update: {
+      salesTodayPaise: n("sales_today"),
+      stockValuePaise: n("stock_value"),
+      receivablesPaise: n("receivables"),
+      payablesPaise: n("payables"),
+    },
+  });
+
+  return { events: [{ name: "verity.plywood.metric_snapshot_captured", entityId: snapshot.id }] };
+}
+
+export const metricsHistory: QueryDefinition<
+  { days?: number },
+  Array<{
+    date: string;
+    salesTodayPaise: number;
+    stockValuePaise: number;
+    receivablesPaise: number;
+    payablesPaise: number;
+  }>
+> = {
+  key: "verity.plywood.metrics_history",
+  entity: ENTITY_INVOICE,
+  input: z.object({ days: z.number().int().min(1).max(365).optional() }),
+  handler: async (ctx, input) => {
+    const rows = await ctx.tx.plywoodMetricSnapshot.findMany({
+      orderBy: { snapshotDate: "desc" },
+      take: input.days ?? 90,
+    });
+    return rows
+      .map((r) => ({
+        date: r.snapshotDate.toISOString().slice(0, 10),
+        salesTodayPaise: r.salesTodayPaise,
+        stockValuePaise: r.stockValuePaise,
+        receivablesPaise: r.receivablesPaise,
+        payablesPaise: r.payablesPaise,
+      }))
+      .reverse();
   },
 };
 
