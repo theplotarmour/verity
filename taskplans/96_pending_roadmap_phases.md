@@ -28,22 +28,25 @@ implementation work.
   capability-local before Phase 2 produces its first real attention
   sources — otherwise Phase 2 builds something Task 90 has to unwind.
 
-## Phase 1 — Zero-dependency, start anytime
+## Phase 1 — Zero-dependency, start anytime — COMPLETE 2026-09-04
 
-No trigger, no second client, no other phase required first.
+Run last, after Phases 2/3/4 rather than first as originally sequenced —
+Task 82's own trigger ("install before the next large client-module
+implementation") technically slipped since Tasks 72/73/77/78 landed first,
+but the skill's value is forward-looking regardless.
 
-1. **Task 82** (capability-builder skill) — install this *before* any
-   other capability work in this roadmap touches code, per its own Phase
-   2 trigger ("before the next large client-module implementation").
-   Sequenced first here for that reason, not because it's urgent alone.
-2. **Task 85** (foundation conformance script) — write plywood's version
-   retrospectively; cheap now, becomes the template Phase 2/4 work reuses.
-3. **Task 92** (business timeline) — first step is reading Task 38's
-   actual output, not building anything. Resolves to either "small
-   presentation layer" or "confirmed gap" — do this early since it's an
-   investigation, not a commitment.
-4. **Task 94** (incomplete-information states) — apply to plywood's own
-   GST fields as the first concrete instance, per its own trigger.
+1. ~~**Task 82**~~ **BUILT** — `.claude/skills/verity-client-capability-
+   builder/SKILL.md`.
+2. ~~**Task 85**~~ **BUILT** — `implementation/13-conformance/
+   acceptance-plywood.md` (PASS) and `acceptance-accounting.md` (PENDING,
+   honestly unwalked).
+3. ~~**Task 92**~~ **PARTIALLY BUILT, confirmed** — the infrastructure
+   (`reconstructHistory`, `ActivityLog`) already existed; found and fixed a
+   real bug (fact entries showed a raw event name instead of nothing). Per-
+   entity coverage beyond purchase/sales orders stays open.
+4. ~~**Task 94**~~ **MECHANISM DECIDED** — `Select`-type companion status
+   field, no new platform primitive, no plywood retrofit (its own
+   non-goal). Taught in Task 82's skill.
 
 ## Phase 2 — Plywood-scoped, single-client work — SKIPPED 2026-09-03
 
