@@ -2252,6 +2252,7 @@ export const ownerConsole: QueryDefinition<
   {
     /* Sales (§7) */
     salesThisMonthPaise: number;
+    salesLastMonthPaise: number;
     todaysSalesPaise: number;
     openSalesOrders: number;
     awaitingCreditApproval: number;
@@ -2261,6 +2262,8 @@ export const ownerConsole: QueryDefinition<
     pendingReceipt: number;
     incomingUnits: number;
     todaysPurchasesPaise: number;
+    purchasesThisMonthPaise: number;
+    purchasesLastMonthPaise: number;
     /* Inventory */
     stockValuePaise: number;
     lowStockBoards: number;
@@ -2311,12 +2314,28 @@ export const ownerConsole: QueryDefinition<
         (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
           WHERE customer_id IS NOT NULL AND issued_at >= date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS sales_this_month,
+        -- Real month-over-month delta (Task 100's dashboard rework) --
+        -- the FULL prior calendar month, not "same number of days ago",
+        -- because a delta against a partial month is not comparable.
+        (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
+          WHERE customer_id IS NOT NULL
+            AND issued_at >= date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone} - interval '1 month'
+            AND issued_at < date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
+          AS sales_last_month,
         (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
           WHERE customer_id IS NOT NULL AND issued_at >= date_trunc('day', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS todays_sales,
         (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
           WHERE supplier_id IS NOT NULL AND issued_at >= date_trunc('day', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
           AS todays_purchases,
+        (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
+          WHERE supplier_id IS NOT NULL AND issued_at >= date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
+          AS purchases_this_month,
+        (SELECT COALESCE(SUM(total_paise), 0) FROM plywood_invoice
+          WHERE supplier_id IS NOT NULL
+            AND issued_at >= date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone} - interval '1 month'
+            AND issued_at < date_trunc('month', now() AT TIME ZONE ${zone}) AT TIME ZONE ${zone})::bigint
+          AS purchases_last_month,
         (SELECT count(*) FROM plywood_sales_order
           WHERE state IN ('draft', 'pending_credit', 'approved', 'dispatching'))::bigint
           AS open_sales_orders,
@@ -2416,6 +2435,7 @@ export const ownerConsole: QueryDefinition<
     const n = (key: string) => Number(row[key] ?? 0);
     return {
       salesThisMonthPaise: n("sales_this_month"),
+      salesLastMonthPaise: n("sales_last_month"),
       todaysSalesPaise: n("todays_sales"),
       openSalesOrders: n("open_sales_orders"),
       awaitingCreditApproval: n("awaiting_credit"),
@@ -2424,6 +2444,8 @@ export const ownerConsole: QueryDefinition<
       pendingReceipt: n("pending_receipt"),
       incomingUnits: n("incoming_units"),
       todaysPurchasesPaise: n("todays_purchases"),
+      purchasesThisMonthPaise: n("purchases_this_month"),
+      purchasesLastMonthPaise: n("purchases_last_month"),
       stockValuePaise: n("stock_value"),
       lowStockBoards: n("low_stock"),
       reservedUnits: n("reserved_units"),
@@ -2536,6 +2558,193 @@ export const metricsHistory: QueryDefinition<
         payablesPaise: r.payablesPaise,
       }))
       .reverse();
+  },
+};
+
+/**
+ * Real weekly totals — Overview dashboard rework. Not a fabricated smooth
+ * line: `plywood_invoice` already holds real historical rows with real
+ * timestamps, so a live `GROUP BY` week gives a real multi-point series
+ * immediately, without waiting for `PlywoodMetricSnapshot` (Task 100) to
+ * accumulate. Same `charts.tsx` rule as everywhere else — every value real.
+ */
+async function weeklyTotals(
+  tx: TenantScopedClient,
+  zone: string,
+  partyColumn: "customer_id" | "supplier_id",
+  weeks: number,
+): Promise<number[]> {
+  // `generate_series` over the week boundaries, LEFT JOINed against the real
+  // invoice sums, so every week in the window gets a bucket — including a
+  // week with zero invoices — at its true chronological position. A version
+  // that only emitted rows for weeks with data and then walked them in
+  // array order left-packed a sparse window: one invoice in an otherwise
+  // empty range landed at index 0 instead of the trailing (current) week.
+  const rows = await tx.$queryRawUnsafe<{ total: bigint }[]>(
+    `WITH weeks AS (
+       SELECT generate_series(
+                date_trunc('week', now() AT TIME ZONE $1) - (($2::int - 1) || ' weeks')::interval,
+                date_trunc('week', now() AT TIME ZONE $1),
+                '1 week'::interval
+              ) AS week_start
+     )
+     SELECT COALESCE(SUM(i.total_paise), 0)::bigint AS total
+       FROM weeks w
+       LEFT JOIN plywood_invoice i
+              ON date_trunc('week', i.issued_at AT TIME ZONE $1) = w.week_start
+             AND i.${partyColumn} IS NOT NULL
+      GROUP BY w.week_start
+      ORDER BY w.week_start ASC`,
+    zone,
+    weeks,
+  );
+  return rows.map((r) => Number(r.total));
+}
+
+export const weeklySalesTotals: QueryDefinition<{ weeks?: number }, number[]> = {
+  key: "verity.plywood.weekly_sales_totals",
+  entity: ENTITY_INVOICE,
+  input: z.object({ weeks: z.number().int().min(1).max(52).optional() }),
+  handler: async (ctx, input) => {
+    const zone = await businessZone(ctx);
+    return weeklyTotals(ctx.tx, zone, "customer_id", input.weeks ?? 10);
+  },
+};
+
+export const weeklyPurchaseTotals: QueryDefinition<{ weeks?: number }, number[]> = {
+  key: "verity.plywood.weekly_purchase_totals",
+  entity: ENTITY_INVOICE,
+  input: z.object({ weeks: z.number().int().min(1).max(52).optional() }),
+  handler: async (ctx, input) => {
+    const zone = await businessZone(ctx);
+    return weeklyTotals(ctx.tx, zone, "supplier_id", input.weeks ?? 10);
+  },
+};
+
+/** The business's own "start of this month" as a real instant — same
+ *  zone-awareness `ownerConsole` already requires (its own comment: a UTC
+ *  boundary reports last month's sales as this month's at 01:55 IST on the
+ *  1st). One tiny query rather than duplicating `date_trunc` logic in JS. */
+async function zoneMonthStart(tx: TenantScopedClient, zone: string): Promise<Date> {
+  const rows = await tx.$queryRawUnsafe<{ month_start: Date }[]>(
+    `SELECT (date_trunc('month', now() AT TIME ZONE $1) AT TIME ZONE $1) AS month_start`,
+    zone,
+  );
+  return rows[0]!.month_start;
+}
+
+export const topCustomers: QueryDefinition<
+  { limit?: number },
+  Array<{ customerId: string; name: string; totalPaise: number; orders: number }>
+> = {
+  key: "verity.plywood.top_customers",
+  entity: ENTITY_INVOICE,
+  input: z.object({ limit: z.number().int().min(1).max(20).optional() }),
+  handler: async (ctx, input) => {
+    const monthStart = await zoneMonthStart(ctx.tx, await businessZone(ctx));
+    const grouped = await ctx.tx.plywoodInvoice.groupBy({
+      by: ["customerId"],
+      where: { customerId: { not: null }, issuedAt: { gte: monthStart } },
+      _sum: { totalPaise: true },
+      _count: { _all: true },
+      orderBy: { _sum: { totalPaise: "desc" } },
+      take: input.limit ?? 5,
+    });
+    const customers = await ctx.tx.plywoodCustomer.findMany({
+      where: { id: { in: grouped.map((g) => g.customerId!) } },
+      select: { id: true, displayName: true },
+    });
+    const nameOf = new Map(customers.map((c) => [c.id, c.displayName]));
+    return grouped.map((g) => ({
+      customerId: g.customerId!,
+      name: nameOf.get(g.customerId!) ?? "—",
+      totalPaise: g._sum.totalPaise ?? 0,
+      orders: g._count._all,
+    }));
+  },
+};
+
+export const topItems: QueryDefinition<
+  { limit?: number },
+  Array<{ productId: string; name: string; unitLabel: string; totalPaise: number; qtyUnits: number }>
+> = {
+  key: "verity.plywood.top_items",
+  entity: ENTITY_INVOICE,
+  input: z.object({ limit: z.number().int().min(1).max(20).optional() }),
+  handler: async (ctx, input) => {
+    const monthStart = await zoneMonthStart(ctx.tx, await businessZone(ctx));
+    const grouped = await ctx.tx.plywoodInvoiceLine.groupBy({
+      by: ["productId"],
+      where: { invoice: { customerId: { not: null }, issuedAt: { gte: monthStart } } },
+      _sum: { lineTotalPaise: true, qtyUnits: true },
+      orderBy: { _sum: { lineTotalPaise: "desc" } },
+      take: input.limit ?? 5,
+    });
+    const products = await ctx.tx.plywoodProduct.findMany({
+      where: { id: { in: grouped.map((g) => g.productId) } },
+      select: { id: true, name: true, unitLabel: true },
+    });
+    const byId = new Map(products.map((p) => [p.id, p]));
+    return grouped.map((g) => ({
+      productId: g.productId,
+      name: byId.get(g.productId)?.name ?? "—",
+      unitLabel: byId.get(g.productId)?.unitLabel ?? "units",
+      totalPaise: g._sum.lineTotalPaise ?? 0,
+      qtyUnits: g._sum.qtyUnits ?? 0,
+    }));
+  },
+};
+
+/**
+ * Tenant-wide activity, unlike `reconstructHistory` (Task 38/92) which is
+ * per-entity. Same source tables (`activity`/`domain_event`), same
+ * `commandKey`-first captioning `ActivityLog` already renders (Task 92's
+ * `kind` fix carried over here too) — this is a different SCOPE of the
+ * same mechanism, not a new one.
+ */
+export const recentActivityFeed: QueryDefinition<
+  { limit?: number },
+  Array<{
+    occurredAt: Date;
+    action: string;
+    commandKey: string | null;
+    kind: "change" | "fact";
+  }>
+> = {
+  key: "verity.plywood.recent_activity_feed",
+  entity: ENTITY_INVOICE,
+  input: z.object({ limit: z.number().int().min(1).max(100).optional() }),
+  handler: async (ctx, input) => {
+    const limit = input.limit ?? 20;
+    const [changes, facts] = await Promise.all([
+      ctx.tx.activity.findMany({
+        orderBy: { occurredAt: "desc" },
+        take: limit,
+        select: { occurredAt: true, fieldChanged: true, commandKey: true },
+      }),
+      ctx.tx.domainEvent.findMany({
+        orderBy: { occurredAt: "desc" },
+        take: limit,
+        select: { occurredAt: true, name: true, commandKey: true },
+      }),
+    ]);
+    const merged = [
+      ...changes.map((c) => ({
+        occurredAt: c.occurredAt,
+        action: c.fieldChanged,
+        commandKey: c.commandKey,
+        kind: "change" as const,
+      })),
+      ...facts.map((f) => ({
+        occurredAt: f.occurredAt,
+        action: f.name,
+        commandKey: f.commandKey,
+        kind: "fact" as const,
+      })),
+    ];
+    return merged
+      .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
+      .slice(0, limit);
   },
 };
 

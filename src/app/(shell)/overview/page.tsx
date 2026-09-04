@@ -3,26 +3,34 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
-import { ForbiddenError } from "@/server/platform/authorization";
 import {
   lowStock,
   marginReport,
+  needsAttention,
   onboardingChecklist,
   ownerConsole,
+  recentActivityFeed,
   taxSummary,
+  topCustomers,
+  topItems,
+  weeklyPurchaseTotals,
+  weeklySalesTotals,
 } from "@/server/capabilities/plywood";
 import { SetupChecklist } from "./SetupChecklist";
 import { loadPanel } from "@/components/ui/panelState";
+import { StatCard } from "@/components/ui/business/StatCard";
+import { AttentionList } from "@/components/ui/business/AttentionList";
+import { RankedList } from "@/components/ui/business/RankedList";
+import { ActivityLog } from "@/components/ui/business/ActivityLog";
+import { commandLabelOf } from "@/components/ui/business/vocabulary";
+import { BarStrip } from "@/components/ui/charts";
 import {
   Button,
   ErrorState,
-  PageHeader,
   Panel,
   PermissionDenied,
-  SectionHeading,
-  Stat,
-  StatRow,
 } from "@/components/ui/primitives";
+import { Icon } from "@/components/ui/icons";
 
 export const dynamic = "force-dynamic";
 
@@ -30,92 +38,131 @@ function rupees(paise: number): string {
   return `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
 }
 
+function delta(thisPeriod: number, lastPeriod: number): { percent: number; direction: "up" | "down" } | undefined {
+  if (lastPeriod === 0) return undefined; // Nothing real to compare against yet.
+  const percent = ((thisPeriod - lastPeriod) / lastPeriod) * 100;
+  return { percent: Math.abs(percent), direction: percent >= 0 ? "up" : "down" };
+}
+
+function initialsOf(name: string): string {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("");
+}
+
+function greeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 /**
- * The owner console.
+ * The owner console — rebuilt against a supplied reference board
+ * (2026-09-04), inspired-by rather than pixel-exact: real Verity data
+ * throughout, no fabricated trend lines (`weeklySalesTotals`/
+ * `weeklyPurchaseTotals` are real `GROUP BY` week totals from actual
+ * invoice history, not a projection). Built from the new platform-wide
+ * card kit (`components/ui/business/StatCard`, `AttentionList`,
+ * `RankedList`) so the next capability's own dashboard reuses these
+ * instead of rebuilding flat stat rows again.
  *
- * plywood.md §8.1 names eight figures, so this shows exactly those eight and
- * nothing invented alongside them. Each is a link, because the value of a
- * dashboard number is the screen it takes you to — a figure with no way through
- * to the records behind it is a number to worry about rather than act on.
- *
- * Everything here is the sum of records that already exist. Nothing is typed in
- * and nothing is estimated.
+ * `needsAttention` is plywood's own local composition of its already-
+ * canonical signals — not Task 90's gated platform-wide contribution
+ * point. Every panel below is independently `loadPanel`-wrapped (Task 86):
+ * one failing panel shows its own inline error, the rest of the page
+ * still renders.
  */
 export default async function OverviewPage() {
   installCapabilities();
   const actor = await requireActor();
 
-  // The owner console feeds nearly every stat on this page — its failure is
-  // "System failure" (Task 86), not "Degraded": the whole page has nothing
-  // to show, not one panel. Denied stays its own case (a real, expected
-  // outcome for a role that cannot read it), distinct from a genuine error.
   const consolePanel = await loadPanel(executeQuery(actor, ownerConsole, {}));
   if (consolePanel.status === "denied") return <PermissionDenied what="the owner console" />;
   if (consolePanel.status === "error") {
-    return (
-      <>
-        <PageHeader title="Business Overview" />
-        <ErrorState
-          title="The owner console could not load"
-          message={consolePanel.message}
-          retryable
-        />
-      </>
-    );
+    return <ErrorState title="The owner console could not load" message={consolePanel.message} retryable />;
   }
-  const console_ = consolePanel.data;
+  const c = consolePanel.data;
 
-  // Each of these is independent — Task 86's "Degraded" state: a failing
-  // panel shows its own inline error and every other panel still renders.
-  // `loadPanel` never rejects, so `Promise.all` cannot fail here the way
-  // an unhandled throw from any one of these used to take the whole page
-  // down with it.
-  const [marginPanel, shortPanel, setupPanel, taxPanel] = await Promise.all([
+  const [
+    marginPanel,
+    shortPanel,
+    setupPanel,
+    taxPanel,
+    salesWeeksPanel,
+    purchaseWeeksPanel,
+    attentionPanel,
+    activityPanel,
+    customersPanel,
+    itemsPanel,
+  ] = await Promise.all([
     loadPanel(executeQuery(actor, marginReport, { sinceDays: 30 })),
     loadPanel(executeQuery(actor, lowStock, {})),
-    // Denied is "nothing to show", not an error: a warehouse operator
-    // cannot read the business profile and does not need an onboarding
-    // checklist either.
     loadPanel(executeQuery(actor, onboardingChecklist, {})),
     loadPanel(executeQuery(actor, taxSummary, {})),
+    loadPanel(executeQuery(actor, weeklySalesTotals, {})),
+    loadPanel(executeQuery(actor, weeklyPurchaseTotals, {})),
+    loadPanel(executeQuery(actor, needsAttention, {})),
+    loadPanel(executeQuery(actor, recentActivityFeed, { limit: 8 })),
+    loadPanel(executeQuery(actor, topCustomers, {})),
+    loadPanel(executeQuery(actor, topItems, {})),
   ]);
 
   const margin = marginPanel.status === "ok" ? marginPanel.data : null;
   const short = shortPanel.status === "ok" ? shortPanel.data : [];
   const setup = setupPanel.status === "ok" ? setupPanel.data : null;
-  // Only the count is wanted here; the list itself lives on /tax/exceptions.
-  // Null rather than zero when the actor cannot read tax (or it failed),
-  // because "no exceptions" and "you may not see them" are different facts
-  // and showing the first for the second is a false all-clear.
   const taxExceptionCount = taxPanel.status === "ok" ? taxPanel.data.exceptions.length : null;
+  const salesWeeks = salesWeeksPanel.status === "ok" ? salesWeeksPanel.data : [];
+  const purchaseWeeks = purchaseWeeksPanel.status === "ok" ? purchaseWeeksPanel.data : [];
+  const attention = attentionPanel.status === "ok" ? attentionPanel.data : [];
+  const activity = activityPanel.status === "ok" ? activityPanel.data : [];
+  const customers = customersPanel.status === "ok" ? customersPanel.data : [];
+  const items = itemsPanel.status === "ok" ? itemsPanel.data : [];
 
-  // The trade name if the business has set one, its legal name otherwise, and
-  // the tenant's own name until either exists. Read here rather than passed
-  // down from the shell, because the shell names the workspace and this names
-  // the business — they are the same string today and need not stay so.
   const businessName = await withTenant(actor.tenantId, async (tx) => {
     const profile = await tx.plywoodBusinessProfile.findFirst({
       select: { tradeName: true, legalName: true },
     });
     if (profile?.tradeName) return profile.tradeName;
     if (profile?.legalName) return profile.legalName;
-    const tenant = await tx.tenant.findUnique({
-      where: { id: actor.tenantId },
-      select: { name: true },
-    });
+    const tenant = await tx.tenant.findUnique({ where: { id: actor.tenantId }, select: { name: true } });
     return tenant?.name ?? "your business";
   });
 
   return (
     <>
-      <PageHeader
-        title="Business Overview"
-        description="Today's trade, what the godowns hold, and what is owed in each direction. Every figure is the sum of records — follow any of them through to the screen it came from."
-      />
+      <div className="mb-7 flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="m-0 text-[11px] font-medium uppercase tracking-[0.18em] text-text-tertiary">
+            {greeting()}
+          </p>
+          <h1 className="mt-1.5 truncate">Here's what's happening with your business.</h1>
+          <p className="mb-0 mt-2 max-w-[62ch] text-[14px] leading-relaxed text-text-secondary">
+            Track your operations, stay on top of what matters, and keep your business moving forward.
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2.5">
+          <Link href="/sales">
+            <Button variant="primary" className="gap-1.5">
+              <Icon name="plus" size={15} /> New Sale
+            </Button>
+          </Link>
+          <Link href="/purchases">
+            <Button className="gap-1.5">
+              <Icon name="plus" size={15} /> Purchase
+            </Button>
+          </Link>
+          <Link href="/customers">
+            <Button className="gap-1.5">
+              <Icon name="plus" size={15} /> Customer
+            </Button>
+          </Link>
+        </div>
+      </div>
 
-      {/* §3 — the checklist leads while it is unfinished, and disappears
-          entirely once it is done. A permanent "you are set up" banner is
-          furniture. */}
       {setup && !setup.complete && (
         <div className="mb-6">
           <SetupChecklist checklist={setup} businessName={businessName} />
@@ -127,152 +174,138 @@ export default async function OverviewPage() {
         </div>
       )}
 
-      {/* §7 — the owner's morning, in the five groups the specification
-          names. Every figure is a link, because the value of a dashboard
-          number is the screen it takes you to; a figure with no way through to
-          the records behind it is a number to worry about rather than act on.
-          Nothing here is entered anywhere — §8. */}
-      <div className="mb-6 flex flex-col gap-5">
-        <section aria-labelledby="ov-sales">
-          <SectionHeading>Sales</SectionHeading>
-          <StatRow>
-            <Stat
-              label="Sales this month"
-              value={rupees(console_.salesThisMonthPaise)}
-              href="/finance"
-              hint={`${rupees(console_.todaysSalesPaise)} today`}
-            />
-            <Stat
-              label="Open orders"
-              value={String(console_.openSalesOrders)}
-              href="/sales"
-              hint="Taken, not yet closed out"
-            />
-            <Stat
-              label="Awaiting credit approval"
-              value={String(console_.awaitingCreditApproval)}
-              href="/sales"
-              hint={console_.awaitingCreditApproval === 0 ? "Nothing held" : "Held until approved"}
-            />
-            <Stat
-              label="Awaiting goods issue"
-              value={String(console_.awaitingGoodsIssue)}
-              href="/sales"
-              hint="Approved, still in the godown"
-            />
-          </StatRow>
-        </section>
+      {/* Stat cards — the same eight figures the page always showed
+          (ownerConsole), now the platform-wide StatCard, with a real
+          month-over-month delta on the two figures that have a real prior
+          period to compare against. */}
+      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          icon="sales"
+          label="Sales this month"
+          value={rupees(c.salesThisMonthPaise)}
+          hint={`${rupees(c.todaysSalesPaise)} today`}
+          delta={delta(c.salesThisMonthPaise, c.salesLastMonthPaise)}
+          href="/finance"
+        />
+        <StatCard
+          icon="workspace"
+          label="Open orders"
+          value={String(c.openSalesOrders)}
+          hint="Taken, not yet closed out"
+          href="/sales"
+        />
+        <StatCard
+          icon="approvals"
+          label="Awaiting credit approval"
+          value={String(c.awaitingCreditApproval)}
+          hint={c.awaitingCreditApproval === 0 ? "Nothing held" : "Held until approved"}
+          href="/sales"
+        />
+        <StatCard
+          icon="purchases"
+          label="Awaiting goods issue"
+          value={String(c.awaitingGoodsIssue)}
+          hint="Approved, still in the godown"
+          href="/sales"
+        />
+      </div>
 
-        <section aria-labelledby="ov-purchase">
-          <SectionHeading>Purchase</SectionHeading>
-          <StatRow>
-            <Stat
-              label="Open purchase orders"
-              value={String(console_.openPurchaseOrders)}
-              href="/purchases"
-            />
-            <Stat
-              label="Pending receipt"
-              value={String(console_.pendingReceipt)}
-              href="/purchases"
-              hint="Something still owed"
-            />
-            <Stat
-              label="Incoming stock"
-              value={`${console_.incomingUnits.toLocaleString("en-IN")} sheets`}
-              href="/purchases"
-              hint="Ordered, not yet arrived"
-            />
-            <Stat
-              label="Today's purchases"
-              value={rupees(console_.todaysPurchasesPaise)}
-              href="/purchases"
-              hint="Billed today"
-            />
-          </StatRow>
-        </section>
+      {/* Sales Overview / Purchase Overview / Needs Attention — the
+          reference's three-up row. Both charts are real weekly totals
+          (GROUP BY week over actual invoice history), never a fabricated
+          smooth line. */}
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Panel title="Sales Overview" className="lg:col-span-1">
+          <p className="tabular m-0 text-[26px] font-normal leading-none text-text">
+            {rupees(c.salesThisMonthPaise)}
+          </p>
+          <p className="m-0 mt-1 text-[12px] text-text-tertiary">Sales this month</p>
+          {salesWeeksPanel.status === "error" ? (
+            <div className="mt-4">
+              <ErrorState title="Weekly sales could not load" message={salesWeeksPanel.message} retryable />
+            </div>
+          ) : (
+            salesWeeks.length > 0 && (
+              <div className="mt-5">
+                <BarStrip values={salesWeeks} label="Sales by week" height={72} />
+              </div>
+            )
+          )}
+        </Panel>
 
-        <section aria-labelledby="ov-inventory">
-          <SectionHeading>Inventory</SectionHeading>
-          <StatRow cols={3}>
-            <Stat
-              label="Inventory value"
-              value={rupees(console_.stockValuePaise)}
-              href="/stock"
-              hint="At weighted average cost"
-            />
-            <Stat
-              label="Low stock"
-              value={String(console_.lowStockBoards)}
-              href="/stock"
-              hint={console_.lowStockBoards === 0 ? "Nothing to buy" : "At or below reorder"}
-            />
-            <Stat
-              label="Reserved"
-              value={`${console_.reservedUnits.toLocaleString("en-IN")} sheets`}
-              href="/sales"
-              hint="Held against orders"
-            />
-          </StatRow>
-        </section>
+        <Panel title="Purchase Overview">
+          <p className="tabular m-0 text-[26px] font-normal leading-none text-text">
+            {rupees(c.purchasesThisMonthPaise)}
+          </p>
+          <p className="m-0 mt-1 text-[12px] text-text-tertiary">Open purchase orders: {c.openPurchaseOrders}</p>
+          {purchaseWeeksPanel.status === "error" ? (
+            <div className="mt-4">
+              <ErrorState title="Weekly purchases could not load" message={purchaseWeeksPanel.message} retryable />
+            </div>
+          ) : (
+            purchaseWeeks.length > 0 && (
+              <div className="mt-5">
+                <BarStrip values={purchaseWeeks} label="Purchases by week" height={72} />
+              </div>
+            )
+          )}
+        </Panel>
 
-        <section aria-labelledby="ov-money">
-          <SectionHeading>Money</SectionHeading>
-          <StatRow>
-            <Stat
-              label="Receivables"
-              value={rupees(console_.receivablesPaise)}
-              href="/finance"
-              hint="Owed to us"
-            />
-            <Stat
-              label="Overdue"
-              value={rupees(console_.overdueReceivablesPaise)}
-              href="/finance"
-              hint="Unsettled after 30 days"
-            />
-            <Stat
-              label="Payables"
-              value={rupees(console_.payablesPaise)}
-              href="/finance"
-              hint="Owed by us"
-            />
-            <Stat
-              label="Collections today"
-              value={rupees(console_.collectionsTodayPaise)}
-              href="/finance"
-              hint="Received from customers"
-            />
-          </StatRow>
-        </section>
+        {attentionPanel.status === "error" ? (
+          <ErrorState title="Needs Attention could not load" message={attentionPanel.message} retryable />
+        ) : (
+          <AttentionList items={attention} />
+        )}
+      </div>
 
-        <section aria-labelledby="ov-tax">
-          <SectionHeading>Tax</SectionHeading>
-          <StatRow cols={3}>
-            <Stat
-              label="Output GST"
-              value={rupees(console_.outputTaxPaise)}
-              href="/tax/gstr-1"
-              hint="Charged this month"
-            />
-            <Stat
-              label="Eligible ITC"
-              value={rupees(console_.eligibleItcPaise)}
-              href="/tax/gstr-3b"
-              hint="Evidenced on purchase invoices"
-            />
-            <Stat
-              label="Tax exceptions"
-              value={taxExceptionCount === null ? "—" : String(taxExceptionCount)}
-              href="/tax/exceptions"
-              hint={taxExceptionCount === 0 ? "Nothing to fix" : "Need attention"}
-            />
-          </StatRow>
-        </section>
+      {/* Inventory Snapshot / Money at a Glance — same ownerConsole fields
+          the page always had, re-skinned. */}
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Panel title="Inventory Snapshot" action={<Link href="/stock" className="text-[12px] text-accent-ink no-underline hover:underline">View stock →</Link>}>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div>
+              <p className="tabular m-0 text-[20px] leading-none text-text">{rupees(c.stockValuePaise)}</p>
+              <p className="m-0 mt-1 text-[12px] text-text-tertiary">Inventory value</p>
+            </div>
+            <div>
+              <p className="tabular m-0 text-[20px] leading-none text-text">{c.lowStockBoards}</p>
+              <p className="m-0 mt-1 text-[12px] text-text-tertiary">Low stock</p>
+            </div>
+            <div>
+              <p className="tabular m-0 text-[20px] leading-none text-text">{c.reservedUnits.toLocaleString("en-IN")}</p>
+              <p className="m-0 mt-1 text-[12px] text-text-tertiary">Reserved (sheets)</p>
+            </div>
+            <div>
+              <p className="tabular m-0 text-[20px] leading-none text-text">{c.incomingUnits.toLocaleString("en-IN")}</p>
+              <p className="m-0 mt-1 text-[12px] text-text-tertiary">Incoming (sheets)</p>
+            </div>
+          </div>
+        </Panel>
+
+        <Panel title="Money at a Glance" action={<Link href="/finance" className="text-[12px] text-accent-ink no-underline hover:underline">View finances →</Link>}>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div>
+              <p className="tabular m-0 text-[20px] leading-none text-text">{rupees(c.receivablesPaise)}</p>
+              <p className="m-0 mt-1 text-[12px] text-text-tertiary">Owed to us</p>
+            </div>
+            <div>
+              <p className="tabular m-0 text-[20px] leading-none text-danger">{rupees(c.overdueReceivablesPaise)}</p>
+              <p className="m-0 mt-1 text-[12px] text-text-tertiary">Overdue</p>
+            </div>
+            <div>
+              <p className="tabular m-0 text-[20px] leading-none text-text">{rupees(c.payablesPaise)}</p>
+              <p className="m-0 mt-1 text-[12px] text-text-tertiary">Owed by us</p>
+            </div>
+            <div>
+              <p className="tabular m-0 text-[20px] leading-none text-success">{rupees(c.collectionsTodayPaise)}</p>
+              <p className="m-0 mt-1 text-[12px] text-text-tertiary">Collected today</p>
+            </div>
+          </div>
+        </Panel>
       </div>
 
       {margin && (
-        <div className="mb-4">
+        <div className="mb-6">
           <Panel title="Margin, last 30 days">
             <div className="flex flex-wrap items-end justify-between gap-6">
               <div>
@@ -284,9 +317,6 @@ export default async function OverviewPage() {
                   <span className="tabular">{(margin.marginBp / 100).toFixed(1)}%</span>
                 </p>
               </div>
-              {/* Named, not implied. FIFO and last-purchase-cost would each give
-                  a different number from the same records, and an owner reading
-                  this is entitled to know which one they are looking at. */}
               <p className="m-0 max-w-[46ch] text-[12px] text-text-tertiary">
                 Costed by {margin.costingMethod.toLowerCase()}. Revenue excludes tax collected — tax
                 is not income. Cost is what the stock ledger recorded as consumed at the moment each
@@ -297,59 +327,134 @@ export default async function OverviewPage() {
         </div>
       )}
       {marginPanel.status === "error" && (
-        <div className="mb-4">
+        <div className="mb-6">
           <ErrorState title="Margin could not load" message={marginPanel.message} retryable />
         </div>
       )}
 
+      {/* Recent Activity / Top Customers / Top Items — the reference's
+          bottom row. Recent Activity reuses ActivityLog's own captioning
+          (Task 92); Top Customers/Items are new real this-month
+          aggregates. */}
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {activityPanel.status === "error" ? (
+          <ErrorState title="Recent activity could not load" message={activityPanel.message} retryable />
+        ) : (
+          <ActivityLog
+            title="Recent Activity"
+            entries={activity.map((a) => ({
+              occurredAt: a.occurredAt,
+              action: a.action,
+              before: null,
+              after: null,
+              actorUserId: null,
+              commandKey: a.commandKey,
+              kind: a.kind,
+            }))}
+          />
+        )}
+
+        {customersPanel.status === "error" ? (
+          <ErrorState title="Top customers could not load" message={customersPanel.message} retryable />
+        ) : (
+          <RankedList
+            title="Top Customers"
+            period="This month"
+            items={customers.map((cu) => ({
+              id: cu.customerId,
+              initials: initialsOf(cu.name),
+              label: cu.name,
+              sublabel: `${cu.orders} order${cu.orders === 1 ? "" : "s"}`,
+              value: rupees(cu.totalPaise),
+              href: `/customers/${cu.customerId}`,
+            }))}
+          />
+        )}
+
+        {itemsPanel.status === "error" ? (
+          <ErrorState title="Top items could not load" message={itemsPanel.message} retryable />
+        ) : (
+          <RankedList
+            title="Top Items"
+            period="This month"
+            items={items.map((it) => ({
+              id: it.productId,
+              initials: initialsOf(it.name),
+              label: it.name,
+              sublabel: `${it.qtyUnits.toLocaleString("en-IN")} ${it.unitLabel}`,
+              value: rupees(it.totalPaise),
+            }))}
+          />
+        )}
+      </div>
+
       {shortPanel.status === "error" && (
-        <div className="mb-4">
+        <div className="mb-6">
           <ErrorState title="Low-stock list could not load" message={shortPanel.message} retryable />
         </div>
       )}
       {short.length > 0 && (
-        <Panel
-          title="Needs buying"
-          action={
-            <Link href="/purchases">
-              <Button size="sm">Raise an order</Button>
-            </Link>
-          }
-        >
-          <table className="w-full border-collapse">
-            <caption className="sr-only">Boards at or below their reorder level</caption>
-            <thead>
-              <tr>
-                {["Board", "On hand", "Reorder at"].map((heading, index) => (
-                  <th
-                    key={heading}
-                    className={
-                      "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                      (index === 0 ? "text-left" : "text-right")
-                    }
-                  >
-                    {heading}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {short.slice(0, 10).map((row) => (
-                <tr key={row.productId}>
-                  <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                    {row.brandName} · {row.productName}
-                  </td>
-                  <td className="tabular border-b border-line px-3 py-2 text-right text-[14px] text-warning">
-                    {row.onHandUnits} {row.unitLabel}
-                  </td>
-                  <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                    {row.reorderLevelUnits}
-                  </td>
+        <div className="mb-6">
+          <Panel
+            title="Needs buying"
+            action={
+              <Link href="/purchases">
+                <Button size="sm">Raise an order</Button>
+              </Link>
+            }
+          >
+            <table className="w-full border-collapse">
+              <caption className="sr-only">Boards at or below their reorder level</caption>
+              <thead>
+                <tr>
+                  {["Board", "On hand", "Reorder at"].map((heading, index) => (
+                    <th
+                      key={heading}
+                      className={
+                        "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
+                        (index === 0 ? "text-left" : "text-right")
+                      }
+                    >
+                      {heading}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </Panel>
+              </thead>
+              <tbody>
+                {short.slice(0, 10).map((row) => (
+                  <tr key={row.productId}>
+                    <td className="border-b border-line px-3 py-2 text-[14px] text-text">
+                      {row.brandName} · {row.productName}
+                    </td>
+                    <td className="tabular border-b border-line px-3 py-2 text-right text-[14px] text-warning">
+                      {row.onHandUnits} {row.unitLabel}
+                    </td>
+                    <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
+                      {row.reorderLevelUnits}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Panel>
+        </div>
+      )}
+
+      {taxExceptionCount !== null && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <StatCard icon="tax" label="Output GST" value={rupees(c.outputTaxPaise)} hint="Charged this month" href="/tax/gstr-1" />
+          <StatCard icon="tax" label="Eligible ITC" value={rupees(c.eligibleItcPaise)} hint="Evidenced on purchase invoices" href="/tax/gstr-3b" />
+          <StatCard
+            icon="tax"
+            label="Tax exceptions"
+            value={String(taxExceptionCount)}
+            hint={taxExceptionCount === 0 ? "Nothing to fix" : "Need attention"}
+            href="/tax/exceptions"
+          />
+        </div>
+      )}
+      {taxPanel.status === "error" && (
+        <ErrorState title="Tax summary could not load" message={taxPanel.message} retryable />
       )}
     </>
   );

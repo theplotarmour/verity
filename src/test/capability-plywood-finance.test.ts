@@ -39,10 +39,16 @@ import {
   invoiceDetail,
   listInvoices,
   outstandingReceivables,
+  ownerConsole,
   partyLedger,
   raiseSalesInvoice,
+  recentActivityFeed,
   recordPayment,
   registerPlywoodCapability,
+  topCustomers,
+  topItems,
+  weeklyPurchaseTotals,
+  weeklySalesTotals,
 } from "@/server/capabilities/plywood";
 
 /**
@@ -518,6 +524,73 @@ describeDb("capability: Plywood trading — finance", () => {
 
     const all = await executeQuery(finance, listInvoices, {});
     expect(all.map((row) => row.id)).toContain(invoice.id);
+  });
+
+  /* --------------------------- overview dashboard ---------------------------- */
+
+  it("reports real weekly sales totals, most recent week last", async () => {
+    const customerId = await customerInState("07");
+    const orderId = await approvedOrder(customerId, 2, 100_000);
+    await executeCommand(finance, raiseSalesInvoice, { salesOrderId: orderId });
+
+    const weeks = await executeQuery(finance, weeklySalesTotals, { weeks: 4 });
+    expect(weeks).toHaveLength(4);
+    // The invoice just raised falls in the current week, which is the last
+    // element — no fabricated point, a real row this same test created.
+    expect(weeks[weeks.length - 1]).toBeGreaterThanOrEqual(200_000);
+  });
+
+  it("reports zero weekly purchase totals when nothing was purchased, not a fabricated point", async () => {
+    const weeks = await executeQuery(finance, weeklyPurchaseTotals, { weeks: 3 });
+    expect(weeks).toHaveLength(3);
+    expect(weeks.every((v) => v === 0)).toBe(true);
+  });
+
+  it("ranks this month's top customers by real invoice totals", async () => {
+    const customerId = await customerInState("07");
+    const orderId = await approvedOrder(customerId, 5, 100_000);
+    await executeCommand(finance, raiseSalesInvoice, { salesOrderId: orderId });
+
+    const top = await executeQuery(finance, topCustomers, {});
+    const row = top.find((c) => c.customerId === customerId)!;
+    expect(row).toBeDefined();
+    expect(row.totalPaise).toBe(590_000);
+    expect(row.orders).toBe(1);
+  });
+
+  it("ranks this month's top items by real invoice-line totals", async () => {
+    const customerId = await customerInState("07");
+    const orderId = await approvedOrder(customerId, 3, 100_000);
+    await executeCommand(finance, raiseSalesInvoice, { salesOrderId: orderId });
+
+    const top = await executeQuery(finance, topItems, {});
+    const row = top.find((i) => i.productId === productId)!;
+    expect(row).toBeDefined();
+    expect(row.qtyUnits).toBeGreaterThanOrEqual(3);
+  });
+
+  it("feeds a tenant-wide recent activity list distinguishing changes from facts", async () => {
+    const customerId = await customerInState("07");
+    const orderId = await approvedOrder(customerId, 1, 100_000);
+    await executeCommand(finance, raiseSalesInvoice, { salesOrderId: orderId });
+
+    const feed = await executeQuery(finance, recentActivityFeed, { limit: 10 });
+    expect(feed.length).toBeGreaterThan(0);
+    for (const entry of feed) {
+      expect(["change", "fact"]).toContain(entry.kind);
+    }
+  });
+
+  it("computes a real month-over-month sales delta on the owner console", async () => {
+    const customerId = await customerInState("07");
+    const orderId = await approvedOrder(customerId, 2, 100_000);
+    await executeCommand(finance, raiseSalesInvoice, { salesOrderId: orderId });
+
+    const console_ = await executeQuery(finance, ownerConsole, {});
+    // This month's sales include the invoice just raised; last month is
+    // genuinely empty for a tenant created seconds ago in this test run.
+    expect(console_.salesThisMonthPaise).toBeGreaterThanOrEqual(236_000);
+    expect(console_.salesLastMonthPaise).toBe(0);
   });
 
   it("shows another tenant no invoices, payments or ledger entries (INV-001)", async () => {

@@ -4,7 +4,9 @@ import {
   issueProvisionalPurchaseBill,
   issueSalesInvoice,
   nextDocumentNumber,
+  outstandingReceivables,
 } from "./finance";
+import { lowStock } from "./stock";
 import { assertGodownInScope, reachableGodownIds } from "./scope";
 import {
   ValidationError,
@@ -22,6 +24,7 @@ import type { TenantScopedClient } from "@/server/platform/tenancy";
 import {
   ENTITY_CUSTOMER,
   ENTITY_CUSTOMER_PRICE,
+  ENTITY_INVOICE,
   ENTITY_PURCHASE_ORDER,
   ENTITY_RESERVATION,
   ENTITY_SALES_ORDER,
@@ -3280,6 +3283,109 @@ export const openOrders: QueryDefinition<
           order.state !== "cancelled",
       })),
     };
+  },
+};
+
+/**
+ * "Needs Attention" — Overview dashboard rework, plywood's own local
+ * feature. NOT Task 90's platform-wide Attention contribution point (see
+ * `taskplans/90_attention_platform_concept.md` — that stays gated behind
+ * its own ADR). This composes plywood's already-canonical signals
+ * (`lowStock`, `outstandingReceivables`, `openOrders`, called here as
+ * ordinary functions, never re-deriving their numbers — Task 82's
+ * source-of-truth rule) into one ordered list, matching the reference
+ * board's bullet style.
+ */
+export const needsAttention: QueryDefinition<
+  Record<string, never>,
+  Array<{
+    id: string;
+    severity: "high" | "medium";
+    label: string;
+    sublabel?: string;
+    href: string;
+  }>
+> = {
+  key: "verity.plywood.needs_attention",
+  entity: ENTITY_INVOICE,
+  input: z.object({}),
+  handler: async (ctx) => {
+    const [stock, receivables, orders] = await Promise.all([
+      lowStock.handler(ctx, {}),
+      outstandingReceivables.handler(ctx, {}),
+      openOrders.handler(ctx, {}),
+    ]);
+
+    const items: Array<{
+      id: string;
+      severity: "high" | "medium";
+      label: string;
+      sublabel?: string;
+      href: string;
+    }> = [];
+
+    const pendingCredit = orders.sales.filter((o) => o.state === "pending_credit");
+    if (pendingCredit.length > 0) {
+      items.push({
+        id: "credit-approval",
+        severity: "high",
+        label: `${pendingCredit.length} sales order${pendingCredit.length === 1 ? "" : "s"} awaiting credit approval`,
+        sublabel: pendingCredit.slice(0, 3).map((o) => o.reference ?? o.id.slice(0, 8)).join(", "),
+        href: "/sales",
+      });
+    }
+
+    const awaitingIssue = orders.sales.filter((o) => o.state === "approved");
+    if (awaitingIssue.length > 0) {
+      items.push({
+        id: "goods-issue",
+        severity: "medium",
+        label: `${awaitingIssue.length} sales order${awaitingIssue.length === 1 ? "" : "s"} awaiting goods issue`,
+        sublabel: awaitingIssue.slice(0, 3).map((o) => o.reference ?? o.id.slice(0, 8)).join(", "),
+        href: "/sales",
+      });
+    }
+
+    // "Delayed" per Task 81 rule 9's own worked example: a specific,
+    // current, true detail, not a bare "cannot dispatch". Three days
+    // outstanding on a submitted/receiving order, not an arbitrary flag.
+    const delayed = orders.purchases.filter(
+      (o) => o.outstandingUnits > 0 && Date.now() - o.raisedAt.getTime() > 3 * 24 * 60 * 60 * 1000,
+    );
+    if (delayed.length > 0) {
+      items.push({
+        id: "purchase-delayed",
+        severity: "high",
+        label: `${delayed.length} purchase receipt${delayed.length === 1 ? "" : "s"} delayed`,
+        sublabel: delayed.slice(0, 3).map((o) => o.reference ?? o.id.slice(0, 8)).join(", "),
+        href: "/purchases",
+      });
+    }
+
+    if (stock.length > 0) {
+      items.push({
+        id: "low-stock",
+        severity: "medium",
+        label: `${stock.length} item${stock.length === 1 ? "" : "s"} approaching reorder point`,
+        sublabel: stock.slice(0, 3).map((s) => s.productName).join(", "),
+        href: "/stock",
+      });
+    }
+
+    const overdue = receivables.filter(
+      (r) => r.oldestUnpaidAt && Date.now() - r.oldestUnpaidAt.getTime() > 30 * 24 * 60 * 60 * 1000,
+    );
+    if (overdue.length > 0) {
+      items.push({
+        id: "overdue-receivables",
+        severity: "high",
+        label: `${overdue.length} customer payment${overdue.length === 1 ? "" : "s"} overdue`,
+        sublabel: overdue.slice(0, 3).map((r) => r.customerName).join(", "),
+        href: "/finance",
+      });
+    }
+
+    return items;
   },
 };
 

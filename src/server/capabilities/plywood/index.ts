@@ -92,6 +92,7 @@ import {
   setPriceSheet,
   stockAvailability,
   submitPurchaseOrder,
+  needsAttention,
 } from "./trading";
 import {
   invoiceDetail,
@@ -111,6 +112,11 @@ import {
   raisePurchaseBillFromOrder,
   captureMetricSnapshot,
   metricsHistory,
+  weeklySalesTotals,
+  weeklyPurchaseTotals,
+  topCustomers,
+  topItems,
+  recentActivityFeed,
 } from "./finance";
 
 /**
@@ -1183,5 +1189,11 @@ export function registerPlywoodCapability(): void {
   registerQuery(unbilledMovements);
   registerQuery(ownerConsole);
   registerQuery(metricsHistory);
+  registerQuery(weeklySalesTotals);
+  registerQuery(weeklyPurchaseTotals);
+  registerQuery(topCustomers);
+  registerQuery(topItems);
+  registerQuery(recentActivityFeed);
+  registerQuery(needsAttention);
   registerQuery(marginReport);
 }

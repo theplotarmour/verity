@@ -57,7 +57,8 @@ export type IconName =
   | "mail"
   | "lock"
   | "eye"
-  | "eyeOff";
+  | "eyeOff"
+  | "plus";
 
 const PATHS: Record<IconName, string> = {
   // Navigation — board nav geometry.
@@ -136,6 +137,7 @@ const PATHS: Record<IconName, string> = {
   eye: "M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
   eyeOff:
     "M3 3l18 18M10.6 10.6a3 3 0 0 0 4.2 4.2M6.5 6.9C4 8.6 2.5 12 2.5 12s3.5 6.5 9.5 6.5c1.6 0 3-.4 4.2-1.1M17.6 17.5C19.9 15.9 21.5 12 21.5 12S18 5.5 12 5.5c-.7 0-1.5.1-2.1.3",
+  plus: "M12 5v14M5 12h14",
 };
 
 export function Icon({

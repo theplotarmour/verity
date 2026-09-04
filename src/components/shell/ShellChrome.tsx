@@ -273,12 +273,12 @@ export function ShellChrome({
         {/* -------------------------- top bar ---------------------------
             Persistent chrome, as the boards draw it. It needs no `sticky`:
             the main region below owns the scroll, so this never travels. */}
-        <div className="hidden h-[84px] shrink-0 items-center gap-4 px-8 print:hidden lg:flex">
+        <div className="hidden h-[92px] shrink-0 items-center gap-5 px-9 print:hidden lg:flex">
           {/* Search is centred and dominant, as the mockup draws it. It is a
               real control over the records already loaded on the page, not a
               platform-wide index — platform search is DEFERRED and drawing a
               box that promises one would be a control that lies. */}
-          <div className="relative mx-auto flex w-full max-w-[520px] items-center">
+          <div className="relative mx-auto flex w-full max-w-[560px] items-center">
             <Icon
               name="search"
               size={18}
@@ -291,17 +291,17 @@ export function ShellChrome({
               id="shell-search"
               type="search"
               placeholder="Search this page"
-              className="glass-control h-12 w-full rounded-xl pl-12 pr-4 text-[14px] text-text placeholder:text-text-tertiary transition-[border-color,box-shadow] duration-200 hover:border-line-strong focus:border-accent focus:shadow-[var(--shadow-highlight),0_0_0_3px_var(--color-accent-subtle)] focus:outline-none"
+              className="glass-control h-12 w-full rounded-xl pl-12 pr-4 text-[14px] text-text shadow-[var(--shadow-sm)] placeholder:text-text-tertiary transition-[border-color,box-shadow] duration-200 hover:border-line-strong focus:border-accent focus:shadow-[var(--shadow-highlight),0_0_0_3px_var(--color-accent-subtle)] focus:outline-none"
             />
           </div>
 
-          <div className="flex shrink-0 items-center gap-2.5">
+          <div className="flex shrink-0 items-center gap-3">
             <OrganizationSwitcher memberships={memberships} active={active} instanceId="header" />
             <ThemeToggle />
             <Link
               href="/audit"
               title="Recent activity"
-              className="glass-control grid size-11 place-items-center rounded-xl text-text-secondary no-underline transition-colors hover:text-text"
+              className="glass-control grid size-11 place-items-center rounded-full text-text-secondary no-underline shadow-[var(--shadow-sm)] transition-[color,box-shadow,transform] duration-200 hover:-translate-y-px hover:text-text hover:shadow-[var(--shadow-md)]"
             >
               <Icon name="bell" size={19} />
               <span className="sr-only">Recent activity</span>
@@ -312,7 +312,7 @@ export function ShellChrome({
                 as the tooltip — which is where it went when the sidebar footer
                 became a plain Sign out. */}
             <span
-              className="grid size-11 shrink-0 place-items-center rounded-full bg-accent-subtle text-[13px] font-medium text-accent-ink ring-1 ring-[var(--color-accent-line)]"
+              className="grid size-11 shrink-0 place-items-center rounded-full bg-accent-subtle text-[13px] font-medium text-accent-ink shadow-[var(--shadow-sm)] ring-1 ring-[var(--color-accent-line)]"
               title={userLabel}
             >
               <span aria-hidden="true">{userInitials}</span>
