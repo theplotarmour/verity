@@ -114,17 +114,13 @@ Both of these say so in their own file, explicitly, not as a suggestion.
 ### 2a. Task 90 — "Attention" platform concept
 
 Its own trigger: "two real capabilities each independently wanting this."
-Its own text already names plywood alone having 3+ candidate sources
-(overdue receivables, pending goods issue, low stock) — check whether
-that alone satisfies "two capabilities" (arguably not — one capability,
-three *sources* within it, is not the same as two *capabilities*
-independently converging). The honest trigger check: does anything built
-this session (accounting, inventory, HR, billing) also want an attention
-feed? Inventory's reorder-level check is a real second candidate
-(`InventoryItem.reorderLevel` vs. `InventoryStockBalance.qty` — the exact
-same shape as plywood's `lowStock` query, independently arrived at). If
-that counts, the trigger has fired — write the ADR before touching
-`contribution.ts`'s pattern to add an `AttentionContribution` shape.
+**Checked 2026-09-04: trigger has NOT fired.** `InventoryItem` carries a
+`reorderLevel` field, but no query was ever built to surface "items at or
+below it" the way plywood's `lowStock` does — the field exists, the
+attention *source* doesn't. Data sitting unused is not a second capability
+independently wanting the feed. Still one real instance (plywood). Revisit
+only once a second capability actually builds and surfaces its own
+exceptions list, not when it merely has the data to someday.
 
 ### 2b. Task 93 — progressive setup / capability readiness engine
 
