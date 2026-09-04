@@ -2,7 +2,27 @@
 
 Authority: User synthesis, 2026-09-03, second round, item 5.
 
-## Status: PENDING — genuinely new gap
+## Status: MECHANISM DECIDED, 2026-09-04 — no retrofit performed (explicit
+non-goal below). Checked `CustomFieldSchema`/`CustomFieldType`
+(`prisma/schema.prisma`) directly, per this file's own instruction: the type
+set is `String | Number | Boolean | Select | Date`, plain-nullable, with no
+existing sentinel for "unknown" vs. "checked and blank" vs. "not
+applicable". The gap is real, not already covered.
+
+**Decision: no new primitive.** `Select` already solves this without a
+platform change — a capability adds a companion status field (also
+`Select`, e.g. "GSTIN verification status" with options `Unknown` /
+`Not applicable` / `Verified` / `Checked — declined to provide`) alongside
+the value field, rather than overloading the value field itself with a
+sentinel string. A picker forces an explicit choice, so "Unknown" becomes a
+real, queryable, filterable value distinguishable from a blank the business
+never looked at. This is a *modeling pattern* the capability-builder skill
+(Task 82) should teach, not new platform code — added to `.claude/skills/
+verity-client-capability-builder/SKILL.md`'s rules 2026-09-04.
+
+No plywood field was retrofitted — this file's own non-goal. Stays
+genuinely PENDING for a first real application; the mechanism is ready the
+moment one arrives.
 
 ## What's missing
 

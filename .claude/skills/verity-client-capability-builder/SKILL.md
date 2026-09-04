@@ -108,6 +108,14 @@ skips the step that would have surfaced the gap.
 - Prefer retiring a reference/registry value over deleting it whenever
   historical records depend on it (ADR-009's rule, one layer down: tax
   categories, payment terms, units, status labels).
+- When a field can genuinely be "we don't know yet" as a distinct state
+  from "the value is empty" (Task 94 — a customer's GSTIN, a delivery
+  confirmation, a credit rating), don't overload the value field with a
+  sentinel and don't force it required before the business actually knows.
+  Add a companion `Select`-type custom field for the status (`Unknown` /
+  `Not applicable` / `Verified` / etc.) alongside the value field — the
+  existing `CustomFieldSchema`/`CustomFieldType` machinery already covers
+  this, no new platform primitive needed.
 
 ## Skill output checklist, per new capability
 
