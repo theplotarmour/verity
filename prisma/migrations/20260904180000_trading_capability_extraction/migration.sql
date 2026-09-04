@@ -138,7 +138,7 @@ CREATE POLICY "plywood_product_detail_isolation" ON "plywood_product_detail"
 --    make `plywood` declare its dependency on `trading`.
 -- ---------------------------------------------------------------------------
 
-INSERT INTO "capability_definition" (id, name, version, dependencies, entity_types)
+INSERT INTO "capability_definition" (id, name, version, dependencies, entity_types, created_at, updated_at)
 VALUES (
   'verity.capability.trading',
   'Trading',
@@ -155,7 +155,8 @@ VALUES (
     'verity.trading.gst_registration', 'verity.trading.accounting_period',
     'verity.trading.invoice', 'verity.trading.payment', 'verity.trading.ledger_entry',
     'verity.trading.metric_snapshot'
-  ]
+  ],
+  now(), now()
 )
 ON CONFLICT (id) DO NOTHING;
 
