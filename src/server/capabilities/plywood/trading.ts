@@ -2846,6 +2846,7 @@ export const purchaseOrderDetail: QueryDefinition<
           after: entry.after ?? null,
           actorUserId: entry.actorUserId,
           commandKey: entry.commandKey,
+          kind: entry.kind,
         })),
     };
   },
@@ -3064,6 +3065,7 @@ export const salesOrderDetail: QueryDefinition<
           after: entry.after ?? null,
           actorUserId: entry.actorUserId,
           commandKey: entry.commandKey,
+          kind: entry.kind,
         })),
     };
   },

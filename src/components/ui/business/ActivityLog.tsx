@@ -25,6 +25,16 @@ export type ActivityEntry = {
   after: string | null;
   actorUserId: string | null;
   commandKey: string | null;
+  /**
+   * "change" = a field edit (`action` is the field name); "fact" = a domain
+   * event (`action` is the event name, e.g. `verity.plywood.credit_approved`
+   * — not a field, so `fieldLabelOf` was never the right lookup for it and
+   * showed the raw dotted name as a redundant second line under a command
+   * label that already said the same thing in words). Optional so existing
+   * callers that predate this field degrade to the old "change" behavior
+   * rather than breaking.
+   */
+  kind?: "change" | "fact";
 };
 
 function when(value: Date | string): string {
@@ -61,17 +71,19 @@ export function ActivityLog({
                   {commandLabelOf(entry.commandKey) ??
                     fieldLabelOf(entry.action)}
                 </p>
-                <p className="m-0 mt-0.5 text-[12px] text-text-tertiary">
-                  {entry.before !== null || entry.after !== null ? (
-                    <>
-                      {fieldLabelOf(entry.action)}
-                      {": "}
-                      {entry.before ?? "—"} → {entry.after ?? "—"}
-                    </>
-                  ) : (
-                    fieldLabelOf(entry.action)
-                  )}
-                </p>
+                {entry.kind !== "fact" && (
+                  <p className="m-0 mt-0.5 text-[12px] text-text-tertiary">
+                    {entry.before !== null || entry.after !== null ? (
+                      <>
+                        {fieldLabelOf(entry.action)}
+                        {": "}
+                        {entry.before ?? "—"} → {entry.after ?? "—"}
+                      </>
+                    ) : (
+                      fieldLabelOf(entry.action)
+                    )}
+                  </p>
+                )}
               </div>
               <span className="shrink-0 text-[12px] text-text-tertiary">
                 {when(entry.occurredAt)}
