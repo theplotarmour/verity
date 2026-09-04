@@ -172,7 +172,14 @@ describe("conformance: capability contracts (Phase E)", () => {
     // vehicle IS an Asset, and an LR scan IS Evidence. Declared here and in the
     // install migrations, so the database refuses the activation when any of the
     // three is inactive rather than discovering it at a failing foreign key.
-    plywood: ["location", "asset", "evidence"],
+    // ADR-018 added a fourth dependency: the generic trading engine plywood's
+    // own product-detail extension sits on top of.
+    plywood: ["location", "asset", "evidence", "trading"],
+    // ADR-018 — the generic order-to-cash/procure-to-pay engine extracted out
+    // of plywood. Depends on nothing: parties, orders, invoicing, GST, stock
+    // and payments need no other capability, the same reasoning `dinein`
+    // above already gives for depending on nothing.
+    trading: [],
   };
 
   const capabilityDirs = readdirSync(join(ROOT, "src/server/capabilities")).filter((entry) =>

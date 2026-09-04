@@ -512,14 +512,23 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
       return acc;
     }
 
-    const capability = files(join(process.cwd(), "src/server/capabilities/plywood"))
+    // ADR-018: most of this capability's commands moved to the generic
+    // `trading/` engine plywood now depends on — scan both directories, and
+    // match either capability's key prefix, rather than assuming everything
+    // still lives under `verity.plywood.*`.
+    const capability = [
+      ...files(join(process.cwd(), "src/server/capabilities/plywood")),
+      ...files(join(process.cwd(), "src/server/capabilities/trading")),
+    ]
       .map((file) => readFileSync(file, "utf8"))
       .join("\n");
     const commandKeys = [
       ...new Set(
-        [...capability.matchAll(/CommandDefinition<[\s\S]*?key: "(verity\.plywood\.[a-z_]+)"/g)].map(
-          (match) => match[1]!,
-        ),
+        [
+          ...capability.matchAll(
+            /CommandDefinition<[\s\S]*?key: "(verity\.(?:plywood|trading)\.[a-z_]+)"/g,
+          ),
+        ].map((match) => match[1]!),
       ),
     ];
     // Was "> 30" when the capability still carried five logistics commands.
