@@ -2,7 +2,12 @@
 
 Authority: `erpclaw-prd/00-product-vision.md` §8 (Success Metrics).
 
-## Status: PENDING — genuinely new gap, no existing taskplan covers this
+## Status: BUILT 2026-09-04 — template established and used twice.
+`implementation/13-conformance/acceptance-plywood.md` (retrospective, walked
+against the shipped capability, **PASS**) and `acceptance-accounting.md`
+(written the same session the capability was built, **PENDING** — not yet
+walked live against a real tenant, marked honestly rather than assumed).
+One script per capability going forward, per this file's own scope.
 
 ## What's missing
 

@@ -4,7 +4,11 @@ Authority: `erpclaw-prd/05-verity-extraction-plan.md` §6, §7 (ERPClaw
 source). `CLAUDE.md` §Foundation-ready definition (a capability must be
 addable "without modifying unrelated platform infrastructure").
 
-## Status: PENDING — highest-value extraction of the set, but still deferred to Phase 2 of the source doc's own rollout
+## Status: BUILT 2026-09-04 — `.claude/skills/verity-client-capability-builder/
+SKILL.md`. Installed after four capabilities (Tasks 72/73/77/78) were
+already built without it this session, not strictly before the "next"
+module per this file's own trigger — the value is forward-looking, for
+whatever capability work comes after this one.
 
 Unlike Tasks 72–80, this is **tooling**, not a business capability — it
 teaches any future agent (Claude Code, Codex) to build a Verity client
