@@ -17,6 +17,7 @@ import {
 import { day, rupees, rupeesShort, sheets } from "@/components/ui/business/format";
 import { SALES_STATE, present } from "@/components/ui/business/states";
 import { Related } from "@/components/ui/business/Related";
+import { ActivityLog, type ActivityEntry } from "@/components/ui/business/ActivityLog";
 
 type Customer = {
   id: string;
@@ -70,9 +71,10 @@ type Customer = {
     invoiceId: string | null;
     runningBalancePaise: number;
   }>;
+  activity: ActivityEntry[];
 };
 
-const TABS = ["Overview", "Pricing", "Sales orders", "Invoices", "Payments", "Ledger"] as const;
+const TABS = ["Overview", "Pricing", "Sales orders", "Invoices", "Payments", "Ledger", "Activity"] as const;
 type Tab = (typeof TABS)[number];
 
 /** Orders the business has committed to and not yet closed out. */
@@ -415,6 +417,8 @@ export function CustomerWorkspace({ customer }: { customer: Customer }) {
             </Panel>
           </div>
         )}
+
+        {tab === "Activity" && <ActivityLog entries={customer.activity} />}
       </div>
     </>
   );

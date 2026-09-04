@@ -17,6 +17,7 @@ import {
 import { day, rupees, rupeesShort, sheets } from "@/components/ui/business/format";
 import { PURCHASE_STATE, present } from "@/components/ui/business/states";
 import { Related } from "@/components/ui/business/Related";
+import { ActivityLog, type ActivityEntry } from "@/components/ui/business/ActivityLog";
 
 type Supplier = {
   id: string;
@@ -67,9 +68,10 @@ type Supplier = {
     invoiceId: string | null;
     runningBalancePaise: number;
   }>;
+  activity: ActivityEntry[];
 };
 
-const TABS = ["Overview", "Pricing", "Purchase orders", "Invoices", "Payments", "Ledger"] as const;
+const TABS = ["Overview", "Pricing", "Purchase orders", "Invoices", "Payments", "Ledger", "Activity"] as const;
 type Tab = (typeof TABS)[number];
 
 export function SupplierWorkspace({ supplier }: { supplier: Supplier }) {
@@ -397,6 +399,8 @@ export function SupplierWorkspace({ supplier }: { supplier: Supplier }) {
             </Panel>
           </div>
         )}
+
+        {tab === "Activity" && <ActivityLog entries={supplier.activity} />}
       </div>
     </>
   );

@@ -23,12 +23,19 @@ label that already said the same thing in words. Fixed: `kind: "change" |
 `trading.ts`; a "fact" entry now shows only its command-label caption, no
 subtitle.
 
+**Coverage extended 2026-09-04:** `supplierDetail`/`customerDetail` now
+call `reconstructHistory()` and expose an `activity` field, following the
+same pattern as purchase/sales order detail exactly (including the
+`kind` fix). Wired into a new "Activity" tab in both `SupplierWorkspace`
+and `CustomerWorkspace`. Also fixed while there: the two pre-existing
+`activity` type declarations (purchase/sales order detail) were missing
+`kind` in their TypeScript type even though the runtime already sent it
+(silently allowed by structural typing through the `.map()` callback
+boundary) — now declared correctly on all four.
+
 **Still open** (genuinely PENDING, not silently claimed done):
-- `supplierDetail`/`customerDetail` (and any other entity detail query) do
-  not call `reconstructHistory()` at all — only purchase/sales order detail
-  do. Per-entity coverage for customer, supplier, employee, asset, invoice
-  is real remaining work, not a rendering gap — each needs its own
-  `reconstructHistory()` call wired in.
+- Employee (HR) and asset detail views don't exist as pages yet in any
+  capability — nothing to wire until one does.
 - A dedicated, standalone "timeline" reading experience distinct from the
   existing per-record activity panel was not built — `ActivityLog` already
   supports oldest-first rendering (a caller just passes `history` instead

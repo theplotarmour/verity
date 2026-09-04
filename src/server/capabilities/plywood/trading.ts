@@ -2721,6 +2721,7 @@ export const purchaseOrderDetail: QueryDefinition<
       after: string | null;
       actorUserId: string | null;
       commandKey: string | null;
+      kind: "change" | "fact";
     }>;
   } | null
 > = {
@@ -2910,6 +2911,7 @@ export const salesOrderDetail: QueryDefinition<
       after: string | null;
       actorUserId: string | null;
       commandKey: string | null;
+      kind: "change" | "fact";
     }>;
   } | null
 > = {
@@ -3403,6 +3405,15 @@ export const supplierDetail: QueryDefinition<
       invoiceId: string | null;
       runningBalancePaise: number;
     }>;
+    activity: Array<{
+      occurredAt: Date;
+      action: string;
+      before: string | null;
+      after: string | null;
+      actorUserId: string | null;
+      commandKey: string | null;
+      kind: "change" | "fact";
+    }>;
   } | null
 > = {
   key: "verity.plywood.supplier_detail",
@@ -3430,6 +3441,12 @@ export const supplierDetail: QueryDefinition<
       },
     });
     if (!supplier) return null;
+
+    // Task 92 coverage extension — same pattern proven on purchase/sales
+    // order detail, applied here for the first time. Newest first, same
+    // reasoning as those panels: a live record's activity panel answers
+    // "what just happened."
+    const history = await reconstructHistory(ctx.tx, ENTITY_SUPPLIER, supplier.id);
 
     const openOrders = supplier.orders.filter((order) =>
       ["submitted", "receiving"].includes(order.state),
@@ -3533,6 +3550,18 @@ export const supplierDetail: QueryDefinition<
           runningBalancePaise: running,
         };
       }),
+      activity: history
+        .slice()
+        .reverse()
+        .map((entry) => ({
+          occurredAt: entry.occurredAt,
+          action: entry.action,
+          before: entry.before ?? null,
+          after: entry.after ?? null,
+          actorUserId: entry.actorUserId,
+          commandKey: entry.commandKey,
+          kind: entry.kind,
+        })),
     };
   },
 };
@@ -3595,6 +3624,15 @@ export const customerDetail: QueryDefinition<
       invoiceId: string | null;
       runningBalancePaise: number;
     }>;
+    activity: Array<{
+      occurredAt: Date;
+      action: string;
+      before: string | null;
+      after: string | null;
+      actorUserId: string | null;
+      commandKey: string | null;
+      kind: "change" | "fact";
+    }>;
   } | null
 > = {
   key: "verity.plywood.customer_detail",
@@ -3629,6 +3667,9 @@ export const customerDetail: QueryDefinition<
       },
     });
     if (!customer) return null;
+
+    // Task 92 coverage extension — see supplierDetail for the same pattern.
+    const history = await reconstructHistory(ctx.tx, ENTITY_CUSTOMER, customer.id);
 
     const exposurePaise = await customerExposurePaise(ctx.tx, customer.id);
     const committed = customer.orders.filter((order) =>
@@ -3733,6 +3774,18 @@ export const customerDetail: QueryDefinition<
           runningBalancePaise: running,
         };
       }),
+      activity: history
+        .slice()
+        .reverse()
+        .map((entry) => ({
+          occurredAt: entry.occurredAt,
+          action: entry.action,
+          before: entry.before ?? null,
+          after: entry.after ?? null,
+          actorUserId: entry.actorUserId,
+          commandKey: entry.commandKey,
+          kind: entry.kind,
+        })),
     };
   },
 };
