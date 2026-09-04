@@ -5,7 +5,24 @@ Authority: `erpclaw-prd/01-information-architecture-and-pages.md` §2.4
 dashboard sections) — merged in here rather than split out, since it's
 the same concept applied at panel granularity.
 
-## Status: PENDING — genuinely new gap
+## Status: BUILT 2026-09-04. Checked current implementation first, per
+this file's own scope note — real gap confirmed, not already covered:
+`/overview` caught `ForbiddenError` per query (denied → empty/null) but
+let any OTHER thrown error propagate and crash the whole page. No
+"Degraded" state existed at all; a genuine DB error in one panel took
+down every panel.
+
+Fixed: `src/components/ui/panelState.ts` (`PanelState<T>` = `ok | denied |
+error`, `loadPanel()` — never rejects, so `Promise.all` across independent
+panel fetches can't have one failure take the others down). Wired into
+`src/app/(shell)/overview/page.tsx`: the owner-console query (feeds nearly
+the whole page) now maps to page-level System-failure on real error, still
+distinct from denied; the four secondary queries (margin, low-stock,
+setup checklist, tax) each render their own inline `ErrorState` (already
+existed in `primitives.tsx`, just never reached by a panel-level error
+before) without affecting the others. Empty/first-setup was already
+correctly handled by the existing `SetupChecklist` gating. Attention state
+deferred to Task 90, per this file's own scope.
 
 ## What's missing
 

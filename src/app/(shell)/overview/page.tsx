@@ -12,8 +12,10 @@ import {
   taxSummary,
 } from "@/server/capabilities/plywood";
 import { SetupChecklist } from "./SetupChecklist";
+import { loadPanel } from "@/components/ui/panelState";
 import {
   Button,
+  ErrorState,
   PageHeader,
   Panel,
   PermissionDenied,
@@ -43,40 +45,49 @@ export default async function OverviewPage() {
   installCapabilities();
   const actor = await requireActor();
 
-  let console_: Awaited<ReturnType<typeof ownerConsole.handler>>;
-  try {
-    console_ = await executeQuery(actor, ownerConsole, {});
-  } catch (error) {
-    if (error instanceof ForbiddenError) return <PermissionDenied what="the owner console" />;
-    throw error;
+  // The owner console feeds nearly every stat on this page — its failure is
+  // "System failure" (Task 86), not "Degraded": the whole page has nothing
+  // to show, not one panel. Denied stays its own case (a real, expected
+  // outcome for a role that cannot read it), distinct from a genuine error.
+  const consolePanel = await loadPanel(executeQuery(actor, ownerConsole, {}));
+  if (consolePanel.status === "denied") return <PermissionDenied what="the owner console" />;
+  if (consolePanel.status === "error") {
+    return (
+      <>
+        <PageHeader title="Business Overview" />
+        <ErrorState
+          title="The owner console could not load"
+          message={consolePanel.message}
+          retryable
+        />
+      </>
+    );
   }
+  const console_ = consolePanel.data;
 
-  const [margin, short, setup, tax] = await Promise.all([
-    executeQuery(actor, marginReport, { sinceDays: 30 }).catch((error) => {
-      if (error instanceof ForbiddenError) return null;
-      throw error;
-    }),
-    executeQuery(actor, lowStock, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return [];
-      throw error;
-    }),
-    // §3. Denied is treated as "nothing to show" rather than as an error: a
-    // warehouse operator cannot read the business profile and does not need an
-    // onboarding checklist either.
-    executeQuery(actor, onboardingChecklist, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return null;
-      throw error;
-    }),
-    // Only the count is wanted here; the list itself lives on /tax/exceptions.
-    // Null rather than zero when the actor cannot read tax, because "no
-    // exceptions" and "you may not see them" are different facts and showing
-    // the first for the second is a false all-clear.
-    executeQuery(actor, taxSummary, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return null;
-      throw error;
-    }),
+  // Each of these is independent — Task 86's "Degraded" state: a failing
+  // panel shows its own inline error and every other panel still renders.
+  // `loadPanel` never rejects, so `Promise.all` cannot fail here the way
+  // an unhandled throw from any one of these used to take the whole page
+  // down with it.
+  const [marginPanel, shortPanel, setupPanel, taxPanel] = await Promise.all([
+    loadPanel(executeQuery(actor, marginReport, { sinceDays: 30 })),
+    loadPanel(executeQuery(actor, lowStock, {})),
+    // Denied is "nothing to show", not an error: a warehouse operator
+    // cannot read the business profile and does not need an onboarding
+    // checklist either.
+    loadPanel(executeQuery(actor, onboardingChecklist, {})),
+    loadPanel(executeQuery(actor, taxSummary, {})),
   ]);
-  const taxExceptionCount = tax === null ? null : tax.exceptions.length;
+
+  const margin = marginPanel.status === "ok" ? marginPanel.data : null;
+  const short = shortPanel.status === "ok" ? shortPanel.data : [];
+  const setup = setupPanel.status === "ok" ? setupPanel.data : null;
+  // Only the count is wanted here; the list itself lives on /tax/exceptions.
+  // Null rather than zero when the actor cannot read tax (or it failed),
+  // because "no exceptions" and "you may not see them" are different facts
+  // and showing the first for the second is a false all-clear.
+  const taxExceptionCount = taxPanel.status === "ok" ? taxPanel.data.exceptions.length : null;
 
   // The trade name if the business has set one, its legal name otherwise, and
   // the tenant's own name until either exists. Read here rather than passed
@@ -108,6 +119,11 @@ export default async function OverviewPage() {
       {setup && !setup.complete && (
         <div className="mb-6">
           <SetupChecklist checklist={setup} businessName={businessName} />
+        </div>
+      )}
+      {setupPanel.status === "error" && (
+        <div className="mb-6">
+          <ErrorState title="Setup checklist could not load" message={setupPanel.message} retryable />
         </div>
       )}
 
@@ -280,7 +296,17 @@ export default async function OverviewPage() {
           </Panel>
         </div>
       )}
+      {marginPanel.status === "error" && (
+        <div className="mb-4">
+          <ErrorState title="Margin could not load" message={marginPanel.message} retryable />
+        </div>
+      )}
 
+      {shortPanel.status === "error" && (
+        <div className="mb-4">
+          <ErrorState title="Low-stock list could not load" message={shortPanel.message} retryable />
+        </div>
+      )}
       {short.length > 0 && (
         <Panel
           title="Needs buying"
