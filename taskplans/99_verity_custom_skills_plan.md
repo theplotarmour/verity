@@ -6,7 +6,12 @@ repeated by hand, a bug that could recur), not a speculative want. Task
 82 (`verity-client-capability-builder`) already covers one of these in
 full; referenced, not duplicated.
 
-## Status: PENDING — a plan, not an installed skill. Nothing below is built.
+## Status: Skills 2 and 3 BUILT 2026-09-04 (`.claude/skills/verity-adr-gate/`,
+`.claude/skills/verity-migration-safety/`) — the two flagged "high, cheap,
+do first." Skill 3 additionally documents a second real incident from
+2026-09-04 itself (migration-checksum drift, not in this file's original
+text). Skills 1 (Task 82) and this pair are now built; 4/5/6/7/8 remain
+PENDING per the priority ranking below.
 
 ## Why this matters more than usual right now
 
