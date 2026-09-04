@@ -53,7 +53,11 @@ export type IconName =
   | "building"
   | "check"
   | "close"
-  | "assistant";
+  | "assistant"
+  | "mail"
+  | "lock"
+  | "eye"
+  | "eyeOff";
 
 const PATHS: Record<IconName, string> = {
   // Navigation — board nav geometry.
@@ -126,6 +130,12 @@ const PATHS: Record<IconName, string> = {
   // robot head: the assistant is a conversation with the platform's own
   // authority, not a separate branded feature (ADR-017).
   assistant: "M4 5h16v11H9l-4 4z M8.5 9.5h7 M8.5 12.5h4.5",
+  // Sign-in field prefixes.
+  mail: "M4 6h16v12H4zM4 7l8 6 8-6",
+  lock: "M6 11V8a6 6 0 1 1 12 0v3M5 11h14v9H5zM12 15v2",
+  eye: "M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
+  eyeOff:
+    "M3 3l18 18M10.6 10.6a3 3 0 0 0 4.2 4.2M6.5 6.9C4 8.6 2.5 12 2.5 12s3.5 6.5 9.5 6.5c1.6 0 3-.4 4.2-1.1M17.6 17.5C19.9 15.9 21.5 12 21.5 12S18 5.5 12 5.5c-.7 0-1.5.1-2.1.3",
 };
 
 export function Icon({

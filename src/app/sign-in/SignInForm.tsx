@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { Button, Field, Input } from "@/components/ui/primitives";
+import { Icon } from "@/components/ui/icons";
 import { signInWithPassword } from "@/server/actions/platform";
 
 /**
@@ -14,10 +16,15 @@ import { signInWithPassword } from "@/server/actions/platform";
  *
  * A failure returns a deliberately uniform message, because distinguishing
  * "no such account" from "wrong password" is an account-enumeration oracle.
+ *
+ * Icon-prefixed fields and the password visibility toggle are visual only —
+ * the reference board's own composition — and touch nothing about how the
+ * form submits.
  */
 export function SignInForm() {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [showPassword, setShowPassword] = useState(false);
 
   return (
     <form
@@ -48,21 +55,62 @@ export function SignInForm() {
       )}
 
       <Field label="Email" htmlFor="email" required>
-        <Input id="email" name="email" type="email" autoComplete="email" required autoFocus />
+        <div className="relative">
+          <Icon
+            name="mail"
+            size={17}
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-text-tertiary"
+          />
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+            autoFocus
+            placeholder="you@company.com"
+            className="pl-11"
+          />
+        </div>
       </Field>
 
       <Field label="Password" htmlFor="password" required>
-        <Input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-        />
+        <div className="relative">
+          <Icon
+            name="lock"
+            size={17}
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-text-tertiary"
+          />
+          <Input
+            id="password"
+            name="password"
+            type={showPassword ? "text" : "password"}
+            autoComplete="current-password"
+            required
+            placeholder="Enter your password"
+            className="pl-11 pr-11"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            className="absolute right-3.5 top-1/2 -translate-y-1/2 cursor-pointer text-text-tertiary transition-colors hover:text-text-secondary"
+          >
+            <Icon name={showPassword ? "eyeOff" : "eye"} size={17} />
+            <span className="sr-only">{showPassword ? "Hide password" : "Show password"}</span>
+          </button>
+        </div>
       </Field>
 
-      <Button type="submit" variant="primary" disabled={pending} className="mt-1 w-full">
+      <Link
+        href="/reset-password"
+        className="-mt-2.5 self-end text-[13px] text-accent-ink no-underline hover:underline"
+      >
+        Forgot password?
+      </Link>
+
+      <Button type="submit" variant="primary" disabled={pending} className="mt-1 w-full gap-2">
         {pending ? "Signing in…" : "Sign in"}
+        {!pending && <Icon name="chevronRight" size={16} />}
       </Button>
     </form>
   );
