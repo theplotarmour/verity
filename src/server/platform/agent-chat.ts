@@ -6,6 +6,7 @@ import { getQuery, executeQuery } from "./query";
 import { GroundingCache } from "./grounding";
 import { readAgentProviderConfig } from "./config";
 import { runCommandBatch } from "./batch";
+import { toActionFailure } from "./action-error";
 
 /**
  * Agent chat orchestrator — Task 84 area 6.
@@ -89,13 +90,24 @@ permissions as the person you are helping — never more, never less. Rules:
    tool to find the real ID. Never invent, guess, or reuse an ID from outside
    this conversation — the platform will reject it (E_UNGROUNDED) and you will
    have to query and retry.
-2. A tool marked (destructive) will NOT run when you call it — it always
+2. Exact match only, never fuzzy. If a query returns more than one plausible
+   match for a name the user gave (a customer, a supplier, a party, an
+   order reference), list the exact candidates and ask which one — never
+   guess the "closest" one, never autocorrect a name yourself. If it
+   returns none, say so and ask for the exact name rather than assuming a
+   typo. If exactly one record exists in total for that kind of thing, you
+   may use it without asking.
+3. A tool marked (destructive) will NOT run when you call it — it always
    comes back "needs_approval". That is not a bug: tell the user plainly
    what it would do and that they need to do it themselves in the app for
    now. Do not retry a destructive call expecting a different result.
-3. If a tool call fails, read the error and decide whether to retry with
-   corrected input or explain the failure to the user. Do not retry blindly.
-4. Keep answers short and in the platform's own terminology (Work, Party,
+4. If a tool call fails, its error has a "code" and a "message". Read the
+   code before deciding what to do: E_VALIDATION means fix the input and
+   retry; E_FORBIDDEN means explain what's inaccessible, don't retry;
+   E_CONFLICT means something changed underneath you, re-query and retry;
+   E_UNGROUNDED means query for the real ID first; anything else, explain
+   the message plainly and don't retry blindly.
+5. Keep answers short and in the platform's own terminology (Work, Party,
    Organization, Resource — never "job", "client", "employee").`;
 
 type OpenAiToolCall = {
@@ -169,7 +181,13 @@ async function runTool(
     if (outcome.status === "succeeded") {
       return { key, kind: "command", input, ok: true, output: outcome.result };
     }
-    return { key, kind: "command", input, ok: false, output: outcome.reason };
+    // Task 81 rule 9 — the model gets the same error CLASS a UI would
+    // (code, from toActionFailure via runCommandBatch), not just a message
+    // string it has to interpret itself.
+    if (outcome.status === "needs_approval") {
+      return { key, kind: "command", input, ok: false, output: { code: "E_NEEDS_APPROVAL", message: outcome.reason } };
+    }
+    return { key, kind: "command", input, ok: false, output: { code: outcome.code, message: outcome.reason } };
   }
 
   const query = getQuery(key);
@@ -178,7 +196,8 @@ async function runTool(
       const result = await executeQuery(actor, query, input, "agent", grounding);
       return { key, kind: "query", input, ok: true, output: result };
     } catch (err) {
-      return { key, kind: "query", input, ok: false, output: err instanceof Error ? err.message : String(err) };
+      const failure = toActionFailure(err);
+      return { key, kind: "query", input, ok: false, output: { code: failure.code, message: failure.message } };
     }
   }
 

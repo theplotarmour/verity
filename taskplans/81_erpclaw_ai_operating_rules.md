@@ -4,7 +4,13 @@ Authority: `erpclaw-prd/05-verity-extraction-plan.md` §5 (ERPClaw source).
 PRN-001 (least surprise / explainable automation), PRN-002 (progressive
 disclosure).
 
-## Status: PENDING — no Verity assistant/command-layer exists yet to apply this to
+## Status: TRIGGER FIRED 2026-09-04 — Task 84 area 6 is the assistant/
+command layer this file was written for. First compliance audit walked
+the same day: `implementation/13-conformance/task-81-compliance-audit.md`.
+5 rules compliant by construction, 2 real gaps found and fixed (error-class
+taxonomy reaching the model, exact-match prompt discipline), 3 real gaps
+recorded as open (prose-claim grounding, structural exact-match
+enforcement, the six-step contract's preview step) rather than rushed.
 
 Unlike Tasks 72–80 (business capabilities), this is a set of **cross-cutting
 interaction rules**, not a data model — cheaper to adopt once an assistant
