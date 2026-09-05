@@ -255,7 +255,7 @@ export function FinanceDesk({
                   size="sm"
                   disabled={pending}
                   onClick={() =>
-                    run("verity.plywood.raise_sales_invoice", {
+                    run("verity.trading.raise_sales_invoice", {
                       salesOrderId: order.id,
                     })
                   }
@@ -281,7 +281,7 @@ export function FinanceDesk({
                   size="sm"
                   disabled={pending}
                   onClick={() =>
-                    run("verity.plywood.raise_purchase_bill_from_order", {
+                    run("verity.trading.raise_purchase_bill_from_order", {
                       purchaseOrderId: order.id,
                     })
                   }
@@ -379,7 +379,7 @@ export function FinanceDesk({
         pending={pending}
         onClose={() => setConfirming(null)}
         onSubmit={(input) =>
-          run("verity.plywood.confirm_purchase_bill", input, () =>
+          run("verity.trading.confirm_purchase_bill", input, () =>
             setConfirming(null),
           )
         }

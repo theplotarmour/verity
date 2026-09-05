@@ -195,7 +195,7 @@ export function RolesDesk({ roles, activities }: { roles: Role[]; activities: Ac
                             checked={held}
                             disabled={pending}
                             onChange={(event) =>
-                              run("verity.plywood.set_role_activity", {
+                              run("verity.trading.set_role_activity", {
                                 roleId: selected.id,
                                 activityKey: activity.key,
                                 enabled: event.target.checked,

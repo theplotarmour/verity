@@ -86,7 +86,7 @@ export function TransactionsDesk({
     setFailure(null);
     startTransition(async () => {
       const result = await runCommand(
-        "verity.plywood.record_party_payment",
+        "verity.trading.record_party_payment",
         input,
         "/transactions",
       );

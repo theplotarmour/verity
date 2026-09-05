@@ -74,7 +74,7 @@ export function CustomerList({ customers }: { customers: Customer[] }) {
     setFailure(null);
     startTransition(async () => {
       const result = await runCommand(
-        "verity.plywood.create_customer",
+        "verity.trading.create_customer",
         input,
         "/customers",
       );
@@ -123,7 +123,7 @@ export function CustomerList({ customers }: { customers: Customer[] }) {
         onClose={() => setEditing(null)}
         onSubmit={(input) =>
           send(
-            "verity.plywood.edit_customer",
+            "verity.trading.edit_customer",
             { customerId: editing!.id, ...input },
             () => setEditing(null),
           )
@@ -145,7 +145,7 @@ export function CustomerList({ customers }: { customers: Customer[] }) {
               disabled={pending}
               onClick={() =>
                 send(
-                  "verity.plywood.remove_customer",
+                  "verity.trading.remove_customer",
                   { customerId: removing!.id },
                   () => setRemoving(null),
                 )

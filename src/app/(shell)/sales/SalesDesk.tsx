@@ -239,7 +239,7 @@ export function SalesDesk({
         pending={pending}
         onClose={() => setNewCustomer(false)}
         onSubmit={(input) =>
-          run("verity.plywood.create_customer", input, () =>
+          run("verity.trading.create_customer", input, () =>
             setNewCustomer(false),
           )
         }
@@ -271,7 +271,7 @@ export function SalesDesk({
         pending={pending}
         onCancel={() => setAmending(null)}
         onSubmit={(input) =>
-          run("verity.plywood.edit_sales_order", input, () => setAmending(null))
+          run("verity.trading.edit_sales_order", input, () => setAmending(null))
         }
       />
 
@@ -288,7 +288,7 @@ export function SalesDesk({
           pending={pending}
           onCancel={() => setNewOrder(false)}
           onSubmit={(input) =>
-            run("verity.plywood.create_sales_order", input, () =>
+            run("verity.trading.create_sales_order", input, () =>
               setNewOrder(false),
             )
           }
@@ -385,7 +385,7 @@ export function SalesDesk({
                               size="sm"
                               disabled={pending}
                               onClick={() =>
-                                run("verity.plywood.reserve_for_order", {
+                                run("verity.trading.reserve_for_order", {
                                   orderId: order.id,
                                 })
                               }
@@ -400,7 +400,7 @@ export function SalesDesk({
                               disabled={pending}
                               onClick={() =>
                                 run(
-                                  "verity.plywood.dispatch_order",
+                                  "verity.trading.dispatch_order",
                                   { orderId: order.id },
                                   (data) => {
                                     // Requested: go straight to the invoice
@@ -458,7 +458,7 @@ export function SalesDesk({
               className="mt-4 flex flex-wrap items-end gap-3 rounded-lg bg-glass-2 p-3"
               action={(formData) =>
                 run(
-                  "verity.plywood.cancel_sales_order",
+                  "verity.trading.cancel_sales_order",
                   {
                     orderId: cancelling,
                     reason: String(formData.get("reason") ?? ""),

@@ -118,7 +118,7 @@ export function PriceSheet({
     setSaved(null);
     startTransition(async () => {
       const result = await runCommand(
-        "verity.plywood.set_price_sheet",
+        "verity.trading.set_price_sheet",
         {
           side,
           partyId,

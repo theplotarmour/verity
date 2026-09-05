@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
  *
  * Deliberately NOT a configuration screen. `/configuration` edits raw keys and
  * is a platform surface; a business administrator setting their legal name
- * should never see `verity.plywood.tax.state_code`.
+ * should never see `verity.trading.tax.state_code`.
  */
 export default async function BusinessSettingsPage() {
   installCapabilities();

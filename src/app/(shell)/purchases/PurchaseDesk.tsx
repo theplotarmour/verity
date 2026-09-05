@@ -257,7 +257,7 @@ export function PurchaseDesk({
         pending={pending}
         onCancel={() => setAmending(null)}
         onSubmit={(input) =>
-          run("verity.plywood.edit_purchase_order", input, () =>
+          run("verity.trading.edit_purchase_order", input, () =>
             setAmending(null),
           )
         }
@@ -273,7 +273,7 @@ export function PurchaseDesk({
           pending={pending}
           onCancel={() => setNewOrder(false)}
           onSubmit={(input) =>
-            run("verity.plywood.create_purchase_order", input, () =>
+            run("verity.trading.create_purchase_order", input, () =>
               setNewOrder(false),
             )
           }
@@ -372,7 +372,7 @@ export function PurchaseDesk({
                               size="sm"
                               disabled={pending}
                               onClick={() =>
-                                run("verity.plywood.submit_purchase_order", {
+                                run("verity.trading.submit_purchase_order", {
                                   orderId: order.id,
                                 })
                               }
@@ -454,7 +454,7 @@ export function PurchaseDesk({
               disabled={pending || cancelReason.trim().length < 3}
               onClick={() =>
                 run(
-                  "verity.plywood.cancel_purchase_order",
+                  "verity.trading.cancel_purchase_order",
                   { orderId: cancelling, reason: cancelReason.trim() },
                   () => {
                     setCancelling(null);
@@ -485,7 +485,7 @@ export function PurchaseDesk({
           pending={pending}
           onClose={() => setReceiving(null)}
           onSubmit={(input) =>
-            run("verity.plywood.receive_goods", input, () => setReceiving(null))
+            run("verity.trading.receive_goods", input, () => setReceiving(null))
           }
         />
       )}

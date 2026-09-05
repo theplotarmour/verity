@@ -86,7 +86,7 @@ export function BusinessSettingsForm({ settings }: { settings: Settings }) {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
             const text = (name: string) => String(data.get(name) ?? "").trim();
-            submit("verity.plywood.set_business_profile", {
+            submit("verity.trading.set_business_profile", {
               legalName: text("legalName"),
               tradeName: text("tradeName") || undefined,
               pan: text("pan").toUpperCase() || undefined,
@@ -149,7 +149,7 @@ export function BusinessSettingsForm({ settings }: { settings: Settings }) {
             onSubmit={(event) => {
               event.preventDefault();
               const data = new FormData(event.currentTarget);
-              submit("verity.plywood.set_tax_rule", {
+              submit("verity.trading.set_tax_rule", {
                 hsnCode: String(data.get("taxHsnCode") ?? "").trim(),
                 // Entered as a percentage, stored as basis points. 18 becomes
                 // 1800; a percentage stored as a float is a rounding error
@@ -193,7 +193,7 @@ export function BusinessSettingsForm({ settings }: { settings: Settings }) {
             onSubmit={(event) => {
               event.preventDefault();
               const data = new FormData(event.currentTarget);
-              submit("verity.plywood.register_gst_registration", {
+              submit("verity.trading.register_gst_registration", {
                 gstin: String(data.get("gstin") ?? "").trim().toUpperCase(),
                 registrationType: String(data.get("registrationType") ?? "regular"),
                 invoiceSeriesPrefix: String(data.get("invoiceSeriesPrefix") ?? "").trim(),

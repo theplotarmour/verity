@@ -204,7 +204,7 @@ export function CatalogueAdmin({ catalogue }: { catalogue: Brand[] }) {
               disabled={pending || brandName.trim() === ""}
               onClick={() =>
                 run(
-                  "verity.plywood.create_brand",
+                  "verity.trading.create_brand",
                   { name: brandName.trim() },
                   () => {
                     setBrandName("");
@@ -284,7 +284,7 @@ export function CatalogueAdmin({ catalogue }: { catalogue: Brand[] }) {
                     size="sm"
                     disabled={pending}
                     onClick={() =>
-                      run("verity.plywood.set_brand_active", {
+                      run("verity.trading.set_brand_active", {
                         brandId: brand.brandId,
                         active: !brand.brandActive,
                       })

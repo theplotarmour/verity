@@ -130,7 +130,7 @@ export function TaxSettingsForm({ settings }: { settings: Settings }) {
                 disabled={pending || gstin.trim().length === 0 || seriesPrefix.trim().length === 0}
                 onClick={() =>
                   run(
-                    "verity.plywood.register_gst_registration",
+                    "verity.trading.register_gst_registration",
                     {
                       gstin: gstin.trim(),
                       registrationType,
@@ -194,7 +194,7 @@ export function TaxSettingsForm({ settings }: { settings: Settings }) {
                 disabled={pending || hsn.trim().length === 0 || rate.trim().length === 0}
                 onClick={() =>
                   run(
-                    "verity.plywood.set_tax_rule",
+                    "verity.trading.set_tax_rule",
                     {
                       hsnCode: hsn.trim(),
                       // The command takes basis points; a person types percent.

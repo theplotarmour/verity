@@ -490,7 +490,7 @@ function MovementForm({
         const productId = String(formData.get("productId") ?? "");
         const qtyUnits = Number(formData.get("qty") ?? 0);
         if (movement === "receive") {
-          onSubmit("verity.plywood.receive_stock", {
+          onSubmit("verity.trading.receive_stock", {
             productId,
             locationId: String(formData.get("locationId") ?? ""),
             qtyUnits,
@@ -499,13 +499,13 @@ function MovementForm({
             unitCostPaise: Math.round(Number(formData.get("cost") ?? 0) * 100),
           });
         } else if (movement === "issue") {
-          onSubmit("verity.plywood.issue_stock", {
+          onSubmit("verity.trading.issue_stock", {
             productId,
             locationId: String(formData.get("locationId") ?? ""),
             qtyUnits,
           });
         } else {
-          onSubmit("verity.plywood.transfer_stock", {
+          onSubmit("verity.trading.transfer_stock", {
             productId,
             fromLocationId: String(formData.get("locationId") ?? ""),
             toLocationId: String(formData.get("toLocationId") ?? ""),
@@ -648,14 +648,14 @@ function CorrectionForm({
           reason: String(formData.get("reason") ?? ""),
         };
         if (correction === "adjust") {
-          onSubmit("verity.plywood.adjust_stock", {
+          onSubmit("verity.trading.adjust_stock", {
             ...base,
             direction: String(formData.get("direction") ?? "out"),
           });
         } else if (correction === "damaged") {
-          onSubmit("verity.plywood.record_damaged_stock", base);
+          onSubmit("verity.trading.record_damaged_stock", base);
         } else {
-          onSubmit("verity.plywood.record_returned_stock", base);
+          onSubmit("verity.trading.record_returned_stock", base);
         }
       }}
     >

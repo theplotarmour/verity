@@ -93,7 +93,7 @@ export function PurchaseOrderView({
       return;
     }
     run(
-      "verity.plywood.receive_goods",
+      "verity.trading.receive_goods",
       {
         orderId: order.id,
         lines,
@@ -124,7 +124,7 @@ export function PurchaseOrderView({
                 variant="primary"
                 disabled={pending}
                 onClick={() =>
-                  run("verity.plywood.submit_purchase_order", {
+                  run("verity.trading.submit_purchase_order", {
                     orderId: order.id,
                   })
                 }
@@ -149,7 +149,7 @@ export function PurchaseOrderView({
                 variant="danger"
                 disabled={pending}
                 onClick={() =>
-                  run("verity.plywood.cancel_purchase_order", {
+                  run("verity.trading.cancel_purchase_order", {
                     orderId: order.id,
                     reason: "Cancelled from the order",
                   })

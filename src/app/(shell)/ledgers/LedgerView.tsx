@@ -365,7 +365,7 @@ function OwedOverview({ balances }: { balances: Balance[] }) {
     setFailure(null);
     startTransition(async () => {
       const result = await runCommand(
-        "verity.plywood.record_party_payment",
+        "verity.trading.record_party_payment",
         input,
         "/ledgers",
       );

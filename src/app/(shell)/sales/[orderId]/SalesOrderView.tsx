@@ -73,7 +73,7 @@ export function SalesOrderView({
               <Button
                 variant="primary"
                 disabled={pending}
-                onClick={() => run("verity.plywood.reserve_for_order", { orderId: order.id })}
+                onClick={() => run("verity.trading.reserve_for_order", { orderId: order.id })}
               >
                 Reserve stock
               </Button>
@@ -96,7 +96,7 @@ export function SalesOrderView({
                 variant="primary"
                 disabled={pending}
                 onClick={() =>
-                  run("verity.plywood.raise_sales_invoice", { salesOrderId: order.id })
+                  run("verity.trading.raise_sales_invoice", { salesOrderId: order.id })
                 }
               >
                 Raise invoice
@@ -110,7 +110,7 @@ export function SalesOrderView({
                 variant="danger"
                 disabled={pending}
                 onClick={() =>
-                  run("verity.plywood.cancel_sales_order", {
+                  run("verity.trading.cancel_sales_order", {
                     orderId: order.id,
                     reason: "Cancelled from the order",
                   })
@@ -178,7 +178,7 @@ export function SalesOrderView({
                   disabled={pending}
                   onClick={() =>
                     run(
-                      "verity.plywood.dispatch_order",
+                      "verity.trading.dispatch_order",
                       {
                         orderId: order.id,
                         ...(collectedBy.trim() ? { collectedBy: collectedBy.trim() } : {}),

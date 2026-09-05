@@ -151,7 +151,7 @@ export function NewSalesOrderForm({
   function createCustomer(input: unknown) {
     startCreating(async () => {
       const result = await runCommand(
-        "verity.plywood.create_customer",
+        "verity.trading.create_customer",
         input,
         "/sales",
       );

@@ -88,7 +88,7 @@ export function ClosePeriodPanel({ checklist, tax }: { checklist: Checklist; tax
                 onSubmit={(event) => {
                   event.preventDefault();
                   const data = new FormData(event.currentTarget);
-                  run("verity.plywood.reopen_period", {
+                  run("verity.trading.reopen_period", {
                     periodKey: checklist.periodKey,
                     reason: String(data.get("reason") ?? "").trim(),
                   });
@@ -115,7 +115,7 @@ export function ClosePeriodPanel({ checklist, tax }: { checklist: Checklist; tax
               <Button
                 disabled={pending}
                 onClick={() =>
-                  run("verity.plywood.close_period", { periodKey: checklist.periodKey })
+                  run("verity.trading.close_period", { periodKey: checklist.periodKey })
                 }
               >
                 Close {checklist.periodKey}
@@ -125,7 +125,7 @@ export function ClosePeriodPanel({ checklist, tax }: { checklist: Checklist; tax
                   variant="secondary"
                   disabled={pending}
                   onClick={() =>
-                    run("verity.plywood.close_period", {
+                    run("verity.trading.close_period", {
                       periodKey: checklist.periodKey,
                       force: true,
                     })

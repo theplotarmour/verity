@@ -118,7 +118,7 @@ export function ConfigurationEditor({ parameters }: { parameters: Parameter[] })
                   label="Key"
                   htmlFor="config-new-key"
                   required
-                  hint="The key a capability reads, e.g. verity.plywood.tax.state_code"
+                  hint="The key a capability reads, e.g. verity.trading.tax.state_code"
                 >
                   <Input id="config-new-key" name="key" required autoFocus />
                 </Field>

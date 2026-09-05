@@ -86,7 +86,7 @@ export function SupplierList({ suppliers }: { suppliers: Supplier[] }) {
     setFailure(null);
     startTransition(async () => {
       const result = await runCommand(
-        "verity.plywood.create_supplier",
+        "verity.trading.create_supplier",
         input,
         "/suppliers",
       );
@@ -127,7 +127,7 @@ export function SupplierList({ suppliers }: { suppliers: Supplier[] }) {
         onClose={() => setEditing(null)}
         onSubmit={(input) =>
           send(
-            "verity.plywood.edit_supplier",
+            "verity.trading.edit_supplier",
             { supplierId: editing!.id, ...(input as Record<string, unknown>) },
             () => setEditing(null),
           )
@@ -149,7 +149,7 @@ export function SupplierList({ suppliers }: { suppliers: Supplier[] }) {
               disabled={pending}
               onClick={() =>
                 send(
-                  "verity.plywood.remove_supplier",
+                  "verity.trading.remove_supplier",
                   { supplierId: removing!.id },
                   () => setRemoving(null),
                 )

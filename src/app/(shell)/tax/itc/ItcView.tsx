@@ -163,7 +163,7 @@ export function ItcView({ report }: { report: Report }) {
 
     startTransition(async () => {
       const result = await runCommand(
-        "verity.plywood.import_gst_portal_records",
+        "verity.trading.import_gst_portal_records",
         {
           periodKey: report.periodKey,
           rows: payload,

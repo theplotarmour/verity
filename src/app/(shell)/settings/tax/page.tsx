@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  * §5 — tax settings in the business's own words.
  *
  * Deliberately not a configuration-key screen. The specification names
- * `verity.plywood.tax.cgst_rate_bp` as exactly what a client must never be
+ * `verity.trading.tax.cgst_rate_bp` as exactly what a client must never be
  * shown, and the reason is not cosmetic: a rate is a business fact with a date
  * on it, and a settings key is a value with none. Storing it as the latter is
  * what makes a mid-year rate change unrepresentable.
