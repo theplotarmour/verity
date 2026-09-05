@@ -64,12 +64,15 @@ export function NewPurchaseOrderForm({
   agreed,
   pending,
   onSubmit,
+  taxRateBp,
   onCancel,
   /** Present when amending an order rather than placing one. */
   editing,
 }: {
   open: boolean;
   editing?: OrderDraft | null;
+  /** Combined CGST+SGST in basis points, by product. Absent when unknown. */
+  taxRateBp: Map<string, number>;
   suppliers: Array<{ id: string; displayName: string; stateCode: string | null }>;
   godowns: Array<{ id: string; name: string }>;
   boards: Array<{ id: string; label: string }>;
@@ -167,10 +170,43 @@ export function NewPurchaseOrderForm({
     );
   }
 
+  // Taxable value: quantity times the net-of-discount cost. This is what the
+  // order stores, and what the three-way match and the weighted average cost
+  // of every sheet in the godown read.
   const total = lines.reduce((sum, line) => {
     const qty = Number.parseFloat(line.qty);
     return sum + (Number.isFinite(qty) ? qty * netCost(line) : 0);
   }, 0);
+
+  // The tax on top, per line, at the rate in force for that product's HSN.
+  // Per line rather than one rate on the total, because two boards on one
+  // order can attract different rates — and if they do, the bill will refuse
+  // and say so, which is a thing worth learning here rather than at the
+  // warehouse door.
+  //
+  // `unknown` when a line's rate cannot be resolved at all. The gross is then
+  // withheld rather than quoted short: an order that says it costs less than
+  // it does is worse than one that admits it does not know yet.
+  const taxOn = (line: Line): number | null => {
+    const qty = Number.parseFloat(line.qty);
+    if (!Number.isFinite(qty)) return 0;
+    const rateBp = taxRateBp.get(line.productId);
+    if (rateBp == null) return null;
+    return (qty * netCost(line) * rateBp) / 10_000;
+  };
+  const taxLines = lines.filter((line) => line.productId !== "");
+  const taxUnknown =
+    gst && taxLines.some((line) => taxRateBp.get(line.productId) == null);
+  const tax = gst
+    ? taxLines.reduce((sum, line) => sum + (taxOn(line) ?? 0), 0)
+    : 0;
+  const rateSpread = new Set(
+    gst
+      ? taxLines
+          .map((line) => taxRateBp.get(line.productId))
+          .filter((rate): rate is number => rate != null)
+      : [],
+  );
 
   const complete = lines.filter(
     (line) =>
@@ -206,8 +242,34 @@ export function NewPurchaseOrderForm({
       footer={
         <>
           {total > 0 && (
-            <span className="tabular mr-auto text-[13px] text-text-secondary">
-              Order total {rupees(Math.round(total * 100))}
+            <span className="mr-auto text-[13px] text-text-secondary">
+              {gst ? (
+                taxUnknown ? (
+                  <>
+                    <span className="tabular">
+                      {rupees(Math.round(total * 100))}
+                    </span>{" "}
+                    before GST — the rate is not set for every line
+                  </>
+                ) : (
+                  <>
+                    <span className="tabular text-text">
+                      {rupees(Math.round((total + tax) * 100))}
+                    </span>{" "}
+                    <span className="tabular">
+                      ({rupees(Math.round(total * 100))} +{" "}
+                      {rupees(Math.round(tax * 100))} GST)
+                    </span>
+                  </>
+                )
+              ) : (
+                <>
+                  <span className="tabular text-text">
+                    {rupees(Math.round(total * 100))}
+                  </span>{" "}
+                  — no GST
+                </>
+              )}
             </span>
           )}
           <ModalCancel onClose={onCancel} disabled={pending} />
@@ -318,6 +380,16 @@ export function NewPurchaseOrderForm({
               ? "The supplier's bill will be taxed at the rate in force and its input credit claimed."
               : "For an unregistered or composition supplier. The bill records no tax and claims no input credit."}
           </p>
+          {/* An invoice carries one rate. Two rates on one order is not a
+              rounding question — the bill will refuse it — and finding that
+              out here costs a moment, while finding it out at goods receipt
+              costs a delivery. */}
+          {rateSpread.size > 1 && (
+            <p className="m-0 pl-[28px] text-[12px] text-warning">
+              These lines attract different GST rates. One bill carries one
+              rate, so this order will need splitting before it can be billed.
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col gap-4 border-t border-line pt-4">

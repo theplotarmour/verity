@@ -8,6 +8,7 @@ import {
   listSuppliers,
   openOrders,
   supplierPrices,
+  productTaxRates,
 } from "@/server/capabilities/plywood";
 import { PageHeader, PermissionDenied } from "@/components/ui/primitives";
 import { PurchaseDesk } from "./PurchaseDesk";
@@ -55,6 +56,17 @@ export default async function PurchasesPage() {
     }),
   ]);
 
+  // The GST rate per product, so the order form can show what the purchase
+  // will actually cost rather than only its taxable value. Resolved on the
+  // server because the rate comes from a dated rule and a tenant default, and
+  // duplicating that decision in the browser is how the two start disagreeing.
+  const taxRates = await executeQuery(actor, productTaxRates, {}).catch(
+    (error) => {
+      if (error instanceof ForbiddenError) return [];
+      throw error;
+    },
+  );
+
   return (
     <>
       <PageHeader
@@ -62,6 +74,7 @@ export default async function PurchasesPage() {
         description="Orders placed with suppliers, and what is still owed on each. Receiving against an order moves the stock in the same step — there is no separate goods-received entry to forget."
       />
       <PurchaseDesk
+        taxRates={taxRates}
         orders={orders.purchases}
         suppliers={suppliers.map((supplier) => ({
           id: supplier.id,

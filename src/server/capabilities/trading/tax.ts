@@ -11,7 +11,15 @@ import {
   businessZone,
   startOfBusinessMonth,
 } from "./clock";
-import { HSN_CODE, ENTITY_GST_REGISTRATION, ENTITY_INVOICE } from "./keys";
+import {
+  HSN_CODE,
+  ENTITY_GST_REGISTRATION,
+  ENTITY_INVOICE,
+  ENTITY_PRODUCT,
+  CONFIG_CGST_RATE_BP,
+  CONFIG_SGST_RATE_BP,
+} from "./keys";
+import { resolveConfig } from "@/server/platform/capability";
 
 /**
  * Tax determination, input credit, and the working for a return.
@@ -194,6 +202,110 @@ export const setTaxRule: CommandDefinition<
  * Nothing here is entered by a person, and there is deliberately no command
  * that would let one.
  */
+/**
+ * The GST rate in force today for every product in the catalogue.
+ *
+ * WHY A SCREEN NEEDS THIS. A purchase order's stored total is its TAXABLE
+ * value, and it has to stay that way -- the three-way match, the payable, and
+ * the weighted average cost of every sheet in the godown all read it. But the
+ * figure a buyer is committing to is the taxable value PLUS the tax, and a
+ * form that shows only the first is telling them the order costs less than it
+ * does. So the rate travels to the screen and the gross is shown beside the
+ * net, without either one being stored twice.
+ *
+ * Resolved per HSN, not per product: a catalogue of four hundred boards shares
+ * a handful of codes. `rateBp` is the combined CGST+SGST -- the same number as
+ * IGST on an inter-state supply, which is why one field serves both.
+ *
+ * `null` means the rate is genuinely not known: no registration, no rule for
+ * that HSN, and no configured default. Absent rather than zero, because zero
+ * is a statement that no tax is charged and the screen must be able to say
+ * "not known" instead of quietly under-quoting the order.
+ */
+export async function productTaxRateMap(
+  tx: TenantScopedClient,
+): Promise<Map<string, number | null>> {
+  const rows = await resolveProductTaxRates(tx);
+  return new Map(rows.map((row) => [row.productId, row.rateBp]));
+}
+
+async function resolveProductTaxRates(
+  tx: TenantScopedClient,
+): Promise<
+  Array<{ productId: string; hsnCode: string | null; rateBp: number | null }>
+> {
+  {
+    const ctx = { tx };
+    const products = await ctx.tx.tradingProduct.findMany({
+      where: { active: true },
+      select: { id: true, hsnCode: true },
+    });
+    if (products.length === 0) return [];
+
+    // The tenant default, used for a product whose HSN nobody has recorded
+    // yet -- the same fallback `ratesFor` applies when it raises the invoice,
+    // so the figure quoted on the order is the figure that will be billed.
+    const [rawCgst, rawSgst] = await Promise.all([
+      resolveConfig<unknown>(ctx.tx, CONFIG_CGST_RATE_BP),
+      resolveConfig<unknown>(ctx.tx, CONFIG_SGST_RATE_BP),
+    ]);
+    const half = (raw: unknown): number | null => {
+      const value = typeof raw === "string" ? Number(raw) : raw;
+      return typeof value === "number" && Number.isFinite(value) ? value : null;
+    };
+    const defaultCgst = half(rawCgst);
+    const defaultSgst = half(rawSgst);
+    const fallbackBp =
+      defaultCgst != null && defaultSgst != null
+        ? defaultCgst + defaultSgst
+        : null;
+
+    const registration = await ctx.tx.tradingGstRegistration.findFirst({
+      where: { active: true },
+    });
+
+    const byHsn = new Map<string, number | null>();
+    if (registration) {
+      const now = new Date();
+      for (const hsn of new Set(
+        products.map((product) => product.hsnCode).filter(Boolean),
+      )) {
+        try {
+          const rate = await resolveTaxRate(ctx.tx, {
+            registrationId: registration.id,
+            hsnCode: hsn as string,
+            on: now,
+          });
+          byHsn.set(hsn as string, rate.cgstRateBp + rate.sgstRateBp);
+        } catch {
+          // No rule for this HSN. The tenant default stands in, exactly as it
+          // will when the invoice is raised.
+          byHsn.set(hsn as string, fallbackBp);
+        }
+      }
+    }
+
+    return products.map((product) => ({
+      productId: product.id,
+      hsnCode: product.hsnCode,
+      rateBp:
+        product.hsnCode == null
+          ? fallbackBp
+          : (byHsn.get(product.hsnCode) ?? fallbackBp),
+    }));
+  }
+}
+
+export const productTaxRates: QueryDefinition<
+  Record<string, never>,
+  Array<{ productId: string; hsnCode: string | null; rateBp: number | null }>
+> = {
+  key: "verity.trading.product_tax_rates",
+  entity: ENTITY_PRODUCT,
+  input: z.object({}),
+  handler: async (ctx) => resolveProductTaxRates(ctx.tx),
+};
+
 export const taxSummary: QueryDefinition<
   { from?: string; to?: string },
   {
@@ -782,4 +894,5 @@ export function registerTax(): void {
   registerQuery(gstr1Working);
   registerQuery(gstr3bWorking);
   registerQuery(taxSettings);
+  registerQuery(productTaxRates);
 }

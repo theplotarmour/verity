@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -127,12 +127,14 @@ export function PurchaseDesk({
   godowns,
   boards,
   agreed,
+  taxRates,
 }: {
   orders: PurchaseOrder[];
   suppliers: Supplier[];
   godowns: Array<{ id: string; name: string }>;
   boards: Array<{ id: string; label: string }>;
   agreed: AgreedCost[];
+  taxRates: Array<{ productId: string; rateBp: number | null }>;
 }) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
@@ -144,6 +146,21 @@ export function PurchaseDesk({
   // Controlled, so a refusal does not blank the reason someone just typed.
   const [cancelReason, setCancelReason] = useState("");
   const [pending, startTransition] = useTransition();
+
+  // Built once rather than per render of the form: the order form asks for a
+  // rate on every keystroke, and rebuilding a four-hundred-entry map each time
+  // is work nobody sees and everybody pays for.
+  const taxRateBp = useMemo(
+    () =>
+      new Map(
+        taxRates
+          .filter((row): row is { productId: string; rateBp: number } =>
+            row.rateBp != null,
+          )
+          .map((row) => [row.productId, row.rateBp]),
+      ),
+    [taxRates],
+  );
 
   /**
    * Opens or closes a panel, clearing any standing failure first.
@@ -252,6 +269,7 @@ export function PurchaseDesk({
               }
             : null
         }
+        taxRateBp={taxRateBp}
         suppliers={suppliers}
         godowns={godowns}
         boards={boards}
@@ -268,6 +286,7 @@ export function PurchaseDesk({
       {canOrder && (
         <NewPurchaseOrderForm
           open={newOrder}
+          taxRateBp={taxRateBp}
           suppliers={suppliers}
           godowns={godowns}
           boards={boards}

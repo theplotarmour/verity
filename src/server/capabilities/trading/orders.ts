@@ -7,6 +7,7 @@ import {
   outstandingReceivables,
 } from "./finance";
 import { lowStock } from "./stock";
+import { productTaxRateMap } from "./tax";
 import { assertGodownInScope, reachableGodownIds } from "./scope";
 import {
   ValidationError,
@@ -3154,6 +3155,17 @@ export const purchaseOrderDetail: QueryDefinition<
      *  composition supplier; the bill then records no tax and claims no
      *  input credit. */
     gstApplicable: boolean;
+    /**
+     * `totalCostPaise` is the TAXABLE value and stays that way — the
+     * three-way match, the payable and the weighted average cost all read it.
+     * This is the tax that will sit on top when the bill is raised, so the
+     * page can show what the order actually commits the business to.
+     *
+     * Null when GST does not apply, or when no rate can be resolved for a
+     * line. Withheld rather than quoted as zero: an order that says it costs
+     * less than it does is worse than one that admits it does not know yet.
+     */
+    estimatedTaxPaise: number | null;
     totalCostPaise: number;
     createdAt: Date;
     qtyOrdered: number;
@@ -3250,6 +3262,28 @@ export const purchaseOrderDetail: QueryDefinition<
       0,
     );
 
+    // What the bill will add on top. Per line, at the rate in force for that
+    // line's own HSN, because two products on one order can attract different
+    // rates — and if any line's rate cannot be resolved, the whole estimate is
+    // withheld rather than quoted short.
+    let estimatedTaxPaise: number | null = null;
+    if (order.gstApplicable) {
+      const rates = await productTaxRateMap(ctx.tx);
+      let running = 0;
+      let known = true;
+      for (const line of order.lines) {
+        const rateBp = rates.get(line.productId);
+        if (rateBp == null) {
+          known = false;
+          break;
+        }
+        running += Math.round(
+          (line.qtyOrdered * line.unitCostPaise * rateBp) / 10_000,
+        );
+      }
+      estimatedTaxPaise = known ? running : null;
+    }
+
     return {
       id: order.id,
       supplierId: order.supplier.id,
@@ -3259,6 +3293,7 @@ export const purchaseOrderDetail: QueryDefinition<
       reference: order.reference,
       state: order.state,
       gstApplicable: order.gstApplicable,
+      estimatedTaxPaise,
       totalCostPaise: order.totalCostPaise,
       createdAt: order.createdAt,
       qtyOrdered,

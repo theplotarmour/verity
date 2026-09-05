@@ -193,7 +193,23 @@ export function PurchaseOrderView({
           <StateBadge category={state.category} label={state.label} />
           {/* Stated only when it is off. An order that carries GST is every
               order; a badge on all of them would hide the one that matters. */}
-          {!order.gstApplicable && (
+          {order.gstApplicable ? (
+            // The stored total is the taxable value. What the business is
+            // actually committed to is that plus the tax the bill will carry,
+            // so both are shown and neither is stored twice.
+            order.estimatedTaxPaise !== null && (
+              <span className="text-[13px] text-text-secondary">
+                <span className="tabular text-text">
+                  {rupees(order.totalCostPaise + order.estimatedTaxPaise)}
+                </span>{" "}
+                with GST{" "}
+                <span className="tabular">
+                  ({rupees(order.totalCostPaise)} +{" "}
+                  {rupees(order.estimatedTaxPaise)})
+                </span>
+              </span>
+            )
+          ) : (
             <span className="text-[13px] text-text-secondary">
               No GST — unregistered or composition supplier. The bill records no
               tax and claims no input credit.
