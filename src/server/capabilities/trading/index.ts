@@ -81,6 +81,7 @@ import {
   purchaseOrderDetail,
   receiveGoods,
   linkSupplierToCustomer,
+  allocationPlan,
   reserveForOrder,
   salesOrderDetail,
   setCreditLimit,
@@ -391,6 +392,7 @@ export function registerTradingCapability(): void {
   registerQuery(salesOrderDetail);
   registerQuery(openOrders);
   registerQuery(stockAvailability);
+  registerQuery(allocationPlan);
   registerQuery(listInvoices);
   registerQuery(invoiceDetail);
   registerQuery(outstandingReceivables);

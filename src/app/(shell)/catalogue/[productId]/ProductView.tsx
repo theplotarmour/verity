@@ -44,9 +44,21 @@ export function ProductView({ product }: { product: NonNullable<Product> }) {
     <>
       <PageHeader
         title={product.name}
-        description={`${product.brandName}${family ? ` · ${family}` : ""} · ${product.grade}${size ? ` · ${size}` : ""}${
-          millimetres(product.thicknessTenthMm) ? ` · ${millimetres(product.thicknessTenthMm)}` : ""
-        }`}
+        // Built by joining what this product actually has. Grade and HSN are
+        // both optional now — a laminate has no grade, and an HSN arrives with
+        // the supplier's bill — so a template string would print "· ·" for the
+        // gaps and read as a fault rather than an absence.
+        description={[
+          product.brandName,
+          family,
+          product.shadeName,
+          product.textureName,
+          product.grade,
+          size,
+          millimetres(product.thicknessTenthMm),
+        ]
+          .filter(Boolean)
+          .join(" · ")}
       />
 
       <div className="flex flex-col gap-5">
@@ -95,8 +107,14 @@ export function ProductView({ product }: { product: NonNullable<Product> }) {
                     </Link>
                   ),
                 },
-                { term: "HSN code", value: product.hsnCode },
-                { term: "Grade", value: product.grade },
+                { term: "HSN code", value: product.hsnCode ?? "Not recorded" },
+                ...(product.grade ? [{ term: "Grade", value: product.grade }] : []),
+                ...(product.shadeName
+                  ? [{ term: "Shade", value: product.shadeName }]
+                  : []),
+                ...(product.textureName
+                  ? [{ term: "Texture", value: product.textureName }]
+                  : []),
                 { term: "Size", value: size ?? "—" },
                 { term: "Thickness", value: millimetres(product.thicknessTenthMm) ?? "—" },
                 {

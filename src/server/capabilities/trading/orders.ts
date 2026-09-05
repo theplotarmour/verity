@@ -10,6 +10,7 @@ import { lowStock } from "./stock";
 import { assertGodownInScope, reachableGodownIds } from "./scope";
 import {
   ValidationError,
+  type ActorContext,
   type CommandDefinition,
 } from "@/server/platform/command";
 import { type QueryDefinition } from "@/server/platform/query";
@@ -778,11 +779,36 @@ export const setCustomerPrice: CommandDefinition<
 
 /* ============================== purchase side ============================= */
 
+/**
+ * A TEMPLATE is not a thing anyone can order, receive or sell.
+ *
+ * It is the parent a laminate design's shade x texture variants were generated
+ * from -- it holds what they share and nothing sits behind it in a godown.
+ * Letting one onto an order line would create a payable, a reservation and a
+ * stock movement for a row that is, by construction, never counted.
+ *
+ * Checked by name rather than filtered out of the query, so the refusal says
+ * which product and why. "Unknown or withdrawn" would be a lie about a product
+ * sitting right there in the catalogue.
+ */
+function assertNoTemplates(
+  products: Array<{ name: string; type: string }>,
+): void {
+  const template = products.find((product) => product.type === "TEMPLATE");
+  if (template) {
+    throw new ValidationError(
+      `E_VALIDATION: ${template.name} is a design, not a product. ` +
+        "Choose one of its shade and texture variants.",
+    );
+  }
+}
+
 export const createPurchaseOrder: CommandDefinition<
   {
     supplierId: string;
     locationId: string;
     reference?: string;
+    gstApplicable?: boolean;
     lines: Array<{
       productId: string;
       qtyOrdered: number;
@@ -799,6 +825,15 @@ export const createPurchaseOrder: CommandDefinition<
     supplierId: z.string().uuid(),
     locationId: z.string().uuid(),
     reference: z.string().max(60).optional(),
+    /**
+     * Whether this purchase attracts GST. Defaults to ON, because the ordinary
+     * registered supplier charges it and defaulting the other way would drop a
+     * claimable input credit without anyone noticing. Turned off for an
+     * unregistered or composition supplier: the bill raised from this order
+     * then records no tax and claims no credit, rather than recording a tax
+     * that was never charged and can never be reconciled against the portal.
+     */
+    gstApplicable: z.boolean().optional(),
     lines: z
       .array(
         z.object({
@@ -852,6 +887,7 @@ export const createPurchaseOrder: CommandDefinition<
         "E_VALIDATION: a board on this order is unknown or withdrawn",
       );
     }
+    assertNoTemplates(products);
 
     const negotiated = await ctx.tx.tradingSupplierPrice.findMany({
       where: { supplierId: input.supplierId },
@@ -920,6 +956,7 @@ export const createPurchaseOrder: CommandDefinition<
         reference:
           input.reference ??
           (await orderNumber(ctx.tx, ctx.actor.tenantId, "PO", new Date())),
+        gstApplicable: input.gstApplicable ?? true,
         totalCostPaise,
       },
     });
@@ -1088,6 +1125,7 @@ export const editPurchaseOrder: CommandDefinition<
   {
     orderId: string;
     reference?: string | null;
+    gstApplicable?: boolean;
     lines?: Array<{
       productId: string;
       qtyOrdered: number;
@@ -1103,6 +1141,7 @@ export const editPurchaseOrder: CommandDefinition<
   input: z.object({
     orderId: z.string().uuid(),
     reference: z.string().max(60).nullable().optional(),
+    gstApplicable: z.boolean().optional(),
     lines: z
       .array(
         z.object({
@@ -1127,6 +1166,22 @@ export const editPurchaseOrder: CommandDefinition<
       );
     }
     const received = order.lines.some((line) => line.qtyReceived > 0);
+
+    // The GST switch is fixed once goods arrive. Flipping it after a receipt
+    // would change the tax on a bill that may already exist, or silently
+    // change what the NEXT partial receipt is billed at while the earlier one
+    // keeps the old treatment -- one order, two tax stories.
+    if (
+      input.gstApplicable !== undefined &&
+      input.gstApplicable !== order.gstApplicable &&
+      received
+    ) {
+      throw new ValidationError(
+        "E_VALIDATION: goods have already arrived against this order, so whether it " +
+          "carries GST is now a fact about a bill. Raise a credit or debit note instead.",
+      );
+    }
+
     if (received && input.lines) {
       throw new ValidationError(
         "E_VALIDATION: goods have already arrived against this order, so its lines " +
@@ -1154,6 +1209,7 @@ export const editPurchaseOrder: CommandDefinition<
           "E_VALIDATION: a board on this order is unknown or withdrawn",
         );
       }
+      assertNoTemplates(products);
       const negotiated = await ctx.tx.tradingSupplierPrice.findMany({
         where: { supplierId: order.supplierId },
       });
@@ -1201,6 +1257,9 @@ export const editPurchaseOrder: CommandDefinition<
       where: { id: order.id },
       data: {
         ...(input.reference === undefined ? {} : { reference: input.reference }),
+        ...(input.gstApplicable === undefined
+          ? {}
+          : { gstApplicable: input.gstApplicable }),
         totalCostPaise,
         version: { increment: 1 },
       },
@@ -1299,6 +1358,7 @@ export const editSalesOrder: CommandDefinition<
           "E_VALIDATION: a board on this order is unknown or withdrawn",
         );
       }
+      assertNoTemplates(products);
       const agreed = await ctx.tx.tradingCustomerPrice.findMany({
         where: { customerId: order.customerId },
       });
@@ -1862,6 +1922,7 @@ export const createSalesOrder: CommandDefinition<
         "E_VALIDATION: a board on this order is unknown or withdrawn",
       );
     }
+    assertNoTemplates(products);
 
     const agreed = await ctx.tx.tradingCustomerPrice.findMany({
       where: { customerId: input.customerId },
@@ -2086,14 +2147,269 @@ export async function availableUnits(
   };
 }
 
-export const reserveForOrder: CommandDefinition<
+/**
+ * WHERE AN ORDER'S STOCK WOULD COME FROM.
+ *
+ * REPORTED: an order for 100 sheets against a godown holding 55 was refused
+ * outright, even though the other godown held the rest. The refusal named the
+ * other godown, which was already better than the "0 available" it used to
+ * say, but it still left a salesperson to work out the split by hand and then
+ * transfer stock to make it true.
+ *
+ * So the split is worked out here, and the rule is the client's own:
+ *
+ *   Take from the order's own godown first. Take the remainder from another.
+ *   If more than one other godown could supply that remainder, ASK which --
+ *   do not pick. Repeat until the line is filled or the stock runs out.
+ *
+ * "Ask, do not pick" is the whole point. Two godowns holding enough is not an
+ * ambiguity the system can resolve: which one to empty is a question about
+ * what else is coming, who collects from where, and which van is going that
+ * way — none of which is in the database. Choosing the fullest one would be a
+ * guess wearing the clothes of a decision.
+ *
+ * A choice is only raised when it is real. One candidate godown is not a
+ * choice, and neither is a set of godowns that must ALL be drained to fill the
+ * line — there is nothing to decide when every option is taken anyway.
+ *
+ * READ-ONLY. This plans; `reserveForOrder` writes, re-reads under lock, and is
+ * free to disagree with a plan that has gone stale.
+ */
+export type AllocationStep = {
+  locationId: string;
+  locationName: string;
+  qtyUnits: number;
+};
+
+export type AllocationLinePlan = {
+  productId: string;
+  name: string;
+  qtyOrdered: number;
+  /** A service holds nothing; the plan says so rather than showing 0 free. */
+  isService: boolean;
+  /** What the rule decides on its own, in the order it would draw. */
+  steps: AllocationStep[];
+  /**
+   * Set when the remainder could come from more than one godown and the
+   * person has to say which. `steps` then holds only what was NOT in doubt,
+   * and `qtyToChoose` is what is still unplaced.
+   */
+  choice: {
+    qtyToChoose: number;
+    candidates: Array<{
+      locationId: string;
+      locationName: string;
+      availableUnits: number;
+    }>;
+  } | null;
+  /** Still unfilled once every reachable godown is counted. */
+  shortfallUnits: number;
+};
+
+export async function planOrderAllocation(
+  tx: TenantScopedClient,
+  actor: ActorContext,
+  order: {
+    locationId: string;
+    lines: Array<{
+      productId: string;
+      productNameSnapshot: string;
+      qtyOrdered: number;
+    }>;
+  },
+): Promise<AllocationLinePlan[]> {
+  const services = await serviceProductIds(
+    tx,
+    order.lines.map((line) => line.productId),
+  );
+  const reachable = await reachableGodownIds(tx, actor, ENTITY_STOCK_BALANCE);
+  // The order's own godown leads whether or not it is reachable through the
+  // scope query -- it is the godown the order was raised against, and a
+  // salesperson who may raise the order may draw from it.
+  const godownIds = [
+    order.locationId,
+    ...reachable.filter((id) => id !== order.locationId),
+  ];
+  const locations = await tx.location.findMany({
+    where: { id: { in: godownIds } },
+    select: { id: true, name: true },
+  });
+  const nameOf = new Map(locations.map((row) => [row.id, row.name]));
+
+  const plans: AllocationLinePlan[] = [];
+  for (const line of order.lines) {
+    if (services.has(line.productId)) {
+      plans.push({
+        productId: line.productId,
+        name: line.productNameSnapshot,
+        qtyOrdered: line.qtyOrdered,
+        isService: true,
+        steps: [],
+        choice: null,
+        shortfallUnits: 0,
+      });
+      continue;
+    }
+
+    const free: AllocationStep[] = [];
+    for (const locationId of godownIds) {
+      const { availableUnits: qty } = await availableUnits(
+        tx,
+        line.productId,
+        locationId,
+      );
+      if (qty > 0) {
+        free.push({
+          locationId,
+          locationName: nameOf.get(locationId) ?? "Godown",
+          qtyUnits: qty,
+        });
+      }
+    }
+
+    const steps: AllocationStep[] = [];
+    let outstanding = line.qtyOrdered;
+    let choice: AllocationLinePlan["choice"] = null;
+
+    // The order's own godown first, in full, without being asked -- it is
+    // where the order already said the goods would come from.
+    const here = free.find((row) => row.locationId === order.locationId);
+    if (here) {
+      const take = Math.min(here.qtyUnits, outstanding);
+      steps.push({ ...here, qtyUnits: take });
+      outstanding -= take;
+    }
+
+    const elsewhere = free
+      .filter((row) => row.locationId !== order.locationId)
+      .sort((a, b) => b.qtyUnits - a.qtyUnits);
+
+    while (outstanding > 0 && elsewhere.length > 0) {
+      const total = elsewhere.reduce((sum, row) => sum + row.qtyUnits, 0);
+      // Every remaining godown is needed, so which to draw from first is not a
+      // decision anybody has to make. Draw from all of them.
+      if (total <= outstanding) {
+        for (const row of elsewhere) {
+          steps.push(row);
+          outstanding -= row.qtyUnits;
+        }
+        elsewhere.length = 0;
+        break;
+      }
+      // One godown covers what is left, and it is the only one that does --
+      // still not a choice.
+      const sufficient = elsewhere.filter((row) => row.qtyUnits >= outstanding);
+      if (sufficient.length === 1 && elsewhere.length === 1) {
+        steps.push({ ...sufficient[0]!, qtyUnits: outstanding });
+        outstanding = 0;
+        break;
+      }
+      // A genuine choice. Stop planning this line and hand the question back.
+      choice = {
+        qtyToChoose: outstanding,
+        candidates: elsewhere.map((row) => ({
+          locationId: row.locationId,
+          locationName: row.locationName,
+          availableUnits: row.qtyUnits,
+        })),
+      };
+      break;
+    }
+
+    plans.push({
+      productId: line.productId,
+      name: line.productNameSnapshot,
+      qtyOrdered: line.qtyOrdered,
+      isService: false,
+      steps,
+      choice,
+      shortfallUnits: choice ? 0 : outstanding,
+    });
+  }
+  return plans;
+}
+
+export const allocationPlan: QueryDefinition<
   { orderId: string },
-  { reserved: Array<{ productId: string; qtyUnits: number }> }
+  {
+    orderId: string;
+    locationId: string;
+    locationName: string;
+    /** True when nothing needs asking and the plan can simply be submitted. */
+    settled: boolean;
+    lines: AllocationLinePlan[];
+  } | null
+> = {
+  key: "verity.trading.allocation_plan",
+  entity: ENTITY_STOCK_BALANCE,
+  input: z.object({ orderId: z.string().uuid() }),
+  handler: async (ctx, input) => {
+    const order = await ctx.tx.tradingSalesOrder.findUnique({
+      where: { id: input.orderId },
+      include: { lines: true, location: { select: { name: true } } },
+    });
+    if (!order) return null;
+
+    const lines = await planOrderAllocation(ctx.tx, ctx.actor, order);
+    return {
+      orderId: order.id,
+      locationId: order.locationId,
+      locationName: order.location.name,
+      settled: lines.every(
+        (line) => line.choice === null && line.shortfallUnits === 0,
+      ),
+      lines,
+    };
+  },
+};
+
+/**
+ * Holds stock against an approved order, across as many godowns as it takes.
+ *
+ * `allocations` is what the person decided, when there was anything to decide
+ * -- see `planOrderAllocation` for the rule and for why a real choice is asked
+ * rather than guessed. Omitted, this command runs that same planner itself and
+ * proceeds only if it settles with nothing to ask; a caller with no screen
+ * (a test, a script, the API) therefore gets the automatic split for free and
+ * an explicit refusal when a human judgement is genuinely required.
+ *
+ * The plan is advisory. Everything is re-read here under `forUpdate`, because
+ * between planning and reserving another order can take the last sheet, and a
+ * hold granted against a stale read is a promise the godown cannot keep.
+ */
+export const reserveForOrder: CommandDefinition<
+  {
+    orderId: string;
+    allocations?: Array<{
+      productId: string;
+      locationId: string;
+      qtyUnits: number;
+    }>;
+  },
+  {
+    reserved: Array<{
+      productId: string;
+      qtyUnits: number;
+      /** Where it was held. More than one row per product is normal now. */
+      locationId: string;
+    }>;
+  }
 > = {
   key: "verity.trading.reserve_for_order",
   entity: ENTITY_RESERVATION,
   verb: "Create",
-  input: z.object({ orderId: z.string().uuid() }),
+  input: z.object({
+    orderId: z.string().uuid(),
+    allocations: z
+      .array(
+        z.object({
+          productId: z.string().uuid(),
+          locationId: z.string().uuid(),
+          qtyUnits: z.number().int().positive(),
+        }),
+      )
+      .optional(),
+  }),
   handler: async (ctx, input) => {
     const order = await ctx.tx.tradingSalesOrder.findUniqueOrThrow({
       where: { id: input.orderId },
@@ -2113,77 +2429,137 @@ export const reserveForOrder: CommandDefinition<
       order.lines.map((line) => line.productId),
     );
 
-    const reserved: Array<{ productId: string; qtyUnits: number }> = [];
+    // What to hold, and from where. Either the caller decided it, or the
+    // planner did -- and if the planner could not, because a genuine choice
+    // was open, the command refuses and says what the choice is rather than
+    // making it.
+    let allocations = input.allocations;
+    if (!allocations) {
+      const plan = await planOrderAllocation(ctx.tx, ctx.actor, order);
+      const undecided = plan.find((line) => line.choice !== null);
+      if (undecided) {
+        const options = undecided.choice!.candidates
+          .map((row) => `${row.locationName} has ${row.availableUnits}`)
+          .join("; ");
+        throw new ValidationError(
+          `E_VALIDATION: ${undecided.name} still needs ${undecided.choice!.qtyToChoose} ` +
+            `and more than one godown could supply them (${options}). ` +
+            "Choose which godown to draw from.",
+        );
+      }
+      const short = plan.find((line) => line.shortfallUnits > 0);
+      if (short) {
+        const held = short.steps
+          .map((step) => `${step.locationName} has ${step.qtyUnits}`)
+          .join("; ");
+        // The whole hold fails rather than reserving what it can. A partial
+        // hold on a multi-line order is a promise the business cannot keep and
+        // would discover at dispatch.
+        throw new ValidationError(
+          `E_VALIDATION: ${short.name} is short by ${short.shortfallUnits} of the ` +
+            `${short.qtyOrdered} ordered across every godown you can draw from` +
+            (held ? ` (${held})` : "") +
+            ". Raise a purchase order, or reduce the line.",
+        );
+      }
+      allocations = plan.flatMap((line) =>
+        line.steps.map((step) => ({
+          productId: line.productId,
+          locationId: step.locationId,
+          qtyUnits: step.qtyUnits,
+        })),
+      );
+    }
+
+    const wanted = new Map(
+      order.lines.map((line) => [line.productId, line.qtyOrdered]),
+    );
+    const allocatedBy = new Map<string, number>();
+    for (const row of allocations) {
+      if (!wanted.has(row.productId)) {
+        throw new ValidationError(
+          "E_VALIDATION: an allocation names a product that is not on this order",
+        );
+      }
+      allocatedBy.set(
+        row.productId,
+        (allocatedBy.get(row.productId) ?? 0) + row.qtyUnits,
+      );
+    }
+
+    const reserved: Array<{
+      productId: string;
+      qtyUnits: number;
+      locationId: string;
+    }> = [];
+
     for (const line of order.lines) {
       // A service line has nothing to hold — `availableUnits` would always
       // read 0 for it (no stock_balance row exists), refusing every order
       // that includes one. Skip straight to counting it reserved.
       if (services.has(line.productId)) {
-        reserved.push({ productId: line.productId, qtyUnits: line.qtyOrdered });
+        reserved.push({
+          productId: line.productId,
+          qtyUnits: line.qtyOrdered,
+          locationId: order.locationId,
+        });
         continue;
       }
 
-      // forUpdate: this read decides a write. Without the lock two orders can
-      // both reserve the last sheet (audit P0-06).
-      const { availableUnits: free } = await availableUnits(
-        ctx.tx,
-        line.productId,
-        order.locationId,
-        { forUpdate: true },
-      );
-      if (free < line.qtyOrdered) {
-        // Audit finding U0-1. The refusal used to stop at "0 available", and a
-        // salesperson reading that concluded the business had none — and
-        // declined an order it could have filled from the other godown. Where
-        // the sheets actually are is the one fact that changes what they do
-        // next, so the message carries it.
-        const reachableGodowns = await reachableGodownIds(
-          ctx.tx,
-          ctx.actor,
-          ENTITY_STOCK_BALANCE,
-        );
-        const elsewhere = await ctx.tx.stockBalance.findMany({
-          where: {
-            productId: line.productId,
-            locationId: {
-              in: reachableGodowns.filter(
-                (id: string) => id !== order.locationId,
-              ),
-            },
-            qtyUnits: { gt: 0 },
-          },
-          include: { location: { select: { name: true } } },
-          orderBy: { qtyUnits: "desc" },
-        });
-        const here = await ctx.tx.location.findUnique({
-          where: { id: order.locationId },
-          select: { name: true },
-        });
-        const alsoAt = elsewhere
-          .map((balance) => `${balance.location.name} has ${balance.qtyUnits}`)
-          .join("; ");
-
-        // The whole hold fails rather than reserving what it can. A partial
-        // hold on a multi-line order is a promise the business cannot keep and
-        // would discover at dispatch.
+      // Exactly the ordered quantity, no more and no less. Under is a hold
+      // that will not fill the order; over quietly takes stock a second order
+      // is counting on.
+      const allocated = allocatedBy.get(line.productId) ?? 0;
+      if (allocated !== line.qtyOrdered) {
         throw new ValidationError(
-          `E_VALIDATION: ${line.productNameSnapshot} has ${free} available in ` +
-            `${here?.name ?? "this godown"}, so ${line.qtyOrdered} cannot be reserved.` +
-            (alsoAt
-              ? ` ${alsoAt}. Transfer stock, or raise the order against that godown.`
-              : ""),
+          `E_VALIDATION: ${line.productNameSnapshot} needs ${line.qtyOrdered} held, ` +
+            `but ${allocated} were allocated across the godowns given`,
         );
       }
+    }
+
+    for (const row of allocations) {
+      const line = order.lines.find(
+        (candidate) => candidate.productId === row.productId,
+      )!;
+      if (services.has(row.productId)) continue;
+
+      // forUpdate: this read decides a write. Without the lock two orders can
+      // both reserve the last sheet (audit P0-06). Re-read here rather than
+      // trusted from the plan, which was made without a lock and may be a
+      // minute old.
+      const { availableUnits: free } = await availableUnits(
+        ctx.tx,
+        row.productId,
+        row.locationId,
+        { forUpdate: true },
+      );
+      if (free < row.qtyUnits) {
+        const where = await ctx.tx.location.findUnique({
+          where: { id: row.locationId },
+          select: { name: true },
+        });
+        throw new ValidationError(
+          `E_VALIDATION: ${line.productNameSnapshot} has ${free} available in ` +
+            `${where?.name ?? "that godown"}, so ${row.qtyUnits} cannot be reserved ` +
+            "from it. Someone else may have taken it — plan the hold again.",
+        );
+      }
+
       await ctx.tx.tradingStockReservation.create({
         data: {
           tenantId: ctx.actor.tenantId,
-          productId: line.productId,
-          locationId: order.locationId,
+          productId: row.productId,
+          locationId: row.locationId,
           salesOrderId: order.id,
-          qtyUnits: line.qtyOrdered,
+          qtyUnits: row.qtyUnits,
         },
       });
-      reserved.push({ productId: line.productId, qtyUnits: line.qtyOrdered });
+      reserved.push({
+        productId: row.productId,
+        qtyUnits: row.qtyUnits,
+        locationId: row.locationId,
+      });
     }
 
     await transition(ctx, {
@@ -2241,6 +2617,7 @@ export const dispatchOrder: CommandDefinition<
     state: string;
     issueId: string;
     issueNumber: string;
+    issuedFrom: Array<{ id: string; issueNumber: string; locationId: string }>;
     issuedLines: number;
     /** The invoice this issue raised, when it fulfilled the order. */
     invoicing: {
@@ -2320,19 +2697,66 @@ export const dispatchOrder: CommandDefinition<
       financialYear,
     );
 
-    const issue = await ctx.tx.tradingGoodsIssue.create({
-      data: {
-        tenantId: ctx.actor.tenantId,
-        salesOrderId: order.id,
-        locationId: order.locationId,
-        issueNumber: numbering.invoiceNumber,
+    // ONE GATE PASS PER GODOWN.
+    //
+    // Stock can now be held across more than one godown for a single order
+    // (see `planOrderAllocation`), and a goods issue is a document saying
+    // these goods left THIS godown. Issuing everything against the order's own
+    // godown would drive its balance negative while the other godown kept the
+    // stock reserved forever -- one wrong number and one hold nobody could
+    // release. So the issue documents are created per godown actually drawn
+    // from, and each one is true.
+    const issues = new Map<
+      string,
+      { id: string; issueNumber: string; locationId: string }
+    >();
+    const scoped = new Set<string>();
+
+    async function issueDocumentFor(locationId: string) {
+      const existing = issues.get(locationId);
+      if (existing) return existing;
+
+      // Layer 2, per godown rather than once for the order: holding
+      // ActionExecute on this order is not permission to empty somebody
+      // else's godown, and until now the only godown checked was the order's.
+      if (!scoped.has(locationId)) {
+        await assertGodownInScope(
+          ctx.tx,
+          ctx.actor,
+          ENTITY_SALES_ORDER,
+          "ActionExecute",
+          locationId,
+        );
+        scoped.add(locationId);
+      }
+
+      const docNumber = await nextDocumentNumber(
+        ctx.tx,
+        ctx.actor.tenantId,
+        "GI",
         financialYear,
-        issuedAt,
-        issuedBy: ctx.actor.userId,
-        collectedBy: input.collectedBy ?? null,
-        notes: input.notes ?? null,
-      },
-    });
+      );
+      const created = await ctx.tx.tradingGoodsIssue.create({
+        data: {
+          tenantId: ctx.actor.tenantId,
+          salesOrderId: order.id,
+          locationId,
+          issueNumber: docNumber.invoiceNumber,
+          financialYear,
+          issuedAt,
+          issuedBy: ctx.actor.userId,
+          collectedBy: input.collectedBy ?? null,
+          notes: input.notes ?? null,
+        },
+      });
+      const record = {
+        id: created.id,
+        issueNumber: created.issueNumber,
+        locationId,
+      };
+      issues.set(locationId, record);
+      return record;
+    }
 
     for (const line of requested) {
       const orderLine = order.lines.find(
@@ -2354,36 +2778,103 @@ export const dispatchOrder: CommandDefinition<
       }
 
       // A service line was never reserved and has nothing to move; only its
-      // issued quantity is real.
-      let unitCostPaise = 0;
-      if (!services.has(line.productId)) {
-        const movement = await applyMovement(ctx.tx, ctx.actor, {
-          productId: line.productId,
-          locationId: order.locationId,
-          rackId: input.rackId ?? null,
-          kind: "sales_outward",
-          qtyUnits: line.qtyIssued,
-          source: {
-            type: "goods_issue",
-            id: issue.id,
-            number: issue.issueNumber,
+      // issued quantity is real. It is recorded against the order's own
+      // godown, which is the only godown it has any relationship with.
+      if (services.has(line.productId)) {
+        const document = await issueDocumentFor(order.locationId);
+        await ctx.tx.tradingGoodsIssueLine.create({
+          data: {
+            tenantId: ctx.actor.tenantId,
+            issueId: document.id,
+            salesOrderLineId: orderLine.id,
+            productId: line.productId,
+            productNameSnapshot: orderLine.productNameSnapshot,
+            rackId: null,
+            qtyIssued: line.qtyIssued,
+            unitCostPaise: 0,
           },
         });
-        unitCostPaise = movement.unitCostPaise;
+        await ctx.tx.tradingSalesOrderLine.update({
+          where: { id: orderLine.id },
+          data: { qtyShipped: { increment: line.qtyIssued } },
+        });
+        continue;
       }
 
-      await ctx.tx.tradingGoodsIssueLine.create({
-        data: {
-          tenantId: ctx.actor.tenantId,
-          issueId: issue.id,
-          salesOrderLineId: orderLine.id,
+      // Drawn from the holds themselves, order's own godown first, because
+      // that is where the goods are and the hold is what says so.
+      const holds = order.reservations
+        .filter((hold) => hold.productId === line.productId)
+        .sort((a, b) => {
+          if (a.locationId === b.locationId) return 0;
+          if (a.locationId === order.locationId) return -1;
+          if (b.locationId === order.locationId) return 1;
+          return 0;
+        });
+
+      let left = line.qtyIssued;
+      for (const hold of holds) {
+        if (left <= 0) break;
+        const take = Math.min(left, hold.qtyUnits);
+        const document = await issueDocumentFor(hold.locationId);
+
+        const movement = await applyMovement(ctx.tx, ctx.actor, {
           productId: line.productId,
-          productNameSnapshot: orderLine.productNameSnapshot,
-          rackId: input.rackId ?? null,
-          qtyIssued: line.qtyIssued,
-          unitCostPaise,
-        },
-      });
+          locationId: hold.locationId,
+          // A rack belongs to one godown, so it can only be honoured on the
+          // godown the caller was looking at when they named it.
+          rackId:
+            hold.locationId === order.locationId ? (input.rackId ?? null) : null,
+          kind: "sales_outward",
+          qtyUnits: take,
+          source: {
+            type: "goods_issue",
+            id: document.id,
+            number: document.issueNumber,
+          },
+        });
+
+        await ctx.tx.tradingGoodsIssueLine.create({
+          data: {
+            tenantId: ctx.actor.tenantId,
+            issueId: document.id,
+            salesOrderLineId: orderLine.id,
+            productId: line.productId,
+            productNameSnapshot: orderLine.productNameSnapshot,
+            rackId:
+              hold.locationId === order.locationId
+                ? (input.rackId ?? null)
+                : null,
+            qtyIssued: take,
+            unitCostPaise: movement.unitCostPaise,
+          },
+        });
+
+        // Release only what left. Releasing the whole hold on a partial issue
+        // would free stock the customer is still owed, and the next order
+        // would quietly take it. A live hold is a running quantity;
+        // immutability begins when it is released.
+        const remaining = hold.qtyUnits - take;
+        await ctx.tx.tradingStockReservation.update({
+          where: { id: hold.id },
+          data:
+            remaining > 0
+              ? { qtyUnits: remaining }
+              : {
+                  releasedAt: issuedAt,
+                  releaseReason: `Issued on ${document.issueNumber}`,
+                },
+        });
+        hold.qtyUnits = remaining;
+        left -= take;
+      }
+
+      if (left > 0) {
+        throw new ValidationError(
+          `E_VALIDATION: only ${line.qtyIssued - left} of ${orderLine.productNameSnapshot} ` +
+            "are held for this order. Hold the rest before issuing it.",
+        );
+      }
 
       await ctx.tx.tradingSalesOrderLine.update({
         where: { id: orderLine.id },
@@ -2391,43 +2882,16 @@ export const dispatchOrder: CommandDefinition<
       });
     }
 
-    // Release only what was issued. Releasing every hold on a partial issue —
-    // which is what the old command did, because it always issued everything —
-    // would free stock the customer is still owed, and the next order would
-    // quietly take it.
     const after = await ctx.tx.tradingSalesOrderLine.findMany({
       where: { salesOrderId: order.id },
     });
     const fulfilled = after.every((line) => line.qtyShipped >= line.qtyOrdered);
 
-    for (const line of requested) {
-      const held = await ctx.tx.tradingStockReservation.findFirst({
-        where: {
-          salesOrderId: order.id,
-          productId: line.productId,
-          releasedAt: null,
-        },
-      });
-      if (!held) continue;
-
-      const remaining = held.qtyUnits - line.qtyIssued;
-      if (remaining > 0) {
-        // The hold shrinks by what left. Reservations are immutable only once
-        // released; a live hold is a running quantity.
-        await ctx.tx.tradingStockReservation.update({
-          where: { id: held.id },
-          data: { qtyUnits: remaining },
-        });
-      } else {
-        await ctx.tx.tradingStockReservation.update({
-          where: { id: held.id },
-          data: {
-            releasedAt: issuedAt,
-            releaseReason: `Issued on ${issue.issueNumber}`,
-          },
-        });
-      }
-    }
+    // The first document raised, for the caller that wants one number to show.
+    // `issuedFrom` carries them all, because a two-godown dispatch genuinely
+    // produced two gate passes and hiding one would lose a record.
+    const issuedFrom = [...issues.values()];
+    const issue = issuedFrom[0]!;
 
     const target = fulfilled ? "completed" : "dispatching";
     if (order.state !== target) {
@@ -2473,6 +2937,8 @@ export const dispatchOrder: CommandDefinition<
         state: target,
         issueId: issue.id,
         issueNumber: issue.issueNumber,
+        /** Every gate pass this dispatch raised — one per godown drawn from. */
+        issuedFrom,
         issuedLines: requested.length,
         invoicing,
         invoicingRefusal,
@@ -2684,6 +3150,10 @@ export const purchaseOrderDetail: QueryDefinition<
     locationName: string;
     reference: string | null;
     state: string;
+    /** Whether this purchase carries GST. False for an unregistered or
+     *  composition supplier; the bill then records no tax and claims no
+     *  input credit. */
+    gstApplicable: boolean;
     totalCostPaise: number;
     createdAt: Date;
     qtyOrdered: number;
@@ -2692,7 +3162,7 @@ export const purchaseOrderDetail: QueryDefinition<
     lines: Array<{
       productId: string;
       name: string;
-      hsnCode: string;
+      hsnCode: string | null;
       qtyOrdered: number;
       qtyReceived: number;
       qtyOutstanding: number;
@@ -2788,6 +3258,7 @@ export const purchaseOrderDetail: QueryDefinition<
       locationName: order.location.name,
       reference: order.reference,
       state: order.state,
+      gstApplicable: order.gstApplicable,
       totalCostPaise: order.totalCostPaise,
       createdAt: order.createdAt,
       qtyOrdered,
@@ -2880,7 +3351,7 @@ export const salesOrderDetail: QueryDefinition<
     lines: Array<{
       productId: string;
       name: string;
-      hsnCode: string;
+      hsnCode: string | null;
       qtyOrdered: number;
       qtyShipped: number;
       qtyReserved: number;
@@ -3092,6 +3563,9 @@ export const openOrders: QueryDefinition<
       raisedAt: Date;
       /// What the order is FOR — the fact the desk was missing entirely.
       summary: string;
+      /// Whether this purchase carries GST. False for an unregistered or
+      /// composition supplier; the bill then records no tax.
+      gstApplicable: boolean;
       /// The lines themselves, so receiving can be scoped to this order.
       lines: Array<{
         productId: string;
@@ -3223,6 +3697,7 @@ export const openOrders: QueryDefinition<
         ),
         raisedAt: order.createdAt,
         summary: summarise(order.lines.map((line) => line.productNameSnapshot)),
+        gstApplicable: order.gstApplicable,
         // Only lines with something still owed can be received against, so the
         // receive form is offered exactly the set it may act on (U0-4).
         lines: order.lines

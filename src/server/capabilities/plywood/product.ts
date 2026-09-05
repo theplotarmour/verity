@@ -49,20 +49,64 @@ export const CATEGORY_RULES: Record<
     sizeUnit: SizeUnit;
     /** Whether a millimetre thickness is expected for a physical item. */
     thickness: "required" | "optional" | "none";
+    /**
+     * Whether a grade means anything for this family. `none` hides the field
+     * entirely rather than merely allowing it to be blank — a laminate does
+     * not have an unknown grade, it has no grade, and an empty box invites
+     * somebody to fill it in.
+     */
+    grade: "expected" | "optional" | "none";
+    /**
+     * Whether this family is sold as a shade x texture matrix. Only laminates
+     * are: a board is one thing, a laminate design exists in every shade the
+     * house prints it in and every finish they press it with, and each of
+     * those combinations sits separately in the godown.
+     */
+    variants: boolean;
     fixedSizeTenth?: { widthTenth: number; heightTenth: number };
   }
 > = {
-  BOARD: { label: "Board", sizeUnit: "FT", thickness: "required" },
-  PLYWOOD: { label: "Plywood", sizeUnit: "FT", thickness: "required" },
+  BOARD: {
+    label: "Board",
+    sizeUnit: "FT",
+    thickness: "required",
+    grade: "expected",
+    variants: false,
+  },
+  PLYWOOD: {
+    label: "Plywood",
+    sizeUnit: "FT",
+    thickness: "required",
+    grade: "expected",
+    variants: false,
+  },
   LAMINATE: {
     label: "Laminate",
     sizeUnit: "FT",
     thickness: "optional",
     // Tenths of a foot: 8.0 x 4.0.
     fixedSizeTenth: { widthTenth: 80, heightTenth: 40 },
+    // A decorative laminate has no grade. Grade says how the glue behaves in
+    // water, which is a structural-plywood fact; asking for one here made the
+    // catalogue invent a value for every laminate row.
+    grade: "none",
+    // The one family sold as a shade-by-texture matrix.
+    variants: true,
   },
-  LOUVRE: { label: "Louvre", sizeUnit: "IN", thickness: "optional" },
-  OTHER: { label: "Other", sizeUnit: "MM", thickness: "optional" },
+  LOUVRE: {
+    label: "Louvre",
+    sizeUnit: "IN",
+    thickness: "optional",
+    grade: "optional",
+    variants: false,
+  },
+  OTHER: {
+    label: "Other",
+    sizeUnit: "MM",
+    thickness: "optional",
+    grade: "optional",
+    variants: false,
+  },
 };
 
 /**
@@ -84,10 +128,17 @@ export function productLabel(
     sizeUnit?: string | null;
     widthTenth?: number | null;
     heightTenth?: number | null;
+    shadeName?: string | null;
+    textureName?: string | null;
   },
   brandName?: string,
 ): string {
   const parts = brandName ? [brandName, product.name] : [product.name];
+  // A generated laminate variant is told apart from its twenty-four siblings
+  // by nothing else: same brand, same design, same 8 x 4, same thickness. The
+  // shade and the texture ARE the product, so they lead.
+  if (product.shadeName) parts.push(product.shadeName);
+  if (product.textureName) parts.push(product.textureName);
   if (product.thicknessTenthMm != null) {
     parts.push(`${(product.thicknessTenthMm / 10).toFixed(1)} mm`);
   } else if (product.widthTenth != null && product.heightTenth != null) {
@@ -100,4 +151,22 @@ export function productLabel(
     );
   }
   return parts.join(" · ");
+}
+
+/**
+ * The name a generated variant carries.
+ *
+ * Built here rather than in the command so the screen can show the client
+ * exactly what twenty-five rows are about to be called BEFORE it creates them
+ * — a matrix that generates names the business does not recognise is worse
+ * than typing them by hand.
+ */
+export function variantName(
+  templateName: string,
+  shadeName: string | null,
+  textureName: string | null,
+): string {
+  return [templateName, shadeName, textureName]
+    .filter((part): part is string => Boolean(part))
+    .join(" · ");
 }

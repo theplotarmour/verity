@@ -189,8 +189,16 @@ export function PurchaseOrderView({
           <Stat label="Order value" value={rupees(order.totalCostPaise)} />
         </StatRow>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <StateBadge category={state.category} label={state.label} />
+          {/* Stated only when it is off. An order that carries GST is every
+              order; a badge on all of them would hide the one that matters. */}
+          {!order.gstApplicable && (
+            <span className="text-[13px] text-text-secondary">
+              No GST — unregistered or composition supplier. The bill records no
+              tax and claims no input credit.
+            </span>
+          )}
         </div>
 
         {receiving && (

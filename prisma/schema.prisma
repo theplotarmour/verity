@@ -159,6 +159,8 @@ model Tenant {
   billingPeriods        BillingPeriod[]
   billingInvoices       BillingInvoice[]
   plywoodProductDetails PlywoodProductDetail[]
+  plywoodShades         PlywoodShade[]
+  plywoodTextures       PlywoodTexture[]
 
   @@map("tenant")
 }
@@ -2131,7 +2133,24 @@ model TradingProduct {
   /// HSN code. Legally required on a GST tax invoice; stored as issued by the
   /// client, validated for shape only. The platform does not own a tax code
   /// table and does not invent one.
-  hsnCode           String   @map("hsn_code")
+  ///
+  /// Nullable. A trader does not learn the HSN at the moment they first need
+  /// the row -- it arrives with the supplier's invoice, days later -- and a
+  /// catalogue that refuses the product until then pushes the whole business
+  /// into a spreadsheet. `raiseSalesInvoice` falls back to the tenant's
+  /// default rate for a line without one, and `closeChecklist` already lists
+  /// every invoice with a missing HSN, so the gap stays visible instead of
+  /// blocking the counter.
+  hsnCode           String?  @map("hsn_code")
+  /// Set on a generated variant, pointing at the TEMPLATE it was generated
+  /// from. Null on an ordinary product and on the template itself.
+  ///
+  /// A laminate is chosen as a shade and a texture of a design, and each
+  /// combination is a separate thing in the godown with its own stock. The
+  /// template holds what they share -- brand, size, HSN, thickness -- and
+  /// exists so that adding a sixth shade later regenerates against one row
+  /// rather than twenty-five.
+  parentProductId   String?  @map("parent_product_id") @db.Uuid
   /// PHYSICAL or SERVICE. A plain string with the same reasoning as `kind`/
   /// `state` elsewhere in this capability — validated at the command layer,
   /// not a Postgres enum, consistent with every other closed-set field here.
@@ -2160,8 +2179,11 @@ model TradingProduct {
   goodsReceiptLines  TradingGoodsReceiptLine[]
   goodsIssueLines    TradingGoodsIssueLine[]
   plywoodDetail      PlywoodProductDetail?
+  parent             TradingProduct?            @relation("ProductVariants", fields: [tenantId, parentProductId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  variants           TradingProduct[]           @relation("ProductVariants")
 
   @@unique([tenantId, id], name: "trading_product_tenant_scoped_id")
+  @@index([tenantId, parentProductId])
   @@index([tenantId, brandId, name])
   @@index([tenantId, active])
   @@map("trading_product")
@@ -2203,14 +2225,74 @@ model PlywoodProductDetail {
   /// BWR, MR, Marine. A free string: grades are the client's vocabulary and an
   /// enum here would need a platform migration the first time a supplier
   /// invents one.
-  grade            String
+  ///
+  /// Nullable. A grade is a structural-plywood fact -- it says how the glue
+  /// behaves in water. A decorative laminate has no grade at all, and the
+  /// column was forcing the catalogue to invent one for every laminate row.
+  grade            String?
   sheetWeightGrams Int?   @map("sheet_weight_grams")
+  /// The shade and texture this variant is. Both null on an ordinary product
+  /// and on the template a variant was generated from; both set on a
+  /// generated variant. Nullable rather than a separate table per variant
+  /// because a laminate IS its shade and texture -- the pair is a property of
+  /// the product, not a row hanging off it.
+  shadeId          String? @map("shade_id") @db.Uuid
+  textureId        String? @map("texture_id") @db.Uuid
 
-  tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  product TradingProduct @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product TradingProduct  @relation(fields: [tenantId, productId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  shade   PlywoodShade?   @relation(fields: [tenantId, shadeId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  texture PlywoodTexture? @relation(fields: [tenantId, textureId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([tenantId, productId])
+  @@index([tenantId, shadeId])
+  @@index([tenantId, textureId])
   @@map("plywood_product_detail")
+}
+
+/// A laminate shade -- the colour/design number printed on the sheet ("1234",
+/// "Walnut Natural"). A tenant-owned list, not a platform taxonomy: every
+/// laminate house numbers its own range and no two agree.
+///
+/// Kept as a row rather than a free string on the product because the whole
+/// point of the variant matrix is choosing FROM a list. A free string would
+/// spell the same shade three ways across twenty-five generated rows, and
+/// nothing would ever group them again.
+model PlywoodShade {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  /// The design number or name as the client says it. Unique per tenant so
+  /// the same shade cannot be added twice under two spellings of one name.
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant  Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  details PlywoodProductDetail[]
+
+  @@unique([tenantId, id], name: "plywood_shade_tenant_scoped_id")
+  @@unique([tenantId, name])
+  @@map("plywood_shade")
+}
+
+/// A laminate surface finish -- Matte, Glossy, Suede, Textured. Same shape and
+/// same reasoning as [PlywoodShade]: the client's own list, chosen from rather
+/// than typed, so the matrix that generates variants has something to iterate.
+model PlywoodTexture {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant  Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  details PlywoodProductDetail[]
+
+  @@unique([tenantId, id], name: "plywood_texture_tenant_scoped_id")
+  @@unique([tenantId, name])
+  @@map("plywood_texture")
 }
 
 /// A rack, bay or stack position inside a godown.
@@ -2462,6 +2544,17 @@ model TradingPurchaseOrder {
   locationId     String   @map("location_id") @db.Uuid
   reference      String?
   state          String   @default("draft")
+  /// Whether this purchase attracts GST. On by default, because the ordinary
+  /// registered supplier charges it and defaulting the other way would lose a
+  /// claimable input credit silently. Turned off for an unregistered or
+  /// composition supplier: the bill raised from this order then records no
+  /// tax and claims no input credit, rather than recording a tax that was
+  /// never charged and can never be reconciled against the portal.
+  ///
+  /// On the order, not the bill: whether the supplier charges tax is known
+  /// when the order is placed, and it changes the total the business commits
+  /// to. Editable while the order is still draft.
+  gstApplicable  Boolean  @default(true) @map("gst_applicable")
   totalCostPaise Int      @default(0) @map("total_cost_paise")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
@@ -2492,7 +2585,7 @@ model TradingPurchaseOrderLine {
   productId           String @map("product_id") @db.Uuid
   /// Snapshots. A catalogue edit must never rewrite a placed order.
   productNameSnapshot String @map("product_name_snapshot")
-  hsnCodeSnapshot     String @map("hsn_code_snapshot")
+  hsnCodeSnapshot     String? @map("hsn_code_snapshot")
   qtyOrdered          Int    @map("qty_ordered")
   qtyReceived         Int    @default(0) @map("qty_received")
   /// NET of any discount — what this business actually agreed to pay per unit.
@@ -2569,7 +2662,7 @@ model TradingSalesOrderLine {
   salesOrderId        String @map("sales_order_id") @db.Uuid
   productId           String @map("product_id") @db.Uuid
   productNameSnapshot String @map("product_name_snapshot")
-  hsnCodeSnapshot     String @map("hsn_code_snapshot")
+  hsnCodeSnapshot     String? @map("hsn_code_snapshot")
   qtyOrdered          Int    @map("qty_ordered")
   qtyShipped          Int    @default(0) @map("qty_shipped")
   /// NET of any discount. See the note on the purchase line: one field carries
@@ -2991,7 +3084,7 @@ model TradingInvoiceLine {
   invoiceId           String @map("invoice_id") @db.Uuid
   productId           String @map("product_id") @db.Uuid
   productNameSnapshot String @map("product_name_snapshot")
-  hsnCodeSnapshot     String @map("hsn_code_snapshot")
+  hsnCodeSnapshot     String? @map("hsn_code_snapshot")
   qtyUnits            Int    @map("qty_units")
   unitPricePaise      Int    @map("unit_price_paise")
   lineTotalPaise      Int    @map("line_total_paise")

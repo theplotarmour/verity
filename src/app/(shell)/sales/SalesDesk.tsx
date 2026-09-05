@@ -15,6 +15,7 @@ import {
 import { day } from "@/components/ui/business/format";
 import { NewCustomerModal } from "@/components/ui/business/NewCustomerModal";
 import { NewSalesOrderForm, type SellableRow } from "./NewSalesOrderForm";
+import { ReserveStockModal } from "./ReserveStockModal";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -140,6 +141,7 @@ export function SalesDesk({
   const [amending, setAmending] = useState<SalesOrder | null>(null);
   const [newCustomer, setNewCustomer] = useState(false);
   const [cancelling, setCancelling] = useState<string | null>(null);
+  const [reserving, setReserving] = useState<string | null>(null);
   const [creditFor, setCreditFor] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -202,6 +204,19 @@ export function SalesDesk({
 
   return (
     <>
+      <ReserveStockModal
+        orderId={reserving}
+        pending={pending}
+        onClose={() => setReserving(null)}
+        onConfirm={(allocations) =>
+          run(
+            "verity.trading.reserve_for_order",
+            { orderId: reserving, allocations },
+            () => setReserving(null),
+          )
+        }
+      />
+
       {failure && (
         <div className="mb-4">
           <ErrorState
@@ -384,11 +399,7 @@ export function SalesDesk({
                             <Button
                               size="sm"
                               disabled={pending}
-                              onClick={() =>
-                                run("verity.trading.reserve_for_order", {
-                                  orderId: order.id,
-                                })
-                              }
+                              onClick={() => setReserving(order.id)}
                             >
                               Hold stock for this
                             </Button>

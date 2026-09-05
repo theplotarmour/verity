@@ -10,6 +10,7 @@ import {
   EmptyState,
   ErrorState,
   Field,
+  FieldSet,
   FormRow,
   Input,
   Panel,
@@ -26,22 +27,28 @@ import {
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
-type ProductType = "PHYSICAL" | "SERVICE";
+type ProductType = "PHYSICAL" | "SERVICE" | "TEMPLATE";
+/** What the form may ask for. A design is made, never chosen. */
+type RequestableType = "PHYSICAL" | "SERVICE";
 
 type Product = {
   id: string;
   name: string;
-  hsnCode: string;
+  hsnCode: string | null;
   thicknessTenthMm: number | null;
   category: ProductCategory;
   sizeUnit: SizeUnit;
   widthTenth: number | null;
   heightTenth: number | null;
-  grade: string;
+  grade: string | null;
   unitLabel: string;
   reorderLevelUnits: number;
   active: boolean;
   type: ProductType;
+  parentProductId: string | null;
+  shadeName: string | null;
+  textureName: string | null;
+  variantCount: number;
 };
 
 type Brand = {
@@ -50,6 +57,9 @@ type Brand = {
   brandActive: boolean;
   products: Product[];
 };
+
+/** A laminate shade or surface texture the tenant has named. */
+type Axis = { id: string; name: string; active: boolean; productCount: number };
 
 /**
  * "18.0 mm" — one decimal, always, so the column reads as a column.
@@ -66,6 +76,37 @@ function thickness(tenthMm: number | null): string {
 /** The unit the user types in, spelt the way the label should read. */
 function unitWord(unit: SizeUnit): string {
   return unit === "FT" ? "ft" : unit === "IN" ? "in" : "mm";
+}
+
+/**
+ * A design and the variants generated from it, together and in that order.
+ *
+ * Variants are named after their template, so alphabetical order already puts
+ * them next to it — but "already" is not "always", and a design whose shade is
+ * named before its own name would drift away from its children the moment
+ * somebody renames one. Grouping states the relationship instead of relying on
+ * a coincidence of spelling.
+ */
+function groupByDesign(products: Product[]): Product[] {
+  const variantsOf = new Map<string, Product[]>();
+  for (const product of products) {
+    if (!product.parentProductId) continue;
+    const kin = variantsOf.get(product.parentProductId) ?? [];
+    kin.push(product);
+    variantsOf.set(product.parentProductId, kin);
+  }
+  const out: Product[] = [];
+  for (const product of products) {
+    if (product.parentProductId) continue;
+    out.push(product);
+    out.push(...(variantsOf.get(product.id) ?? []));
+  }
+  // A variant whose template was filtered out of this view would otherwise
+  // vanish with it. Nothing may disappear from a catalogue silently.
+  for (const [parentId, kin] of variantsOf) {
+    if (!products.some((product) => product.id === parentId)) out.push(...kin);
+  }
+  return out;
 }
 
 /**
@@ -87,7 +128,15 @@ function unitWord(unit: SizeUnit): string {
  * An inline panel pushed the table it belonged to down the screen and let two
  * forms be open at once with one shared error banner between them.
  */
-export function CatalogueAdmin({ catalogue }: { catalogue: Brand[] }) {
+export function CatalogueAdmin({
+  catalogue,
+  shades,
+  textures,
+}: {
+  catalogue: Brand[];
+  shades: Axis[];
+  textures: Axis[];
+}) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [addingTo, setAddingTo] = useState<string | null>(null);
@@ -232,6 +281,8 @@ export function CatalogueAdmin({ catalogue }: { catalogue: Brand[] }) {
       <ProductModal
         open={addingTo !== null}
         pending={pending}
+        shades={shades}
+        textures={textures}
         onClose={() => setAddingTo(null)}
         onSubmit={(input) =>
           run(
@@ -339,24 +390,47 @@ export function CatalogueAdmin({ catalogue }: { catalogue: Brand[] }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {brand.products.map((product) => (
+                      {groupByDesign(brand.products).map((product) => (
                         <tr key={product.id}>
                           <td className="border-b border-line px-3 py-2 text-[14px] text-text">
                             {/* §10 — the product page connects everything about
                               this item: stock by godown, both sides of its
                               pricing, open orders, and every movement. */}
-                            <Link
-                              href={`/catalogue/${product.id}`}
-                              className="text-text no-underline hover:underline"
+                            <div
+                              className={
+                                product.parentProductId
+                                  ? // Indented under the design it came from,
+                                    // with a hairline rule rather than a
+                                    // coloured bar: the relationship is
+                                    // structural, not a status worth a colour.
+                                    "border-l border-line pl-3 ml-1"
+                                  : ""
+                              }
                             >
-                              {product.name}
-                            </Link>
+                              <Link
+                                href={`/catalogue/${product.id}`}
+                                className="text-text no-underline hover:underline"
+                              >
+                                {product.name}
+                              </Link>
+                              {(product.shadeName || product.textureName) && (
+                                <span className="block text-[12px] text-text-tertiary">
+                                  {[product.shadeName, product.textureName]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="border-b border-line px-3 py-2 text-[13px]">
                             {product.type === "SERVICE" ? (
                               <span className="text-text-secondary">
                                 Service
                               </span>
+                            ) : product.type === "TEMPLATE" ? (
+                              <Badge tone="accent">
+                                Design · {product.variantCount}
+                              </Badge>
                             ) : (
                               <Badge>
                                 {CATEGORY_RULES[product.category].label}
@@ -364,7 +438,7 @@ export function CatalogueAdmin({ catalogue }: { catalogue: Brand[] }) {
                             )}
                           </td>
                           <td className="border-b border-line px-3 py-2 text-[13px] text-text-secondary">
-                            {product.grade}
+                            {product.grade ?? "—"}
                           </td>
                           {/* Tabular numerals so thickness and size read down the
                             column — this is the scan the trade actually does. */}
@@ -375,10 +449,11 @@ export function CatalogueAdmin({ catalogue }: { catalogue: Brand[] }) {
                             {formatProductSize(product)}
                           </td>
                           <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                            {product.hsnCode}
+                            {product.hsnCode ?? "—"}
                           </td>
                           <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                            {product.reorderLevelUnits === 0
+                            {product.type === "TEMPLATE" ||
+                            product.reorderLevelUnits === 0
                               ? "—"
                               : `${product.reorderLevelUnits} ${product.unitLabel}`}
                           </td>
@@ -431,6 +506,154 @@ export function CatalogueAdmin({ catalogue }: { catalogue: Brand[] }) {
 }
 
 /**
+ * One variant axis: the shades already named, plus any typed here and now.
+ *
+ * TOGGLES, NOT A MULTI-SELECT. A native `<select multiple>` needs a modifier
+ * key to add a second option and shows about four rows of a list that runs to
+ * forty — choosing five shades in it is a fight. Toggle buttons show every
+ * option at once, take one tap each, and make what is chosen readable without
+ * scrolling.
+ *
+ * ADDING WITHOUT LEAVING. The client picks shades from a physical swatch book,
+ * and the sixth one being new is normal. Sending them to a settings screen
+ * to add it would abandon a half-filled product form, so a new name is typed
+ * here and created with the product in the same transaction. Nothing is
+ * created if the form is cancelled.
+ */
+function AxisPicker({
+  idPrefix,
+  label,
+  placeholder,
+  options,
+  picked,
+  added,
+  onPicked,
+  onAdded,
+}: {
+  idPrefix: string;
+  label: string;
+  placeholder: string;
+  options: Axis[];
+  picked: string[];
+  added: string[];
+  onPicked: (next: string[]) => void;
+  onAdded: (next: string[]) => void;
+}) {
+  const [draft, setDraft] = useState("");
+
+  const known = new Set(options.map((option) => option.name.toLowerCase()));
+  const trimmed = draft.trim();
+  // Typing a name that already exists selects it rather than adding a
+  // duplicate. The person cannot be expected to remember what the tenant
+  // already holds while looking at a swatch.
+  const existing = options.find(
+    (option) => option.name.toLowerCase() === trimmed.toLowerCase(),
+  );
+  const canAdd =
+    trimmed !== "" &&
+    !added.some((name) => name.toLowerCase() === trimmed.toLowerCase()) &&
+    (!existing || !picked.includes(existing.id));
+
+  function commit() {
+    if (!canAdd) return;
+    if (existing) onPicked([...picked, existing.id]);
+    else onAdded([...added, trimmed]);
+    setDraft("");
+  }
+
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <span className="text-[13px] text-text">{label}</span>
+        <span className="text-[12px] text-text-tertiary">
+          {picked.length + added.length === 0
+            ? "None chosen"
+            : `${picked.length + added.length} chosen`}
+        </span>
+      </div>
+
+      {options.length + added.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {options.map((option) => {
+            const on = picked.includes(option.id);
+            return (
+              <button
+                key={option.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() =>
+                  onPicked(
+                    on
+                      ? picked.filter((id) => id !== option.id)
+                      : [...picked, option.id],
+                  )
+                }
+                className={
+                  "rounded-lg border px-2.5 py-1 text-[13px] transition-colors duration-150 " +
+                  "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-subtle)] " +
+                  (on
+                    ? "border-accent bg-accent text-accent-on"
+                    : "border-line text-text-secondary hover:border-line-strong hover:text-text")
+                }
+              >
+                {option.name}
+              </button>
+            );
+          })}
+          {/* Typed a moment ago and not yet saved. Marked as new so it is
+              obvious which names are about to be added to the tenant's list. */}
+          {added.map((name) => (
+            <button
+              key={`new-${name}`}
+              type="button"
+              aria-pressed
+              onClick={() =>
+                onAdded(added.filter((candidate) => candidate !== name))
+              }
+              className={
+                "rounded-lg border border-dashed border-accent bg-accent-subtle px-2.5 py-1 " +
+                "text-[13px] text-text transition-colors duration-150 " +
+                "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-subtle)]"
+              }
+            >
+              {name}
+              <span className="ml-1.5 text-text-tertiary">new</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <Input
+          id={`${idPrefix}-new`}
+          aria-label={`Add a ${label.toLowerCase().replace(/s$/, "")}`}
+          value={draft}
+          placeholder={placeholder}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            // Enter adds the name rather than submitting the dialog — the
+            // rhythm of typing five shades is type, enter, type, enter.
+            if (event.key === "Enter") {
+              event.preventDefault();
+              commit();
+            }
+          }}
+        />
+        <Button size="sm" disabled={!canAdd} onClick={commit}>
+          Add
+        </Button>
+      </div>
+      {trimmed !== "" && !known.has(trimmed.toLowerCase()) && (
+        <p className="mb-0 mt-1.5 text-[12px] text-text-tertiary">
+          New — it will be added to your {label.toLowerCase()} when the design
+          is created.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
  * Adding a product.
  *
  * The family is the first field because it decides every field under it. A
@@ -445,16 +668,20 @@ export function CatalogueAdmin({ catalogue }: { catalogue: Brand[] }) {
 function ProductModal({
   open,
   pending,
+  shades,
+  textures,
   onClose,
   onSubmit,
 }: {
   open: boolean;
   pending: boolean;
+  shades: Axis[];
+  textures: Axis[];
   onClose: () => void;
   onSubmit: (input: Record<string, unknown>) => void;
 }) {
   const [category, setCategory] = useState<ProductCategory>("PLYWOOD");
-  const [type, setType] = useState<ProductType>("PHYSICAL");
+  const [type, setType] = useState<RequestableType>("PHYSICAL");
   const [name, setName] = useState("");
   const [grade, setGrade] = useState("");
   const [hsn, setHsn] = useState("");
@@ -463,6 +690,10 @@ function ProductModal({
   const [width, setWidth] = useState("8");
   const [height, setHeight] = useState("4");
   const [reorder, setReorder] = useState("0");
+  const [pickedShades, setPickedShades] = useState<string[]>([]);
+  const [pickedTextures, setPickedTextures] = useState<string[]>([]);
+  const [addedShades, setAddedShades] = useState<string[]>([]);
+  const [addedTextures, setAddedTextures] = useState<string[]>([]);
 
   const rules = CATEGORY_RULES[category];
   const unit = unitWord(rules.sizeUnit);
@@ -470,6 +701,19 @@ function ProductModal({
   const fixedSize = rules.fixedSizeTenth != null;
   const wantsSize = physical && !fixedSize;
   const thicknessRequired = physical && rules.thickness === "required";
+  const wantsGrade = physical && rules.grade !== "none";
+  const gradeRequired = physical && rules.grade === "expected";
+  const wantsVariants = physical && rules.variants;
+
+  // 5 shades x 5 textures is 25 products. The count is shown before the button
+  // is pressed, because twenty-five rows appearing unannounced in a catalogue
+  // is not a surprise anybody wants to undo by hand.
+  const shadeCount = pickedShades.length + addedShades.length;
+  const textureCount = pickedTextures.length + addedTextures.length;
+  const variantCount = wantsVariants
+    ? Math.max(shadeCount, 1) * Math.max(textureCount, 1)
+    : 0;
+  const generates = wantsVariants && shadeCount + textureCount > 0;
 
   function reset() {
     setCategory("PLYWOOD");
@@ -482,6 +726,10 @@ function ProductModal({
     setWidth("8");
     setHeight("4");
     setReorder("0");
+    setPickedShades([]);
+    setPickedTextures([]);
+    setAddedShades([]);
+    setAddedTextures([]);
   }
 
   function close() {
@@ -503,8 +751,7 @@ function ProductModal({
 
   const incomplete =
     name.trim() === "" ||
-    grade.trim() === "" ||
-    hsn.trim() === "" ||
+    (gradeRequired && grade.trim() === "") ||
     (thicknessRequired && thick.trim() === "") ||
     (wantsSize && (width.trim() === "") !== (height.trim() === ""));
 
@@ -524,8 +771,21 @@ function ProductModal({
             onClick={() => {
               onSubmit({
                 name: name.trim(),
-                hsnCode: hsn.trim(),
-                grade: grade.trim(),
+                // Omitted rather than sent empty. Both are optional now, and
+                // "" is not a shorter way of saying "none" — it is a value the
+                // schema would have to reject.
+                ...(hsn.trim() ? { hsnCode: hsn.trim() } : {}),
+                ...(wantsGrade && grade.trim()
+                  ? { grade: grade.trim() }
+                  : {}),
+                ...(generates
+                  ? {
+                      shadeIds: pickedShades,
+                      newShades: addedShades,
+                      textureIds: pickedTextures,
+                      newTextures: addedTextures,
+                    }
+                  : {}),
                 category,
                 type,
                 unitLabel,
@@ -547,7 +807,11 @@ function ProductModal({
               reset();
             }}
           >
-            {pending ? "Adding…" : "Add"}
+            {pending
+              ? "Adding…"
+              : generates
+                ? `Add ${variantCount} product${variantCount === 1 ? "" : "s"}`
+                : "Add"}
           </Button>
         </>
       }
@@ -573,7 +837,9 @@ function ProductModal({
             <Select
               id="product-type"
               value={type}
-              onChange={(event) => setType(event.target.value as ProductType)}
+              onChange={(event) =>
+                setType(event.target.value as RequestableType)
+              }
             >
               <option value="PHYSICAL">Physical — held in a godown</option>
               <option value="SERVICE">Service — never stocked</option>
@@ -594,31 +860,57 @@ function ProductModal({
           </Field>
         </FormRow>
 
-        <FormRow columns="minmax(0,1.6fr) minmax(0,0.8fr) minmax(0,1fr)">
-          <Field label="Name" htmlFor="product-name" required>
+        <FormRow
+          columns={
+            wantsGrade
+              ? "minmax(0,1.6fr) minmax(0,0.8fr) minmax(0,1fr)"
+              : "minmax(0,1.6fr) minmax(0,1fr)"
+          }
+        >
+          <Field
+            label={generates ? "Design name" : "Name"}
+            htmlFor="product-name"
+            required
+            hint={
+              generates ? "Each shade and texture is named after it" : undefined
+            }
+          >
             <Input
               id="product-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
               autoFocus
               placeholder={
-                category === "LOUVRE" ? "WPC Fluted Louvre" : "Sainik 710"
+                category === "LOUVRE"
+                  ? "WPC Fluted Louvre"
+                  : category === "LAMINATE"
+                    ? "Marino Touchwood"
+                    : "Sainik 710"
               }
             />
           </Field>
-          <Field label="Grade" htmlFor="product-grade" required>
-            <Input
-              id="product-grade"
-              value={grade}
-              onChange={(event) => setGrade(event.target.value)}
-              placeholder={category === "LOUVRE" ? "WPC" : "BWR"}
-            />
-          </Field>
+          {/* Absent, not blank, for a laminate. A grade says how the glue
+              behaves in water — a decorative sheet does not have an unknown
+              one, it has none, and an empty box invites somebody to fill it. */}
+          {wantsGrade && (
+            <Field
+              label="Grade"
+              htmlFor="product-grade"
+              required={gradeRequired}
+              hint={gradeRequired ? undefined : "Optional"}
+            >
+              <Input
+                id="product-grade"
+                value={grade}
+                onChange={(event) => setGrade(event.target.value)}
+                placeholder={category === "LOUVRE" ? "WPC" : "BWR"}
+              />
+            </Field>
+          )}
           <Field
             label="HSN code"
             htmlFor="product-hsn"
-            required
-            hint="4, 6 or 8 digits"
+            hint="4, 6 or 8 digits — add it when the supplier's bill arrives"
           >
             <Input
               id="product-hsn"
@@ -630,6 +922,40 @@ function ProductModal({
             />
           </Field>
         </FormRow>
+
+        {wantsVariants && (
+          <FieldSet
+            legend="Shades and textures"
+            description={
+              generates
+                ? `${shadeCount || 1} × ${textureCount || 1} — ${variantCount} product${variantCount === 1 ? "" : "s"} will be created under this design`
+                : "Pick the shades and finishes this design is pressed in. One product is created for every combination."
+            }
+          >
+            <div className="flex flex-col gap-4">
+              <AxisPicker
+                idPrefix="shade"
+                label="Shades"
+                placeholder="1234 or Walnut Natural"
+                options={shades}
+                picked={pickedShades}
+                added={addedShades}
+                onPicked={setPickedShades}
+                onAdded={setAddedShades}
+              />
+              <AxisPicker
+                idPrefix="texture"
+                label="Textures"
+                placeholder="Suede"
+                options={textures}
+                picked={pickedTextures}
+                added={addedTextures}
+                onPicked={setPickedTextures}
+                onAdded={setAddedTextures}
+              />
+            </div>
+          </FieldSet>
+        )}
 
         {/* A fixed four-column band rather than auto-fit: the measurement
             fields differ per family — a laminate has no width or height — and
@@ -744,7 +1070,7 @@ function EditProductModal({
   const [grade, setGrade] = useState("");
   const [hsn, setHsn] = useState("");
   const [reorder, setReorder] = useState("0");
-  const [type, setType] = useState<ProductType>("PHYSICAL");
+  const [type, setType] = useState<RequestableType>("PHYSICAL");
   const [category, setCategory] = useState<ProductCategory>("OTHER");
   // Which record the fields hold. Seeding on open rather than in an effect
   // keeps a half-typed correction from being overwritten by a re-render.
@@ -753,10 +1079,13 @@ function EditProductModal({
   if (product && loaded !== product.id) {
     setLoaded(product.id);
     setName(product.name);
-    setGrade(product.grade);
-    setHsn(product.hsnCode);
+    setGrade(product.grade ?? "");
+    setHsn(product.hsnCode ?? "");
     setReorder(String(product.reorderLevelUnits));
-    setType(product.type);
+    // A design is not a kind anyone may choose, so the control shows the only
+    // two that are choosable and the command refuses a change on a template
+    // that has variants anyway.
+    setType(product.type === "SERVICE" ? "SERVICE" : "PHYSICAL");
     setCategory(product.category);
   }
 
@@ -782,8 +1111,10 @@ function EditProductModal({
               onSubmit({
                 productId: product.id,
                 name: name.trim(),
-                grade: grade.trim(),
-                hsnCode: hsn.trim(),
+                // `null` clears; a blank box means "it has none", which is now
+                // a thing a product may legitimately be.
+                grade: grade.trim() || null,
+                hsnCode: hsn.trim() || null,
                 reorderLevelUnits: Number(reorder) || 0,
                 type,
                 category,
@@ -807,18 +1138,18 @@ function EditProductModal({
                 autoFocus
               />
             </Field>
-            <Field label="Grade" htmlFor="edit-grade" required>
+            <Field label="Grade" htmlFor="edit-grade" hint="Optional">
               <Input
                 id="edit-grade"
                 value={grade}
                 onChange={(event) => setGrade(event.target.value)}
+                placeholder="None"
               />
             </Field>
             <Field
               label="HSN code"
               htmlFor="edit-hsn"
-              required
-              hint="4, 6 or 8 digits"
+              hint="4, 6 or 8 digits — optional"
             >
               <Input
                 id="edit-hsn"
@@ -858,7 +1189,9 @@ function EditProductModal({
               <Select
                 id="edit-type"
                 value={type}
-                onChange={(event) => setType(event.target.value as ProductType)}
+                onChange={(event) =>
+                  setType(event.target.value as RequestableType)
+                }
               >
                 <option value="PHYSICAL">Physical</option>
                 <option value="SERVICE">Service</option>
@@ -882,7 +1215,9 @@ function EditProductModal({
           <p className="m-0 rounded-lg border border-line bg-glass-2 px-3 py-2 text-[13px] text-text-secondary">
             {product.type === "SERVICE"
               ? "A service — no size to change."
-              : `${thickness(product.thicknessTenthMm)} · ${formatProductSize(product)} — fixed at creation.`}
+              : product.type === "TEMPLATE"
+                ? `A design with ${product.variantCount} variant${product.variantCount === 1 ? "" : "s"} under it. Nothing is stocked against it directly.`
+                : `${thickness(product.thicknessTenthMm)} · ${formatProductSize(product)} — fixed at creation.`}
           </p>
         </div>
       )}

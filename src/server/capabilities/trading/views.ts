@@ -569,7 +569,13 @@ export const sellableStock: QueryDefinition<
           reservedUnits: reserved,
           availableUnits: balance.qtyUnits - reserved,
           agreedPricePaise: priceBy.get(balance.productId) ?? null,
-          taxRateBp: rateByHsn.get(balance.product.hsnCode) ?? null,
+          // A product with no HSN has no rate to look up -- optional since the
+          // catalogue stopped demanding one -- and `null` here already means
+          // "not known", which is exactly what it is.
+          taxRateBp:
+            balance.product.hsnCode == null
+              ? null
+              : (rateByHsn.get(balance.product.hsnCode) ?? null),
         };
       })
       .sort(

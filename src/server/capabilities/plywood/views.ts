@@ -38,8 +38,11 @@ export const productDetail: QueryDefinition<
     name: string;
     brandId: string;
     brandName: string;
-    hsnCode: string;
-    grade: string;
+    hsnCode: string | null;
+    grade: string | null;
+    /** Set on a generated laminate variant; null on everything else. */
+    shadeName: string | null;
+    textureName: string | null;
     unitLabel: string;
     thicknessTenthMm: number | null;
     category: string;
@@ -127,7 +130,7 @@ export const productDetail: QueryDefinition<
         customerPrices: {
           include: { customer: { select: { id: true, displayName: true } } },
         },
-        plywoodDetail: true,
+        plywoodDetail: { include: { shade: true, texture: true } },
       },
     });
     if (!product) return null;
@@ -261,7 +264,9 @@ export const productDetail: QueryDefinition<
       brandId: product.brand.id,
       brandName: product.brand.name,
       hsnCode: product.hsnCode,
-      grade: product.plywoodDetail?.grade ?? "",
+      grade: product.plywoodDetail?.grade ?? null,
+      shadeName: product.plywoodDetail?.shade?.name ?? null,
+      textureName: product.plywoodDetail?.texture?.name ?? null,
       unitLabel: product.unitLabel,
       thicknessTenthMm: product.plywoodDetail?.thicknessTenthMm ?? null,
       category: product.plywoodDetail?.category ?? "OTHER",

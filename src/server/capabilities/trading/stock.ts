@@ -233,6 +233,16 @@ export async function assertTradeable(
       "E_VALIDATION: this is a service — it has no stock to move",
     );
   }
+  if (product.type === "TEMPLATE") {
+    // Same single choke point, for the same reason. A laminate design is the
+    // parent its shade x texture variants were generated from; the sheets in
+    // the godown are the variants, and stock recorded against the design would
+    // be stock nobody can ever sell.
+    throw new ValidationError(
+      "E_VALIDATION: this is a design, not a product — move one of its shade " +
+        "and texture variants instead",
+    );
+  }
   const godown = await tx.location.findUnique({ where: { id: locationId } });
   if (!godown)
     throw new ValidationError("E_VALIDATION: godown not found in this tenant");

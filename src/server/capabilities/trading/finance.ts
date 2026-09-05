@@ -351,44 +351,22 @@ export async function issueSalesInvoice(
     // a schema change and its own task. Until then an invoice whose lines
     // resolve to DIFFERENT rates is refused rather than silently taxed at the
     // first one, because the second behaviour is wrong in a way nobody sees.
-    let cgstRateBp: number | undefined;
-    let sgstRateBp: number | undefined;
-    let igstRateBp: number | undefined;
-
-    const registration = await ctx.tx.tradingGstRegistration.findFirst({
-      where: { active: true },
-    });
-    if (registration) {
-      const rates = new Set<string>();
-      for (const line of order.lines) {
-        const rate = await resolveTaxRate(ctx.tx, {
-          registrationId: registration.id,
-          hsnCode: line.hsnCodeSnapshot,
-          on: issuedAt,
-        });
-        rates.add(`${rate.cgstRateBp}:${rate.sgstRateBp}`);
-        cgstRateBp = rate.cgstRateBp;
-        sgstRateBp = rate.sgstRateBp;
-        // Interstate is the two halves expressed once, so it is derived rather
-        // than stored twice and cannot drift from them.
-        igstRateBp = rate.cgstRateBp + rate.sgstRateBp;
-      }
-      if (rates.size > 1) {
-        throw new ValidationError(
-          "E_VALIDATION: this order's lines attract different tax rates, and an invoice " +
-            "carries one rate. Split it into one order per rate.",
-        );
-      }
-    } else {
-      const [rawCgst, rawSgst, rawIgst] = await Promise.all([
-        resolveConfig<unknown>(ctx.tx, CONFIG_CGST_RATE_BP),
-        resolveConfig<unknown>(ctx.tx, CONFIG_SGST_RATE_BP),
-        resolveConfig<unknown>(ctx.tx, CONFIG_IGST_RATE_BP),
-      ]);
-      cgstRateBp = configNumber(rawCgst, CONFIG_CGST_RATE_BP);
-      sgstRateBp = configNumber(rawSgst, CONFIG_SGST_RATE_BP);
-      igstRateBp = configNumber(rawIgst, CONFIG_IGST_RATE_BP);
-    }
+    //
+    // One call rather than the two branches this used to carry. `ratesFor`
+    // holds all three cases now — a registration with rules, no registration
+    // at all, and (since HSN became optional on a product) a line whose HSN
+    // has not been recorded yet, which takes the tenant's default rate rather
+    // than refusing the sale.
+    const {
+      cgstRateBp,
+      sgstRateBp,
+      igstRateBp,
+    }: { cgstRateBp?: number; sgstRateBp?: number; igstRateBp?: number } =
+      await ratesFor(
+        ctx.tx,
+        order.lines.map((line) => line.hsnCodeSnapshot),
+        issuedAt,
+      );
 
     const taxablePaise = order.lines.reduce(
       // ISSUED, not ordered (audit P0-03, slice 4). Invoicing the ordered
@@ -672,6 +650,17 @@ export const raisePurchaseInvoice: CommandDefinition<
     const sgstPaise = input.sgstPaise ?? 0;
     const igstPaise = input.igstPaise ?? 0;
     const taxPaise = cgstPaise + sgstPaise + igstPaise;
+
+    // The order says this supplier does not charge GST, and the document being
+    // transcribed does. One of the two is wrong, and guessing which would
+    // either book a credit that cannot be claimed or discard one that can.
+    if (!order.gstApplicable && taxPaise > 0) {
+      throw new ValidationError(
+        "E_VALIDATION: this purchase order is marked as carrying no GST, but the " +
+          "supplier's document shows tax. Turn GST back on for the order, or check " +
+          "the figures.",
+      );
+    }
     // Defaulted rather than required, so an invoice can still be recorded from
     // a document whose split has not been read off yet. That case now surfaces
     // as an exception instead of silently costing the business its credit.
@@ -781,49 +770,72 @@ export const raisePurchaseInvoice: CommandDefinition<
  * different ones is refused rather than silently taxed at whichever line was
  * read first.
  */
+/**
+ * The tenant's configured default rate, used in two places: when there is no
+ * GST registration at all, and — since HSN became optional on a product — for
+ * a line whose HSN nobody has recorded yet.
+ *
+ * Refused rather than defaulted to zero. A document computed at 0% is not
+ * "tax unknown" — it is a statement that no tax was charged, and on a purchase
+ * bill that statement costs the business its input credit.
+ */
+async function configuredFallbackRates(
+  tx: TenantScopedClient,
+): Promise<{ cgstRateBp: number; sgstRateBp: number; igstRateBp: number }> {
+  const [rawCgst, rawSgst, rawIgst] = await Promise.all([
+    resolveConfig<unknown>(tx, CONFIG_CGST_RATE_BP),
+    resolveConfig<unknown>(tx, CONFIG_SGST_RATE_BP),
+    resolveConfig<unknown>(tx, CONFIG_IGST_RATE_BP),
+  ]);
+  const cgstRateBp = configNumber(rawCgst, CONFIG_CGST_RATE_BP);
+  const sgstRateBp = configNumber(rawSgst, CONFIG_SGST_RATE_BP);
+  const igstRateBp = configNumber(rawIgst, CONFIG_IGST_RATE_BP);
+  if (
+    cgstRateBp === undefined ||
+    sgstRateBp === undefined ||
+    igstRateBp === undefined
+  ) {
+    throw new ValidationError(
+      "E_VALIDATION: no GST registration and no fallback rates are configured, " +
+        "so tax cannot be decided. Add a registration under Business Settings.",
+    );
+  }
+  return { cgstRateBp, sgstRateBp, igstRateBp };
+}
+
 async function ratesFor(
   tx: TenantScopedClient,
-  hsnCodes: string[],
+  hsnCodes: Array<string | null>,
   on: Date,
 ): Promise<{ cgstRateBp: number; sgstRateBp: number; igstRateBp: number }> {
   const registration = await tx.tradingGstRegistration.findFirst({
     where: { active: true },
   });
 
-  if (!registration) {
-    const [rawCgst, rawSgst, rawIgst] = await Promise.all([
-      resolveConfig<unknown>(tx, CONFIG_CGST_RATE_BP),
-      resolveConfig<unknown>(tx, CONFIG_SGST_RATE_BP),
-      resolveConfig<unknown>(tx, CONFIG_IGST_RATE_BP),
-    ]);
-    const cgstRateBp = configNumber(rawCgst, CONFIG_CGST_RATE_BP);
-    const sgstRateBp = configNumber(rawSgst, CONFIG_SGST_RATE_BP);
-    const igstRateBp = configNumber(rawIgst, CONFIG_IGST_RATE_BP);
-    // Refused rather than defaulted to zero. A document computed at 0% is not
-    // "tax unknown" — it is a statement that no tax was charged, and on a
-    // purchase bill that statement costs the business its input credit.
-    if (
-      cgstRateBp === undefined ||
-      sgstRateBp === undefined ||
-      igstRateBp === undefined
-    ) {
-      throw new ValidationError(
-        "E_VALIDATION: no GST registration and no fallback rates are configured, " +
-          "so tax cannot be decided. Add a registration under Business Settings.",
-      );
-    }
-    return { cgstRateBp, sgstRateBp, igstRateBp };
-  }
+  if (!registration) return configuredFallbackRates(tx);
 
   const seen = new Set<string>();
   let cgstRateBp = 0;
   let sgstRateBp = 0;
+  // Resolved once and reused: the fallback is the same three numbers for every
+  // line that needs it, and reading configuration inside the loop would hit
+  // the database once per line to learn what it already knows.
+  let fallback: Awaited<ReturnType<typeof configuredFallbackRates>> | null =
+    null;
   for (const hsnCode of hsnCodes) {
-    const rate = await resolveTaxRate(tx, {
-      registrationId: registration.id,
-      hsnCode,
-      on,
-    });
+    // HSN IS OPTIONAL ON A PRODUCT, so a line can genuinely have none. The
+    // rate then comes from the tenant's default rather than refusing the
+    // document: the client asked for HSN not to block the counter, and the
+    // period-close checklist already lists every invoice missing one, so this
+    // is deferred rather than lost.
+    const rate =
+      hsnCode == null
+        ? (fallback ??= await configuredFallbackRates(tx))
+        : await resolveTaxRate(tx, {
+            registrationId: registration.id,
+            hsnCode,
+            on,
+          });
     seen.add(`${rate.cgstRateBp}:${rate.sgstRateBp}`);
     cgstRateBp = rate.cgstRateBp;
     sgstRateBp = rate.sgstRateBp;
@@ -868,6 +880,111 @@ async function ratesFor(
  * Returns null when there is nothing to bill or a bill already exists, so the
  * caller can stay indifferent to both.
  */
+/**
+ * The supplier's bill when the order says GST does not apply.
+ *
+ * An unregistered dealer and a composition dealer both charge the goods and no
+ * tax. The document must still exist -- the business owes the money and the
+ * payable has to appear on the ledger like any other -- so this writes the same
+ * invoice, the same lines and the same ledger entry as the taxed path, with
+ * every tax figure zero.
+ *
+ * Zero here is a STATEMENT, not a gap: it says no tax was charged, which is
+ * true, and it is what stops the ITC reconciliation looking for a credit that
+ * was never available. That is exactly why `ratesFor` refuses to default to
+ * zero on the taxed path -- the same number means the opposite thing when
+ * nobody decided it.
+ *
+ * The state codes are recorded for the record, not for arithmetic. With no tax
+ * to split there is no intra/inter-state question to answer, so a supplier with
+ * no state code is not a reason to refuse the bill the way it is when tax has
+ * to be worked out.
+ */
+async function issueZeroTaxPurchaseBill(
+  ctx: CommandContext,
+  order: {
+    id: string;
+    supplierId: string;
+    supplier: { stateCode: string | null };
+  },
+  received: Array<{
+    productId: string;
+    productNameSnapshot: string;
+    hsnCodeSnapshot: string | null;
+    qtyReceived: number;
+    unitCostPaise: number;
+  }>,
+  issuedAt: Date,
+): Promise<{ id: string; invoiceNumber: string; totalPaise: number }> {
+  const totalPaise = received.reduce(
+    (sum, line) => sum + line.qtyReceived * line.unitCostPaise,
+    0,
+  );
+
+  const ourStateCode =
+    (await sellerIdentity(ctx.tx)).stateCode ??
+    String(
+      (await resolveConfig<unknown>(ctx.tx, CONFIG_TENANT_STATE_CODE)) ?? "",
+    ).trim();
+
+  const financialYear = financialYearOf(issuedAt);
+  const numbering = await nextInvoiceNumber(
+    ctx.tx,
+    ctx.actor.tenantId,
+    "PURCHASE",
+    financialYear,
+  );
+
+  const invoice = await ctx.tx.tradingInvoice.create({
+    data: {
+      tenantId: ctx.actor.tenantId,
+      seriesId: numbering.seriesId,
+      supplierId: order.supplierId,
+      purchaseOrderId: order.id,
+      invoiceNumber: numbering.invoiceNumber,
+      sequenceNumber: numbering.sequenceNumber,
+      financialYear,
+      supplyStateCode: order.supplier.stateCode ?? ourStateCode,
+      placeOfSupplyStateCode: ourStateCode,
+      cgstRateBp: 0,
+      sgstRateBp: 0,
+      igstRateBp: 0,
+      taxablePaise: totalPaise,
+      cgstPaise: 0,
+      sgstPaise: 0,
+      igstPaise: 0,
+      totalPaise,
+      issuedAt,
+    },
+  });
+
+  await ctx.tx.tradingInvoiceLine.createMany({
+    data: received.map((line) => ({
+      tenantId: ctx.actor.tenantId,
+      invoiceId: invoice.id,
+      productId: line.productId,
+      productNameSnapshot: line.productNameSnapshot,
+      hsnCodeSnapshot: line.hsnCodeSnapshot,
+      qtyUnits: line.qtyReceived,
+      unitPricePaise: line.unitCostPaise,
+      lineTotalPaise: line.qtyReceived * line.unitCostPaise,
+    })),
+  });
+
+  await ctx.tx.tradingLedgerEntry.create({
+    data: {
+      tenantId: ctx.actor.tenantId,
+      supplierId: order.supplierId,
+      entryType: "credit",
+      amountPaise: totalPaise,
+      invoiceId: invoice.id,
+      narration: `Purchase bill ${numbering.invoiceNumber} (no GST; awaiting supplier document)`,
+    },
+  });
+
+  return { id: invoice.id, invoiceNumber: numbering.invoiceNumber, totalPaise };
+}
+
 export async function issueProvisionalPurchaseBill(
   ctx: CommandContext,
   purchaseOrderId: string,
@@ -887,6 +1004,19 @@ export async function issueProvisionalPurchaseBill(
 
   const issuedAt = new Date();
   await assertPeriodOpen(ctx.tx, issuedAt);
+
+  // GST TURNED OFF ON THE ORDER.
+  //
+  // An unregistered or composition supplier charges none, so there is nothing
+  // to decide: no rate to resolve, no registration to require, no state codes
+  // to compare, and no input credit to claim. Everything below this block
+  // exists to work out how much tax was charged, and the honest answer here is
+  // that none was — so the whole of it is skipped rather than run and then
+  // multiplied by zero, which would still refuse the bill for a missing
+  // registration the business does not need.
+  if (!order.gstApplicable) {
+    return issueZeroTaxPurchaseBill(ctx, order, received, issuedAt);
+  }
 
   // The supply is the SUPPLIER's, so the supply state is theirs and the place
   // of supply is ours — the mirror of a sales invoice, and the reason a
@@ -2095,7 +2225,7 @@ export const invoiceDetail: QueryDefinition<
     }>;
     lines: Array<{
       name: string;
-      hsnCode: string;
+      hsnCode: string | null;
       qtyUnits: number;
       unitPricePaise: number;
       lineTotalPaise: number;

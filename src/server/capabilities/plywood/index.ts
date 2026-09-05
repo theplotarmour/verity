@@ -8,8 +8,8 @@ import {
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import { diffFields, recordActivity } from "@/server/platform/audit";
 import { notify } from "@/server/platform/notification";
-import { withTenant } from "@/server/platform/tenancy";
-import { PLYWOOD_CAPABILITY } from "./keys";
+import { withTenant, type TenantScopedClient } from "@/server/platform/tenancy";
+import { ENTITY_PRODUCT_DETAIL, PLYWOOD_CAPABILITY } from "./keys";
 import { productDetail } from "./views";
 import {
   registerTradingCapability,
@@ -60,37 +60,262 @@ export {
   CATEGORY_RULES,
   formatProductSize,
   productLabel,
+  variantName,
   type ProductCategory,
   type SizeUnit,
 } from "./product";
 import {
   CATEGORY_RULES,
   PRODUCT_CATEGORIES,
+  variantName,
   type ProductCategory,
   type SizeUnit,
 } from "./product";
 
+/**
+ * What a caller may ask for. TEMPLATE is deliberately absent: it is not a
+ * choice, it is what `createProduct` makes of a laminate when shades and
+ * textures are given, and letting a form request one would produce a template
+ * with nothing under it.
+ */
 export const PRODUCT_TYPES = ["PHYSICAL", "SERVICE"] as const;
-export type ProductType = (typeof PRODUCT_TYPES)[number];
+export type RequestableProductType = (typeof PRODUCT_TYPES)[number];
+
+/**
+ * TEMPLATE — a laminate design that exists only as the parent of its
+ * variants. It holds what they share (brand, size, HSN, thickness) and is
+ * never stocked, ordered, priced or invoiced; the twenty-five rows generated
+ * under it are the real products. Kept as a third `type` value rather than a
+ * separate boolean so that every place already asking "is this PHYSICAL?"
+ * excludes it without being told to.
+ */
+export const PRODUCT_TYPE_TEMPLATE = "TEMPLATE";
+export const PRODUCT_TYPES_ALL = [
+  "PHYSICAL",
+  "SERVICE",
+  PRODUCT_TYPE_TEMPLATE,
+] as const;
+export type ProductType = (typeof PRODUCT_TYPES_ALL)[number];
 
 /* ================================ products ================================ */
+
+/* ------------------------- shades and textures ------------------------- */
+
+/**
+ * The two laminate variant axes, as commands.
+ *
+ * AUTHORIZATION. Both run against `verity.plywood.product_detail` rather than
+ * getting entity keys of their own. A shade is not an independently governed
+ * thing — it is vocabulary the product detail draws from, in the same way a
+ * grade is — and whoever may record a board's grade may name the shade a
+ * laminate comes in. Giving them their own entities would add a permission
+ * surface every existing tenant would have to be granted before the catalogue
+ * worked again, to express a distinction nobody asked for.
+ *
+ * NEITHER IS DELETABLE. The foreign keys are ON DELETE RESTRICT, and there is
+ * no remove command: a shade with products on it cannot go without either
+ * orphaning or silently rewriting them, and a shade with none is harmless.
+ * A discontinued shade is deactivated, which stops it being offered without
+ * touching what was already sold under it.
+ */
+
+type AxisKind = "shade" | "texture";
+type AxisRow = { id: string; name: string };
+type AxisRowFull = AxisRow & { active: boolean };
+
+/**
+ * The two tables have identical shape, and the code below is genuinely the
+ * same code twice over. Prisma still generates two unrelated delegate types,
+ * so a `shade | texture` union is callable with neither — the narrow
+ * structural type here is what lets one implementation serve both. It states
+ * exactly the four calls this file makes, so a Prisma change that broke any of
+ * them would still be a type error at the cast rather than at runtime.
+ */
+type AxisDelegate = {
+  findMany(args: {
+    where?: { active?: boolean; id?: { in: string[] } };
+    orderBy?: { name: "asc" };
+    include?: { _count: { select: { details: true } } };
+  }): Promise<Array<AxisRowFull & { _count?: { details: number } }>>;
+  findFirst(args: { where: { name: string } }): Promise<AxisRowFull | null>;
+  create(args: {
+    data: { tenantId: string; name: string };
+  }): Promise<AxisRowFull>;
+  update(args: {
+    where: { id: string };
+    data: { active: boolean };
+  }): Promise<AxisRowFull>;
+};
+
+const axisTable = (tx: TenantScopedClient, kind: AxisKind): AxisDelegate =>
+  (kind === "shade"
+    ? tx.plywoodShade
+    : tx.plywoodTexture) as unknown as AxisDelegate;
+
+/**
+ * Turns "these five ids plus this one new name" into five-or-six rows.
+ *
+ * A name that already exists is REUSED rather than rejected. The form cannot
+ * know what the tenant already has when the person typing is looking at a
+ * swatch, and failing the whole product creation because "Walnut" was added
+ * last month is a worse answer than quietly meaning the same "Walnut".
+ */
+async function resolveAxis(
+  ctx: { tx: TenantScopedClient; actor: { tenantId: string } },
+  kind: AxisKind,
+  ids: string[] | undefined,
+  newNames: string[] | undefined,
+): Promise<AxisRow[]> {
+  const table = axisTable(ctx.tx, kind);
+  const out: AxisRow[] = [];
+  const seen = new Set<string>();
+
+  if (ids?.length) {
+    const rows = await table.findMany({ where: { id: { in: ids } } });
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    for (const id of ids) {
+      const row = byId.get(id);
+      if (!row) {
+        throw new ValidationError(
+          `E_VALIDATION: ${kind} not found in this tenant`,
+        );
+      }
+      if (!row.active) {
+        throw new ValidationError(
+          `E_VALIDATION: ${row.name} is a discontinued ${kind}`,
+        );
+      }
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      out.push({ id: row.id, name: row.name });
+    }
+  }
+
+  for (const raw of newNames ?? []) {
+    const name = raw.trim();
+    if (name.length === 0) continue;
+    const existing = await table.findFirst({ where: { name } });
+    const row = existing ?? (await table.create({
+      data: { tenantId: ctx.actor.tenantId, name },
+    }));
+    if (!row.active) {
+      throw new ValidationError(
+        `E_VALIDATION: ${row.name} is a discontinued ${kind}`,
+      );
+    }
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    out.push({ id: row.id, name: row.name });
+  }
+
+  return out;
+}
+
+function axisCommands(kind: AxisKind, label: string) {
+  const create: CommandDefinition<{ name: string }, { id: string }> = {
+    key: `verity.plywood.create_${kind}`,
+    entity: ENTITY_PRODUCT_DETAIL,
+    verb: "Create",
+    input: z.object({ name: z.string().min(1).max(80) }),
+    handler: async (ctx, input) => {
+      const name = input.name.trim();
+      const clash = await axisTable(ctx.tx, kind).findFirst({ where: { name } });
+      if (clash) {
+        throw new ValidationError(
+          `E_VALIDATION: ${label} ${name} already exists`,
+        );
+      }
+      const row = await axisTable(ctx.tx, kind).create({
+        data: { tenantId: ctx.actor.tenantId, name },
+      });
+      return {
+        result: { id: row.id },
+        events: [{ name: `verity.plywood.${kind}_created`, entityId: row.id }],
+      };
+    },
+  };
+
+  const setActive: CommandDefinition<
+    { id: string; active: boolean },
+    { id: string }
+  > = {
+    key: `verity.plywood.set_${kind}_active`,
+    entity: ENTITY_PRODUCT_DETAIL,
+    verb: "Edit",
+    input: z.object({ id: z.string().uuid(), active: z.boolean() }),
+    handler: async (ctx, input) => {
+      const row = await axisTable(ctx.tx, kind).update({
+        where: { id: input.id },
+        data: { active: input.active },
+      });
+      return {
+        result: { id: row.id },
+        events: [
+          {
+            name: `verity.plywood.${kind}_${input.active ? "activated" : "deactivated"}`,
+            entityId: row.id,
+          },
+        ],
+      };
+    },
+  };
+
+  const list: QueryDefinition<
+    { includeInactive?: boolean },
+    Array<{ id: string; name: string; active: boolean; productCount: number }>
+  > = {
+    key: `verity.plywood.list_${kind}s`,
+    entity: ENTITY_PRODUCT_DETAIL,
+    input: z.object({ includeInactive: z.boolean().optional() }),
+    handler: async (ctx, input) => {
+      const rows = await axisTable(ctx.tx, kind).findMany({
+        where: input.includeInactive ? {} : { active: true },
+        orderBy: { name: "asc" },
+        include: { _count: { select: { details: true } } },
+      });
+      return rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        active: row.active,
+        productCount: row._count?.details ?? 0,
+      }));
+    },
+  };
+
+  return { create, setActive, list };
+}
+
+const shadeCommands = axisCommands("shade", "shade");
+const textureCommands = axisCommands("texture", "texture");
+
+export const createShade = shadeCommands.create;
+export const setShadeActive = shadeCommands.setActive;
+export const listShades = shadeCommands.list;
+export const createTexture = textureCommands.create;
+export const setTextureActive = textureCommands.setActive;
+export const listTextures = textureCommands.list;
+
 
 export const createProduct: CommandDefinition<
   {
     brandId: string;
     name: string;
-    hsnCode: string;
+    hsnCode?: string;
     thicknessTenthMm?: number;
     category?: ProductCategory;
     widthTenth?: number;
     heightTenth?: number;
-    grade: string;
+    grade?: string;
     sheetWeightGrams?: number;
     reorderLevelUnits?: number;
     unitLabel?: string;
-    type?: ProductType;
+    type?: RequestableProductType;
+    shadeIds?: string[];
+    newShades?: string[];
+    textureIds?: string[];
+    newTextures?: string[];
   },
-  { id: string }
+  { id: string; variantIds: string[] }
 > = {
   key: "verity.plywood.create_product",
   entity: ENTITY_PRODUCT,
@@ -98,7 +323,10 @@ export const createProduct: CommandDefinition<
   input: z.object({
     brandId: z.string().uuid(),
     name: z.string().min(1).max(200),
-    hsnCode: HSN_CODE,
+    // Optional. The HSN usually arrives with the supplier's first invoice, not
+    // at the moment the row is needed; refusing the product until then pushes
+    // the catalogue into a spreadsheet.
+    hsnCode: HSN_CODE.optional(),
     // Tenths of a millimetre: 180 is 18.0 mm. Integers because a board's
     // thickness is an exact fact, and a float would make it approximately so.
     // Optional: a SERVICE product or most hardware items have no sheet
@@ -112,11 +340,18 @@ export const createProduct: CommandDefinition<
     // Tenths of that unit: 80 is 8.0 ft, 960 is 96.0 in, 24400 is 2440.0 mm.
     widthTenth: z.number().int().positive().optional(),
     heightTenth: z.number().int().positive().optional(),
-    grade: z.string().min(1).max(60),
+    grade: z.string().min(1).max(60).optional(),
     sheetWeightGrams: z.number().int().positive().optional(),
     reorderLevelUnits: z.number().int().min(0).optional(),
     unitLabel: z.string().min(1).max(30).optional(),
     type: z.enum(PRODUCT_TYPES).optional(),
+    // The two variant axes. Existing shades/textures by id, brand-new ones by
+    // name in the same call — a client picking five shades should not have to
+    // abandon a half-filled product form because the sixth one is new.
+    shadeIds: z.array(z.string().uuid()).max(50).optional(),
+    newShades: z.array(z.string().min(1).max(80)).max(50).optional(),
+    textureIds: z.array(z.string().uuid()).max(50).optional(),
+    newTextures: z.array(z.string().min(1).max(80)).max(50).optional(),
   }),
   preconditions: async (ctx, input) => {
     const brand = await ctx.tx.tradingBrand.findUnique({
@@ -152,6 +387,42 @@ export const createProduct: CommandDefinition<
         "E_VALIDATION: give both the width and the height, or neither",
       );
     }
+
+    // A grade says how the glue behaves in water. Structural families are told
+    // apart by it, so it stays required there; a decorative laminate has none
+    // at all, and accepting one would record a fact that is not true of the
+    // sheet.
+    if (
+      rules.grade === "expected" &&
+      (input.type ?? "PHYSICAL") === "PHYSICAL" &&
+      input.grade === undefined
+    ) {
+      throw new ValidationError(
+        `E_VALIDATION: a ${rules.label.toLowerCase()} needs a grade`,
+      );
+    }
+    if (rules.grade === "none" && input.grade !== undefined) {
+      throw new ValidationError(
+        `E_VALIDATION: a ${rules.label.toLowerCase()} has no grade`,
+      );
+    }
+
+    const wantsVariants =
+      (input.shadeIds?.length ?? 0) +
+        (input.newShades?.length ?? 0) +
+        (input.textureIds?.length ?? 0) +
+        (input.newTextures?.length ?? 0) >
+      0;
+    if (wantsVariants && !rules.variants) {
+      throw new ValidationError(
+        `E_VALIDATION: shades and textures belong to a laminate, not a ${rules.label.toLowerCase()}`,
+      );
+    }
+    if (wantsVariants && (input.type ?? "PHYSICAL") !== "PHYSICAL") {
+      throw new ValidationError(
+        "E_VALIDATION: a service has no shades or textures",
+      );
+    }
   },
   handler: async (ctx, input) => {
     const category = input.category ?? "OTHER";
@@ -164,36 +435,87 @@ export const createProduct: CommandDefinition<
       heightTenth: input.heightTenth ?? null,
     };
 
+    const shades = await resolveAxis(ctx, "shade", input.shadeIds, input.newShades);
+    const textures = await resolveAxis(
+      ctx,
+      "texture",
+      input.textureIds,
+      input.newTextures,
+    );
+    const generates = shades.length > 0 || textures.length > 0;
+
+    const base = {
+      tenantId: ctx.actor.tenantId,
+      brandId: input.brandId,
+      hsnCode: input.hsnCode ?? null,
+      unitLabel: input.unitLabel ?? "sheets",
+    };
+    const baseDetail = {
+      tenantId: ctx.actor.tenantId,
+      thicknessTenthMm: input.thicknessTenthMm ?? null,
+      category,
+      sizeUnit: rules.sizeUnit,
+      widthTenth: size.widthTenth,
+      heightTenth: size.heightTenth,
+      grade: input.grade ?? null,
+      sheetWeightGrams: input.sheetWeightGrams ?? null,
+    };
+
     // One transaction, two tables: the generic base and plywood's own
     // dimension/grade extension (ADR-018). The UI still sees one call.
-    const product = await ctx.tx.tradingProduct.create({
+    //
+    // With no variant axis this is exactly what it always was — one product.
+    // With one, the row created here becomes the TEMPLATE: it carries no
+    // reorder level, because nothing is ever counted against it.
+    const parent = await ctx.tx.tradingProduct.create({
       data: {
-        tenantId: ctx.actor.tenantId,
-        brandId: input.brandId,
+        ...base,
         name: input.name,
-        hsnCode: input.hsnCode,
-        reorderLevelUnits: input.reorderLevelUnits ?? 0,
-        unitLabel: input.unitLabel ?? "sheets",
-        type: input.type ?? "PHYSICAL",
+        reorderLevelUnits: generates ? 0 : (input.reorderLevelUnits ?? 0),
+        type: generates ? PRODUCT_TYPE_TEMPLATE : (input.type ?? "PHYSICAL"),
       },
     });
     await ctx.tx.plywoodProductDetail.create({
-      data: {
-        tenantId: ctx.actor.tenantId,
-        productId: product.id,
-        thicknessTenthMm: input.thicknessTenthMm ?? null,
-        category,
-        sizeUnit: rules.sizeUnit,
-        widthTenth: size.widthTenth,
-        heightTenth: size.heightTenth,
-        grade: input.grade,
-        sheetWeightGrams: input.sheetWeightGrams ?? null,
-      },
+      data: { ...baseDetail, productId: parent.id },
     });
+
+    // The matrix. An axis nobody chose contributes a single null rather than
+    // nothing, so five shades and no textures generate five products — not
+    // five times zero, which is the arithmetic bug this shape avoids.
+    const shadeAxis = shades.length > 0 ? shades : [null];
+    const textureAxis = textures.length > 0 ? textures : [null];
+    const variantIds: string[] = [];
+    for (const shade of shadeAxis) {
+      for (const texture of textureAxis) {
+        const variant = await ctx.tx.tradingProduct.create({
+          data: {
+            ...base,
+            name: variantName(input.name, shade?.name ?? null, texture?.name ?? null),
+            reorderLevelUnits: input.reorderLevelUnits ?? 0,
+            type: "PHYSICAL",
+            parentProductId: parent.id,
+          },
+        });
+        await ctx.tx.plywoodProductDetail.create({
+          data: {
+            ...baseDetail,
+            productId: variant.id,
+            shadeId: shade?.id ?? null,
+            textureId: texture?.id ?? null,
+          },
+        });
+        variantIds.push(variant.id);
+      }
+    }
+
     return {
-      result: { id: product.id },
+      result: { id: parent.id, variantIds },
       events: [
-        { name: "verity.plywood.product_created", entityId: product.id },
+        { name: "verity.plywood.product_created", entityId: parent.id },
+        ...variantIds.map((id) => ({
+          name: "verity.plywood.product_created",
+          entityId: id,
+        })),
       ],
     };
   },
@@ -203,12 +525,12 @@ export const editProduct: CommandDefinition<
   {
     productId: string;
     name?: string;
-    hsnCode?: string;
-    grade?: string;
+    hsnCode?: string | null;
+    grade?: string | null;
     sheetWeightGrams?: number | null;
     reorderLevelUnits?: number;
     unitLabel?: string;
-    type?: ProductType;
+    type?: RequestableProductType;
     category?: ProductCategory;
   },
   { id: string }
@@ -219,8 +541,12 @@ export const editProduct: CommandDefinition<
   input: z.object({
     productId: z.string().uuid(),
     name: z.string().min(1).max(200).optional(),
-    hsnCode: HSN_CODE.optional(),
-    grade: z.string().min(1).max(60).optional(),
+    // `null` clears it. A product entered with the wrong HSN and no
+    // replacement to hand is better recorded as having none than as having
+    // that one — the rate then falls back to the tenant default, and the
+    // period-close checklist lists it, instead of a wrong code filing quietly.
+    hsnCode: HSN_CODE.nullable().optional(),
+    grade: z.string().min(1).max(60).nullable().optional(),
     sheetWeightGrams: z.number().int().positive().nullable().optional(),
     reorderLevelUnits: z.number().int().min(0).optional(),
     unitLabel: z.string().min(1).max(30).optional(),
@@ -435,17 +761,23 @@ export const listCatalogue: QueryDefinition<
     products: Array<{
       id: string;
       name: string;
-      hsnCode: string;
+      hsnCode: string | null;
       thicknessTenthMm: number | null;
       category: ProductCategory;
       sizeUnit: SizeUnit;
       widthTenth: number | null;
       heightTenth: number | null;
-      grade: string;
+      grade: string | null;
       unitLabel: string;
       reorderLevelUnits: number;
       active: boolean;
       type: ProductType;
+      /** Null on an ordinary product and on a template; set on a variant. */
+      parentProductId: string | null;
+      shadeName: string | null;
+      textureName: string | null;
+      /** How many variants hang off this row. Zero unless it is a template. */
+      variantCount: number;
     }>;
   }>
 > = {
@@ -466,7 +798,10 @@ export const listCatalogue: QueryDefinition<
         products: {
           where: input.includeInactive ? {} : { active: true },
           orderBy: [{ name: "asc" }],
-          include: { plywoodDetail: true },
+          include: {
+            plywoodDetail: { include: { shade: true, texture: true } },
+            _count: { select: { variants: true } },
+          },
         },
       },
     });
@@ -484,11 +819,15 @@ export const listCatalogue: QueryDefinition<
         sizeUnit: (product.plywoodDetail?.sizeUnit ?? "MM") as SizeUnit,
         widthTenth: product.plywoodDetail?.widthTenth ?? null,
         heightTenth: product.plywoodDetail?.heightTenth ?? null,
-        grade: product.plywoodDetail?.grade ?? "",
+        grade: product.plywoodDetail?.grade ?? null,
         unitLabel: product.unitLabel,
         reorderLevelUnits: product.reorderLevelUnits,
         active: product.active,
         type: product.type as ProductType,
+        parentProductId: product.parentProductId,
+        shadeName: product.plywoodDetail?.shade?.name ?? null,
+        textureName: product.plywoodDetail?.texture?.name ?? null,
+        variantCount: product._count.variants,
       })),
     }));
   },
@@ -877,8 +1216,14 @@ export function registerPlywoodCapability(): void {
   registerCommand(createProduct);
   registerCommand(editProduct);
   registerCommand(setProductActive);
+  registerCommand(createShade);
+  registerCommand(setShadeActive);
+  registerCommand(createTexture);
+  registerCommand(setTextureActive);
 
   registerQuery(listCatalogue);
   registerQuery(productDetail);
   registerQuery(stockOnHand);
+  registerQuery(listShades);
+  registerQuery(listTextures);
 }

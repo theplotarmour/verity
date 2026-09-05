@@ -41,6 +41,7 @@ type PurchaseOrder = {
     qtyReceived: number;
     qtyOutstanding: number;
   }>;
+  gstApplicable: boolean;
   editable: {
     locationId: string;
     supplierId: string;
@@ -246,6 +247,7 @@ export function PurchaseDesk({
                 reference: amending.reference,
                 supplierId: amending.editable.supplierId,
                 locationId: amending.editable.locationId,
+                gstApplicable: amending.gstApplicable,
                 lines: amending.editable.lines,
               }
             : null
@@ -336,6 +338,10 @@ export function PurchaseDesk({
                         </Link>
                         <span className="mt-0.5 block text-[12px] text-text-tertiary">
                           {order.supplierName} · {day(order.raisedAt)}
+                          {/* Only the exception is called out. Every other
+                              order carries GST, and saying so on all of them
+                              would make the one that does not invisible. */}
+                          {!order.gstApplicable && " · No GST"}
                         </span>
                       </td>
                       {/* U2-2: what the order is FOR. Without this the desk could

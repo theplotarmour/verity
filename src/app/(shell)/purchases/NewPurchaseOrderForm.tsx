@@ -1,7 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Button, Field, FormRow, Input } from "@/components/ui/primitives";
+import {
+  Button,
+  Checkbox,
+  Field,
+  FormRow,
+  Input,
+} from "@/components/ui/primitives";
 import { Combobox } from "@/components/ui/Combobox";
 import { Modal, ModalCancel } from "@/components/ui/Modal";
 import { rupees } from "@/components/ui/business/format";
@@ -40,6 +46,7 @@ export type OrderDraft = {
   reference: string | null;
   supplierId: string;
   locationId: string;
+  gstApplicable: boolean;
   lines: Array<{
     productId: string;
     qtyOrdered: number;
@@ -74,6 +81,10 @@ export function NewPurchaseOrderForm({
   const [supplierId, setSupplierId] = useState("");
   const [locationId, setLocationId] = useState("");
   const [reference, setReference] = useState("");
+  // On by default. The ordinary registered supplier charges GST, and
+  // defaulting the other way would quietly drop a claimable input credit on
+  // every order somebody forgot to tick.
+  const [gst, setGst] = useState(true);
   const [lines, setLines] = useState<Line[]>([{ ...EMPTY_LINE }]);
   // Seeded when the dialog opens on an order, not from an effect: an effect
   // would overwrite a half-typed amendment on the next render.
@@ -84,6 +95,7 @@ export function NewPurchaseOrderForm({
     setSupplierId(editing?.supplierId ?? "");
     setLocationId(editing?.locationId ?? "");
     setReference(editing?.reference ?? "");
+    setGst(editing?.gstApplicable ?? true);
     setLines(
       editing
         ? editing.lines.map((line) => ({
@@ -208,6 +220,7 @@ export function NewPurchaseOrderForm({
                 supplierId,
                 locationId,
                 ...(reference.trim() ? { reference: reference.trim() } : {}),
+                gstApplicable: gst,
                 lines: complete.map((line) => {
                   const discount = Number.parseFloat(line.discount);
                   return {
@@ -289,6 +302,23 @@ export function NewPurchaseOrderForm({
             />
           </Field>
         </FormRow>
+
+        {/* A checkbox rather than a select: this is one fact that is true or
+            not, and the default is the answer nine times out of ten. It sits
+            with the supplier because that is what decides it — an unregistered
+            or composition dealer charges none. */}
+        <div className="flex flex-col gap-1.5 border-t border-line pt-4">
+          <Checkbox
+            checked={gst}
+            onChange={(event) => setGst(event.target.checked)}
+            label="This purchase carries GST"
+          />
+          <p className="m-0 pl-[28px] text-[12px] text-text-tertiary">
+            {gst
+              ? "The supplier's bill will be taxed at the rate in force and its input credit claimed."
+              : "For an unregistered or composition supplier. The bill records no tax and claims no input credit."}
+          </p>
+        </div>
 
         <div className="flex flex-col gap-4 border-t border-line pt-4">
           {lines.map((line, index) => {

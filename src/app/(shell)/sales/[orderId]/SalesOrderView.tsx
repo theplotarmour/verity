@@ -24,6 +24,7 @@ import { SALES_STATE, present } from "@/components/ui/business/states";
 import { Related } from "@/components/ui/business/Related";
 import { ActivityLog } from "@/components/ui/business/ActivityLog";
 import { runCommand } from "@/server/actions/platform";
+import { ReserveStockModal } from "../ReserveStockModal";
 import type { ActionFailure } from "@/server/platform/action-error";
 
 type Order = NonNullable<
@@ -39,6 +40,7 @@ export function SalesOrderView({
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [reason, setReason] = useState("");
   const [issuing, setIssuing] = useState(false);
+  const [reserving, setReserving] = useState(false);
   const [collectedBy, setCollectedBy] = useState("");
   const [pending, startTransition] = useTransition();
 
@@ -64,6 +66,19 @@ export function SalesOrderView({
 
   return (
     <>
+      <ReserveStockModal
+        orderId={reserving ? order.id : null}
+        pending={pending}
+        onClose={() => setReserving(false)}
+        onConfirm={(allocations) =>
+          run(
+            "verity.trading.reserve_for_order",
+            { orderId: order.id, allocations },
+            () => setReserving(false),
+          )
+        }
+      />
+
       <PageHeader
         title={title}
         description={`${order.customerName} · from ${order.locationName} · taken ${day(order.createdAt)}`}
@@ -73,7 +88,7 @@ export function SalesOrderView({
               <Button
                 variant="primary"
                 disabled={pending}
-                onClick={() => run("verity.trading.reserve_for_order", { orderId: order.id })}
+                onClick={() => setReserving(true)}
               >
                 Reserve stock
               </Button>

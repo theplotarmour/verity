@@ -36,7 +36,7 @@ type Invoice = {
   }>;
   lines: Array<{
     name: string;
-    hsnCode: string;
+    hsnCode: string | null;
     qtyUnits: number;
     unitPricePaise: number;
     lineTotalPaise: number;
@@ -172,7 +172,7 @@ export function InvoiceView({
                   {line.name}
                 </td>
                 <td className="tabular border-b border-line px-2 py-3 text-right text-[13px] text-text-secondary">
-                  {line.hsnCode}
+                  {line.hsnCode ?? "—"}
                 </td>
                 <td className="tabular border-b border-line px-2 py-3 text-right text-[14px]">
                   {line.qtyUnits}
