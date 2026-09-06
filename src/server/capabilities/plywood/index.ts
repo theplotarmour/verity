@@ -482,10 +482,18 @@ export const createProduct: CommandDefinition<
     // The matrix. An axis nobody chose contributes a single null rather than
     // nothing, so five shades and no textures generate five products — not
     // five times zero, which is the arithmetic bug this shape avoids.
+    //
+    // GUARDED ON `generates`, and that guard is load bearing. Filling BOTH
+    // empty axes with a null gives a one-by-one matrix, so an ordinary product
+    // with no shades and no textures was generating a single nameless variant
+    // of itself: two catalogue rows for one board, the second stockable and
+    // orderable and indistinguishable from the first. The nulls exist for the
+    // five-shades-no-textures case; they must never run when nobody asked for
+    // a matrix at all.
     const shadeAxis = shades.length > 0 ? shades : [null];
     const textureAxis = textures.length > 0 ? textures : [null];
     const variantIds: string[] = [];
-    for (const shade of shadeAxis) {
+    for (const shade of generates ? shadeAxis : []) {
       for (const texture of textureAxis) {
         const variant = await ctx.tx.tradingProduct.create({
           data: {
