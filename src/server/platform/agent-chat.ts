@@ -3,7 +3,7 @@ import { withTenant } from "./tenancy";
 import { buildToolManifest, type ToolDescriptor } from "./tool-manifest";
 import { getCommand, type ActorContext } from "./command";
 import { getQuery, executeQuery } from "./query";
-import { GroundingCache } from "./grounding";
+import { GroundingCache, checkProseClaims } from "./grounding";
 import { readAgentProviderConfig } from "./config";
 import { runCommandBatch } from "./batch";
 import { toActionFailure } from "./action-error";
@@ -48,9 +48,42 @@ export type ToolCallRecord = {
   output: unknown;
 };
 
+/**
+ * Task 81 rule 8 step 3 ("preview" a routine action before executing when
+ * the resolved outcome isn't obvious) — the worked example is "mark all
+ * three overdue invoices as written off": routine per rule 4, but the
+ * SPECIFIC three invoices it resolved to are worth showing before acting.
+ *
+ * Scope, deliberately bounded: this fires only when one assistant message
+ * contains 2+ tool calls to the SAME routine (non-destructive) command key
+ * — the concrete shape of the worked example. A single routine call still
+ * executes immediately, unchanged (correct per rule 4: "routine, clearly-
+ * authorized user actions execute without re-asking"). This is not a
+ * general "preview anything ambiguous" engine — building that without a
+ * second real instance would be exactly the over-built primitive Task 81's
+ * own audit declined to rush.
+ *
+ * On confirm, the client calls `executeConfirmedPreview` with these EXACT
+ * inputs — the model is never asked to re-derive them, so there is no
+ * chance of drift between what was shown and what runs.
+ */
+export type PendingPreview = {
+  commandKey: string;
+  description: string;
+  inputs: unknown[];
+};
+
 export type AgentTurnResult = {
   reply: string;
   toolCalls: ToolCallRecord[];
+  /** Present when this turn stopped short of executing a multi-item
+   *  routine action to show it first — see `PendingPreview`. `toolCalls`
+   *  for the previewed command(s) is empty in this case: nothing ran. */
+  preview?: PendingPreview;
+  /** Task 81 rules 1/2's "still open" gap — prose numbers in `reply` that
+   *  did not match any number surfaced by a query this turn. A WARNING,
+   *  never used to alter or block `reply` — see `checkProseClaims`. */
+  groundingWarnings?: string[];
 };
 
 export class AgentNotConfiguredError extends Error {
@@ -205,6 +238,85 @@ async function runTool(
 }
 
 /**
+ * Detects Task 81 rule 8's worked example inside one assistant message: 2+
+ * tool calls naming the SAME routine (non-destructive) command. Returns the
+ * pending preview if so, else `null`. A single call to a routine command,
+ * or any number of calls to DIFFERENT commands, is unaffected — only a
+ * repeated call to one mutating command is the "resolved to N specific
+ * records" shape this rule is about.
+ */
+function detectBatchPreview(toolCalls: OpenAiToolCall[]): PendingPreview | null {
+  const byKey = new Map<string, unknown[]>();
+  for (const call of toolCalls) {
+    const key = fromToolName(call.function.name);
+    const command = getCommand(key);
+    if (!command || command.impact === "destructive") continue; // destructive already needs_approval
+    let input: unknown;
+    try {
+      input = call.function.arguments ? JSON.parse(call.function.arguments) : {};
+    } catch {
+      continue; // malformed args fail normally inside runTool, not previewed
+    }
+    const inputs = byKey.get(key) ?? [];
+    inputs.push(input);
+    byKey.set(key, inputs);
+  }
+
+  for (const [key, inputs] of byKey) {
+    if (inputs.length < 2) continue;
+    const command = getCommand(key)!;
+    return {
+      commandKey: key,
+      description: `This will run "${command.description ?? key}" on ${inputs.length} records.`,
+      inputs,
+    };
+  }
+  return null;
+}
+
+/**
+ * Executes an EXACT previously-shown `PendingPreview` — never re-derived
+ * from the model, so what runs is provably what was shown. Called by the
+ * chat route on the human's structural "Confirm" click, bypassing the
+ * provider entirely for this step.
+ */
+export async function executeConfirmedPreview(
+  actor: ActorContext,
+  commandKey: string,
+  inputs: unknown[],
+): Promise<{ reply: string; toolCalls: ToolCallRecord[] }> {
+  const command = getCommand(commandKey);
+  if (!command) {
+    return { reply: `That action is no longer available (${commandKey}).`, toolCalls: [] };
+  }
+  const batch = await runCommandBatch(actor, command, inputs, { channel: "agent" });
+  const toolCalls: ToolCallRecord[] = batch.items.map((item) => {
+    const { outcome } = item;
+    if (outcome.status === "succeeded") {
+      return { key: commandKey, kind: "command", input: inputs[item.index], ok: true, output: outcome.result };
+    }
+    if (outcome.status === "needs_approval") {
+      return {
+        key: commandKey,
+        kind: "command",
+        input: inputs[item.index],
+        ok: false,
+        output: { code: "E_NEEDS_APPROVAL", message: outcome.reason },
+      };
+    }
+    return {
+      key: commandKey,
+      kind: "command",
+      input: inputs[item.index],
+      ok: false,
+      output: { code: outcome.code, message: outcome.reason },
+    };
+  });
+  const reply = `Done — ${batch.succeeded} of ${batch.total} succeeded${batch.failed > 0 ? `, ${batch.failed} failed` : ""}.`;
+  return { reply, toolCalls };
+}
+
+/**
  * Runs one full agent turn: the user's message, any number of tool-call
  * round trips (capped), and the final assistant reply. Everything the model
  * touches is scoped to `actor` — the manifest, every command, every query.
@@ -231,7 +343,15 @@ export async function runAgentTurn(
     messages.push(message);
 
     if (!message.tool_calls || message.tool_calls.length === 0) {
-      return { reply: message.content ?? "", toolCalls };
+      const reply = message.content ?? "";
+      const hasQuery = toolCalls.some((c) => c.kind === "query" && c.ok);
+      const groundingWarnings = hasQuery ? checkProseClaims(reply, grounding) : [];
+      return { reply, toolCalls, groundingWarnings: groundingWarnings.length > 0 ? groundingWarnings : undefined };
+    }
+
+    const preview = detectBatchPreview(message.tool_calls);
+    if (preview) {
+      return { reply: preview.description + " Confirm to proceed.", toolCalls, preview };
     }
 
     for (const call of message.tool_calls) {

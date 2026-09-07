@@ -1,10 +1,21 @@
 # Taskplans status index
 
-Classification of every file in `taskplans/`, regenerated 2026-09-04
-(originally 2026-09-02) against current `git log`, `src/`,
-`prisma/schema.prisma`, and each file's own closing/status section. No
-existing file was moved, renamed, or edited — this is a pointer, not a
-reorganization. Numbers 61–63 do not exist (gap in the original sequence).
+Classification of every file in `taskplans/`, regenerated 2026-09-08
+(previously 2026-09-04, originally 2026-09-02) against current `git log`,
+`src/`, `prisma/schema.prisma`, and each file's own closing/status
+section. No existing file was moved, renamed, or edited — this is a
+pointer, not a reorganization. Numbers 61–63 do not exist (gap in the
+original sequence).
+
+This regeneration moves 5 more items Pending -> Done since 2026-09-04,
+per commits `e502208`/`e7b997b`/`897ed08`/`b98a7e2`/`7fb4af1`/`e92dbee`
+(Tasks 81, 86, 92-extension, 99 Skills 2/3, 100). `101_remaining_work_
+master_plan.md` itself now predates all six of those commits — its
+Category 1 ("buildable now") is fully executed; its Categories 2-5 are
+still accurate (checked directly, not assumed) as of this regeneration.
+Tasks 103/104 are new since the last regeneration (Payload CMS control-
+plane ADR analysis) and are listed Pending — both PROPOSED/DRAFT,
+awaiting product-owner ratification, not a build gap.
 
 Re-derive this index (don't trust it blindly) if it's more than a few weeks
 stale — re-run against current `git log` and `src/`. `taskplans/101_
@@ -104,7 +115,12 @@ regeneration — read that instead of re-deriving triage from scratch.
 | 84_verity_ai_agent_system.md | **COMPLETE 2026-09-04** — all six areas built and unit-tested; areas 1/2/3/5 also live-verified 2026-09-03. Known MVP gaps recorded in the file itself (no streaming, grounding is entity-agnostic, no confirm UI so destructive commands always `needs_approval`) |
 | 85_foundation_conformance_acceptance_script.md | **BUILT 2026-09-04** — template + two scripts (`implementation/13-conformance/`): plywood (walked, PASS), accounting (written, not yet walked) |
 | 91_bulk_operations_and_partial_failure.md | **BUILT 2026-09-04** — `src/server/platform/batch.ts`, consumed by Task 84's agent loop; trigger (Task 84 landing first) fired same day it was written |
-| 92_business_timeline_view.md | **PARTIALLY BUILT, confirmed 2026-09-04** — infrastructure (Task 38's `reconstructHistory`, `ActivityLog`) already existed; a real bug found and fixed (fact entries showed a raw event name). Coverage beyond purchase/sales orders still open |
+| 81_erpclaw_ai_operating_rules.md | **AUDITED 2026-09-04, extended 2026-09-08** (`e502208`, `implementation/13-conformance/task-81-compliance-audit.md`) — trigger fired when Task 84 area 6 shipped; 5 rules compliant by construction, 2 gaps fixed 2026-09-04 (error-class taxonomy, exact-match prompt discipline), 2 more gaps built 2026-09-08: prose-claim numeric grounding (`checkProseClaims`, warning-level, not blocking) and the six-step contract's preview step (`detectBatchPreview`/`executeConfirmedPreview`, structural Confirm/Cancel in `AgentChatDock`). 1 gap remains open — structural exact-match enforcement — listed Pending below |
+| 86_dashboard_and_panel_state_model.md | **BUILT 2026-09-04** (`897ed08`) — `src/components/ui/panelState.ts` (`PanelState<T>`, `loadPanel()`), wired into `/overview`: real Degraded state distinct from denied/empty, per-panel fetch isolation so one failing query no longer crashes the whole page. Attention state still deferred to Task 90 (unfired trigger), per this file's own scope |
+| 92_business_timeline_view.md | **BUILT for order/party detail, confirmed 2026-09-04** (`e733c33`, `b98a7e2`) — infrastructure (Task 38's `reconstructHistory`, `ActivityLog`) already existed; a real bug found and fixed (fact entries showed a raw event name, `kind` field added). Coverage extended to supplier/customer detail (`SupplierWorkspace`/`CustomerWorkspace` Activity tabs). Still open: employee/asset detail (no such capability exists yet — nothing to wire), a standalone timeline reading view (optional, not requested) |
+| 99_verity_custom_skills_plan.md (Skills 2/3 only) | **BUILT 2026-09-04** (`e7b997b`) — `verity-adr-gate` and `verity-migration-safety` both exist under `.claude/skills/`. Skills 4/5/7/8 remain deferred by the taskplan's own priority ranking; Skill 6 needs real design work first — both listed Pending below |
+| 100_dashboard_intelligence_direction.md | **BOTH BLOCKING DECISIONS RESOLVED 2026-09-04** (`7fb4af1`, `e92dbee`) — shadcn/ui: decided NO, keep the hand-built component layer. Metrics-history: BUILT (`PlywoodMetricSnapshot`, daily capture job, `metricsHistory` query, reusing `ownerConsole`'s exact SQL to avoid a second definition of the same number). Migration application and the sparkline UI itself are the remaining concrete steps, listed Pending below — the *decisions* are what were blocking, and both are made |
+| 102_adversarial_black_box_audit_prompt.md | complete as authored — the file **is** the prompt, meant to be pasted into a fresh session; nothing further to build here |
 | 94_incomplete_information_states.md | **MECHANISM DECIDED 2026-09-04** — `Select`-type companion status field, no new primitive; taught in Task 82's skill; no plywood retrofit performed (its own non-goal) |
 | ADR-018 (trading capability extraction) | **BUILT 2026-09-04** — `src/server/capabilities/trading/` extracted from `plywood` (28 of 29 `Plywood*` models were already generic); `plywood` now depends on `trading` and keeps only `PlywoodProductDetail` (board dimension/grade). Explicit product-owner override of taskplans 74/75's "wait for 72/73 settled" gate, given the auto-parts client concretely arriving; see `verity-spec/17_decisions/adr/adr-018.md` for the full reasoning and what was rejected. Migration `20260904180000_trading_capability_extraction` renames tables (data-preserving), backfills the new detail table, and activates `trading` for every tenant that already had `plywood` active. |
 
@@ -123,17 +139,20 @@ This table is the flat list; that file is the sequencing.
 | 79_erpclaw_capability_payroll.md | no Indian statutory spec (PF/ESI/TDS/Form 16) exists to build against — real research needed first, not code |
 | 80_erpclaw_capability_advanced_accounting.md | needs Task 72 settled + an enterprise consolidation/lease-accounting client; neither present |
 | 81_erpclaw_ai_operating_rules.md | **trigger fired 2026-09-04** (Task 84's chat surface is the assistant/command layer this was written for) — 16 rules not yet audited against what actually shipped |
+| 81_erpclaw_ai_operating_rules.md (1 remaining gap only) | structural (non-prompt-level) exact-match enforcement — needs the grounding mechanism extended in a different direction than the two gaps built 2026-09-08 (numeric-claim warning, batch-preview). No trigger blocking it; not picked up yet |
 | 83_erpclaw_vertical_module_registry.md | reference table — not a build plan for any row |
-| 86_dashboard_and_panel_state_model.md | zero-dependency, buildable now; blocks Task 90 |
 | 87_import_export_migration_framework.md | trigger: first real external-data client onboarding — unfired |
 | 88_reconciliation_as_a_platform_pattern.md | trigger: second reconciliation instance — unfired, most likely via Task 87 |
 | 89_period_locking_as_a_platform_pattern.md | trigger: payroll (79) or a second finance-heavy client — unfired |
-| 90_attention_platform_concept.md | **requires ADR** if generalized — check whether inventory's reorder-level check (built 2026-09-04) now counts as the second independent capability wanting this |
-| 93_progressive_setup_capability_readiness.md | **requires ADR** if generalized — build plywood's own concrete instance first if picked up |
+| 90_attention_platform_concept.md | **requires ADR** if generalized — rechecked 2026-09-04 (`e96dfea`): inventory's reorder-level field exists but no query surfaces it; trigger ("two capabilities independently wanting this") has **not** fired |
+| 93_progressive_setup_capability_readiness.md | trigger: next real plywood/client onboarding that isn't a seed script — unfired |
+| 100_dashboard_intelligence_direction.md (remaining steps only) | both blocking decisions resolved (see Done) — remaining: apply `pending-metric-snapshot-migration.sql` (blocked on the same schema-migration permission boundary as every migration this session) and build the sparkline UI itself over the now-existing metrics-history data |
+| 103_payload_cms_control_plane_adr.md | PROPOSED — needs product-owner ratification, not a build step; depends on 104 |
+| 104_verity_native_configuration_extension_architecture.md | DRAFT — 5 open questions listed in the file itself must be resolved before it can support ratifying 103 as `adr-019` |
 | 95_verity_ai_long_term_vision.md | aspirational, not a build plan; subordinate to Task 84 (now complete for near-term scope, but "proven" means real usage); phase 6 needs its own future ADR |
 | 96_pending_roadmap_phases.md | sequencing doc for Tasks 72–95 — Phases 1/3/4 complete 2026-09-04, Phase 2 explicitly skipped, Phase 5 aspirational |
 | 97_deep_codebase_cleanup.md | Finding 3 (stale ADR proposal doc) fixed 2026-09-04; Findings 1/6 (dead `.eslintrc.json`, local scratch files) still blocked on a permission the product owner has to grant directly, not this session |
 | 98_liquid_glass_react_extraction.md | narrow candidate (glass-shell/overlay static dispersion) applied 2026-09-04; the sign-in-mark candidate explicitly rejected (ADR-012 monochrome-mark conflict) |
-| 99_verity_custom_skills_plan.md | 8 candidates, none built; Skills 2/3 flagged buildable-now in Task 101 |
+| 99_verity_custom_skills_plan.md (Skills 4/5/6/7/8 only) | Skills 2/3 built (see Done). Skills 4/5/7/8 deferred by the taskplan's own priority ranking, no urgency; Skill 6 (`verity-capability-boundary-check`) needs real design work — worth scoping once two developers work in parallel, not before |
 | 100_dashboard_intelligence_direction.md | two explicit decisions needed (metrics-history capability, shadcn adoption) before its full scope proceeds; the non-conflicting parts are buildable now |
 | 101_remaining_work_master_plan.md | **NEW 2026-09-04** — sequencing doc for everything in this table; not itself a build |

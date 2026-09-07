@@ -227,12 +227,13 @@ any requirement written because it is "common in ERP/SaaS" rather than traced to
   including favicon and app icon. Supersedes ADR-011 in part — accent default only.
 
   **This list stops at ADR-012 and is stale.** The canonical ADR register is
-  `verity-spec/17_decisions/adr/` (`adr-001.md`…`adr-017.md` as of 2026-09-03) — ADR-013 (Global HQ
+  `verity-spec/17_decisions/adr/` (`adr-001.md`…`adr-019.md` as of 2026-09-08) — ADR-013 (Global HQ
   Operator Security Model), ADR-014 (DEC-001 scope), ADR-015 (scheduled work trigger), ADR-016 (the
-  scheduler may enumerate tenants), and ADR-017 (below) are all ACCEPTED there and are not
-  summarized here. Treat this section as a curated highlight reel of ADRs relevant to day-to-day
-  work in this repo, never as the complete list — check the register before assuming an ADR number
-  is unused, the mistake that made ADR-017 necessary as a correction to begin with.
+  scheduler may enumerate tenants), ADR-017 (below), ADR-018 (extract a generic Trading capability
+  out of plywood), and ADR-019 (below) are all ACCEPTED there and are not summarized here. Treat
+  this section as a curated highlight reel of ADRs relevant to day-to-day work in this repo, never
+  as the complete list — check the register before assuming an ADR number is unused, the mistake
+  that made ADR-017 necessary as a correction to begin with.
 - **ADR-017** The AI/assistant channel (`PolicyChannel: "agent"` in `policy.ts`) executes every
   action as the calling human's own `ActorContext` — same tenant, same membership, same role, same
   grants, same `enforcePolicy()` gate every other caller passes through. `channel` is recorded on
@@ -245,6 +246,21 @@ any requirement written because it is "common in ERP/SaaS" rather than traced to
   misnumbered ADR-013 on first write — that number was already taken by the accepted Global HQ
   Operator Security Model decision; corrected same day, before any dependent work shipped beyond
   this file and the taskplans below.)
+- **ADR-019** Payload CMS (or any comparable second application framework with its own
+  database-access layer) is rejected as the authoritative control plane for any tenant-configurable
+  Verity data — custom fields, workflow/approval definitions, feature/module configuration, or
+  anything else whose correct value depends on `tenant_id`. Reason, in order of weight: it would
+  introduce a second tenant-access enforcement surface with no RLS-equivalent (fails open by
+  default, the opposite of INV-001's fail-closed design) and a second authorization decision point
+  outside `enforcePolicy()`, which ADR-017 already forecloses. The audited *patterns* (declarative
+  schema-as-data, metadata-driven forms, a local-API-style server helper, shadow-table versioning)
+  remain worth adopting natively; Payload the dependency does not. A narrowly bounded future option
+  — Payload confined only to content that is never tenant-scoped (marketing content, platform-global
+  templates, SOPs, a read-only industry-template catalog) — is left open, not decided, pending its
+  own trigger. This ADR does **not** settle item 10's native implementation shape — see
+  `taskplans/104_verity_native_configuration_extension_architecture.md`, still DRAFT with 5 open
+  questions. Full text: `verity-spec/17_decisions/adr/adr-019.md`; full comparative analysis:
+  `taskplans/103_payload_cms_control_plane_adr.md`.
 
 ## Identity, authorization, and post-foundation platform substrate (already decided, do not re-litigate)
 

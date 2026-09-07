@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireActor } from "@/server/platform/auth";
-import { runAgentTurn, AgentNotConfiguredError, type ChatMessage } from "@/server/platform/agent-chat";
+import {
+  runAgentTurn,
+  executeConfirmedPreview,
+  AgentNotConfiguredError,
+  type ChatMessage,
+} from "@/server/platform/agent-chat";
 import { toActionFailure } from "@/server/platform/action-error";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +32,22 @@ function isChatRequestBody(value: unknown): value is ChatRequestBody {
   return true;
 }
 
+/** Task 81 rule 8 step 3 — the structural "Confirm" click on a preview
+ *  the dock rendered. Executes the EXACT inputs previously shown, never
+ *  re-derived from the model. */
+type ConfirmPreviewBody = {
+  confirmPreview: { commandKey: string; inputs: unknown[] };
+};
+
+function isConfirmPreviewBody(value: unknown): value is ConfirmPreviewBody {
+  if (!value || typeof value !== "object") return false;
+  const body = value as Record<string, unknown>;
+  const cp = body.confirmPreview;
+  if (!cp || typeof cp !== "object") return false;
+  const { commandKey, inputs } = cp as Record<string, unknown>;
+  return typeof commandKey === "string" && commandKey.length > 0 && Array.isArray(inputs) && inputs.length > 0;
+}
+
 export async function POST(request: Request): Promise<Response> {
   let actor;
   try {
@@ -39,9 +60,24 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const body: unknown = await request.json().catch(() => null);
+
+  if (isConfirmPreviewBody(body)) {
+    try {
+      const result = await executeConfirmedPreview(actor, body.confirmPreview.commandKey, body.confirmPreview.inputs);
+      return NextResponse.json({ ok: true, data: result });
+    } catch (err) {
+      return NextResponse.json(toActionFailure(err), { status: 500 });
+    }
+  }
+
   if (!isChatRequestBody(body)) {
     return NextResponse.json(
-      { ok: false, code: "E_VALIDATION", message: "E_VALIDATION: expected { message: string, history?: ChatMessage[] }", retryable: false },
+      {
+        ok: false,
+        code: "E_VALIDATION",
+        message: "E_VALIDATION: expected { message: string, history?: ChatMessage[] } or { confirmPreview }",
+        retryable: false,
+      },
       { status: 400 },
     );
   }
