@@ -1,4 +1,4 @@
-# 102 — Black-box functional and conformance audit prompt
+# 102 — Functional, conformance and security-control audit prompt
 
 This file **is** the prompt. Paste everything below the line into a fresh Claude Code
 session at the repo root. Nothing above the line is part of it.
@@ -8,14 +8,23 @@ application like a demanding user, and is forbidden from reading application sou
 decide whether something works. Reading the source is how an auditor talks themselves
 out of a finding — "the code looks right, so the behaviour must be right".
 
-Scope is correctness, not security. It covers whether every feature works, whether the
-architecture's claims hold, whether the books and the tax returns are right, and what
-happens when infrastructure fails. Penetration testing is a separate exercise and is
-deliberately not in this file.
+Scope is correctness **and** security posture: whether every feature works, whether the
+architecture's claims hold, whether the books and the tax returns are right, what
+happens when infrastructure fails, and whether the controls that are supposed to keep
+attackers out are present and correctly configured.
+
+**Security here is reviewed, not exercised.** Phase 7 verifies that each control exists
+and is set up correctly - is RLS forced on every table, is the session cookie HttpOnly,
+does the role grant refuse - by reading configuration and observing ordinary behaviour
+under a legitimate session. It does not fire injection payloads, stuff credentials, or
+attempt to breach anything. That is a deliberate choice and the better one here: an
+exploit test tells you which holes happen to be reachable today, while a control review
+tells you which controls are missing, including the ones nobody has found a route to
+yet. It is also safe to run against production, which an exploit test never is.
 
 ---
 
-# VERITY — FULL FUNCTIONAL AND CONFORMANCE AUDIT
+# VERITY — FUNCTIONAL, CONFORMANCE AND SECURITY-CONTROL AUDIT
 
 Your job is to find where this system is wrong, not to admire it. Assume the software
 is guilty until it proves itself innocent, and assume that anything you did not
@@ -25,7 +34,8 @@ personally observe working does not work.
 
 **You audit the running application, not the source code.**
 
-You may not open a file under `src/` to decide whether a behaviour is correct. You may read `README`, `CLAUDE.md`, the `taskplans/` and `verity-spec/`
+Until Phase 7, you may not open a file under `src/` to decide whether a behaviour is
+correct. You may read `README`, `CLAUDE.md`, the `taskplans/` and `verity-spec/`
 documents to learn what the system *claims*, and you may read migration SQL to
 understand the data model — but every verdict about behaviour must come from an
 observation: a page you loaded, a button you pressed, a request you replayed, a row you
@@ -57,8 +67,12 @@ Invoke these; do not reimplement what they already do.
 | Understanding what the corpus claims | `graphify query "<question>"` — the graph is at `graphify-out/` |
 | Verifying you are actually done | `superpowers:verification-before-completion` |
 
-Slash command: `/code-review high` at the very end, as a cross-check against your
-black-box findings — never as a substitute for them. Do not run `/code-review ultra`
+Subagents for Phases 7 and 8, where source access is permitted:
+`ecc:security-reviewer` (control review), `ecc:database-reviewer` (RLS, grants, schema),
+`ecc:silent-failure-hunter` (swallowed errors and bad fallbacks).
+
+Slash commands: `/security-review` and `/code-review high` at the very end, as a
+cross-check against your black-box findings — never as a substitute for them. Do not run `/code-review ultra`
 yourself; it is user-triggered and billed. Tell the user if you think it is warranted.
 
 Shell: `npm run typecheck`, `npm run test`, `npm run build`. **Ask before running the
@@ -91,7 +105,7 @@ Every finding:
 
 - **Severity:** Critical | High | Medium | Low | Informational
 - **Category:** Correctness / Data integrity / Architecture / Availability /
-  Regulatory / Interface
+  Regulatory / Interface / Security control
 - **Surface:** the route, API, command key, or table
 - **Actor:** which role, in which tenant, was logged in
 - **Reproduction:**
@@ -109,6 +123,8 @@ Also maintain, as sibling files:
 - `audit/COVERAGE.md` — every route, API, command and capability, marked Tested /
   Partially tested / Untested-and-why. **An honest untested list is worth more than a
   fake green tick.**
+- `audit/METHOD-GAPS.md` — anything the Phase 8 source review found that the black-box
+  phases missed. That gap is itself a result worth recording.
 - `audit/ATTEMPTED-AND-FAILED.md` — every way you tried to break the system that it
   correctly refused. This is the evidence that the guards work, and it is the half of an
   audit that everybody skips.
@@ -315,6 +331,220 @@ Browser back after a mutation. Refresh mid-form.
 
 Check the console on every page for hydration mismatches — one previously affected every
 modal in the application and was invisible until someone looked.
+
+---
+
+# PHASE 7 — SECURITY CONTROLS, REVIEWED NOT EXERCISED
+
+**Read this before starting the phase.** Every item is answered by inspecting
+configuration, by reading what the application returns to a session that is entitled to
+it, or by reading the source once Phase 8 opens it. You are confirming that a control is
+present, enabled and correctly scoped — not defeating it. Do not send injection payloads,
+do not brute-force or stuff credentials, do not upload hostile files, and do not forge a
+request to reach another tenant's data.
+
+If a control is missing, **that is the finding**. Write it up with the evidence of its
+absence. You never need to demonstrate a breach to justify reporting a gap, and a report
+that says "RLS is not forced on `trading_invoice`" is more useful than one that says "I
+got a row out", because it names the fix.
+
+### 1. API keys and client-side secrets
+Read what the browser is actually handed: page source, the JS bundles, `__NEXT_DATA__`,
+and the response bodies of the app's own requests during a normal session. Confirm the
+only Supabase key present is the **anon** key, which is public by design. Confirm no
+`service_role` key, no `postgres://` string, no `CRON_SECRET`. Confirm `localStorage`
+and `sessionStorage` hold no bearer token beyond the auth session the client is meant to
+have. The question to answer: *does the browser receive anything that would let a holder
+act beyond that signed-in user's own rights?*
+
+### 2. Row-level security
+This is the mechanism INV-001 rests on, so verify it as configuration rather than by
+probing:
+- every table in `public`: `relrowsecurity` **and** `relforcerowsecurity` both true.
+  `FORCE` matters — without it the table owner is exempt from its own policy;
+- every table has an isolation policy, and its `USING` and `WITH CHECK` both compare to
+  `verity.current_tenant_id()`;
+- the runtime role satisfies `rolbypassrls = false` and `rolsuper = false`;
+- `assertRlsEnforceable()` still refuses to boot on a bypassing role — check it is
+  called on the startup path and has not been weakened;
+- newly added tables are the usual gap: `plywood_shade`, `plywood_texture`,
+  `plywood_product_detail` and anything added since.
+
+### 3. Object references and ownership checks
+For each id-bearing route (`/sales/[orderId]`, `/purchases/[orderId]`,
+`/finance/[invoiceId]`, `/catalogue/[productId]`, `/customers/[customerId]`,
+`/suppliers/[supplierId]`, `/godowns/[locationId]`, `/assets/[id]`, `/locations/[id]`,
+`/counter/[billId]`, `/floor/[orderId]`, `/hq/clients/[tenantId]`), confirm from the
+source in Phase 8 that the lookup is scoped — that the query filters by tenant and, where
+relevant, passes through `assertRowInScope()` — rather than fetching by id alone and
+trusting that the id came from a page the user was allowed to see.
+
+Note also whether "not found" and "forbidden" are distinguishable in the response. If
+they are, record it: that difference lets an outsider learn which ids exist.
+
+### 4. Secrets in version control
+Deferred to Phase 8.
+### 5. Administrative surfaces
+Confirm every `/hq/*` route is gated server-side, and that the gate refuses the **data**
+and not merely the page — a route that redirects only after streaming the tenant list has
+already disclosed it. Check the gate is an authorization call, not a client-side
+condition. Confirm `/api/scheduled` returns 503 rather than running unauthenticated
+(ADR-015) and compares its secret in constant time.
+
+### 6. Tenant and organization isolation
+INV-001 is the constitutional invariant, so confirm the mechanism rather than probing it:
+- every tenant-scoped read goes through `withTenant()`, and the GUC is set with
+  `set_config(..., true)` so it cannot outlive its transaction;
+- tenant context is derived from the authorization context and never from a request
+  payload (Spec PLA-TEN-006);
+- organization scope resolves to the actor's node **plus descendants** and excludes
+  siblings (PLA-ORG-002, PLA-ORG-003);
+- a membership with a null `roleId` resolves to no permissions — check with the roleless
+  identity the audit tenant provides, by signing in as them and observing that the app
+  offers nothing;
+- `Global` scope is filtered out by `verity.resolve_permissions`, so a Global grant
+  cannot silently take effect;
+- Party and User are global tables and their isolation is reachability through
+  `TenantMembership` — confirm the queries that read them join through it.
+
+### 7. Rate limiting and abuse resistance
+Confirm a server-side limiter exists on sign-in, on `/api/agent/chat`, and on the busiest
+server actions; that it is enforced in the handler and not by a disabled button; and
+whether its key is per-account, per-IP or both. Read `src/server/platform/rate-limit.ts`
+in Phase 8 and confirm the limits are actually applied on those paths. Note whether one
+tenant's traffic can consume a limit shared with another — that is a cross-tenant
+availability weakness even with no attacker involved.
+
+### 8. File storage
+Confirm the evidence bucket is private, that objects are served by **signed, expiring**
+URLs rather than by unguessable paths, and that anonymous listing is disabled. Confirm
+the two-phase upload freezes key, checksum and size at confirmation, and that a file can
+only be confirmed by the tenant that prepared it.
+
+### 9. Input validation
+Confirm every command validates server-side, in its zod schema and preconditions, and
+that no rule exists only in the browser. Walk the schemas and check the numeric bounds
+are real: quantities positive, discounts capped at 10,000 basis points, HSN 4/6/8 digits,
+GSTIN shape enforced, money integer paise, thickness and dimensions positive integers.
+Where the UI enforces something the schema does not, that is the finding.
+
+Ordinary boundary values through the real forms are fine and useful — a zero quantity,
+an empty name, a date far in the past. That is functional testing, not exploitation.
+
+### 10. Unauthenticated access
+Signed out, confirm each route and API redirects or refuses, and that none returns
+content. Then confirm the session lifecycle handles the in-between states: expired
+session, revoked membership, deleted user, and switching organization.
+
+### 11. Query construction
+The stack is Prisma, so parameterisation is the default and the interesting cases are the
+places that opt out. Inventory every `$queryRaw`, `$queryRawUnsafe`, `$executeRaw` and
+`$executeRawUnsafe` in the source, and for each confirm the values are passed as
+parameters rather than interpolated into the string. Where a table or column name is
+interpolated — which cannot be parameterised — confirm it comes from a fixed list in the
+code and never from a request. Pay attention to report filters, date ranges, sort
+parameters and the period key on tax close, and to the agent chat path.
+
+### 12. Log and error hygiene
+Drive ordinary workflows and read the console. Then trigger ordinary failures — a wrong
+password, a forbidden action, an invalid form — and read what the error page and the
+response body disclose. A production response carrying a stack trace, a file path or a
+SQL fragment is a finding. Confirm `telemetry-scrub` actually redacts: check what it
+matches, and confirm an error carrying a GSTIN or a godown UUID comes out scrubbed.
+
+### 13. Assignable fields
+Mass assignment is a design question, so read the schemas. For each mutating command,
+confirm the input schema accepts **only** the fields the operation legitimately takes,
+and that these are absent from it: `tenantId`, `roleId`, `permissions`, `scope`, `id`,
+`version`, `createdAt`, `createdBy`, and every derived quantity (`qtyShipped`,
+`qtyReceived`, `totalCostPaise`, `parentProductId`, `type: TEMPLATE`). Zod strips unknown
+keys by default — confirm nothing has switched to `passthrough()`.
+
+Then confirm field-level redaction: a role without a `<entityKey>#<fieldName>` grant must
+have the field **omitted** from the response, not nulled, because a null cannot be told
+apart from a genuinely absent value.
+
+### 14. Upload restrictions
+Confirm, from the source, that the upload path checks content type rather than trusting
+the extension or the client-supplied MIME type; that there is a size ceiling; that the
+stored key is generated rather than taken from the filename, so a traversal sequence in a
+filename cannot escape; and that anything served back is delivered with a
+`Content-Disposition` and a content type that will not execute in the app's origin.
+
+### 15. Business-rule enforcement
+The business rules are a security boundary in an accounting system, and Phase 1 and
+Phase 4 already exercise them legitimately. Here, confirm the guard exists in the
+**command**, not only in the screen, for each of: selling stock that is not there,
+issuing more than was reserved, receiving against a cancelled order, invoicing twice,
+over-allocating a payment, posting into a closed period, editing an issued invoice,
+ordering a TEMPLATE product, and moving stock against one. For each, name the line that
+refuses. A rule enforced only in the UI is the finding.
+
+### 16. Response shape
+Read the response bodies the app produces during normal use and confirm they carry only
+what the screen renders. Look for `authUserId`, internal ids, cost prices on a
+customer-facing surface, other tenants' names in a lookup, and full user records where a
+display name would do. Over-fetching is how one careless component becomes a disclosure.
+
+### 17. Session and transport controls
+Confirm on the session cookie: `HttpOnly`, `Secure`, `SameSite`, `Path`, and a bounded
+expiry. Confirm sign-out invalidates server-side rather than only clearing the cookie,
+and that the session identifier is reissued on sign-in and on privilege change. Confirm
+CSRF protection covers every state-changing action — Next.js server actions carry some by
+default; verify it rather than assuming. Confirm the response headers: CSP, HSTS,
+`X-Frame-Options` or `frame-ancestors`, `X-Content-Type-Options`, `Referrer-Policy`.
+
+### 18. Dependencies
+Deferred to Phase 8.
+
+### 19. The three authorization layers
+Confirm each layer exists and is independently effective:
+- **Layer 1** `authorize()` — gates the entity type, and throws `ForbiddenError` rather
+  than returning a boolean a caller can forget to check (MET-ACT-002);
+- **Layer 2** `assertRowInScope()` / `scopeFilter()` — gates which records, and a
+  `Location`-scoped grant reaches nothing rather than widening to the tenant;
+- **Layer 3** `redactFields()` — removes restricted fields, applied automatically to a
+  top-level array result.
+
+Then the property that matters most: find a command where Layer 1 passes and Layer 2 is
+the only thing standing between the actor and someone else's record, and confirm Layer 2
+is actually invoked there. A system where Layer 1 incidentally covers a missing Layer 2
+is one refactor away from a gap.
+
+Confirm ADR-017 holds: the agent channel executes under the calling human's own
+`ActorContext`, `channel` is recorded for provenance and consulted by no authorization
+rule, and there is no service-account or elevated path.
+
+### 20. (blank on the source list)
+Regulatory and integrity — Phase 5.
+
+---
+
+# PHASE 8 — SUPPLY CHAIN AND SECRETS
+
+Source and repository tooling are permitted here.
+
+**Secrets in history.** Search the full git history for credentials, committed `.env`
+files, private keys and connection strings. Confirm `.gitignore` covers `.env*` and the
+generated credential files. Confirm the deployed bundle ships no source maps exposing
+server code. A secret that was committed and later removed is still disclosed — rotation
+is the only remedy, and say so rather than reporting it as fixed.
+
+**Dependencies.** `npm audit`. Check the lockfile is committed and consistent, look for
+`postinstall` scripts, unmaintained or typosquatted packages, and anything resolved from
+outside the public registry. Note the versions of Next.js, React, Prisma and the Supabase
+client against known advisories.
+
+**Server-side secret handling.** Confirm every secret is read only in server code, that
+nothing sensitive is exposed through a `NEXT_PUBLIC_` variable, and that
+`SUPABASE_SERVICE_ROLE_KEY` and `CRON_SECRET` appear in neither the client bundle nor any
+log. Note that this repository's own `.env` has held a stale `verity_app` password —
+check whether the deployment and the local file still agree.
+
+Now run `ecc:security-reviewer`, `ecc:database-reviewer` and `ecc:silent-failure-hunter`
+over the source, plus `/security-review` and `/code-review high`. **Cross-check against
+your own findings**: anything they found that you missed is a gap in the black-box
+method, and belongs in `audit/METHOD-GAPS.md`.
 
 ---
 
