@@ -121,7 +121,8 @@ Every finding:
 Also maintain, as sibling files:
 
 - `audit/COVERAGE.md` — every route, API, command and capability, marked Tested /
-  Partially tested / Untested-and-why. **An honest untested list is worth more than a
+  Partially tested / Untested-and-why. **Seed it from the appendix at the end of this
+  file**, which lists all 206 registered command and query keys as a checklist. **An honest untested list is worth more than a
   fake green tick.**
 - `audit/METHOD-GAPS.md` — anything the Phase 8 source review found that the black-box
   phases missed. That gap is itself a result worth recording.
@@ -565,3 +566,276 @@ method, and belongs in `audit/METHOD-GAPS.md`.
 **If you run low on context, write what you have to the report and say where you stopped.
 A partial audit that is honest about its boundary is useful. A complete-looking audit
 with invented coverage is worse than no audit at all.**
+
+---
+
+# APPENDIX — EVERY REGISTERED COMMAND AND QUERY
+
+206 keys. This is the depth the phases above do not reach on their own: Phase 1 walks
+the *screens*, so a key with no screen — a scheduled sweep, a workspace queue, a query
+another query calls — is exercised only if somebody goes looking for it. This list is
+what makes them impossible to skip quietly.
+
+**How to use it.** Copy the whole list into `audit/COVERAGE.md` at the start and tick
+each box as you reach it. A key you never reached stays unticked with a reason beside
+it. The reason is the useful part: "no UI path found" is a finding about the product,
+not a gap in the audit, and it is exactly how a dead command or an orphaned query
+surfaces.
+
+**Three things to check per key, not one.**
+
+1. *Reachable* — is there a path through the interface that runs it? If not, say so.
+2. *Authorized* — does it declare an entity and a verb, and does an actor lacking that
+   grant get refused? The narrow Counter Staff identity in the audit tenant is the
+   instrument for this.
+3. *Recorded* — does a command write an Activity row naming what changed? A command
+   that mutates and records nothing is a hole in the audit trail.
+
+Counts by capability, so an absent capability is visible as a zero rather than as
+silence. `trading` carries 97 because ADR-018 moved the whole generic engine there;
+`plywood` retains 9, which is the extension it still owns.
+
+**accounting** — 7
+
+- [ ] `verity.accounting.account_ledger` (query)
+- [ ] `verity.accounting.create_account` (command)
+- [ ] `verity.accounting.list_accounts` (query)
+- [ ] `verity.accounting.post_journal_entry` (command)
+- [ ] `verity.accounting.reverse_journal_entry` (command)
+- [ ] `verity.accounting.set_account_active` (command)
+- [ ] `verity.accounting.trial_balance` (query)
+
+**approval** — 3
+
+- [ ] `verity.approval.decide` (command)
+- [ ] `verity.approval.list_pending` (query)
+- [ ] `verity.approval.request` (command)
+
+**asset** — 4
+
+- [ ] `verity.asset.change_state` (command)
+- [ ] `verity.asset.list` (query)
+- [ ] `verity.asset.register` (command)
+- [ ] `verity.asset.relocate` (command)
+
+**billing** — 7
+
+- [ ] `verity.billing.create_meter` (command)
+- [ ] `verity.billing.generate_invoice_for_meter` (command)
+- [ ] `verity.billing.list_meters` (query)
+- [ ] `verity.billing.open_billing_period` (command)
+- [ ] `verity.billing.period_invoices` (query)
+- [ ] `verity.billing.record_meter_reading` (command)
+- [ ] `verity.billing.set_meter_rate` (command)
+
+**dinein** — 30
+
+- [ ] `verity.dinein.add_order_lines` (command)
+- [ ] `verity.dinein.advance_order_line` (command)
+- [ ] `verity.dinein.apply_bill_discount` (command)
+- [ ] `verity.dinein.cancel_order` (command)
+- [ ] `verity.dinein.create_menu_category` (command)
+- [ ] `verity.dinein.create_menu_item` (command)
+- [ ] `verity.dinein.create_menu_variant` (command)
+- [ ] `verity.dinein.create_order` (command)
+- [ ] `verity.dinein.define_table` (command)
+- [ ] `verity.dinein.define_zone` (command)
+- [ ] `verity.dinein.edit_menu_item` (command)
+- [ ] `verity.dinein.generate_bill` (command)
+- [ ] `verity.dinein.get_bill_detail` (query)
+- [ ] `verity.dinein.get_order_detail` (query)
+- [ ] `verity.dinein.item_ready` (notification)
+- [ ] `verity.dinein.kitchen_queue` (query)
+- [ ] `verity.dinein.list_floor` (query)
+- [ ] `verity.dinein.list_menu` (query)
+- [ ] `verity.dinein.list_open_bills` (query)
+- [ ] `verity.dinein.move_table` (command)
+- [ ] `verity.dinein.open_bills` (workspace queue)
+- [ ] `verity.dinein.place_order` (command)
+- [ ] `verity.dinein.position_table` (command)
+- [ ] `verity.dinein.record_payment` (command)
+- [ ] `verity.dinein.sales_summary` (query)
+- [ ] `verity.dinein.set_menu_item_active` (command)
+- [ ] `verity.dinein.settle_bill` (command)
+- [ ] `verity.dinein.sweep_prep_breaches` (schedule)
+- [ ] `verity.dinein.tables_to_clean` (workspace queue)
+- [ ] `verity.dinein.void_order_line` (command)
+
+**evidence** — 2
+
+- [ ] `verity.evidence.capture` (command)
+- [ ] `verity.evidence.list_for` (query)
+
+**hr** — 8
+
+- [ ] `verity.hr.apply_for_leave` (command)
+- [ ] `verity.hr.create_department` (command)
+- [ ] `verity.hr.create_employee` (command)
+- [ ] `verity.hr.create_leave_type` (command)
+- [ ] `verity.hr.decide_leave_application` (command)
+- [ ] `verity.hr.leave_application_status` (query)
+- [ ] `verity.hr.list_employees` (query)
+- [ ] `verity.hr.set_employee_active` (command)
+
+**inventory** — 7
+
+- [ ] `verity.inventory.create_item_group` (command)
+- [ ] `verity.inventory.create_item` (command)
+- [ ] `verity.inventory.list_items` (query)
+- [ ] `verity.inventory.record_stock_movement` (command)
+- [ ] `verity.inventory.set_item_active` (command)
+- [ ] `verity.inventory.stock_ledger` (query)
+- [ ] `verity.inventory.stock_on_hand` (query)
+
+**location** — 8
+
+- [ ] `verity.location.add_geofence` (command)
+- [ ] `verity.location.assign_user` (command)
+- [ ] `verity.location.create_location` (command)
+- [ ] `verity.location.create_place` (command)
+- [ ] `verity.location.edit_location` (command)
+- [ ] `verity.location.list_locations` (query)
+- [ ] `verity.location.remove_location` (command)
+- [ ] `verity.location.set_custom_fields` (command)
+
+**platform** — 19
+
+- [ ] `verity.platform.assign_role` (command)
+- [ ] `verity.platform.compose_role` (command)
+- [ ] `verity.platform.create_organization` (command)
+- [ ] `verity.platform.create_role` (command)
+- [ ] `verity.platform.grant_permission` (command)
+- [ ] `verity.platform.invite_person` (command)
+- [ ] `verity.platform.list_configuration` (query)
+- [ ] `verity.platform.list_grantable_entities` (query)
+- [ ] `verity.platform.list_modules` (query)
+- [ ] `verity.platform.list_organizations` (query)
+- [ ] `verity.platform.list_people` (query)
+- [ ] `verity.platform.list_roles` (query)
+- [ ] `verity.platform.operations_snapshot` (query)
+- [ ] `verity.platform.revoke_membership` (command)
+- [ ] `verity.platform.revoke_permission` (command)
+- [ ] `verity.platform.set_capability_state` (command)
+- [ ] `verity.platform.set_configuration` (command)
+- [ ] `verity.platform.set_person_state` (command)
+- [ ] `verity.platform.update_organization` (command)
+
+**plywood** — 9
+
+- [ ] `verity.plywood.capture_metric_snapshot` (schedule)
+- [ ] `verity.plywood.create_product` (command)
+- [ ] `verity.plywood.edit_product` (command)
+- [ ] `verity.plywood.list_catalogue` (query)
+- [ ] `verity.plywood.low_stock` (workspace queue + notification)
+- [ ] `verity.plywood.product_detail` (query)
+- [ ] `verity.plywood.set_product_active` (command)
+- [ ] `verity.plywood.stock_on_hand` (query)
+- [ ] `verity.plywood.sweep_low_stock` (schedule)
+
+**scheduling** — 5
+
+- [ ] `verity.scheduling.book` (command)
+- [ ] `verity.scheduling.create_group` (command)
+- [ ] `verity.scheduling.create_resource` (command)
+- [ ] `verity.scheduling.declare_unavailable` (command)
+- [ ] `verity.scheduling.list_bookings` (query)
+
+**trading** — 97
+
+- [ ] `verity.trading.adjust_stock` (command)
+- [ ] `verity.trading.allocation_plan` (query)
+- [ ] `verity.trading.approve_credit` (command)
+- [ ] `verity.trading.business_settings` (query)
+- [ ] `verity.trading.cancel_purchase_order` (command)
+- [ ] `verity.trading.cancel_sales_order` (command)
+- [ ] `verity.trading.close_checklist` (query)
+- [ ] `verity.trading.close_period` (command)
+- [ ] `verity.trading.confirm_purchase_bill` (command)
+- [ ] `verity.trading.create_brand` (command)
+- [ ] `verity.trading.create_customer` (command)
+- [ ] `verity.trading.create_purchase_order` (command)
+- [ ] `verity.trading.create_sales_order` (command)
+- [ ] `verity.trading.create_supplier` (command)
+- [ ] `verity.trading.customer_detail` (query)
+- [ ] `verity.trading.customer_prices` (query)
+- [ ] `verity.trading.define_godown_rack` (command)
+- [ ] `verity.trading.dispatch_order` (command)
+- [ ] `verity.trading.edit_customer` (command)
+- [ ] `verity.trading.edit_purchase_order` (command)
+- [ ] `verity.trading.edit_sales_order` (command)
+- [ ] `verity.trading.edit_supplier` (command)
+- [ ] `verity.trading.finance_ageing` (query)
+- [ ] `verity.trading.godown_detail` (query)
+- [ ] `verity.trading.goods_receipt_detail` (query)
+- [ ] `verity.trading.gstr1_working` (query)
+- [ ] `verity.trading.gstr3b_working` (query)
+- [ ] `verity.trading.import_gst_portal_records` (command)
+- [ ] `verity.trading.inventory_analysis` (query)
+- [ ] `verity.trading.invoice_detail` (query)
+- [ ] `verity.trading.issue_stock` (command)
+- [ ] `verity.trading.itc_reconciliation` (query)
+- [ ] `verity.trading.link_supplier_to_customer` (command)
+- [ ] `verity.trading.list_business_activities` (query)
+- [ ] `verity.trading.list_customers` (query)
+- [ ] `verity.trading.list_godown_racks` (query)
+- [ ] `verity.trading.list_invoices` (query)
+- [ ] `verity.trading.list_suppliers` (query)
+- [ ] `verity.trading.low_stock` (query)
+- [ ] `verity.trading.margin_report` (query)
+- [ ] `verity.trading.metrics_history` (query)
+- [ ] `verity.trading.needs_attention` (query)
+- [ ] `verity.trading.onboarding_checklist` (query)
+- [ ] `verity.trading.open_orders` (query)
+- [ ] `verity.trading.outstanding_receivables` (query)
+- [ ] `verity.trading.owner_console` (query)
+- [ ] `verity.trading.party_balances` (query)
+- [ ] `verity.trading.party_ledger` (query)
+- [ ] `verity.trading.payment_journal` (query)
+- [ ] `verity.trading.product_movements` (query)
+- [ ] `verity.trading.product_tax_rates` (query)
+- [ ] `verity.trading.purchase_analysis` (query)
+- [ ] `verity.trading.purchase_match` (query)
+- [ ] `verity.trading.purchase_order_detail` (query)
+- [ ] `verity.trading.purchase_review_queue` (query)
+- [ ] `verity.trading.raise_invoice_note` (command)
+- [ ] `verity.trading.raise_purchase_bill_from_order` (command)
+- [ ] `verity.trading.raise_purchase_invoice` (command)
+- [ ] `verity.trading.raise_sales_invoice` (command)
+- [ ] `verity.trading.receive_goods` (command)
+- [ ] `verity.trading.receive_stock` (command)
+- [ ] `verity.trading.recent_activity_feed` (query)
+- [ ] `verity.trading.record_damaged_stock` (command)
+- [ ] `verity.trading.record_party_payment` (command)
+- [ ] `verity.trading.record_payment` (command)
+- [ ] `verity.trading.record_returned_stock` (command)
+- [ ] `verity.trading.register_gst_registration` (command)
+- [ ] `verity.trading.remove_customer` (command)
+- [ ] `verity.trading.remove_supplier` (command)
+- [ ] `verity.trading.reopen_period` (command)
+- [ ] `verity.trading.reserve_for_order` (command)
+- [ ] `verity.trading.sales_analysis` (query)
+- [ ] `verity.trading.sales_order_detail` (query)
+- [ ] `verity.trading.sellable_stock` (query)
+- [ ] `verity.trading.set_brand_active` (command)
+- [ ] `verity.trading.set_business_profile` (command)
+- [ ] `verity.trading.set_credit_limit` (command)
+- [ ] `verity.trading.set_customer_price` (command)
+- [ ] `verity.trading.set_godown_rack_active` (command)
+- [ ] `verity.trading.set_price_sheet` (command)
+- [ ] `verity.trading.set_role_activity` (command)
+- [ ] `verity.trading.set_supplier_price` (command)
+- [ ] `verity.trading.set_tax_rule` (command)
+- [ ] `verity.trading.stock_availability` (query)
+- [ ] `verity.trading.stock_ledger` (query)
+- [ ] `verity.trading.stock_on_hand` (query)
+- [ ] `verity.trading.submit_purchase_order` (command)
+- [ ] `verity.trading.supplier_detail` (query)
+- [ ] `verity.trading.supplier_prices` (query)
+- [ ] `verity.trading.tax_settings` (query)
+- [ ] `verity.trading.tax_summary` (query)
+- [ ] `verity.trading.top_customers` (query)
+- [ ] `verity.trading.top_items` (query)
+- [ ] `verity.trading.transfer_stock` (command)
+- [ ] `verity.trading.unbilled_movements` (query)
+- [ ] `verity.trading.weekly_purchase_totals` (query)
+- [ ] `verity.trading.weekly_sales_totals` (query)
