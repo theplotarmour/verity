@@ -65,40 +65,55 @@ const admin = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL });
  * Written out rather than left to cascades because most of these relations are
  * ON DELETE RESTRICT on purpose — a ledger entry is not something a stray
  * delete should be able to take with it — so the order here is the point.
+ *
+ * ADR-018 renamed twenty-eight of these tables `plywood_*` -> `trading_*` when
+ * the generic engine was extracted, and this list was missed. Every name in it
+ * was dead, so the first DELETE aborted the script — which meant the seed could
+ * not run at all, and nobody noticed because running it is destructive and
+ * nobody had. `plywood_product` also split in two: the generic
+ * `trading_product` base and plywood's own `plywood_product_detail`.
  */
 const WIPE_ORDER = [
-  "plywood_payment_allocation",
-  "plywood_purchase_bill_confirmation",
-  "plywood_gst_portal_record",
-  "plywood_ledger_entry",
-  "plywood_payment",
-  "plywood_invoice_note",
-  "plywood_invoice_line",
-  "plywood_invoice",
-  "plywood_goods_issue_line",
-  "plywood_goods_issue",
-  "plywood_goods_receipt_line",
-  "plywood_goods_receipt",
-  "plywood_stock_reservation",
-  "plywood_sales_order_line",
-  "plywood_sales_order",
-  "plywood_purchase_order_line",
-  "plywood_purchase_order",
+  "trading_payment_allocation",
+  "trading_purchase_bill_confirmation",
+  "trading_gst_portal_record",
+  "trading_ledger_entry",
+  "trading_payment",
+  "trading_invoice_note",
+  "trading_invoice_line",
+  "trading_invoice",
+  "trading_goods_issue_line",
+  "trading_goods_issue",
+  "trading_goods_receipt_line",
+  "trading_goods_receipt",
+  "trading_stock_reservation",
+  "trading_sales_order_line",
+  "trading_sales_order",
+  "trading_purchase_order_line",
+  "trading_purchase_order",
   "stock_ledger_entry",
   "stock_balance",
-  "plywood_customer_price",
-  "plywood_supplier_price",
-  "plywood_customer",
-  "plywood_supplier",
-  "plywood_product",
-  "plywood_brand",
+  "trading_customer_price",
+  "trading_supplier_price",
+  "trading_customer",
+  "trading_supplier",
+  // Plywood's own extension of the generic product, and the two taxonomies a
+  // laminate design draws its variants from. Before the base product, because
+  // the detail references it and the shade and texture references are
+  // ON DELETE RESTRICT — a shade with products on it is deliberately not
+  // deletable, so the products go first.
+  "plywood_product_detail",
+  "trading_product",
+  "plywood_shade",
+  "plywood_texture",
+  "trading_brand",
 ];
 
 async function wipe(): Promise<void> {
   // The invoice numbering counters go too. Leaving them would restart the demo
   // at SALES/2026-27/0042 with no invoice 1 to 41, and a gap in a tax invoice
   // series is the one thing the numbering code exists to prevent.
-  for (const table of [...WIPE_ORDER, "plywood_invoice_series"]) {
+  for (const table of [...WIPE_ORDER, "trading_invoice_series"]) {
     const deleted = await admin.$executeRawUnsafe(
       `DELETE FROM "${table}" WHERE tenant_id = $1::uuid`,
       TENANT_ID,
@@ -107,7 +122,7 @@ async function wipe(): Promise<void> {
   }
   // Suppliers can no longer be linked to customers that no longer exist.
   await admin.$executeRawUnsafe(
-    `UPDATE "plywood_accounting_period" SET state = 'open', closed_at = NULL, closed_by = NULL
+    `UPDATE "trading_accounting_period" SET state = 'open', closed_at = NULL, closed_by = NULL
       WHERE tenant_id = $1::uuid AND state = 'closed'`,
     TENANT_ID,
   );
@@ -234,7 +249,7 @@ async function main(): Promise<void> {
   // re-registering a real GSTIN to look at test invoices. So a second run finds
   // one already there, which is success, not a failure to report.
   const [{ count }] = await admin.$queryRawUnsafe<Array<{ count: bigint }>>(
-    `SELECT count(*)::bigint AS count FROM "plywood_gst_registration"
+    `SELECT count(*)::bigint AS count FROM "trading_gst_registration"
       WHERE tenant_id = $1::uuid AND active = true`,
     TENANT_ID,
   );
