@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Icon } from "@/components/ui/icons";
-import type { ChatMessage } from "@/server/platform/agent-chat";
+import type { ChatMessage, PendingPreview } from "@/server/platform/agent-chat";
 
 /**
  * The AI assistant — Task 84 area 6.
@@ -25,6 +25,8 @@ export function AgentChatDock() {
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<PendingPreview | null>(null);
+  const [groundingWarnings, setGroundingWarnings] = useState<string[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
 
   async function send() {
@@ -35,6 +37,8 @@ export function AgentChatDock() {
     setMessages(nextHistory);
     setInput("");
     setError(null);
+    setPreview(null);
+    setGroundingWarnings([]);
     setPending(true);
 
     try {
@@ -49,12 +53,47 @@ export function AgentChatDock() {
         return;
       }
       setMessages([...nextHistory, { role: "assistant", content: json.data.reply } satisfies ChatMessage]);
+      if (json.data.preview) setPreview(json.data.preview);
+      if (json.data.groundingWarnings?.length) setGroundingWarnings(json.data.groundingWarnings);
     } catch {
       setError("Could not reach the assistant. Check your connection and try again.");
     } finally {
       setPending(false);
       queueMicrotask(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight }));
     }
+  }
+
+  /** Task 81 rule 8 step 3 — runs the EXACT inputs the preview showed, never
+   *  asking the model to re-derive them. `preview` itself is never re-sent
+   *  to the model; this call bypasses the provider entirely. */
+  async function confirmPreview() {
+    if (!preview || pending) return;
+    setPending(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/agent/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirmPreview: { commandKey: preview.commandKey, inputs: preview.inputs } }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        setError(json.message ?? "Could not complete that action.");
+        return;
+      }
+      setMessages((prev) => [...prev, { role: "assistant", content: json.data.reply } satisfies ChatMessage]);
+    } catch {
+      setError("Could not reach the assistant. Check your connection and try again.");
+    } finally {
+      setPreview(null);
+      setPending(false);
+      queueMicrotask(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight }));
+    }
+  }
+
+  function cancelPreview() {
+    setPreview(null);
+    setMessages((prev) => [...prev, { role: "assistant", content: "Cancelled — nothing was changed." } satisfies ChatMessage]);
   }
 
   return (
@@ -102,6 +141,34 @@ export function AgentChatDock() {
                 {m.content}
               </div>
             ))}
+            {preview && (
+              <div className="verity-solid max-w-[92%] rounded-xl border border-line px-3.5 py-3 text-[13.5px] text-text">
+                <p className="mb-2.5">{preview.description}</p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void confirmPreview()}
+                    disabled={pending}
+                    className="bg-accent text-accent-on rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelPreview}
+                    disabled={pending}
+                    className="glass-control rounded-lg px-3 py-1.5 text-[13px] font-medium text-text-secondary transition-colors hover:text-text disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            {groundingWarnings.length > 0 && (
+              <p className="text-[12px] text-text-tertiary">
+                Double-check: {groundingWarnings.join(", ")} — not confirmed against a query this turn.
+              </p>
+            )}
             {pending && <p className="text-[13px] text-text-tertiary">Thinking…</p>}
             {error && <p className="text-[13px] text-danger">{error}</p>}
           </div>

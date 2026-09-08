@@ -1,12 +1,12 @@
 # Audit remediation — 7 September 2026
 
-This records code changes against the original findings. Production data was not
-modified and no production migration or deployment was performed. The original
+This records code changes against the original findings. Production business records
+were not modified and no production migration or deployment was performed. The original
 audit files remain evidence of the pre-remediation state.
 
 ## Changes by finding
 
-“Fixed” below means implemented in this working tree, not deployed or re-audited
+“Fixed” below means implemented in this branch, not deployed or re-audited
 against the production service.
 
 | Finding | Status | Change / remaining boundary |
@@ -29,7 +29,7 @@ against the production service.
 | F-018 | Fixed at validation time | Removed unused Serwist/idb dependencies, updated vulnerable transitive dependencies, and scoped an override to deepmerge-ts 8 for @prisma/config. npm audit reports zero vulnerabilities. Prisma generation, migration replay and the application build were exercised with the resulting lockfile. |
 | F-019 | Fixed at page level | Removed swallowed permission errors that impersonated empty financial datasets. If a required query is denied, the page shows an access-denied state. Independent per-panel access rendering remains a possible UX refinement. |
 | F-020 | Hardened | Unknown exception message bodies and stack context are withheld from outgoing Sentry events. Existing request/body/cookie/extra scrubbing remains. |
-| F-021 | Contract documented | CLAUDE.md explicitly retains the existing globally shared, last-committed-write identity attributes and lifecycle. Tenant-specific labels belong in scoped profiles; tenant-local removal uses membership revocation. No tenant-specific Party copies were introduced. |
+| F-021 | Contract documented | src/server/platform/CLAUDE.md explicitly retains the existing globally shared, last-committed-write identity attributes and lifecycle. Tenant-specific labels belong in scoped profiles; tenant-local removal uses membership revocation. No tenant-specific Party copies were introduced. |
 | F-022 | Fixed by migration | Runtime/PUBLIC access to _prisma_migrations is revoked. The deployment role retains migration access. |
 | F-023 | Fixed | GSTR-3B separates booked and eligible ITC and marks unconfirmed purchase bills as unsubstantiated. ITC reconciliation filters out unconfirmed bills. No historical invoice or filed return was rewritten. |
 | F-024 | Fixed | Every numbering call resolves the tenant timezone; financial-year rollover occurs at the tenant's April midnight. |
@@ -108,3 +108,22 @@ reverse-charge reporting, and e-invoice/IRN registration. The tax UI now states 
 boundaries and refuses composition registration. Production migration, authenticated
 browser re-audit, real storage-provider delivery, and live Sentry delivery still
 require deployment verification. GitHub publication does not establish those checks.
+
+## Final validation after integrating GitHub main
+
+- Full suite: **874 passed, 4 skipped across 64 suites**. The four skips are
+  explicitly opt-in live storage checks. Four additional bucket-policy and quota
+  privilege checks then passed (878 distinct passing tests in total).
+- Production build and TypeScript check passed on the combined patch. Full ESLint
+  completed with no errors and one existing TanStack `incompatible-library` warning.
+- `npm audit --omit=optional --audit-level=low`: zero vulnerabilities.
+- The upstream assistant preview flow keeps the audit's quota and body limits;
+  preview batches are capped at 50 and six route tests cover refusal and success.
+- All 66 original migrations replayed locally; the 67th shared-quota migration
+  applied successfully to that isolated database.
+- Prisma's implicit `.env` loading caused earlier live-storage fixtures to contact
+  the configured provider. Three temporary `lr-scan.txt` artifacts were identified
+  by exact fixture contents and creation times, then removed. Live Supabase tests
+  now require `VERITY_TEST_STORAGE=1`; their cleanup covers the sealed key too.
+  The new private-bucket/25 MB policy check refused the existing bucket settings.
+  No bucket settings were changed. Validate the configured provider after rollout.

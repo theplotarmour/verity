@@ -31,6 +31,7 @@ const SOURCES = sourceFiles(join(ROOT, "src"));
 
 /** Models that are deliberately not tenant-scoped, each with its authority. */
 const GLOBAL_MODELS: Record<string, string> = {
+  RequestQuota: "opaque pre-authentication quotas; function-only runtime access, audit F-008",
   Tenant: "the isolation boundary itself (ADR-005)",
   Party: "global identity — Bible V2 Primitive 2 §2, INV-003",
   User: "global identity, 1:1 with Party — GOV-TER-006",

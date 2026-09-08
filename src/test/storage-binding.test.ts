@@ -28,7 +28,7 @@ import { installStorage } from "@/server/storage";
  */
 
 const hasDatabase = Boolean(process.env.DATABASE_URL);
-const hasStorage = Boolean(
+const hasStorage = process.env.VERITY_TEST_STORAGE === "1" && Boolean(
   (process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL) &&
     process.env.SUPABASE_SERVICE_ROLE_KEY &&
     process.env.SUPABASE_MEDIA_BUCKET,
@@ -39,7 +39,7 @@ const describeDb = hasDatabase && hasStorage ? describe : describe.skip;
 if (!hasStorage) {
   // Not a failure. A deployment without storage is a valid deployment, and the
   // platform refuses at the point of use rather than at boot for that reason.
-  console.warn("storage-binding.test.ts skipped: no storage variables configured.");
+  console.warn("storage-binding.test.ts skipped: live storage requires explicit VERITY_TEST_STORAGE=1 and dedicated test credentials.");
 }
 
 vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 });
@@ -67,6 +67,7 @@ describeDb("storage: Supabase, end to end", () => {
   const tenantId = randomUUID();
   const bytes = Buffer.from(`LR scan placeholder ${randomUUID()}`);
   let storageKey: string;
+  let sealedKey: string;
 
   beforeAll(async () => {
     await assertRlsEnforceable();
@@ -83,6 +84,7 @@ describeDb("storage: Supabase, end to end", () => {
     if (driver && storageKey) {
       await driver.delete(storageKey).catch(() => undefined);
     }
+    if (driver && sealedKey) await driver.delete(sealedKey);
     const admin = new PrismaClient({ datasourceUrl: process.env.DIRECT_URL });
     try {
       await admin.$executeRaw`DELETE FROM tenant WHERE id = ${tenantId}::uuid`;
@@ -128,6 +130,7 @@ describeDb("storage: Supabase, end to end", () => {
       }),
     );
     expect(confirmed.ok).toBe(true);
+    sealedKey = (await withTenant(tenantId, (tx) => tx.storedFile.findUniqueOrThrow({ where: { id: reserved.fileId } }))).storageKey;
 
     const url = await withTenant(tenantId, (tx) => readUrlFor(tx, reserved.fileId, 60));
     const readBack = await fetch(url);

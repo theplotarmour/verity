@@ -5,6 +5,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { CommandAccessProvider, CommandButton } from "@/components/ui/CommandAccess";
+import { prisma } from "@/server/platform/db";
 import { sharedRateLimit } from "@/server/platform/shared-rate-limit";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { installAdministration } from "@/server/platform/administration";
@@ -50,4 +51,8 @@ describe("permission-aware action controls", () => {
     }
     visit("src/app/(shell)");
   });
+});
+
+it("denies runtime access to the quota table outside its restricted function", async () => {
+  await expect(prisma.$queryRaw`SELECT * FROM public.request_quota LIMIT 1`).rejects.toThrow(/permission denied/);
 });

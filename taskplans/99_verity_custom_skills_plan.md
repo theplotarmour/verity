@@ -6,12 +6,23 @@ repeated by hand, a bug that could recur), not a speculative want. Task
 82 (`verity-client-capability-builder`) already covers one of these in
 full; referenced, not duplicated.
 
-## Status: Skills 2 and 3 BUILT 2026-09-04 (`.claude/skills/verity-adr-gate/`,
+## Status: Skills 1, 2, 3, 4, 5, 7, 8 BUILT. Skill 6 remains PENDING.
+
+Skills 2 and 3 BUILT 2026-09-04 (`.claude/skills/verity-adr-gate/`,
 `.claude/skills/verity-migration-safety/`) — the two flagged "high, cheap,
 do first." Skill 3 additionally documents a second real incident from
 2026-09-04 itself (migration-checksum drift, not in this file's original
-text). Skills 1 (Task 82) and this pair are now built; 4/5/6/7/8 remain
-PENDING per the priority ranking below.
+text).
+
+Skills 4, 5, 7, 8 BUILT 2026-09-08 (`.claude/skills/verity-taskplan-writer/`,
+`verity-rd-miner/`, `verity-orientation/`, `verity-design-companion/`) —
+the four flagged "useful, no urgency" below, built on explicit request
+rather than left for a future session.
+
+Skill 6 (`verity-capability-boundary-check`) remains PENDING — flagged
+below as needing real design work first (what counts as a platform-
+touching change is not always a clean file-path rule), not merely
+low-priority. Not built in this pass.
 
 ## Why this matters more than usual right now
 

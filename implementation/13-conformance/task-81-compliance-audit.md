@@ -27,13 +27,18 @@ walk of the 16 rules against what actually got built.
 | 9 / 13 — error-class taxonomy, "why can't I" | `runTool` was discarding `toActionFailure`'s already-computed `code` and handing the model a bare message string, so a model reading the error had no reliable way to distinguish "fix your input" from "you're not allowed" from "query again." | `runTool` now returns `{ code, message }` for every failure (command and query paths), and the system prompt tells the model what each code means (rule 4 of the prompt, `E_VALIDATION`/`E_FORBIDDEN`/`E_CONFLICT`/`E_UNGROUNDED`). |
 | 2 — exact legal-entity resolution, never fuzzy-match | Nothing in the system prompt stated this discipline at all — the model was free to guess a "closest" customer/supplier name with nothing structurally stopping it. | Added as prompt rule 2: list exact candidates and ask, never autocorrect; single-record default only when exactly one exists (rule 2a). Prompt-level, not structurally enforced — see open gaps below. |
 
-## Still open, not fixed today (real design work, not a quick patch)
+## Built 2026-09-08 (previously recorded open, real design work)
+
+| Rule | Gap | Fix |
+|---|---|---|
+| 1 — live-record grounding (prose claims) | `assertGrounded` only checked `*Id` fields on command INPUT, not a prose claim's numbers. | `GroundingCache` now also records every number reachable from a query result this turn; `checkProseClaims()` (`grounding.ts`) scans the final reply for currency/comma-grouped/decimal numbers and flags any not seen in a query result. **Deliberately a warning, not a block** (`AgentTurnResult.groundingWarnings`) — a false positive here would refuse a correct answer, worse than the gap it closes. Rendered as a small "double-check" note in the dock, never alters or suppresses the reply. Full response-time fact-checking of arbitrary claims (not just numbers) remains future work; this closes the concrete, worked numeric case. |
+| 8 — six-step contract, step 3 (preview) | No pause before executing a routine action whose resolution wasn't obvious (worked example: "mark all three overdue invoices written off"). | `agent-chat.ts`'s `detectBatchPreview()`: when one assistant message contains 2+ tool calls to the SAME routine (non-destructive) command, the turn stops before executing any of them and returns a `PendingPreview` (command description + exact resolved inputs) instead. `AgentChatDock.tsx` renders a structural Confirm/Cancel card. Confirm calls `executeConfirmedPreview()` with the EXACT previously-shown inputs — the model never re-derives them, so there is no drift between what was shown and what runs. Scope is deliberately bounded to this one shape (2+ same-key routine calls in one message) — not a general "preview anything ambiguous" engine, per the same over-build caution Task 93 states for a different primitive. |
+
+## Still open, not fixed (real design work, different mechanism than above)
 
 | Rule | Gap | Why not fixed now |
 |---|---|---|
-| 1 — live-record grounding | `assertGrounded` (Task 84 area 4) only checks `*Id` fields on command INPUT. It does not check whether a *prose claim* the model makes ("the customer's balance is ₹X") was actually backed by a query result this turn. Prompt rule 1 asks for this; nothing structurally enforces it for spoken claims, only for write-time IDs. | Task 84's own known-gap list already flags grounding as entity-agnostic MVP scope; extending it to prose claims is a materially different mechanism (would need response-time fact-checking against tool results), not a rule-9-style cheap fix. |
-| 2 — exact match | Fixed at the prompt level only (above). A model can still ignore the instruction. No structural gate (e.g. refusing a create/update whose resolved entity came from a multi-candidate query without an explicit user pick) exists. | Same category as rule 1 — needs the grounding mechanism extended, not a standalone fix. |
-| 8 — six-step contract, specifically step 3 (preview) | The loop goes straight from tool call to result. There is no "here's what I'm about to do in plain language, before you've said yes or no" step for an ambiguous or high-impact ROUTINE action (the example given: "mark all three overdue invoices written off" — routine per rule 4, but resolving to three specific invoices is worth showing before acting). Only destructive commands get any pause at all (via `needs_approval`), and even those get no preview UI — they're simply refused with a message. | A real preview step is a UI feature (a distinct message type the dock renders before the tool executes, with an accept/reject affordance) — not something to add to a text-only chat loop without designing that UI first. Belongs with Task 95's "Plans before execution" framing, not a today-sized fix. |
+| 2 — exact match, structural enforcement | Fixed at the prompt level only (2026-09-04 pass). A model can still ignore the instruction. No structural gate (e.g. refusing a create/update whose resolved entity came from a multi-candidate query without an explicit user pick) exists. | Would need the grounding mechanism extended to track "which specific candidate did the user pick," a different and larger addition than the numeric-claim check built today. |
 
 ## Not yet applicable
 
@@ -45,7 +50,12 @@ until those surfaces exist.
 
 ## Result
 
-Two real, cheap gaps found and fixed same day. Two real, non-cheap gaps
-recorded rather than rushed — both trace back to the same root (`assertGrounded`'s
-MVP scope stopping at write-time IDs, not spoken claims) and should be designed
-together, not patched separately, whenever they're picked up.
+2026-09-04: two real, cheap gaps found and fixed same day; three non-cheap
+gaps recorded rather than rushed.
+
+2026-09-08: two of those three built (prose-claim numeric grounding as a
+warning, and the preview step for the batch-routine-action shape). One
+remains open — structural (non-prompt-level) exact-match enforcement —
+tracked above, not rushed for the same reason the others weren't: it needs
+the grounding mechanism extended in a different direction than either fix
+built today.
