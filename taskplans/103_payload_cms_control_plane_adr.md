@@ -1,12 +1,16 @@
 # Task Plan 103 — Payload CMS as Control-Plane Infrastructure: Comparative Architecture Analysis (Proposed ADR)
 
-**Status:** RATIFIED (partial, 2026-09-08) — the "reject Payload as
-tenant-scoped control-plane dependency" conclusion (sections 15-16, first
-bullet) is now `verity-spec/17_decisions/adr/adr-019.md`, ACCEPTED. The
-native-implementation-shape conclusion (section 16, second bullet) is
-explicitly **not** ratified by that ADR and remains open, pending
-`104_verity_native_configuration_extension_architecture.md`'s five open
-questions. See ADR-019 §"What is explicitly not settled by this ADR."
+**Status:** RATIFIED (2026-09-08) — the "reject Payload as tenant-scoped
+control-plane dependency" conclusion (sections 15-16, first bullet) is
+`verity-spec/17_decisions/adr/adr-019.md`, ACCEPTED. The native-
+implementation-shape question (section 16, second bullet) turned out to
+need no further ratification: `104_verity_native_configuration_extension_
+architecture.md`'s five open questions were resolved same day by finding
+that four of five pieces already ship natively (`TenantActivation`,
+`CustomFieldSchema`, the `WorkflowDefinition`/`EdgeCondition` engine,
+`contribution.ts`'s navigation) — this ADR's own section 3 sketch was
+independently reinvented, not designed from a blank page. See ADR-019's
+"Correction, same day" note and 104's own Correction section.
 
 **Date:** 2026-09-08
 

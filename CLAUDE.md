@@ -60,6 +60,17 @@ for one client must be reusable by the next.
 11. Required data / sync infrastructure
 12. Minimal experience shell / runtime
 13. Foundation conformance tests
+
+**Correction (2026-09-08, `taskplans/104_verity_native_configuration_
+extension_architecture.md`):** items 9 and 10 are substantially already
+built — `WorkflowDefinition`/`WorkflowNode`/`WorkflowEdge`/`EdgeCondition`
+(`workflow.ts`), `TenantActivation`/`CapabilityDefinition`
+(`capability.ts`), `CustomFieldSchema` + metadata-driven forms
+(`experience.ts`), navigation contributions (`contribution.ts`) — just
+never consolidated under these item numbers until that document checked.
+This does not itself declare foundation-ready (item 13's conformance
+tests are the gate for that claim); it only corrects "unbuilt," which
+`adr-019` had repeated without checking.
 14. Hypothetical future-capability validation
 
 ## Authority order
