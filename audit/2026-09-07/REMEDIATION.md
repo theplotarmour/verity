@@ -127,3 +127,7 @@ require deployment verification. GitHub publication does not establish those che
   now require `VERITY_TEST_STORAGE=1`; their cleanup covers the sealed key too.
   The new private-bucket/25 MB policy check refused the existing bucket settings.
   No bucket settings were changed. Validate the configured provider after rollout.
+
+GitHub replay applied all 67 migrations successfully. Its role-safety assertion
+needed a correction: PostgreSQL concatenates booleans as `false`, not `f`; the
+assertion now matches the actual non-superuser/non-BYPASSRLS output.
