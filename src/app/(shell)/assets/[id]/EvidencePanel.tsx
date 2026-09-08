@@ -1,5 +1,7 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -49,9 +51,9 @@ export function EvidencePanel({
         title="Evidence"
         action={
           canCapture && !open ? (
-            <Button size="sm" onClick={() => setOpen(true)}>
+            <CommandButton commands={"verity.evidence.capture"} size="sm" onClick={() => setOpen(true)}>
               Capture
-            </Button>
+            </CommandButton>
           ) : (
             <span className="text-[12px] text-text-tertiary">Immutable once recorded</span>
           )
@@ -153,9 +155,9 @@ export function EvidencePanel({
           </div>
 
           <div className="flex gap-2">
-            <Button type="submit" variant="primary" disabled={pending}>
+            <CommandButton commands={"verity.evidence.capture"} type="submit" variant="primary" disabled={pending}>
               {pending ? "Capturing…" : "Capture"}
-            </Button>
+            </CommandButton>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
               Cancel
             </Button>

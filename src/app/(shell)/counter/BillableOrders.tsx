@@ -1,8 +1,10 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, ErrorState } from "@/components/ui/primitives";
+import { ErrorState } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -82,14 +84,14 @@ export function BillableOrders({
                 {rupees(order.subtotalMinor)}
               </td>
               <td className="border-b border-line px-3 py-3 text-right">
-                <Button
+                <CommandButton commands={"verity.dinein.generate_bill"}
                   size="sm"
                   variant="primary"
                   disabled={pending}
                   onClick={() => generate(order.id)}
                 >
                   Raise bill
-                </Button>
+                </CommandButton>
               </td>
             </tr>
           ))}

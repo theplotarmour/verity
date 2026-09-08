@@ -1,9 +1,10 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Button,
   EmptyState,
   ErrorState,
   Field,
@@ -79,7 +80,7 @@ export function GodownList({
         footer={
           <>
             <ModalCancel onClose={() => setCreating(false)} disabled={pending} />
-            <Button
+            <CommandButton commands={"verity.location.create_location"}
               variant="primary"
               disabled={pending || name.trim() === "" || organizationId === ""}
               onClick={() =>
@@ -94,7 +95,7 @@ export function GodownList({
               }
             >
               {pending ? "Creating…" : "Create"}
-            </Button>
+            </CommandButton>
           </>
         }
       >
@@ -137,7 +138,7 @@ export function GodownList({
         footer={
           <>
             <ModalCancel onClose={() => setRenaming(null)} disabled={pending} />
-            <Button
+            <CommandButton commands={"verity.location.edit_location"}
               variant="primary"
               disabled={pending || name.trim() === ""}
               onClick={() =>
@@ -149,7 +150,7 @@ export function GodownList({
               }
             >
               Save
-            </Button>
+            </CommandButton>
           </>
         }
       >
@@ -174,7 +175,7 @@ export function GodownList({
             <ModalCancel onClose={() => setRemoving(null)} disabled={pending}>
               Keep
             </ModalCancel>
-            <Button
+            <CommandButton commands={"verity.location.remove_location"}
               variant="danger"
               disabled={pending}
               onClick={() =>
@@ -186,7 +187,7 @@ export function GodownList({
               }
             >
               Remove
-            </Button>
+            </CommandButton>
           </>
         }
       >
@@ -215,9 +216,9 @@ export function GodownList({
             description="Everything you hold is held somewhere. Create the first one, and stock movements can name it."
             action={
               organizations.length === 0 ? undefined : (
-                <Button variant="primary" onClick={() => setCreating(true)}>
+                <CommandButton commands={"verity.location.create_location"} variant="primary" onClick={() => setCreating(true)}>
                   Create a godown
-                </Button>
+                </CommandButton>
               )
             }
           />
@@ -243,7 +244,7 @@ export function GodownList({
         title={godowns.length === 1 ? "1 godown" : `${godowns.length} godowns`}
         action={
           organizations.length === 0 ? undefined : (
-            <Button
+            <CommandButton commands={"verity.location.create_location"}
               variant="primary"
               onClick={() => {
                 setName("");
@@ -251,7 +252,7 @@ export function GodownList({
               }}
             >
               New godown
-            </Button>
+            </CommandButton>
           )
         }
       >
@@ -262,7 +263,7 @@ export function GodownList({
                 {godown.name}
               </span>
               <div className="flex shrink-0 gap-2">
-                <Button
+                <CommandButton commands={"verity.location.edit_location"}
                   size="sm"
                   onClick={() => {
                     setName(godown.name);
@@ -270,10 +271,10 @@ export function GodownList({
                   }}
                 >
                   Rename
-                </Button>
-                <Button size="sm" onClick={() => setRemoving(godown)}>
+                </CommandButton>
+                <CommandButton commands={"verity.location.remove_location"} size="sm" onClick={() => setRemoving(godown)}>
                   Remove
-                </Button>
+                </CommandButton>
               </div>
             </Row>
           ))}

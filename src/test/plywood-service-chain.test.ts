@@ -40,7 +40,6 @@ import {
   marginReport,
   ownerConsole,
   partyLedger,
-  raiseSalesInvoice,
   receiveGoods,
   recordPayment,
   registerPlywoodCapability,
@@ -219,14 +218,14 @@ describeDb("plywood: the whole chain, from purchase to payment", () => {
     supplierId = (
       await executeCommand(owner, createSupplier, {
         displayName: "Century Distributors",
-        gstin: "07AABCU9603R1ZM",
+        gstin: "07AABCU9603R1ZP",
         stateCode: "07",
       })
     ).id;
     customerId = (
       await executeCommand(owner, createCustomer, {
         displayName: "Sharma Timber Mart",
-        gstin: "07AAACS1429B1ZL",
+        gstin: "07AAACS1429B1ZX",
         stateCode: "07",
         creditLimitPaise: 50_000_000,
       })
@@ -335,13 +334,15 @@ describeDb("plywood: the whole chain, from purchase to payment", () => {
   /* ------------------------------- 7. invoice ------------------------------- */
 
   it("7 — raises a gapless, correctly taxed invoice", async () => {
-    const invoice = await executeCommand(owner, raiseSalesInvoice, { salesOrderId });
+    const invoice = await withTenant(tenantId, (tx) => tx.tradingInvoice.findFirstOrThrow({
+      where: { salesOrderId },
+    }));
     invoiceId = invoice.id;
     invoiceTotalPaise = invoice.totalPaise;
 
     // Both in Delhi, so CGST + SGST at 9% each on ₹76,800.
     const taxable = SOLD * PRICE_PER_SHEET;
-    expect(invoice.interState).toBe(false);
+    expect(invoice.igstPaise).toBe(0);
     expect(invoice.totalPaise).toBe(taxable + Math.round(taxable * 0.09) * 2);
     expect(invoice.invoiceNumber).toMatch(/^SALES\/\d{4}-\d{2}\/0001$/);
   });

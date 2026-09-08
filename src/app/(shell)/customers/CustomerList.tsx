@@ -1,10 +1,11 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Button,
   EmptyState,
   ErrorState,
   Input,
@@ -35,7 +36,7 @@ type Customer = {
   active: boolean;
 };
 
-export function CustomerList({ customers }: { customers: Customer[] }) {
+export function CustomerList({ customers, canCreate = false, canEdit = false, canDelete = false }: { customers: Customer[]; canCreate?: boolean; canEdit?: boolean; canDelete?: boolean }) {
   const [filter, setFilter] = useState("");
   // Reported: creating a customer lived on Sales only, so the page anyone opens
   // to look a customer up could not make one.
@@ -140,7 +141,7 @@ export function CustomerList({ customers }: { customers: Customer[] }) {
             <ModalCancel onClose={() => setRemoving(null)} disabled={pending}>
               Keep
             </ModalCancel>
-            <Button
+            <CommandButton commands={"verity.trading.remove_customer"}
               variant="danger"
               disabled={pending}
               onClick={() =>
@@ -152,7 +153,7 @@ export function CustomerList({ customers }: { customers: Customer[] }) {
               }
             >
               Remove
-            </Button>
+            </CommandButton>
           </>
         }
       >
@@ -179,11 +180,11 @@ export function CustomerList({ customers }: { customers: Customer[] }) {
         <EmptyState
           title="No customers yet"
           description="Add the first one here, or let a sales order create them."
-          action={
-            <Button variant="primary" onClick={() => setCreating(true)}>
+          action={canCreate ? (
+            <CommandButton commands={"verity.trading.create_customer"} variant="primary" onClick={() => setCreating(true)}>
               New customer
-            </Button>
-          }
+            </CommandButton>
+          ) : undefined}
         />
         {dialog}
       </>
@@ -224,9 +225,9 @@ export function CustomerList({ customers }: { customers: Customer[] }) {
                 aria-label="Filter customers"
               />
             </div>
-            <Button variant="primary" onClick={() => setCreating(true)}>
+            {canCreate && <CommandButton commands={"verity.trading.create_customer"} variant="primary" onClick={() => setCreating(true)}>
               New customer
-            </Button>
+            </CommandButton>}
           </div>
         }
       >
@@ -281,12 +282,12 @@ export function CustomerList({ customers }: { customers: Customer[] }) {
                       </p>
                     </div>
                     <div className="flex shrink-0 gap-2">
-                      <Button size="sm" onClick={() => setEditing(customer)}>
+                      {canEdit && <CommandButton commands={"verity.trading.edit_customer"} size="sm" onClick={() => setEditing(customer)}>
                         Edit
-                      </Button>
-                      <Button size="sm" onClick={() => setRemoving(customer)}>
+                      </CommandButton>}
+                      {canDelete && <CommandButton commands={"verity.trading.remove_customer"} size="sm" onClick={() => setRemoving(customer)}>
                         Remove
-                      </Button>
+                      </CommandButton>}
                     </div>
                   </div>
                 </Row>

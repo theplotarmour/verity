@@ -1,10 +1,11 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Button,
   EmptyState,
   ErrorState,
   Field,
@@ -144,7 +145,7 @@ export function SupplierList({ suppliers }: { suppliers: Supplier[] }) {
             <ModalCancel onClose={() => setRemoving(null)} disabled={pending}>
               Keep
             </ModalCancel>
-            <Button
+            <CommandButton commands={"verity.trading.remove_supplier"}
               variant="danger"
               disabled={pending}
               onClick={() =>
@@ -156,7 +157,7 @@ export function SupplierList({ suppliers }: { suppliers: Supplier[] }) {
               }
             >
               Remove
-            </Button>
+            </CommandButton>
           </>
         }
       >
@@ -184,9 +185,9 @@ export function SupplierList({ suppliers }: { suppliers: Supplier[] }) {
           title="No suppliers yet"
           description="Add the first one here, or let a purchase order create it."
           action={
-            <Button variant="primary" onClick={() => setCreating(true)}>
+            <CommandButton commands={"verity.trading.create_supplier"} variant="primary" onClick={() => setCreating(true)}>
               New supplier
-            </Button>
+            </CommandButton>
           }
         />
         {dialog}
@@ -235,9 +236,9 @@ export function SupplierList({ suppliers }: { suppliers: Supplier[] }) {
                 aria-label="Filter suppliers"
               />
             </div>
-            <Button variant="primary" onClick={() => setCreating(true)}>
+            <CommandButton commands={"verity.trading.create_supplier"} variant="primary" onClick={() => setCreating(true)}>
               New supplier
-            </Button>
+            </CommandButton>
           </div>
         }
       >
@@ -291,12 +292,12 @@ export function SupplierList({ suppliers }: { suppliers: Supplier[] }) {
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-2">
-                    <Button size="sm" onClick={() => setEditing(supplier)}>
+                    <CommandButton commands={"verity.trading.edit_supplier"} size="sm" onClick={() => setEditing(supplier)}>
                       Edit
-                    </Button>
-                    <Button size="sm" onClick={() => setRemoving(supplier)}>
+                    </CommandButton>
+                    <CommandButton commands={"verity.trading.remove_supplier"} size="sm" onClick={() => setRemoving(supplier)}>
                       Remove
-                    </Button>
+                    </CommandButton>
                   </div>
 
                 </div>
@@ -361,7 +362,7 @@ function NewSupplierModal({
       footer={
         <>
           <ModalCancel onClose={onClose} disabled={pending} />
-          <Button
+          <CommandButton commands={["verity.trading.create_supplier","verity.trading.edit_supplier"]}
             variant="primary"
             disabled={pending || name.trim() === ""}
             onClick={() =>
@@ -374,7 +375,7 @@ function NewSupplierModal({
             }
           >
             {pending ? "Saving…" : initial ? "Save" : "Create"}
-          </Button>
+          </CommandButton>
         </>
       }
     >

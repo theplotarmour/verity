@@ -542,6 +542,11 @@ export const OPERATOR_GRANTS = [
   { verb: "Edit" as const, entity: "verity.platform.membership" },
   { verb: "Delete" as const, entity: "verity.platform.membership" },
   { verb: "Read" as const, entity: "verity.platform.role" },
+  { verb: "Read" as const, entity: "verity.platform.activity" },
+  { verb: "Read" as const, entity: "verity.platform.security_event" },
+  { verb: "Read" as const, entity: "verity.platform.overview" },
+  { verb: "Read" as const, entity: "verity.platform.capability" },
+
   { verb: "Create" as const, entity: "verity.platform.role" },
   { verb: "Edit" as const, entity: "verity.platform.role" },
   // Module enablement and tenant configuration. ActionExecute rather than Edit

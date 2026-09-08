@@ -264,6 +264,7 @@ export const listGodownRacks: QueryDefinition<
     racks: Array<{ id: string; rackLabel: string; active: boolean }>;
   }>
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.list_godown_racks",
   entity: ENTITY_GODOWN_RACK,
   input: z.object({

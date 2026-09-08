@@ -1,3 +1,4 @@
+import { assertGrantCeiling } from "@/server/platform/authorization";
 import { z } from "zod";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import {
@@ -521,6 +522,7 @@ export const setRoleActivity: CommandDefinition<
   { roleId: string; activityKey: string; enabled: boolean },
   { granted: number; revoked: number }
 > = {
+  impact: "destructive",
   key: "verity.trading.set_role_activity",
   entity: ENTITY_ROLE,
   verb: "Edit",
@@ -554,6 +556,7 @@ export const setRoleActivity: CommandDefinition<
       const missing = activity.grants.filter(
         (grant) => !have.has(`${grant.verb}:${grant.entity}`),
       );
+      await assertGrantCeiling(ctx.tx, ctx.actor, missing.map((grant) => ({ ...grant, scope: "Organization" })));
       if (missing.length > 0) {
         await ctx.tx.permission.createMany({
           data: missing.map((grant) => ({

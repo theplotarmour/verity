@@ -1,3 +1,5 @@
+import { recordExecutionFailure } from "./execution-failure";
+import { limitActorRequests } from "./request-limits";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { PermissionVerb } from "@prisma/client";
@@ -86,16 +88,11 @@ export type CommandDefinition<TInput, TResult> = {
   verb: PermissionVerb;
   /** Input contract (MET-ACT-001). */
   input: z.ZodType<TInput>;
+  /** Only handlers with explicit row filtering/guards may opt into narrow grants. */
+  scopeHandling?: "handler";
   /**
-   * Confirmation class (Task 81 rules 4/4a). Absent means routine — every
-   * command shipped before this field existed is routine by Task 81's own
-   * checklist (close a period, restore, install/remove a capability, roll
-   * back a platform file, generate a bank-payment file, force-reinit,
-   * schema rollback, delete/rotate a credential, permanent-delete cleanup),
-   * so defaulting to routine describes the existing command set correctly
-   * rather than leaving a gap. A caller proposing a command through a
-   * surface that gates on impact (an agent, eventually) must treat
-   * `undefined` as `"routine"`, not as unknown.
+   * Commands changing authority, deleting records or reversing business state
+   * must declare destructive impact. Batch/agent callers require confirmation.
    */
   impact?: "routine" | "destructive";
   /**
@@ -206,6 +203,7 @@ export async function executeCommand<TInput, TResult>(
    */
   grounding?: GroundingCache,
 ): Promise<TResult> {
+  if (channel !== "job") await limitActorRequests(actor.tenantId, actor.userId, "command");
   // One identifier for the whole execution, minted before any write. Every
   // audit row, event and security event below carries it, which is what makes
   // "what else happened in the request that changed this?" answerable.
@@ -221,6 +219,11 @@ export async function executeCommand<TInput, TResult>(
     },
     () => withTenant(actor.tenantId, async (tx) => {
     const ctx: CommandContext = { actor, tx, correlationId, channel };
+    await tx.$executeRaw`SELECT
+      set_config('verity.actor_user_id', ${actor.userId}, true),
+      set_config('verity.command_key', ${def.key}, true),
+      set_config('verity.correlation_id', ${correlationId}, true),
+      set_config('verity.channel', ${channel}, true)`;
 
     await runHooks(def.key, "before_validate", ctx, rawInput);
 
@@ -252,6 +255,7 @@ export async function executeCommand<TInput, TResult>(
       verb: def.verb,
       entity: def.entity,
       channel,
+      resource: def.scopeHandling === "handler" ? undefined : {},
     });
 
     // 2c. Task 84 area 4 — grounding. Not a MET-ACT step number of its own;
@@ -287,14 +291,19 @@ export async function executeCommand<TInput, TResult>(
 
       return { result: outcome.result, events: outcome.events ?? [], ctx };
     }),
-  );
+  ).catch(async (error: unknown) => {
+    await recordExecutionFailure(error, actor, def.key, correlationId);
+    throw error;
+  });
 
   // after_save runs post-commit (PLA-EXT-004). A failure here cannot roll back a
   // committed transaction, so it is not wrapped in one — surfacing the error is
   // honest, pretending it was atomic would not be.
-  await withTenant(actor.tenantId, async (tx) => {
-    await runHooks(def.key, "after_save", { actor, tx, correlationId, channel }, { result, events });
-  });
+  if (hooks.has(hookKey(def.key, "after_save"))) {
+    await withTenant(actor.tenantId, async (tx) => {
+      await runHooks(def.key, "after_save", { actor, tx, correlationId, channel }, { result, events });
+    });
+  }
 
   return result;
 }

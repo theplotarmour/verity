@@ -496,7 +496,7 @@ describeDb("plywood finance automation (Task 71)", () => {
       });
     });
 
-    it("refuses a discount of 100 per cent, which is a free supply", async () => {
+    it("records an explicit 100 per cent discount as a zero-value supply", async () => {
       const productId = await freshBoard();
       await expect(
         executeCommand(owner, createPurchaseOrder, {
@@ -511,7 +511,7 @@ describeDb("plywood finance automation (Task 71)", () => {
             },
           ],
         }),
-      ).rejects.toThrow();
+      ).resolves.toMatchObject({ totalCostPaise: 0 });
     });
   });
 });

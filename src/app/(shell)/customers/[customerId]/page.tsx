@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
@@ -10,7 +11,7 @@ import { CustomerWorkspace } from "./CustomerWorkspace";
 export const dynamic = "force-dynamic";
 
 /** §35 — the customer as an operating account, credit decision included. */
-export default async function CustomerPage({
+async function CustomerPage({
   params,
 }: {
   params: Promise<{ customerId: string }>;
@@ -30,3 +31,5 @@ export default async function CustomerPage({
 
   return <CustomerWorkspace customer={customer} />;
 }
+
+export default withPageAccess(CustomerPage);

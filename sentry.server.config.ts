@@ -53,3 +53,6 @@ Sentry.init({
 
   debug: false,
 });
+
+import { registerErrorSink } from "@/server/platform/observability";
+registerErrorSink((error) => { Sentry.captureException(error); });

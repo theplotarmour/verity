@@ -23,6 +23,7 @@ const SNAPSHOT_KEYS = [
   "NEXT_PUBLIC_SUPABASE_ANON_KEY",
   "SUPABASE_JWT_SECRET",
   "VERITY_SESSION_SECRET",
+  "JWT_SECRET",
   "SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
   "SUPABASE_MEDIA_BUCKET",
@@ -94,16 +95,23 @@ describe("runtime configuration boundary", () => {
     expect(runtimeConfig.database.txMaxWaitMs).toBe(8_000);
   });
 
-  it("falls back the session-cookie signing key to the anon key when SUPABASE_JWT_SECRET is unset", async () => {
+  it("refuses to sign membership cookies with the public anon key", async () => {
     Object.assign(process.env, REQUIRED_ENV);
     delete process.env.SUPABASE_JWT_SECRET;
-
-    const { runtimeConfig } = await importConfig();
-
-    expect(runtimeConfig.auth.jwtSecret).toBe(REQUIRED_ENV.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+    delete process.env.VERITY_SESSION_SECRET;
+    delete process.env.JWT_SECRET;
+    await expect(importConfig()).rejects.toThrow(/E_CONFIG_INVALID/);
   });
 
-  it("prefers an explicit SUPABASE_JWT_SECRET over the anon-key fallback", async () => {
+  it("accepts the private legacy JWT_SECRET alias", async () => {
+    Object.assign(process.env, REQUIRED_ENV);
+    delete process.env.SUPABASE_JWT_SECRET;
+    delete process.env.VERITY_SESSION_SECRET;
+    process.env.JWT_SECRET = "private-legacy-test-signing-secret";
+    expect((await importConfig()).runtimeConfig.auth.jwtSecret).toBe(process.env.JWT_SECRET);
+  });
+
+  it("prefers an explicit SUPABASE_JWT_SECRET over other private aliases", async () => {
     Object.assign(process.env, REQUIRED_ENV);
     process.env.SUPABASE_JWT_SECRET = "a-real-signing-secret";
 

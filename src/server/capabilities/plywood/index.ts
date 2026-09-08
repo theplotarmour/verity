@@ -867,6 +867,7 @@ export const stockOnHand: QueryDefinition<
   }>
 > = {
   key: "verity.plywood.stock_on_hand",
+  scopeHandling: tradingStockOnHand.scopeHandling,
   entity: ENTITY_STOCK_BALANCE,
   input: tradingStockOnHand.input,
   handler: async (ctx, input) => {

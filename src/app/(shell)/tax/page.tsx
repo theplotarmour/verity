@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import Link from "next/link";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
@@ -35,7 +36,7 @@ export const dynamic = "force-dynamic";
  * documents; there is deliberately no field on this page, because §58 is
  * explicit that the tax centre must never become a second entry system.
  */
-export default async function TaxCentrePage({
+async function TaxCentrePage({
   searchParams,
 }: {
   searchParams: Promise<{ period?: string }>;
@@ -56,14 +57,8 @@ export default async function TaxCentrePage({
   }
 
   const [threeB, close] = await Promise.all([
-    executeQuery(actor, gstr3bWorking, window).catch((error) => {
-      if (error instanceof ForbiddenError) return null;
-      throw error;
-    }),
-    executeQuery(actor, closeChecklist, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return null;
-      throw error;
-    }),
+    executeQuery(actor, gstr3bWorking, window),
+    executeQuery(actor, closeChecklist, {}),
   ]);
 
   // Named by the SERVER, from the business's own zone.
@@ -307,3 +302,5 @@ export default async function TaxCentrePage({
     </>
   );
 }
+
+export default withPageAccess(TaxCentrePage);

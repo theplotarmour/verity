@@ -1,10 +1,11 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Button,
   EmptyState,
   ErrorState,
   Field,
@@ -239,13 +240,13 @@ export function PurchaseDesk({
         {/* "Agree a price" is NOT here any more. A rate card is worked
             through in one sitting on /prices; one dialog per board on the
             buying desk is why those lists stayed empty. */}
-        <Button
+        <CommandButton commands={"verity.trading.create_purchase_order"}
           variant="primary"
           disabled={!canOrder}
           onClick={() => openPanel(() => setNewOrder(true))}
         >
           New order
-        </Button>
+        </CommandButton>
       </div>
 
       {/* Each disabled action names its own missing prerequisite — three
@@ -393,7 +394,7 @@ export function PurchaseDesk({
                       <td className="border-b border-line px-3 py-2 text-right">
                         <div className="flex justify-end gap-2">
                           {order.state === "draft" && (
-                            <Button
+                            <CommandButton commands={"verity.trading.submit_purchase_order"}
                               size="sm"
                               disabled={pending}
                               onClick={() =>
@@ -403,11 +404,11 @@ export function PurchaseDesk({
                               }
                             >
                               Send to supplier
-                            </Button>
+                            </CommandButton>
                           )}
                           {(order.state === "submitted" ||
                             order.state === "receiving") && (
-                            <Button
+                            <CommandButton commands={"verity.trading.receive_goods"}
                               size="sm"
                               disabled={pending}
                               onClick={() =>
@@ -419,23 +420,23 @@ export function PurchaseDesk({
                               }
                             >
                               {receiving === order.id ? "Close" : "Receive…"}
-                            </Button>
+                            </CommandButton>
                           )}
                           {/* Amendable only while nothing has arrived — once
                               it has, the lines describe a real delivery. */}
                           {order.receivedUnits === 0 &&
                             order.state !== "completed" &&
                             order.state !== "cancelled" && (
-                              <Button
+                              <CommandButton commands={"verity.trading.edit_purchase_order"}
                                 size="sm"
                                 disabled={pending}
                                 onClick={() => openPanel(() => setAmending(order))}
                               >
                                 Edit
-                              </Button>
+                              </CommandButton>
                             )}
                           {order.state !== "completed" && (
-                            <Button
+                            <CommandButton commands={"verity.trading.cancel_purchase_order"}
                               size="sm"
                               disabled={pending}
                               onClick={() =>
@@ -449,7 +450,7 @@ export function PurchaseDesk({
                               {cancelling === order.id
                                 ? "Keep order"
                                 : "Cancel order…"}
-                            </Button>
+                            </CommandButton>
                           )}
                         </div>
                       </td>
@@ -474,7 +475,7 @@ export function PurchaseDesk({
             <ModalCancel onClose={() => setCancelling(null)} disabled={pending}>
               Keep order
             </ModalCancel>
-            <Button
+            <CommandButton commands={"verity.trading.cancel_purchase_order"}
               variant="danger"
               disabled={pending || cancelReason.trim().length < 3}
               onClick={() =>
@@ -489,7 +490,7 @@ export function PurchaseDesk({
               }
             >
               Cancel order
-            </Button>
+            </CommandButton>
           </>
         }
       >
@@ -574,13 +575,13 @@ function ReceiveForm({
             order is fully received, the supplier&apos;s bill is raised for you.
           </span>
           <ModalCancel onClose={onClose} disabled={pending} />
-          <Button
+          <CommandButton commands={"verity.trading.receive_goods"}
             variant="primary"
             disabled={pending || lines.length === 0}
             onClick={() => onSubmit({ orderId: order.id, lines })}
           >
             {pending ? "Recording…" : "Record receipt"}
-          </Button>
+          </CommandButton>
         </>
       }
     >

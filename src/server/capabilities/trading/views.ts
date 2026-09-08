@@ -161,6 +161,7 @@ export const godownDetail: QueryDefinition<
     }>;
   } | null
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.godown_detail",
   entity: ENTITY_STOCK_BALANCE,
   input: z.object({ locationId: z.string().uuid() }),
@@ -363,6 +364,7 @@ export const stockLedger: QueryDefinition<
     }>;
   } | null
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.stock_ledger",
   entity: ENTITY_STOCK_LEDGER,
   input: z.object({
@@ -487,6 +489,7 @@ export const sellableStock: QueryDefinition<
     taxRateBp: number | null;
   }>
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.sellable_stock",
   entity: ENTITY_STOCK_BALANCE,
   input: z.object({ customerId: z.string().uuid().optional() }),

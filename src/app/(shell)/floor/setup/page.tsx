@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
  * same table somewhere else. Putting both on one screen means one of them
  * happens by accident, and it is always the wrong one at the worst moment.
  */
-export default async function FloorSetupPage() {
+async function FloorSetupPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -38,3 +39,5 @@ export default async function FloorSetupPage() {
     </>
   );
 }
+
+export default withPageAccess(FloorSetupPage);

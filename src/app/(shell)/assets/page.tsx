@@ -1,6 +1,6 @@
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
-import { hasPermission } from "@/server/platform/authorization";
+import { hasTenantPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { ENTITY_ASSET } from "@/server/capabilities/asset";
 import { DataTable } from "@/components/ui/DataTable";
@@ -23,7 +23,7 @@ export default async function AssetsPage() {
   const actor = await requireActor();
 
   const data = await withTenant(actor.tenantId, async (tx) => {
-    if (!(await hasPermission(tx, actor.roleId, "Read", ENTITY_ASSET))) return null;
+    if (!(await hasTenantPermission(tx, actor.roleId, "Read", ENTITY_ASSET))) return null;
 
     const [assets, states] = await Promise.all([
       tx.asset.findMany({ include: { location: true }, orderBy: { name: "asc" } }),

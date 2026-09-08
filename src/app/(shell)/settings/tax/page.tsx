@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
  * on it, and a settings key is a value with none. Storing it as the latter is
  * what makes a mid-year rate change unrepresentable.
  */
-export default async function TaxSettingsPage() {
+async function TaxSettingsPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -39,3 +40,5 @@ export default async function TaxSettingsPage() {
     </>
   );
 }
+
+export default withPageAccess(TaxSettingsPage);

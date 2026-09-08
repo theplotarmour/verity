@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import Link from "next/link";
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
@@ -76,7 +77,7 @@ function greeting(): string {
  * one failing panel shows its own inline error, the rest of the page
  * still renders.
  */
-export default async function OverviewPage() {
+async function OverviewPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -459,3 +460,5 @@ export default async function OverviewPage() {
     </>
   );
 }
+
+export default withPageAccess(OverviewPage);

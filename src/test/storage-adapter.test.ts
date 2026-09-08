@@ -60,7 +60,7 @@ function mockSupabaseClient(storageApi: {
 }) {
   vi.doMock("@supabase/supabase-js", () => ({
     createClient: createClient.mockReturnValue({
-      storage: { from: vi.fn(() => storageApi) },
+      storage: { getBucket: vi.fn().mockResolvedValue({ data: { public: false, file_size_limit: 25 * 1024 * 1024 }, error: null }), from: vi.fn(() => storageApi) },
     }),
   }));
 }

@@ -1,3 +1,5 @@
+import { TaxCoverageNotice } from "@/components/ui/business/TaxCoverageNotice";
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -29,7 +31,7 @@ export const dynamic = "force-dynamic";
  * B2B and B2C split on whether the buyer holds a GSTIN and on nothing else,
  * plus the HSN summary the return actually asks for. Generated, never typed.
  */
-export default async function Gstr1Page({
+async function Gstr1Page({
   searchParams,
 }: {
   searchParams: Promise<{ period?: string }>;
@@ -65,6 +67,7 @@ export default async function Gstr1Page({
 
   return (
     <>
+      <TaxCoverageNotice />
       <PageHeader
         actions={<PeriodSwitch basePath="/tax/gstr-1" periodKey={periodKey} />}
         title="GSTR-1 working"
@@ -235,3 +238,5 @@ export default async function Gstr1Page({
     </>
   );
 }
+
+export default withPageAccess(Gstr1Page);

@@ -1,5 +1,7 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -95,9 +97,9 @@ export function ConfigurationEditor({ parameters }: { parameters: Parameter[] })
       )}
 
       <div className="mb-4 flex justify-end">
-        <Button variant="primary" onClick={() => setAdding((open) => !open)}>
+        <CommandButton commands={"verity.platform.set_configuration"} variant="primary" onClick={() => setAdding((open) => !open)}>
           {adding ? "Cancel" : "Set another key"}
-        </Button>
+        </CommandButton>
       </div>
 
       {adding && (
@@ -128,9 +130,9 @@ export function ConfigurationEditor({ parameters }: { parameters: Parameter[] })
                   <Input id="config-new-value" name="value" required />
                 </Field>
               </div>
-              <Button type="submit" variant="primary" disabled={pending}>
+              <CommandButton commands={"verity.platform.set_configuration"} type="submit" variant="primary" disabled={pending}>
                 Save
-              </Button>
+              </CommandButton>
             </form>
           </Panel>
         </div>
@@ -239,18 +241,18 @@ function ConfigRow({
       <Badge tone={parameter.inherited ? "neutral" : "accent"}>
         {parameter.inherited ? "Platform default" : "Tenant override"}
       </Badge>
-      <Button type="submit" disabled={pending}>
+      <CommandButton commands={"verity.platform.set_configuration"} type="submit" disabled={pending}>
         Save
-      </Button>
+      </CommandButton>
       {!parameter.inherited && (
-        <Button
+        <CommandButton commands={"verity.platform.set_configuration"}
           type="button"
           disabled={pending}
           onClick={() => onWrite(parameter.key, null)}
           title="Clear this tenant's value and fall back to the platform default"
         >
           Clear
-        </Button>
+        </CommandButton>
       )}
     </form>
   );

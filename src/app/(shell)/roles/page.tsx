@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
  * is resolved on the server and never crosses to the browser. The page receives
  * activities and their state; it has no idea what a permission verb is.
  */
-export default async function RolesPage() {
+async function RolesPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -70,3 +71,5 @@ export default async function RolesPage() {
     </>
   );
 }
+
+export default withPageAccess(RolesPage);

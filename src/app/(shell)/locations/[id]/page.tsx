@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/primitives";
 import { AuditTrail } from "@/components/shell/AuditTrail";
 import { buildFormDescriptor } from "@/server/platform/experience";
-import { hasPermission } from "@/server/platform/authorization";
+import { hasTenantPermission } from "@/server/platform/authorization";
 import { CustomFieldsPanel } from "./CustomFieldsPanel";
 
 export const dynamic = "force-dynamic";
@@ -61,7 +61,7 @@ export default async function LocationDetailPage({
     // Built from the tenant's own declarations, so a newly declared field
     // appears without this page changing (PLA-EXT-002).
     const descriptor = await buildFormDescriptor(tx, ENTITY_LOCATION);
-    const canEdit = await hasPermission(tx, actor.roleId, "Edit", ENTITY_LOCATION);
+    const canEdit = await hasTenantPermission(tx, actor.roleId, "Edit", ENTITY_LOCATION);
     return { location, history, descriptor, canEdit };
   });
 

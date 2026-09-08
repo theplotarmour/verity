@@ -1,3 +1,5 @@
+import { TaxCoverageNotice } from "@/components/ui/business/TaxCoverageNotice";
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -29,7 +31,7 @@ export const dynamic = "force-dynamic";
  * 3B has produced a return that no longer agrees with the invoices behind it,
  * and no way to say which is right.
  */
-export default async function Gstr3bPage({
+async function Gstr3bPage({
   searchParams,
 }: {
   searchParams: Promise<{ period?: string }>;
@@ -63,6 +65,7 @@ export default async function Gstr3bPage({
 
   return (
     <>
+      <TaxCoverageNotice />
       <PageHeader
         actions={<PeriodSwitch basePath="/tax/gstr-3b" periodKey={periodKey} />}
         title="GSTR-3B working"
@@ -212,3 +215,5 @@ export default async function Gstr3bPage({
     </>
   );
 }
+
+export default withPageAccess(Gstr3bPage);

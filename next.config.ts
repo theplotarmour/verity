@@ -61,16 +61,7 @@ const nextConfig: NextConfig = {
    *
    * The application previously sent none beyond `poweredByHeader: false`.
    *
-   * NO CSP HERE, DELIBERATELY. A Content-Security-Policy that Next.js can
-   * actually run needs a per-request nonce for its inline bootstrap scripts,
-   * which means middleware and a matching `nonce` on every script — a change
-   * with real breakage risk that must not be made blind during a remediation
-   * pass. A `report-only` CSP would be theatre: it protects nothing and creates
-   * a report sink nobody is reading. CSP is its own task, listed in
-   * taskplans/66 and left open in the ledger rather than half-done here.
-   *
-   * These four are the ones that are correct unconditionally and cannot break a
-   * working page.
+   * Nonce-based CSP is added by src/proxy.ts.
    */
   async headers() {
     return [
@@ -131,12 +122,6 @@ const sentryConfig = {
   automaticVercelMonitors: true,
 };
 
-// The service worker is served by src/app/sw.js/route.ts, not generated here.
-// @serwist/next is a webpack plugin and silently no-ops under Turbopack, which
-// is what `next build` uses — so it never actually ran, and the stale
-// public/sw.js committed alongside it was what production served. Serving the
-// worker from a route makes it work under Turbopack and lets the cache name
-// carry a real per-deploy id.
 let config = nextConfig;
 
 // Only with a DSN, and only with an organisation and project to report into.

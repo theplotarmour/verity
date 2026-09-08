@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -24,7 +25,7 @@ export const dynamic = "force-dynamic";
  * the entries, and the running balance in the last column is computed for
  * display and never written down.
  */
-export default async function LedgersPage({
+async function LedgersPage({
   searchParams,
 }: {
   searchParams: Promise<{ customer?: string; supplier?: string }>;
@@ -41,19 +42,13 @@ export default async function LedgersPage({
     throw error;
   }
 
-  const suppliers = await executeQuery(actor, listSuppliers, {}).catch((error) => {
-    if (error instanceof ForbiddenError) return [];
-    throw error;
-  });
+  const suppliers = await executeQuery(actor, listSuppliers, {});
 
   // Reported: "instead of selecting a particular customer or supplier, we see
   // the full table of amount we need to send, and amount they send us."
   // Choosing a party first meant the screen said nothing until you already knew
   // whose name you were looking for, which is the opposite of what it is for.
-  const balances = await executeQuery(actor, partyBalances, {}).catch((error) => {
-    if (error instanceof ForbiddenError) return [];
-    throw error;
-  });
+  const balances = await executeQuery(actor, partyBalances, {});
 
   // Exactly one party, as the query requires. A ledger of everybody at once is
   // not a ledger, it is a journal, and nobody asked for one.
@@ -64,10 +59,7 @@ export default async function LedgersPage({
       : null;
 
   const ledger = selected
-    ? await executeQuery(actor, partyLedger, selected).catch((error) => {
-        if (error instanceof ForbiddenError) return null;
-        throw error;
-      })
+    ? await executeQuery(actor, partyLedger, selected)
     : null;
 
   const selectedName = customer
@@ -94,3 +86,5 @@ export default async function LedgersPage({
     </>
   );
 }
+
+export default withPageAccess(LedgersPage);

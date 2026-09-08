@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { prisma } from "@/server/platform/db";
@@ -28,6 +28,20 @@ describeDb("files and notifications", () => {
   const tenantId = randomUUID();
   const otherTenant = randomUUID();
   let userId: string, colleagueId: string;
+
+  let uploadedBytes = Buffer.from("calibration certificate");
+  const verified = new Map<string, Uint8Array>();
+  beforeEach(() => {
+    registerStorageDriver({
+      name: "test",
+      createUploadUrl: async (key) => ({ url: `https://test.invalid/put/${key}` }),
+      createReadUrl: async (key) => `https://test.invalid/get/${key}`,
+      storeVerified: async (key, bytes) => { verified.set(key, bytes); },
+      delete: async () => {},
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(uploadedBytes)));
+  });
+  afterEach(() => { vi.unstubAllGlobals(); registerStorageDriver(null); });
 
   beforeAll(async () => {
     await assertRlsEnforceable();
@@ -106,7 +120,7 @@ describeDb("files and notifications", () => {
 
   it("quarantines an upload whose size disagrees with the reservation", async () => {
     const reserved = await withTenant(tenantId, (tx) =>
-      reserveUpload(tx, { tenantId, uploadedById: userId, fileName: "x.bin", mimeType: "application/octet-stream", byteSize: 100 }),
+      reserveUpload(tx, { tenantId, uploadedById: userId, fileName: "x.txt", mimeType: "text/plain", byteSize: 100 }),
     );
     const result = await withTenant(tenantId, (tx) =>
       confirmUpload(tx, { fileId: reserved.fileId, checksum: "abc", byteSize: 999 }),
@@ -120,8 +134,18 @@ describeDb("files and notifications", () => {
     expect(record.status).toBe("Quarantined");
   });
 
+  it("rejects active content and oversized files before reserving a record", async () => {
+    const before = await withTenant(tenantId, (tx) => tx.storedFile.count());
+    for (const input of [{ mimeType: "text/html", byteSize: 10 }, { mimeType: "application/pdf", byteSize: 26 * 1024 * 1024 }]) {
+      await expect(withTenant(tenantId, (tx) => reserveUpload(tx, {
+        tenantId, uploadedById: userId, fileName: "rejected", ...input,
+      }))).rejects.toThrow(/E_VALIDATION/);
+    }
+    expect(await withTenant(tenantId, (tx) => tx.storedFile.count())).toBe(before);
+  });
+
   it("confirms idempotently", async () => {
-    const bytes = Buffer.from("idem");
+    const bytes = uploadedBytes = Buffer.from("idem");
     const reserved = await withTenant(tenantId, (tx) =>
       reserveUpload(tx, { tenantId, uploadedById: userId, fileName: "i.txt", mimeType: "text/plain", byteSize: bytes.byteLength }),
     );
@@ -133,27 +157,55 @@ describeDb("files and notifications", () => {
     await expect(confirm()).resolves.toEqual({ ok: true });
   });
 
-  it("reports honestly that no storage backend is bound", async () => {
+  it("refuses confirmation when no storage backend is bound", async () => {
+    registerStorageDriver(null);
     const bytes = Buffer.from("needs a driver");
-    const reserved = await withTenant(tenantId, (tx) =>
-      reserveUpload(tx, { tenantId, uploadedById: userId, fileName: "d.txt", mimeType: "text/plain", byteSize: bytes.byteLength }),
-    );
-    await withTenant(tenantId, (tx) =>
-      confirmUpload(tx, { fileId: reserved.fileId, checksum: checksumOf(bytes), byteSize: bytes.byteLength }),
-    );
-    // The record layer works; binding a backend is a deployment step, and
-    // saying so beats pretending a URL exists.
-    await expect(withTenant(tenantId, (tx) => readUrlFor(tx, reserved.fileId)))
-      .rejects.toBeInstanceOf(StorageUnavailableError);
+    const reserved = await withTenant(tenantId, (tx) => reserveUpload(tx, {
+      tenantId, uploadedById: userId, fileName: "d.txt", mimeType: "text/plain", byteSize: bytes.length,
+    }));
+    await expect(withTenant(tenantId, (tx) => confirmUpload(tx, {
+      fileId: reserved.fileId, checksum: checksumOf(bytes), byteSize: bytes.length,
+    }))).rejects.toBeInstanceOf(StorageUnavailableError);
+  });
 
-    registerStorageDriver({
-      name: "test",
-      createUploadUrl: async (key) => ({ url: `https://test.invalid/put/${key}` }),
-      createReadUrl: async (key) => `https://test.invalid/get/${key}`,
-      delete: async () => {},
-    });
-    await expect(withTenant(tenantId, (tx) => readUrlFor(tx, reserved.fileId)))
-      .resolves.toContain("https://test.invalid/get/");
+  it("quarantines actual tampered bytes even when the client claims the reserved size", async () => {
+    const expected = Buffer.from("good");
+    uploadedBytes = Buffer.from("evil");
+    const reserved = await withTenant(tenantId, (tx) => reserveUpload(tx, {
+      tenantId, uploadedById: userId, fileName: "x.txt", mimeType: "text/plain", byteSize: expected.length,
+    }));
+    const confirm = () => withTenant(tenantId, (tx) => confirmUpload(tx, {
+      fileId: reserved.fileId, checksum: checksumOf(expected), byteSize: expected.length,
+    }));
+    expect(await confirm()).toMatchObject({ ok: false, reason: expect.stringContaining("checksum") });
+    uploadedBytes = expected;
+    expect(await confirm()).toMatchObject({ ok: false, status: "Quarantined" });
+  });
+
+  it("quarantines oversized stored bytes and forged MIME declarations", async () => {
+    for (const [size, content] of [[4, "too big"], [7, "<html/>"]] as const) {
+      uploadedBytes = Buffer.from(content);
+      const reserved = await withTenant(tenantId, (tx) => reserveUpload(tx, {
+        tenantId, uploadedById: userId, fileName: "x.pdf", mimeType: "application/pdf", byteSize: size,
+      }));
+      expect(await withTenant(tenantId, (tx) => confirmUpload(tx, {
+        fileId: reserved.fileId, checksum: checksumOf(uploadedBytes), byteSize: size,
+      }))).toMatchObject({ ok: false, status: "Quarantined" });
+    }
+  });
+
+  it("seals the verified bytes under a key never exposed for upload", async () => {
+    uploadedBytes = Buffer.from("sealed");
+    const reserved = await withTenant(tenantId, (tx) => reserveUpload(tx, {
+      tenantId, uploadedById: userId, fileName: "s.txt", mimeType: "text/plain", byteSize: uploadedBytes.length,
+    }));
+    await withTenant(tenantId, (tx) => confirmUpload(tx, {
+      fileId: reserved.fileId, checksum: checksumOf(uploadedBytes), byteSize: uploadedBytes.length,
+    }));
+    const stored = await withTenant(tenantId, (tx) => tx.storedFile.findUniqueOrThrow({ where: { id: reserved.fileId } }));
+    expect(stored.storageKey).not.toBe(reserved.storageKey);
+    expect(verified.get(stored.storageKey)).toEqual(uploadedBytes);
+    expect(await withTenant(tenantId, (tx) => readUrlFor(tx, stored.id))).toContain(stored.storageKey);
   });
 
   it("keeps files invisible to another tenant", async () => {

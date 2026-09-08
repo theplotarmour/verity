@@ -1,5 +1,7 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -85,18 +87,18 @@ export function SalesOrderView({
         actions={
           <>
             {order.state === "approved" && (
-              <Button
+              <CommandButton commands={"verity.trading.reserve_for_order"}
                 variant="primary"
                 disabled={pending}
                 onClick={() => setReserving(true)}
               >
                 Reserve stock
-              </Button>
+              </CommandButton>
             )}
             {order.state === "dispatching" && !issuing && (
-              <Button variant="primary" disabled={pending} onClick={() => setIssuing(true)}>
+              <CommandButton commands={"verity.trading.dispatch_order"} variant="primary" disabled={pending} onClick={() => setIssuing(true)}>
                 Issue goods
-              </Button>
+              </CommandButton>
             )}
             {/* §49 — raise the invoice from the order it is for.
                 Prefilled by construction: the command takes only the order id
@@ -107,7 +109,7 @@ export function SalesOrderView({
                 which is why this is a button and not a form. A form here would
                 be a second place those rules could drift. */}
             {order.qtyIssued > 0 && order.invoices.length === 0 && (
-              <Button
+              <CommandButton commands={"verity.trading.raise_sales_invoice"}
                 variant="primary"
                 disabled={pending}
                 onClick={() =>
@@ -115,13 +117,13 @@ export function SalesOrderView({
                 }
               >
                 Raise invoice
-              </Button>
+              </CommandButton>
             )}
             {order.state !== "completed" && order.state !== "cancelled" && (
               // §69 — cancelling after reservation releases the hold; it never
               // reverses stock that has already physically left. The command
               // enforces that, and the label should not promise otherwise.
-              <Button
+              <CommandButton commands={"verity.trading.cancel_sales_order"}
                 variant="danger"
                 disabled={pending}
                 onClick={() =>
@@ -132,7 +134,7 @@ export function SalesOrderView({
                 }
               >
                 Cancel order
-              </Button>
+              </CommandButton>
             )}
           </>
         }
@@ -188,7 +190,7 @@ export function SalesOrderView({
                 />
               </Field>
               <div className="flex gap-2">
-                <Button
+                <CommandButton commands={"verity.trading.dispatch_order"}
                   variant="primary"
                   disabled={pending}
                   onClick={() =>
@@ -214,7 +216,7 @@ export function SalesOrderView({
                   }
                 >
                   {pending ? "Issuing…" : "Issue everything outstanding"}
-                </Button>
+                </CommandButton>
                 <Button disabled={pending} onClick={() => setIssuing(false)}>
                   Cancel
                 </Button>

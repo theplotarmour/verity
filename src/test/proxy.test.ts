@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createServerClient } from "@supabase/ssr";
 import { NextRequest } from "next/server";
 
 /**
@@ -86,4 +87,15 @@ describe("session refresh boundary", () => {
     expect(consoleError).toHaveBeenCalled();
     consoleError.mockRestore();
   });
+  it("serves a fresh enforcing CSP and requests private, week-long session cookies", async () => {
+    getUser.mockResolvedValue({ data: { user: null }, error: null });
+    const first = await callProxy();
+    const second = await callProxy();
+    expect(first.headers.get("content-security-policy")).toContain("'strict-dynamic'");
+    expect(first.headers.get("content-security-policy")).not.toBe(second.headers.get("content-security-policy"));
+    expect(createServerClient).toHaveBeenCalledWith(expect.any(String), expect.any(String), expect.objectContaining({
+      cookieOptions: expect.objectContaining({ httpOnly: true, sameSite: "lax", maxAge: 604800 }),
+    }));
+  });
+
 });

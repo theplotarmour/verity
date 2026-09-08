@@ -1,3 +1,4 @@
+import { tenantZone } from "./clock";
 import { z } from "zod";
 import {
   financialYearOf,
@@ -24,6 +25,8 @@ import { transition } from "@/server/platform/state";
 import { notify } from "@/server/platform/notification";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
 import {
+  GSTIN,
+  GST_STATE_CODE,
   ENTITY_CUSTOMER,
   ENTITY_CUSTOMER_PRICE,
   ENTITY_INVOICE,
@@ -50,18 +53,7 @@ import { applyMovement, serviceProductIds } from "./stock";
  * produce a union nobody can follow.
  */
 
-/** A GSTIN is 15 characters in a fixed shape; the column checks the same rule. */
-const GSTIN = z
-  .string()
-  .regex(
-    /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
-    "that is not a valid GSTIN",
-  );
-
-/** Two digits. It decides CGST + SGST against IGST (P4). */
-const STATE_CODE = z
-  .string()
-  .regex(/^[0-9]{2}$/, "a GST state code is two digits");
+const STATE_CODE = GST_STATE_CODE;
 
 /**
  * A readable number for an order, when the user gave it none.
@@ -89,7 +81,7 @@ async function orderNumber(
     tx,
     tenantId,
     seriesKey,
-    financialYearOf(raisedAt),
+    financialYearOf(raisedAt, await tenantZone(tx)),
   );
   return invoiceNumber;
 }
@@ -302,6 +294,7 @@ export const removeSupplier: CommandDefinition<
   { supplierId: string },
   { id: string; deleted: boolean }
 > = {
+  impact: "destructive",
   key: "verity.trading.remove_supplier",
   entity: ENTITY_SUPPLIER,
   verb: "Edit",
@@ -402,6 +395,7 @@ export const removeCustomer: CommandDefinition<
   { customerId: string },
   { id: string; deleted: boolean }
 > = {
+  impact: "destructive",
   key: "verity.trading.remove_customer",
   entity: ENTITY_CUSTOMER,
   verb: "Edit",
@@ -819,6 +813,7 @@ export const createPurchaseOrder: CommandDefinition<
   },
   { id: string; totalCostPaise: number }
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.create_purchase_order",
   entity: ENTITY_PURCHASE_ORDER,
   verb: "Create",
@@ -1136,6 +1131,7 @@ export const editPurchaseOrder: CommandDefinition<
   },
   { id: string; totalCostPaise: number }
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.edit_purchase_order",
   entity: ENTITY_PURCHASE_ORDER,
   verb: "Edit",
@@ -1290,6 +1286,7 @@ export const editSalesOrder: CommandDefinition<
   },
   { id: string; totalPricePaise: number }
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.edit_sales_order",
   entity: ENTITY_SALES_ORDER,
   verb: "Edit",
@@ -1443,6 +1440,7 @@ export const receiveGoods: CommandDefinition<
     billingRefusal: string | null;
   }
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.receive_goods",
   entity: ENTITY_PURCHASE_ORDER,
   verb: "ActionExecute",
@@ -1498,7 +1496,7 @@ export const receiveGoods: CommandDefinition<
     // the same allocator invoices use, because a receipt is what a supplier
     // dispute turns on.
     const receivedAt = new Date();
-    const financialYear = financialYearOf(receivedAt);
+    const financialYear = financialYearOf(receivedAt, await tenantZone(ctx.tx));
     const numbering = await nextDocumentNumber(
       ctx.tx,
       ctx.actor.tenantId,
@@ -1675,6 +1673,7 @@ export const cancelPurchaseOrder: CommandDefinition<
   { orderId: string; reason: string },
   { id: string }
 > = {
+  impact: "destructive",
   key: "verity.trading.cancel_purchase_order",
   entity: ENTITY_PURCHASE_ORDER,
   verb: "ActionExecute",
@@ -1757,73 +1756,52 @@ export const cancelPurchaseOrder: CommandDefinition<
  * Advances reduce exposure only once allocated. A disputed invoice is NOT
  * excluded — a dispute is not a payment.
  */
-export async function customerExposurePaise(
-  tx: TenantScopedClient,
-  customerId: string,
-): Promise<number> {
-  // Term 1 — unallocated receivables. Gross of tax: the customer owes the
-  // total on the document, not its taxable value.
+export async function customerExposurePaise(tx: TenantScopedClient, customerId: string): Promise<number> {
+  return (await customerExposuresPaise(tx, [customerId])).get(customerId) ?? 0;
+}
+
+/** Three set-wise reads, independent of the number of customers. */
+export async function customerExposuresPaise(
+  tx: TenantScopedClient, customerIds: string[],
+): Promise<Map<string, number>> {
+  const exposure = new Map(customerIds.map((id) => [id, 0]));
+  if (customerIds.length === 0) return exposure;
   const invoices = await tx.tradingInvoice.findMany({
-    where: { customerId },
+    where: { customerId: { in: customerIds } },
     select: {
-      totalPaise: true,
-      payments: { select: { amountPaise: true } },
-      // Slice 5 fills in the term slice 1 left at zero: a credit note reduces
-      // what the customer owes, and an exposure that ignores it holds credit
-      // against money the business has already agreed it will not collect.
+      customerId: true, totalPaise: true,
+      allocations: { select: { amountPaise: true } },
       notes: { select: { noteType: true, totalPaise: true } },
     },
   });
-
-  const receivables = invoices.reduce((sum, invoice) => {
-    const paid = invoice.payments.reduce(
-      (p, payment) => p + payment.amountPaise,
-      0,
-    );
-    const credited = invoice.notes
-      .filter((note) => note.noteType === "credit")
-      .reduce((c, note) => c + note.totalPaise, 0);
-    const debited = invoice.notes
-      .filter((note) => note.noteType === "debit")
-      .reduce((d, note) => d + note.totalPaise, 0);
-
-    // Clamped at zero per invoice, not in aggregate: an overpayment on one
-    // invoice is money on account, and letting it mask a different unpaid
-    // invoice would understate exposure.
-    return sum + Math.max(0, invoice.totalPaise + debited - paid - credited);
-  }, 0);
-
-  // Term 2 — approved but not yet invoiced. `COMMITTED_ORDER_STATES` is the
-  // set of states in which the business has promised to supply; a draft has
-  // promised nothing and a cancelled order has withdrawn the promise.
+  for (const invoice of invoices) {
+    if (!invoice.customerId) continue;
+    const paid = invoice.allocations.reduce((sum, allocation) => sum + allocation.amountPaise, 0);
+    const adjustment = invoice.notes.reduce((sum, note) =>
+      sum + (note.noteType === "debit" ? note.totalPaise : -note.totalPaise), 0);
+    exposure.set(invoice.customerId, (exposure.get(invoice.customerId) ?? 0) +
+      Math.max(0, invoice.totalPaise + adjustment - paid));
+  }
   const orders = await tx.tradingSalesOrder.findMany({
-    where: { customerId, state: { in: [...COMMITTED_ORDER_STATES] } },
-    select: { id: true, totalPricePaise: true },
+    where: { customerId: { in: customerIds }, state: { in: [...COMMITTED_ORDER_STATES] } },
+    select: { id: true, customerId: true, totalPricePaise: true },
   });
-
-  // `TradingSalesOrder` carries no back-relation to its invoices, so the
-  // invoiced value is fetched once for the whole set rather than per order.
   const invoicedByOrder = new Map<string, number>();
-  if (orders.length > 0) {
+  if (orders.length) {
     const raised = await tx.tradingInvoice.findMany({
       where: { salesOrderId: { in: orders.map((order) => order.id) } },
       select: { salesOrderId: true, totalPaise: true },
     });
     for (const invoice of raised) {
-      if (!invoice.salesOrderId) continue;
-      invoicedByOrder.set(
-        invoice.salesOrderId,
-        (invoicedByOrder.get(invoice.salesOrderId) ?? 0) + invoice.totalPaise,
-      );
+      if (invoice.salesOrderId) invoicedByOrder.set(invoice.salesOrderId,
+        (invoicedByOrder.get(invoice.salesOrderId) ?? 0) + invoice.totalPaise);
     }
   }
-
-  const commitments = orders.reduce((sum, order) => {
-    const invoiced = invoicedByOrder.get(order.id) ?? 0;
-    return sum + Math.max(0, order.totalPricePaise - invoiced);
-  }, 0);
-
-  return receivables + commitments;
+  for (const order of orders) {
+    exposure.set(order.customerId, (exposure.get(order.customerId) ?? 0) +
+      Math.max(0, order.totalPricePaise - (invoicedByOrder.get(order.id) ?? 0)));
+  }
+  return exposure;
 }
 
 /**
@@ -1860,6 +1838,7 @@ export const createSalesOrder: CommandDefinition<
   },
   { id: string; totalPricePaise: number; state: string }
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.create_sales_order",
   entity: ENTITY_SALES_ORDER,
   verb: "Create",
@@ -2631,6 +2610,7 @@ export const dispatchOrder: CommandDefinition<
     invoicingRefusal: string | null;
   }
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.dispatch_order",
   entity: ENTITY_SALES_ORDER,
   verb: "ActionExecute",
@@ -2690,7 +2670,7 @@ export const dispatchOrder: CommandDefinition<
     }
 
     const issuedAt = new Date();
-    const financialYear = financialYearOf(issuedAt);
+    const financialYear = financialYearOf(issuedAt, await tenantZone(ctx.tx));
     const numbering = await nextDocumentNumber(
       ctx.tx,
       ctx.actor.tenantId,
@@ -2970,6 +2950,7 @@ export const cancelSalesOrder: CommandDefinition<
   { orderId: string; reason: string },
   { id: string }
 > = {
+  impact: "destructive",
   key: "verity.trading.cancel_sales_order",
   entity: ENTITY_SALES_ORDER,
   verb: "ActionExecute",
@@ -3106,24 +3087,10 @@ export const listCustomers: QueryDefinition<
       },
     });
 
-    // Exposure comes from `customerExposurePaise` and from nowhere else.
-    //
-    // THE DEFECT THIS REPLACES. This list previously summed the customer's
-    // open orders, which is a SECOND definition of exposure sitting beside the
-    // canonical one — precisely what taskplans/45 §4.1 calls a defect. It
-    // disagreed with the credit check in two directions at once: it ignored
-    // invoiced-and-unpaid money entirely, so a customer who owed a lakh on an
-    // issued invoice showed zero here, and it counted draft orders, which
-    // commit the business to nothing. The list screen is where a sales manager
-    // decides whether to take the next order, so the number that is wrong here
-    // is the number the decision is made on.
-    //
-    // Sequential rather than concurrent: these share one tenant-scoped
-    // transaction, and issuing them in parallel on a single connection would
-    // interleave on the same session.
+    const exposures = await customerExposuresPaise(ctx.tx, customers.map((customer) => customer.id));
     const rows = [];
     for (const customer of customers) {
-      const exposurePaise = await customerExposurePaise(ctx.tx, customer.id);
+      const exposurePaise = exposures.get(customer.id) ?? 0;
       rows.push({
         ...customer,
         exposurePaise,
@@ -3210,6 +3177,7 @@ export const purchaseOrderDetail: QueryDefinition<
     }>;
   } | null
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.purchase_order_detail",
   entity: ENTITY_PURCHASE_ORDER,
   input: z.object({ orderId: z.string().uuid() }),
@@ -3239,7 +3207,7 @@ export const purchaseOrderDetail: QueryDefinition<
         tradingInvoices: {
           orderBy: { issuedAt: "desc" },
           include: {
-            payments: { select: { amountPaise: true } },
+            allocations: { select: { amountPaise: true } },
             notes: { select: { noteType: true, totalPaise: true } },
           },
         },
@@ -3321,7 +3289,7 @@ export const purchaseOrderDetail: QueryDefinition<
         ),
       })),
       invoices: order.tradingInvoices.map((invoice) => {
-        const paid = invoice.payments.reduce(
+        const paid = invoice.allocations.reduce(
           (sum, payment) => sum + payment.amountPaise,
           0,
         );
@@ -3424,6 +3392,7 @@ export const salesOrderDetail: QueryDefinition<
     }>;
   } | null
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.sales_order_detail",
   entity: ENTITY_SALES_ORDER,
   input: z.object({ orderId: z.string().uuid() }),
@@ -3451,7 +3420,7 @@ export const salesOrderDetail: QueryDefinition<
         tradingInvoices: {
           orderBy: { issuedAt: "desc" },
           include: {
-            payments: { select: { amountPaise: true } },
+            allocations: { select: { amountPaise: true } },
             notes: { select: { noteType: true, totalPaise: true } },
           },
         },
@@ -3544,7 +3513,7 @@ export const salesOrderDetail: QueryDefinition<
         qtyUnits: issue.lines.reduce((sum, line) => sum + line.qtyIssued, 0),
       })),
       invoices: order.tradingInvoices.map((invoice) => {
-        const paid = invoice.payments.reduce(
+        const paid = invoice.allocations.reduce(
           (sum, payment) => sum + payment.amountPaise,
           0,
         );
@@ -3651,6 +3620,7 @@ export const openOrders: QueryDefinition<
     }>;
   }
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.open_orders",
   entity: ENTITY_SALES_ORDER,
   input: z.object({}),
@@ -3909,6 +3879,7 @@ export const stockAvailability: QueryDefinition<
     availableUnits: number;
   }>
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.stock_availability",
   entity: ENTITY_RESERVATION,
   input: z.object({ locationId: z.string().uuid() }),
@@ -4049,7 +4020,7 @@ export const supplierDetail: QueryDefinition<
         tradingInvoices: {
           orderBy: { issuedAt: "desc" },
           include: {
-            payments: { orderBy: { receivedAt: "desc" } },
+            allocations: { include: { payment: true }, orderBy: { payment: { receivedAt: "desc" } } },
             notes: { select: { noteType: true, totalPaise: true } },
           },
         },
@@ -4118,7 +4089,7 @@ export const supplierDetail: QueryDefinition<
         createdAt: order.createdAt,
       })),
       invoices: supplier.tradingInvoices.map((invoice) => {
-        const paid = invoice.payments.reduce(
+        const paid = invoice.allocations.reduce(
           (p, payment) => p + payment.amountPaise,
           0,
         );
@@ -4143,12 +4114,12 @@ export const supplierDetail: QueryDefinition<
         };
       }),
       payments: supplier.tradingInvoices.flatMap((invoice) =>
-        invoice.payments.map((payment) => ({
+        invoice.allocations.map(({ payment, amountPaise }) => ({
           id: payment.id,
           invoiceId: invoice.id,
           invoiceNumber: invoice.invoiceNumber,
           method: payment.method,
-          amountPaise: payment.amountPaise,
+          amountPaise,
           reference: payment.reference,
           receivedAt: payment.receivedAt,
         })),
@@ -4275,7 +4246,7 @@ export const customerDetail: QueryDefinition<
         tradingInvoices: {
           orderBy: { issuedAt: "desc" },
           include: {
-            payments: { orderBy: { receivedAt: "desc" } },
+            allocations: { include: { payment: true }, orderBy: { payment: { receivedAt: "desc" } } },
             notes: { select: { noteType: true, totalPaise: true } },
           },
         },
@@ -4342,7 +4313,7 @@ export const customerDetail: QueryDefinition<
         createdAt: order.createdAt,
       })),
       invoices: customer.tradingInvoices.map((invoice) => {
-        const paid = invoice.payments.reduce(
+        const paid = invoice.allocations.reduce(
           (p, payment) => p + payment.amountPaise,
           0,
         );
@@ -4367,12 +4338,12 @@ export const customerDetail: QueryDefinition<
         };
       }),
       payments: customer.tradingInvoices.flatMap((invoice) =>
-        invoice.payments.map((payment) => ({
+        invoice.allocations.map(({ payment, amountPaise }) => ({
           id: payment.id,
           invoiceId: invoice.id,
           invoiceNumber: invoice.invoiceNumber,
           method: payment.method,
-          amountPaise: payment.amountPaise,
+          amountPaise,
           reference: payment.reference,
           receivedAt: payment.receivedAt,
         })),

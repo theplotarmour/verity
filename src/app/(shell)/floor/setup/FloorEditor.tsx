@@ -1,8 +1,10 @@
 "use client";
 
+import { CommandButton, useCommandAccess } from "@/components/ui/CommandAccess";
+
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, EmptyState, ErrorState, Field, Input, Panel, Select } from "@/components/ui/primitives";
+import { EmptyState, ErrorState, Field, Input, Panel, Select } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 import type { FloorTable } from "@/server/capabilities/dinein";
@@ -27,6 +29,7 @@ const TABLE_H = 84;
  */
 export function FloorEditor({ tables }: { tables: FloorTable[] }) {
   const router = useRouter();
+  const canCommand = useCommandAccess();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<string | null>(null);
@@ -95,16 +98,16 @@ export function FloorEditor({ tables }: { tables: FloorTable[] }) {
       )}
 
       <div className="mb-4 flex flex-wrap gap-2">
-        <Button onClick={() => setAddingZone((open) => !open)}>
+        <CommandButton commands={"verity.dinein.define_zone"} onClick={() => setAddingZone((open) => !open)}>
           {addingZone ? "Cancel" : "New zone"}
-        </Button>
-        <Button
+        </CommandButton>
+        <CommandButton commands={"verity.dinein.define_table"}
           variant="primary"
           disabled={zones.length === 0}
           onClick={() => setAddingTable((open) => !open)}
         >
           {addingTable ? "Cancel" : "New table"}
-        </Button>
+        </CommandButton>
       </div>
 
       {addingZone && (
@@ -133,9 +136,9 @@ export function FloorEditor({ tables }: { tables: FloorTable[] }) {
                   <Input id="zone-floor" name="floorLabel" placeholder="G" />
                 </Field>
               </div>
-              <Button type="submit" variant="primary" disabled={pending}>
+              <CommandButton commands={"verity.dinein.define_zone"} type="submit" variant="primary" disabled={pending}>
                 Create
-              </Button>
+              </CommandButton>
             </form>
           </Panel>
         </div>
@@ -190,9 +193,9 @@ export function FloorEditor({ tables }: { tables: FloorTable[] }) {
                   </Select>
                 </Field>
               </div>
-              <Button type="submit" variant="primary" disabled={pending}>
+              <CommandButton commands={"verity.dinein.define_table"} type="submit" variant="primary" disabled={pending}>
                 Add
-              </Button>
+              </CommandButton>
             </form>
           </Panel>
         </div>
@@ -252,6 +255,7 @@ export function FloorEditor({ tables }: { tables: FloorTable[] }) {
                     <button
                       key={table.id}
                       type="button"
+                      disabled={!canCommand("verity.dinein.position_table")}
                       aria-label={`${table.label}, ${table.seats} seats, at ${at.x} by ${at.y}`}
                       aria-pressed={isSelected}
                       onFocus={() => setSelected(table.id)}

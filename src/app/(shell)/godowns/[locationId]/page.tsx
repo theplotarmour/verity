@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
  * they may not read is nevertheless there, which is the fact the scope was
  * meant to withhold.
  */
-export default async function GodownPage({
+async function GodownPage({
   params,
 }: {
   params: Promise<{ locationId: string }>;
@@ -37,3 +38,5 @@ export default async function GodownPage({
 
   return <GodownView godown={godown} />;
 }
+
+export default withPageAccess(GodownPage);

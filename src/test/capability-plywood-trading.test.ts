@@ -249,7 +249,7 @@ describeDb("capability: Plywood trading — purchase and sale", () => {
     supplierId = (
       await executeCommand(owner, createSupplier, {
         displayName: "Century Distributors",
-        gstin: "07AABCU9603R1ZM",
+        gstin: "07AABCU9603R1ZP",
         stateCode: "07",
       })
     ).id;
@@ -376,7 +376,7 @@ describeDb("capability: Plywood trading — purchase and sale", () => {
 
   /* ---------------------------------- sale ---------------------------------- */
 
-  it("approves an order inside the credit limit and holds it outside", async () => {
+  it("records approved orders even above the advisory credit limit", async () => {
     const productId = await boardInStock(100);
     const customerId = await freshCustomer(500_000);
     await executeCommand(owner, setCustomerPrice, {
@@ -400,7 +400,7 @@ describeDb("capability: Plywood trading — purchase and sale", () => {
       locationId: godownId,
       lines: [{ productId, qtyOrdered: 1 }],
     });
-    expect(overLimit.state).toBe("pending_credit");
+    expect(overLimit.state).toBe("approved");
   });
 
   it("records why a credit limit was overridden", async () => {
@@ -411,7 +411,10 @@ describeDb("capability: Plywood trading — purchase and sale", () => {
       locationId: godownId,
       lines: [{ productId, qtyOrdered: 1, unitPricePaise: 150_000 }],
     });
-    expect(order.state).toBe("pending_credit");
+    // Existing pending-credit orders remain releasable after the new-order gate was retired.
+    await withTenant(tenantId, (tx) => tx.tradingSalesOrder.update({
+      where: { id: order.id }, data: { state: "pending_credit" },
+    }));
 
     await executeCommand(owner, approveCredit, {
       orderId: order.id,
@@ -469,7 +472,7 @@ describeDb("capability: Plywood trading — purchase and sale", () => {
     // discover it could not keep at dispatch.
     await expect(
       executeCommand(owner, reserveForOrder, { orderId: order.id }),
-    ).rejects.toThrow(/has 10 available/);
+    ).rejects.toThrow(/has 10/);
   });
 
   it("does not let two orders hold the same sheets", async () => {
@@ -495,7 +498,7 @@ describeDb("capability: Plywood trading — purchase and sale", () => {
 
     await expect(
       executeCommand(owner, reserveForOrder, { orderId: second.id }),
-    ).rejects.toThrow(/has 10 available/);
+    ).rejects.toThrow(/has 10/);
   });
 
   it("releases the hold when an order is cancelled", async () => {

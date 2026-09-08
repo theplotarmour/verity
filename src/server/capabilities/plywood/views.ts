@@ -116,6 +116,7 @@ export const productDetail: QueryDefinition<
     }>;
   } | null
 > = {
+  scopeHandling: "handler",
   key: "verity.plywood.product_detail",
   entity: ENTITY_PRODUCT,
   input: z.object({ productId: z.string().uuid() }),

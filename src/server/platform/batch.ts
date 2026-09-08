@@ -68,7 +68,7 @@ export async function runCommandBatch<TInput, TResult>(
   let needsApproval = 0;
 
   for (let index = 0; index < inputs.length; index++) {
-    if (def.impact === "destructive" && !options.confirmed) {
+    if ((def.impact === "destructive" || def.verb === "Delete") && !options.confirmed) {
       needsApproval++;
       items.push({
         index,

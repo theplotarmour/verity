@@ -1,10 +1,11 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Button,
   EmptyState,
   ErrorState,
   Field,
@@ -520,7 +521,7 @@ function SettleModal({
               : "Settles it in full"}
           </span>
           <ModalCancel onClose={onClose} disabled={pending} />
-          <Button
+          <CommandButton commands={"verity.trading.record_party_payment"}
             variant="primary"
             disabled={pending || !valid}
             onClick={() =>
@@ -537,7 +538,7 @@ function SettleModal({
             }
           >
             {pending ? "Recording…" : "Record"}
-          </Button>
+          </CommandButton>
         </>
       }
     >
@@ -667,13 +668,13 @@ function OwedTable({
                         {rupees(amount)}
                       </td>
                       <td className="whitespace-nowrap border-b border-line px-3 py-2.5 text-right">
-                        <Button
+                        <CommandButton commands={"verity.trading.record_party_payment"}
                           size="sm"
                           disabled={pending}
                           onClick={() => onSettle(row)}
                         >
                           {actionLabel}
-                        </Button>
+                        </CommandButton>
                       </td>
                     </tr>
                   );

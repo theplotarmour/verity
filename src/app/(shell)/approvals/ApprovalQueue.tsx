@@ -1,8 +1,10 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, EmptyState, ErrorState, Field, Input, StateBadge } from "@/components/ui/primitives";
+import { EmptyState, ErrorState, Field, Input, StateBadge } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -148,7 +150,7 @@ export function ApprovalQueue({
                     expected path, and giving them equal visual weight makes the
                     reader stop and parse two identical buttons. */}
                 <div className="flex shrink-0 gap-2">
-                  <Button
+                  <CommandButton commands={"verity.approval.decide"}
                     type="submit"
                     name="intent"
                     value="approve"
@@ -156,8 +158,8 @@ export function ApprovalQueue({
                     disabled={pending && busy === request.id}
                   >
                     {pending && busy === request.id ? "Recording…" : "Approve"}
-                  </Button>
-                  <Button
+                  </CommandButton>
+                  <CommandButton commands={"verity.approval.decide"}
                     type="submit"
                     name="intent"
                     value="reject"
@@ -165,7 +167,7 @@ export function ApprovalQueue({
                     disabled={pending && busy === request.id}
                   >
                     Reject
-                  </Button>
+                  </CommandButton>
                 </div>
               </form>
             ) : (

@@ -1,3 +1,6 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
+import { withTenant } from "@/server/platform/tenancy";
+import { resolvePermissions } from "@/server/platform/authorization";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -15,7 +18,7 @@ export const dynamic = "force-dynamic";
  * promising anything is what is left, and a bare limit next to a bare
  * outstanding makes them do the subtraction on the phone.
  */
-export default async function CustomersPage() {
+async function CustomersPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -27,13 +30,17 @@ export default async function CustomersPage() {
     throw error;
   }
 
+  const grants = await withTenant(actor.tenantId, (tx) => actor.roleId ? resolvePermissions(tx, actor.roleId) : Promise.resolve([]));
+  const allowed = grants.filter((grant) => grant.entity === listCustomers.entity && grant.scope === "Tenant").map((grant) => grant.verb);
   return (
     <>
       <PageHeader
         title="Customers"
         description="Everyone the business sells to. Exposure is what they owe plus what has been approved and not yet billed — the same figure the credit check uses, so the list and the block never disagree."
       />
-      <CustomerList customers={customers} />
+      <CustomerList customers={customers} canCreate={allowed.includes("Create")} canEdit={allowed.includes("Edit")} canDelete={allowed.includes("Delete")} />
     </>
   );
 }
+
+export default withPageAccess(CustomersPage);

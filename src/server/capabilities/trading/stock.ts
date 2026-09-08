@@ -463,6 +463,7 @@ export const recordDamagedStock: CommandDefinition<
   },
   { ledgerId: string; onHandUnits: number }
 > = {
+  impact: "destructive",
   key: "verity.trading.record_damaged_stock",
   entity: ENTITY_STOCK_LEDGER,
   verb: "ActionExecute",
@@ -615,6 +616,7 @@ export const stockOnHand: QueryDefinition<
     valuePaise: number;
   }>
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.stock_on_hand",
   entity: ENTITY_STOCK_BALANCE,
   input: z.object({
@@ -682,6 +684,7 @@ export const lowStock: QueryDefinition<
     reorderLevelUnits: number;
   }>
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.low_stock",
   entity: ENTITY_STOCK_BALANCE,
   input: z.object({}),
@@ -757,6 +760,7 @@ export const productMovements: QueryDefinition<
     occurredAt: Date;
   }>
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.product_movements",
   entity: ENTITY_STOCK_LEDGER,
   input: z.object({

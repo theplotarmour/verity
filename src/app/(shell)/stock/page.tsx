@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
  * owner reading a stock value is entitled to know which of three possible
  * numbers it is — FIFO and last-purchase-cost would both give a different one.
  */
-export default async function StockPage() {
+async function StockPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -31,14 +32,8 @@ export default async function StockPage() {
 
   const [short, godowns, catalogue] = await Promise.all([
     executeQuery(actor, lowStock, {}),
-    executeQuery(actor, listLocations, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return [];
-      throw error;
-    }),
-    executeQuery(actor, listCatalogue, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return [];
-      throw error;
-    }),
+    executeQuery(actor, listLocations, {}),
+    executeQuery(actor, listCatalogue, {}),
   ]);
 
   return (
@@ -67,3 +62,5 @@ export default async function StockPage() {
     </>
   );
 }
+
+export default withPageAccess(StockPage);

@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -18,7 +19,7 @@ export const dynamic = "force-dynamic";
  * Receivables lead. An invoice that has been paid is a record; an invoice that
  * has not is a phone call somebody has to make today.
  */
-export default async function FinancePage() {
+async function FinancePage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -31,16 +32,9 @@ export default async function FinancePage() {
   }
 
   const [balances, unbilled] = await Promise.all([
-    executeQuery(actor, partyBalances, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return [];
-      throw error;
-    }),
+    executeQuery(actor, partyBalances, {}),
     // Goods moved with no document — a FAILED automatic raise, not a queue.
-    executeQuery(actor, unbilledMovements, {}).catch((error) => {
-      if (error instanceof ForbiddenError)
-        return { purchases: [], sales: [] };
-      throw error;
-    }),
+    executeQuery(actor, unbilledMovements, {}),
   ]);
 
   return (
@@ -58,3 +52,5 @@ export default async function FinancePage() {
     </>
   );
 }
+
+export default withPageAccess(FinancePage);

@@ -61,10 +61,19 @@ export function supabaseStorageDriver(input: {
 }): StorageDriver {
   const supabase = serviceClient(input.url, input.serviceRoleKey);
 
+  async function requirePrivateBoundedBucket() {
+    const { data, error } = await supabase.storage.getBucket(input.bucket);
+    if (error || !data || data.public || !data.file_size_limit || data.file_size_limit > 25 * 1024 * 1024) {
+      throw new Error("E_STORAGE: configure a private bucket with an upload limit of at most 25 MB");
+    }
+  }
+
+
   return {
     name: `supabase:${input.bucket}`,
 
     async createUploadUrl(key, mimeType) {
+      await requirePrivateBoundedBucket();
       const { data, error } = await supabase.storage
         .from(input.bucket)
         .createSignedUploadUrl(key);
@@ -81,13 +90,21 @@ export function supabaseStorageDriver(input: {
     },
 
     async createReadUrl(key, expiresInSeconds) {
+      await requirePrivateBoundedBucket();
       const { data, error } = await supabase.storage
         .from(input.bucket)
-        .createSignedUrl(key, expiresInSeconds);
+        .createSignedUrl(key, expiresInSeconds, { download: true });
       if (error || !data) {
         throw new Error(`E_STORAGE: could not create a read URL (${error?.message ?? "no data"})`);
       }
       return data.signedUrl;
+    },
+
+    async storeVerified(key, bytes, mimeType) {
+      const { error } = await supabase.storage.from(input.bucket).upload(key, bytes, {
+        contentType: mimeType, upsert: false,
+      });
+      if (error) throw new Error("E_STORAGE: could not store verified bytes");
     },
 
     async delete(key) {

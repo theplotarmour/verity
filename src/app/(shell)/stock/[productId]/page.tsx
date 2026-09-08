@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireActor } from "@/server/platform/auth";
@@ -29,7 +30,7 @@ export const dynamic = "force-dynamic";
  * Oldest first with a running balance, so the closing figure is the last row.
  * A running total that counts down from the present is not a running balance.
  */
-export default async function StockLedgerPage({
+async function StockLedgerPage({
   params,
   searchParams,
 }: {
@@ -150,3 +151,5 @@ export default async function StockLedgerPage({
     </>
   );
 }
+
+export default withPageAccess(StockLedgerPage);

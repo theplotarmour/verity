@@ -82,7 +82,7 @@ export function scrubTelemetryText(text: string): string {
  */
 export type ScrubbableEvent = {
   message?: unknown;
-  exception?: { values?: Array<{ value?: unknown; type?: unknown }> };
+  exception?: { values?: Array<{ value?: unknown; type?: unknown; stacktrace?: unknown }> };
   breadcrumbs?: Array<{ message?: unknown; data?: unknown }>;
   request?: { url?: unknown; headers?: Record<string, unknown>; data?: unknown; cookies?: unknown };
   extra?: Record<string, unknown>;
@@ -95,7 +95,12 @@ export function scrubTelemetryEvent<T extends ScrubbableEvent>(event: T): T | nu
   }
 
   for (const value of event.exception?.values ?? []) {
-    if (typeof value.value === "string") value.value = scrubTelemetryText(value.value);
+    if (typeof value.value === "string") {
+      const code = value.value.match(/\bE_[A-Z_]+(?=:)/)?.[0];
+      value.value = `${code ?? "Error"}: [message withheld]`;
+    }
+    // Local variables, source context and absolute paths can carry tenant data.
+    delete value.stacktrace;
   }
 
   for (const crumb of event.breadcrumbs ?? []) {

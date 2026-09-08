@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -22,7 +23,7 @@ export const dynamic = "force-dynamic";
  * The order that is half-delivered is the one this screen exists for. A
  * completed order is history; a draft is a note to self.
  */
-export default async function PurchasesPage() {
+async function PurchasesPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -36,24 +37,12 @@ export default async function PurchasesPage() {
   }
 
   const [suppliers, godowns, catalogue, agreed] = await Promise.all([
-    executeQuery(actor, listSuppliers, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return [];
-      throw error;
-    }),
-    executeQuery(actor, listLocations, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return [];
-      throw error;
-    }),
-    executeQuery(actor, listCatalogue, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return [];
-      throw error;
-    }),
+    executeQuery(actor, listSuppliers, {}),
+    executeQuery(actor, listLocations, {}),
+    executeQuery(actor, listCatalogue, {}),
     // Task 71 item 8: the buyer sees the price they already agreed, in the
     // field, instead of a box that says "blank uses agreed price".
-    executeQuery(actor, supplierPrices, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return [];
-      throw error;
-    }),
+    executeQuery(actor, supplierPrices, {}),
   ]);
 
   // The GST rate per product, so the order form can show what the purchase
@@ -62,7 +51,7 @@ export default async function PurchasesPage() {
   // duplicating that decision in the browser is how the two start disagreeing.
   const taxRates = await executeQuery(actor, productTaxRates, {}).catch(
     (error) => {
-      if (error instanceof ForbiddenError) return [];
+      if (error instanceof ForbiddenError) throw error;
       throw error;
     },
   );
@@ -106,3 +95,5 @@ export default async function PurchasesPage() {
     </>
   );
 }
+
+export default withPageAccess(PurchasesPage);

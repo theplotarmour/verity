@@ -1,5 +1,7 @@
+import { recordExecutionFailure } from "./execution-failure";
+import { limitActorRequests } from "./request-limits";
 import { z } from "zod";
-import { redactFields, scopeFilter } from "./authorization";
+import { redactFields, redactResult, scopeFilter } from "./authorization";
 import { capabilityForEntity, requireCapabilityActive } from "./capability";
 import { withTenant, type TenantScopedClient } from "./tenancy";
 import { ValidationError, type ActorContext } from "./command";
@@ -19,13 +21,10 @@ import type { GroundingCache } from "./grounding";
  * at all; Layer 2 narrows which rows inside the tenant are theirs; Layer 3
  * removes restricted fields from what survives.
  *
- * Layer 2 is offered to the handler rather than imposed on it, because the
- * platform does not know where a capability keeps its organization column — or
- * whether the entity is organization-scoped at all. Layer 3 is applied
- * automatically to a top-level array result, which is the shape almost every
- * list query returns; a handler returning something more nested is responsible
- * for calling `ctx.redact` itself, and the field-permission registry makes that
- * requirement discoverable rather than tribal.
+ * Handlers must explicitly declare scopeHandling to accept narrow grants and
+ * enforce their row filters. All other operations require a Tenant grant.
+ * Declared field restrictions are applied to arrays, objects and nested values.
+
  */
 
 export type QueryContext = {
@@ -45,6 +44,8 @@ export type QueryDefinition<TInput, TResult> = {
   /** EntityDefinition.key being read. */
   entity: string;
   input: z.ZodType<TInput>;
+  /** Only handlers with explicit row filtering/guards may opt into narrow grants. */
+  scopeHandling?: "handler";
   /** One sentence, business language — see the same field on CommandDefinition. */
   description?: string;
   handler: (ctx: QueryContext, input: TInput) => Promise<TResult>;
@@ -90,6 +91,7 @@ export async function executeQuery<TInput, TResult>(
    *  invented. Only meaningful when `channel === "agent"`. */
   grounding?: GroundingCache,
 ): Promise<TResult> {
+  if (channel !== "job") await limitActorRequests(actor.tenantId, actor.userId, "query");
   return withTenant(actor.tenantId, async (tx) => {
     const parsed = def.input.safeParse(rawInput);
     if (!parsed.success) {
@@ -105,7 +107,7 @@ export async function executeQuery<TInput, TResult>(
     // `enforcePolicy` throws ForbiddenError on deny exactly like `authorize`
     // did, and Layer 1's grant resolution is the same `resolve_permissions`
     // call either way, so this changes nothing about who can read what.
-    await enforcePolicy(tx, actor, { verb: "Read", entity: def.entity, channel });
+    await enforcePolicy(tx, actor, { verb: "Read", entity: def.entity, channel, resource: def.scopeHandling === "handler" ? undefined : {} });
 
     const ctx: QueryContext = {
       actor,
@@ -116,18 +118,7 @@ export async function executeQuery<TInput, TResult>(
 
     const result = await def.handler(ctx, parsed.data);
 
-    // Layer 3 on the common shape. Only a top-level array of plain objects is
-    // handled; anything else is the handler's own responsibility, and silently
-    // half-redacting a nested structure would be worse than not touching it.
-    const final =
-      Array.isArray(result) && result.every((r) => r && typeof r === "object")
-        ? ((await redactFields(
-            tx,
-            actor,
-            def.entity,
-            result as Array<Record<string, unknown>>,
-          )) as TResult)
-        : result;
+    const final = await redactResult(tx, actor, def.entity, result);
 
     // Task 84 area 4. Recorded AFTER redaction — a field the actor cannot
     // read cannot ground anything either, and `redactFields` omits rather
@@ -136,5 +127,8 @@ export async function executeQuery<TInput, TResult>(
     if (channel === "agent" && grounding) grounding.record(final);
 
     return final;
+  }).catch(async (error: unknown) => {
+    await recordExecutionFailure(error, actor, def.key);
+    throw error;
   });
 }

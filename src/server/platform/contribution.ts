@@ -1,3 +1,4 @@
+import { captureError } from "./observability";
 import "server-only";
 import type { PermissionVerb } from "@prisma/client";
 import { withTenant, type TenantScopedClient } from "./tenancy";
@@ -346,6 +347,7 @@ export async function runDueWork(args: {
         ms: Date.now() - started,
       });
     } catch (error) {
+      captureError(error);
       outcomes.push({
         capabilityId: unit.capabilityId,
         key: unit.key,

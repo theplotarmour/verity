@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import Link from "next/link";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
@@ -13,7 +14,7 @@ import { Related } from "@/components/ui/business/Related";
 export const dynamic = "force-dynamic";
 
 /** §73 Inventory — valuation, ageing, damage and adjustments. */
-export default async function InventoryReportPage() {
+async function InventoryReportPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -123,3 +124,5 @@ export default async function InventoryReportPage() {
     </>
   );
 }
+
+export default withPageAccess(InventoryReportPage);

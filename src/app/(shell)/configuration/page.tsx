@@ -1,6 +1,6 @@
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
-import { hasPermission } from "@/server/platform/authorization";
+import { hasTenantPermission } from "@/server/platform/authorization";
 import { ENTITY_TENANT } from "@/server/platform/administration";
 import { PageHeader, Panel, PermissionDenied, Stat, StatRow } from "@/components/ui/primitives";
 import { AppearanceControls } from "@/components/shell/AppearanceControls";
@@ -48,7 +48,7 @@ export default async function ConfigurationPage() {
   // set of people who may read them is the set who may change them, not a
   // wider one invented here.
   const permitted = await withTenant(actor.tenantId, (tx) =>
-    hasPermission(tx, actor.roleId, "Edit", ENTITY_TENANT),
+    hasTenantPermission(tx, actor.roleId, "Edit", ENTITY_TENANT),
   );
   if (!permitted) return <PermissionDenied what="configuration" />;
 

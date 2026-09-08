@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -12,7 +13,7 @@ import { Related } from "@/components/ui/business/Related";
 export const dynamic = "force-dynamic";
 
 /** §73 Finance — receivable and payable ageing. */
-export default async function FinanceReportPage() {
+async function FinanceReportPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -88,3 +89,5 @@ export default async function FinanceReportPage() {
     </>
   );
 }
+
+export default withPageAccess(FinanceReportPage);

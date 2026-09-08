@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
@@ -20,7 +21,7 @@ export const dynamic = "force-dynamic";
  * storage round trip. "Share" is the same button — every operating system prints
  * to PDF.
  */
-export default async function InvoicePage({
+async function InvoicePage({
   params,
 }: {
   params: Promise<{ invoiceId: string }>;
@@ -55,3 +56,5 @@ export default async function InvoicePage({
 
   return <InvoiceView invoice={invoice} seller={seller} />;
 }
+
+export default withPageAccess(InvoicePage);

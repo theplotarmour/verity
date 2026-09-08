@@ -99,6 +99,7 @@ export async function buildToolManifest(
 
   for (const def of listCommands()) {
     if (!(await entityUsable(def.entity, def.verb))) continue;
+    if (def.scopeHandling !== "handler" && !grants.some((p) => p.entity === def.entity && p.verb === def.verb && p.scope === "Tenant")) continue;
     tools.push({
       key: def.key,
       kind: "command",
@@ -111,6 +112,7 @@ export async function buildToolManifest(
 
   for (const def of listQueries()) {
     if (!(await entityUsable(def.entity, "Read"))) continue;
+    if (def.scopeHandling !== "handler" && !grants.some((p) => p.entity === def.entity && p.verb === "Read" && p.scope === "Tenant")) continue;
     tools.push({
       key: def.key,
       kind: "query",

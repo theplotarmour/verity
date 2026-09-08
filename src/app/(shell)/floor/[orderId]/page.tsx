@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
@@ -19,7 +20,7 @@ type MenuCategory = Awaited<ReturnType<typeof listMenu.handler>>[number];
  * two screens in their head at once, so the menu and the order sit side by side
  * rather than behind a tab.
  */
-export default async function OrderPage({
+async function OrderPage({
   params,
 }: {
   params: Promise<{ orderId: string }>;
@@ -52,3 +53,5 @@ export default async function OrderPage({
     </>
   );
 }
+
+export default withPageAccess(OrderPage);

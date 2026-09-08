@@ -69,12 +69,8 @@ const configSchema = z.object({
       supabaseAnonKey: z.string().optional(),
 
       /**
-       * Signs the active-membership cookie (`auth.ts`). Sourced from
-       * SUPABASE_JWT_SECRET, else VERITY_SESSION_SECRET, else the anon key —
-       * the last being the fallback auth.ts already performed inline. An
-       * OIDC-only deployment has no anon key, so one of the first two must be
-       * set there, and an empty string reaches the `min(1)` below rather than
-       * silently signing with nothing.
+       * Private signing material only. JWT_SECRET is a legacy deployment alias;
+       * the public Supabase anon key is never a signing-secret fallback.
        */
       jwtSecret: z.string().min(1, "SUPABASE_JWT_SECRET or VERITY_SESSION_SECRET is required"),
 
@@ -199,7 +195,7 @@ function loadConfig(): RuntimeConfig {
       jwtSecret:
         env("SUPABASE_JWT_SECRET") ??
         env("VERITY_SESSION_SECRET") ??
-        env("NEXT_PUBLIC_SUPABASE_ANON_KEY") ??
+        env("JWT_SECRET") ??
         "",
       // Passed as undefined rather than a half-filled object when the issuer is
       // absent, so `provider=oidc` with nothing configured reports the missing

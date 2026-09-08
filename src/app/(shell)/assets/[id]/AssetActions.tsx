@@ -1,8 +1,10 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, ErrorState } from "@/components/ui/primitives";
+import { ErrorState } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -36,7 +38,7 @@ export function AssetActions({
     <div className="flex flex-col items-end gap-2">
       <div className="flex flex-wrap gap-2">
         {transitions.map((target) => (
-          <Button
+          <CommandButton commands={"verity.asset.change_state"}
             key={target.key}
             size="sm"
             // Secondary throughout, with the terminal transition marked in
@@ -60,7 +62,7 @@ export function AssetActions({
             }}
           >
             {pending ? "Working…" : `Mark ${target.key.replace(/_/g, " ")}`}
-          </Button>
+          </CommandButton>
         ))}
       </div>
       {failure && (

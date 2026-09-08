@@ -1,8 +1,10 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, ErrorState, Input, Panel } from "@/components/ui/primitives";
+import { ErrorState, Input, Panel } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 import type { OrderDetail } from "@/server/capabilities/dinein";
@@ -129,7 +131,7 @@ export function OrderPad({ order, menu }: { order: OrderDetail; menu: MenuCatego
                         </span>
                       </span>
                       <span className="flex shrink-0 gap-1.5">
-                        <Button
+                        <CommandButton commands={"verity.dinein.add_order_lines"}
                           size="sm"
                           disabled={!canAdd || pending}
                           onClick={() =>
@@ -140,9 +142,9 @@ export function OrderPad({ order, menu }: { order: OrderDetail; menu: MenuCatego
                           }
                         >
                           Add
-                        </Button>
+                        </CommandButton>
                         {item.variants.map((variant) => (
-                          <Button
+                          <CommandButton commands={"verity.dinein.add_order_lines"}
                             key={variant.id}
                             size="sm"
                             disabled={!canAdd || pending}
@@ -154,7 +156,7 @@ export function OrderPad({ order, menu }: { order: OrderDetail; menu: MenuCatego
                             }
                           >
                             {variant.name}
-                          </Button>
+                          </CommandButton>
                         ))}
                       </span>
                     </div>
@@ -191,7 +193,7 @@ export function OrderPad({ order, menu }: { order: OrderDetail; menu: MenuCatego
                       <div className="mt-1 flex items-center justify-between gap-3">
                         <span className={`text-[12px] ${state.tone}`}>{state.label}</span>
                         {line.state === "ready" && (
-                          <Button
+                          <CommandButton commands={"verity.dinein.advance_order_line"}
                             size="sm"
                             disabled={pending}
                             onClick={() =>
@@ -202,7 +204,7 @@ export function OrderPad({ order, menu }: { order: OrderDetail; menu: MenuCatego
                             }
                           >
                             Mark served
-                          </Button>
+                          </CommandButton>
                         )}
                       </div>
                       {line.lineNote && (
@@ -226,13 +228,13 @@ export function OrderPad({ order, menu }: { order: OrderDetail; menu: MenuCatego
           <Panel title="Service">
             <div className="flex flex-col gap-2">
               {canPlace && (
-                <Button
+                <CommandButton commands={"verity.dinein.place_order"}
                   variant="primary"
                   disabled={pending}
                   onClick={() => run("verity.dinein.place_order", { orderId: order.id })}
                 >
                   {pending ? "Sending…" : "Send to kitchen"}
-                </Button>
+                </CommandButton>
               )}
 
               {order.state === "served" && (
@@ -242,13 +244,13 @@ export function OrderPad({ order, menu }: { order: OrderDetail; menu: MenuCatego
               )}
 
               {["draft", "placed", "partially_served"].includes(order.state) && (
-                <Button
+                <CommandButton commands={"verity.dinein.cancel_order"}
                   variant="danger"
                   disabled={pending}
                   onClick={() => run("verity.dinein.cancel_order", { orderId: order.id })}
                 >
                   Cancel order
-                </Button>
+                </CommandButton>
               )}
 
               <p className="mb-0 mt-1 text-[12px] text-text-tertiary">

@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
  * orders that will move it and the movements that already have — each of them
  * a link back to the record that owns the fact.
  */
-export default async function ProductPage({
+async function ProductPage({
   params,
 }: {
   params: Promise<{ productId: string }>;
@@ -37,3 +38,5 @@ export default async function ProductPage({
 
   return <ProductView product={product} />;
 }
+
+export default withPageAccess(ProductPage);

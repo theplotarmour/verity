@@ -250,7 +250,7 @@ describeDb("plywood period close (slice 7)", () => {
 
   beforeAll(async () => {
     await executeCommand(owner, registerGstRegistration, {
-      gstin: "07AAACN1234K1Z5",
+      gstin: "07AAACN1234K1ZO",
       invoiceSeriesPrefix: "NK/",
     });
     await executeCommand(owner, setTaxRule, { hsnCode: "4412", rateBp: 1800 });

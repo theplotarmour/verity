@@ -1,5 +1,7 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -120,7 +122,7 @@ export function PurchaseOrderView({
         actions={
           <>
             {order.state === "draft" && (
-              <Button
+              <CommandButton commands={"verity.trading.submit_purchase_order"}
                 variant="primary"
                 disabled={pending}
                 onClick={() =>
@@ -130,22 +132,22 @@ export function PurchaseOrderView({
                 }
               >
                 Submit to supplier
-              </Button>
+              </CommandButton>
             )}
             {canReceive && !receiving && (
-              <Button
+              <CommandButton commands={"verity.trading.receive_goods"}
                 variant="primary"
                 disabled={pending}
                 onClick={() => setReceiving(true)}
               >
                 Receive goods
-              </Button>
+              </CommandButton>
             )}
             {/* §68 — cancellation before receipt withdraws the commitment.
                 After a receipt the command refuses, because erasing a goods
                 receipt would erase stock that physically arrived. */}
             {(order.state === "draft" || order.state === "submitted") && (
-              <Button
+              <CommandButton commands={"verity.trading.cancel_purchase_order"}
                 variant="danger"
                 disabled={pending}
                 onClick={() =>
@@ -156,7 +158,7 @@ export function PurchaseOrderView({
                 }
               >
                 Cancel order
-              </Button>
+              </CommandButton>
             )}
           </>
         }
@@ -263,13 +265,13 @@ export function PurchaseOrderView({
               </p>
 
               <div className="flex gap-2">
-                <Button
+                <CommandButton commands={"verity.trading.receive_goods"}
                   variant="primary"
                   disabled={pending}
                   onClick={submitReceipt}
                 >
                   {pending ? "Recording…" : "Record receipt"}
-                </Button>
+                </CommandButton>
                 <Button disabled={pending} onClick={() => setReceiving(false)}>
                   Cancel
                 </Button>

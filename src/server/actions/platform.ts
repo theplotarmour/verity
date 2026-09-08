@@ -1,4 +1,5 @@
 "use server";
+import { increment, log } from "@/server/platform/observability";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -15,7 +16,8 @@ import {
   setActiveMembership,
 } from "@/server/platform/auth";
 import { recordSecurityEvent } from "@/server/platform/audit";
-import { SIGN_IN_LIMIT, rateLimit, signInKey } from "@/server/platform/rate-limit";
+import { sharedRateLimit } from "@/server/platform/shared-rate-limit";
+import { signInKey } from "@/server/platform/rate-limit";
 import { withTenant } from "@/server/platform/tenancy";
 import { installCapabilities } from "@/server/capabilities/registry";
 import {
@@ -143,8 +145,10 @@ export async function signInWithPassword(formData: FormData): Promise<ActionFail
   // Audit finding F-01. Counted BEFORE the credential is checked, so a refused
   // attempt costs the attacker its slot whether or not the password was right.
   // Counting only failures would let a correct-password probe run free.
-  const throttle = rateLimit(signInKey(email), SIGN_IN_LIMIT);
+  const throttle = await sharedRateLimit(signInKey(email), "signin");
   if (!throttle.allowed) {
+    increment("authentication_failed_total");
+    log("warn", "Authentication refused", { reason: "rate_limit" });
     return {
       ok: false,
       code: "E_VALIDATION",
@@ -162,11 +166,10 @@ export async function signInWithPassword(formData: FormData): Promise<ActionFail
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
-    // A failed attempt is recorded where it can be: before authentication there
-    // is no tenant context, so the security stream — which is tenant-scoped by
-    // design — cannot hold it. Recording it against a guessed tenant would be
-    // worse than not recording it, so this is deliberately left to the auth
-    // provider's own log and noted as a platform gap.
+    // Pre-authentication events have no tenant. Keep a separate structured
+    // operational signal without identifiers, credentials or provider text.
+    increment("authentication_failed_total");
+    log("warn", "Authentication refused", { reason: "credentials" });
     return {
       ok: false,
       code: "E_VALIDATION",

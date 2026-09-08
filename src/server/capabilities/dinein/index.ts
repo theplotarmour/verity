@@ -750,6 +750,7 @@ export const cancelOrder: CommandDefinition<
   { orderId: string; reason?: string },
   { orderId: string }
 > = {
+  impact: "destructive",
   key: "verity.dinein.cancel_order",
   entity: ENTITY_ORDER,
   verb: "ActionExecute",
@@ -868,13 +869,15 @@ export const generateBill: CommandDefinition<
       0,
     );
 
-    // Rates from configuration, with an explicit zero default: a restaurant that
-    // has not configured GST should get a bill with no tax rather than a guess
-    // at what its rate might be.
-    // Configuration holds the percentage a manager types; basis points are what
-    // the arithmetic and the stored record use.
-    const cgstRateBp = Math.round(Number((await resolveConfig<number>(ctx.tx, CONFIG_CGST_RATE)) ?? 0) * 100);
-    const sgstRateBp = Math.round(Number((await resolveConfig<number>(ctx.tx, CONFIG_SGST_RATE)) ?? 0) * 100);
+    const cgst = await resolveConfig<number>(ctx.tx, CONFIG_CGST_RATE);
+    const sgst = await resolveConfig<number>(ctx.tx, CONFIG_SGST_RATE);
+    if (cgst == null || sgst == null || !Number.isFinite(Number(cgst)) ||
+        !Number.isFinite(Number(sgst)) || Number(cgst) < 0 || Number(sgst) < 0 ||
+        Number(cgst) + Number(sgst) > 100) {
+      throw new ValidationError("E_VALIDATION: configure valid GST rates before generating a bill; zero must be explicit");
+    }
+    const cgstRateBp = Math.round(Number(cgst) * 100);
+    const sgstRateBp = Math.round(Number(sgst) * 100);
 
     const totals = computeBillTotals({
       subtotalMinor,

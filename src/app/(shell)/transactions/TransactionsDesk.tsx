@@ -1,11 +1,12 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Badge,
-  Button,
   EmptyState,
   ErrorState,
   Field,
@@ -154,10 +155,10 @@ export function TransactionsDesk({
       </StatRow>
 
       <div className="flex flex-wrap justify-end gap-2">
-        <Button variant="primary" onClick={() => setRecording("in")}>
+        <CommandButton commands={"verity.trading.record_party_payment"} variant="primary" onClick={() => setRecording("in")}>
           We received money
-        </Button>
-        <Button onClick={() => setRecording("out")}>We sent money</Button>
+        </CommandButton>
+        <CommandButton commands={"verity.trading.record_party_payment"} onClick={() => setRecording("out")}>We sent money</CommandButton>
       </div>
 
       <Panel
@@ -351,7 +352,7 @@ function RecordPaymentModal({
       footer={
         <>
           <ModalCancel onClose={onClose} disabled={pending} />
-          <Button
+          <CommandButton commands={"verity.trading.record_party_payment"}
             variant="primary"
             disabled={pending || !canSave}
             onClick={() => {
@@ -373,7 +374,7 @@ function RecordPaymentModal({
             }}
           >
             {pending ? "Recording…" : "Record"}
-          </Button>
+          </CommandButton>
         </>
       }
     >

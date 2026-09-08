@@ -3,7 +3,7 @@ import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { PLYWOOD_CAPABILITY, landingRouteFor } from "@/server/capabilities/plywood";
 import { withTenant } from "@/server/platform/tenancy";
-import { resolvePermissions } from "@/server/platform/authorization";
+import { resolvePermissions, hasTenantPermission } from "@/server/platform/authorization";
 import {
   Button,
   CardAction,
@@ -32,6 +32,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function OverviewPage() {
   const actor = await requireActor();
+  if (!actor.roleId) return <PermissionDenied what="the overview — no role has been assigned" />;
 
   // §1 — start each role where its work is.
   //
@@ -55,6 +56,9 @@ export default async function OverviewPage() {
   });
   if (landing) redirect(landing);
 
+  // This aggregate spans capabilities; it requires its own explicit grant.
+  const canRead = await withTenant(actor.tenantId, (tx) => hasTenantPermission(tx, actor.roleId, "Read", "verity.platform.overview"));
+  if (!canRead) return <PermissionDenied what="the overview" />;
   const data = await withTenant(actor.tenantId, async (tx) => {
     const [
       organization,

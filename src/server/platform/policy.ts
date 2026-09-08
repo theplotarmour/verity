@@ -230,6 +230,7 @@ async function evaluateResourceScope(
   grants: ResolvedPermission[],
 ): Promise<PolicyDecision> {
   const resource = request.resource!;
+  if (grants.some((g) => g.scope === "Tenant")) return allow(2, "tenant-scoped grant", request, grants);
   const { organizationIds, unresolvedScopes } = await reachableOrganizations(
     tx,
     actor,

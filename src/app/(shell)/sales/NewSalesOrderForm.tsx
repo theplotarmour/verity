@@ -1,5 +1,7 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -289,7 +291,7 @@ export function NewSalesOrderForm({
             </span>
           )}
           <ModalCancel onClose={onCancel} disabled={pending} />
-          <Button
+          <CommandButton commands={["verity.trading.create_sales_order","verity.trading.edit_sales_order"]}
             variant="primary"
             disabled={pending || !canSubmit}
             onClick={() =>
@@ -325,7 +327,7 @@ export function NewSalesOrderForm({
             }
           >
             {pending ? "Saving…" : editing ? "Save changes" : "Create order"}
-          </Button>
+          </CommandButton>
         </>
       }
     >
@@ -353,13 +355,13 @@ export function NewSalesOrderForm({
                   }))}
                 />
               </div>
-              <Button
+              <CommandButton commands={"verity.trading.create_customer"}
                 disabled={pending || creating}
                 onClick={() => setAddingCustomer(true)}
                 aria-label="Add a customer"
               >
                 +
-              </Button>
+              </CommandButton>
             </div>
           </Field>
           <Field

@@ -1,3 +1,5 @@
+import { limitActorRequests, RateLimitError, readBoundedJson } from "@/server/platform/request-limits";
+import { z } from "zod";
 import { NextResponse } from "next/server";
 import { requireActor } from "@/server/platform/auth";
 import { runAgentTurn, AgentNotConfiguredError, type ChatMessage } from "@/server/platform/agent-chat";
@@ -19,12 +21,13 @@ type ChatRequestBody = {
   history?: ChatMessage[];
 };
 
+const chatRequestSchema = z.object({
+  message: z.string().trim().min(1).max(8000),
+  history: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(8000) }).strict()).max(20).optional(),
+}).strict();
+
 function isChatRequestBody(value: unknown): value is ChatRequestBody {
-  if (!value || typeof value !== "object") return false;
-  const body = value as Record<string, unknown>;
-  if (typeof body.message !== "string" || body.message.trim().length === 0) return false;
-  if (body.history !== undefined && !Array.isArray(body.history)) return false;
-  return true;
+  return chatRequestSchema.safeParse(value).success;
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -38,7 +41,14 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const body: unknown = await request.json().catch(() => null);
+  try { await limitActorRequests(actor.tenantId, actor.userId, "chat"); }
+  catch (error) {
+    if (error instanceof RateLimitError) return NextResponse.json(toActionFailure(error), {
+      status: 429, headers: { "Retry-After": String(error.retryAfterSeconds) },
+    });
+    throw error;
+  }
+  const body = await readBoundedJson(request, 96 * 1024).catch(() => null);
   if (!isChatRequestBody(body)) {
     return NextResponse.json(
       { ok: false, code: "E_VALIDATION", message: "E_VALIDATION: expected { message: string, history?: ChatMessage[] }", retryable: false },

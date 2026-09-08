@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import Link from "next/link";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
@@ -33,7 +34,7 @@ export const dynamic = "force-dynamic";
  * ✓ Invoice matched ✓ GST matched ✓ ITC eligible`, and an order that
  * disappears once it is clean leaves the accountant unsure it was ever checked.
  */
-export default async function PurchaseReviewPage() {
+async function PurchaseReviewPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -166,3 +167,5 @@ export default async function PurchaseReviewPage() {
     </>
   );
 }
+
+export default withPageAccess(PurchaseReviewPage);

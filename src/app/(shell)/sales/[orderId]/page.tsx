@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
  * §80 gives them: customer → price → order → credit check → approval → reserve
  * → goods issue → invoice → receivable → payment.
  */
-export default async function SalesOrderPage({
+async function SalesOrderPage({
   params,
 }: {
   params: Promise<{ orderId: string }>;
@@ -36,3 +37,5 @@ export default async function SalesOrderPage({
 
   return <SalesOrderView order={order} />;
 }
+
+export default withPageAccess(SalesOrderPage);

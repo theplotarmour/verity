@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import Link from "next/link";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
@@ -59,7 +60,7 @@ const EXCEPTION: Record<
   },
 };
 
-export default async function TaxExceptionsPage({
+async function TaxExceptionsPage({
   searchParams,
 }: {
   searchParams: Promise<{ period?: string }>;
@@ -167,3 +168,5 @@ export default async function TaxExceptionsPage({
     </>
   );
 }
+
+export default withPageAccess(TaxExceptionsPage);

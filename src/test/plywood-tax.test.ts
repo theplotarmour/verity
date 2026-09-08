@@ -250,7 +250,7 @@ describeDb("plywood tax (slice 6)", () => {
     // The business registers, then sets its rates. Both are slice 2 and 6
     // master data, not configuration keys.
     await executeCommand(owner, registerGstRegistration, {
-      gstin: "07AAACN1234K1Z5",
+      gstin: "07AAACN1234K1ZO",
       invoiceSeriesPrefix: "NK/",
     });
     await executeCommand(owner, setTaxRule, {
@@ -439,7 +439,7 @@ describeDb("plywood tax (slice 6)", () => {
       const registered = await executeCommand(owner, createCustomer, {
         displayName: "Gupta Timber",
         stateCode: "07",
-        gstin: "07AAACG1234K1Z5",
+        gstin: "07AAACG1234K1ZV",
         creditLimitPaise: 1_000_000_000,
       });
       const walkIn = await customerIn("07");
@@ -448,7 +448,7 @@ describeDb("plywood tax (slice 6)", () => {
       await sell(productId, walkIn, 5);
 
       const working = await executeQuery(owner, gstr1Working, {});
-      expect(working.b2b.some((row) => row.gstin === "07AAACG1234K1Z5")).toBe(true);
+      expect(working.b2b.some((row) => row.gstin === "07AAACG1234K1ZV")).toBe(true);
       expect(working.b2c.length).toBeGreaterThan(0);
     });
 

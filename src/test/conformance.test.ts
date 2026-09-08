@@ -180,6 +180,10 @@ describe("conformance: capability contracts (Phase E)", () => {
     // and payments need no other capability, the same reasoning `dinein`
     // above already gives for depending on nothing.
     trading: [],
+    accounting: [],
+    billing: [],
+    hr: [],
+    inventory: [],
   };
 
   const capabilityDirs = readdirSync(join(ROOT, "src/server/capabilities")).filter((entry) =>
@@ -379,7 +383,9 @@ describe("conformance: over-genericity (Phase G)", () => {
     // redaction is a platform rule and the destination is a deployment
     // decision. It binds no vendor — the Sentry config passes its event in
     // against a structural type, so the platform never imports the SDK.
-    expect(platformModules.length).toBeLessThanOrEqual(33);
+    // Reviewed additions: batch, agent-chat, tool-manifest, sync plus audit
+    // csp, execution-failure, request-limits and shared-rate-limit controls.
+    expect(platformModules.length).toBeLessThanOrEqual(41);
   });
 });
 
@@ -434,13 +440,19 @@ describeDb("conformance: database enforcement", () => {
       // credit note, which is a new document rather than an edit to an old one.
       expect(guarded).toEqual([
         "activity",
+        "billing_invoice",
+        "billing_meter_reading",
         "domain_event",
         "evidence",
+        "hr_leave_decision",
+        "inventory_stock_movement",
+        "journal_entry",
+        "journal_line",
         "trading_invoice",
         "trading_ledger_entry",
         "security_audit_event",
         "stock_ledger_entry",
-      ]);
+      ].sort());
     } finally {
       await admin.$disconnect();
     }

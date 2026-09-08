@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -19,7 +20,7 @@ export const dynamic = "force-dynamic";
  * menu shows retired dishes: a purchase order from last quarter references what
  * was traded, so nothing is ever deleted.
  */
-export default async function CataloguePage() {
+async function CataloguePage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -51,3 +52,5 @@ export default async function CataloguePage() {
     </>
   );
 }
+
+export default withPageAccess(CataloguePage);

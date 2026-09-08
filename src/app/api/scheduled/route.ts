@@ -1,3 +1,4 @@
+import { captureError } from "@/server/platform/observability";
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { runDueWork, type ScheduleCadence } from "@/server/platform/contribution";
@@ -92,15 +93,22 @@ async function dispatch(request: Request): Promise<NextResponse> {
   // when that becomes the constraint rather than a prediction.
   const results = [];
   for (const tenantId of tenantIds) {
-    results.push(await runForTenant(tenantId, cadence));
+    try {
+      results.push(await runForTenant(tenantId, cadence));
+    } catch (error) {
+      captureError(error, { route: "scheduled" });
+      results.push({ tenantId, ran: 0, outcomes: [{ key: "tenant", status: "failed", events: 0, ms: 0, error: "Tenant work failed" }] });
+    }
   }
 
+  const failed = results.some((result) => result.outcomes.some((outcome) => outcome.status === "failed"));
   return NextResponse.json({
+    failed,
     cadence,
     tenants: results.length,
     ran: results.reduce((sum, result) => sum + result.ran, 0),
     results,
-  });
+  }, { status: failed ? 503 : 200 });
 }
 
 /**

@@ -336,9 +336,48 @@ export async function redactFields<T extends Record<string, unknown>>(
   const strip = restricted.map((f) => f.fieldName).filter((name) => !permitted.has(name));
   if (strip.length === 0) return rows;
 
-  return rows.map((row) => {
-    const copy: Record<string, unknown> = { ...row };
-    for (const field of strip) delete copy[field];
-    return copy as Partial<T>;
-  });
+  return rows.map((row) => stripRestrictedFields(row, new Set(strip)) as Partial<T>);
+}
+
+/** A scope ceiling is deliberately a partial order: Organization and Location
+ * cannot confer each other. Tenant may confer either. */
+export function permissionsCover(held: ResolvedPermission[], requested: { verb: string; entity: string; scope: string }): boolean {
+  return requested.scope !== "Global" && held.some((grant) =>
+    grant.verb === requested.verb && grant.entity === requested.entity &&
+    (grant.scope === "Tenant" || grant.scope === requested.scope));
+}
+
+export async function assertGrantCeiling(tx: TenantScopedClient, actor: ActorContext,
+  requested: Array<{ verb: string; entity: string; scope: string }>): Promise<void> {
+  const held = actor.roleId ? await resolvePermissions(tx, actor.roleId) : [];
+  // Roles are reusable by memberships throughout the tenant. Matching a narrow
+  // scope alone is insufficient: it would move that authority to another branch.
+  if (requested.some((grant) => !permissionsCover(held.filter((p) => p.scope === "Tenant"), grant))) {
+    throw new ForbiddenError("E_FORBIDDEN: you cannot grant authority beyond your own permissions");
+  }
+}
+
+/** Recursive so wrapped detail records cannot bypass a declared restriction.
+ * Same-named nested fields are conservatively withheld too. */
+export function stripRestrictedFields(value: unknown, restricted: Set<string>): unknown {
+  if (Array.isArray(value)) return value.map((item) => stripRestrictedFields(item, restricted));
+  if (!value || typeof value !== "object" || value instanceof Date) return value;
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !restricted.has(key))
+    .map(([key, child]) => [key, stripRestrictedFields(child, restricted)]));
+}
+
+export async function redactResult<T>(tx: TenantScopedClient, actor: ActorContext, entity: string, result: T): Promise<T> {
+  if (Array.isArray(result)) return await redactFields(tx, actor, entity, result) as T;
+  if (result && typeof result === "object" && !(result instanceof Date)) {
+    return (await redactFields(tx, actor, entity, [result as Record<string, unknown>]))[0] as T;
+  }
+  return result;
+}
+
+/** Direct tenant-wide page reads need an explicit Tenant grant too. */
+export async function hasTenantPermission(tx: TenantScopedClient, roleId: string | null | undefined,
+  verb: PermissionVerb, entity: string): Promise<boolean> {
+  if (!roleId) return false;
+  return (await resolvePermissions(tx, roleId)).some((grant) =>
+    grant.verb === verb && grant.entity === entity && grant.scope === "Tenant");
 }
