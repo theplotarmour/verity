@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import Link from "next/link";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
@@ -13,7 +14,7 @@ import { Related } from "@/components/ui/business/Related";
 export const dynamic = "force-dynamic";
 
 /** §73 Sales — revenue and quantity, by product and by customer. */
-export default async function SalesReportPage() {
+async function SalesReportPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -98,3 +99,5 @@ export default async function SalesReportPage() {
     </>
   );
 }
+
+export default withPageAccess(SalesReportPage);

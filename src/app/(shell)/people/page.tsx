@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
  * `(hq)/clients/[tenantId]/people` administers somebody else's business; this
  * one is the business administering itself, and it speaks accordingly.
  */
-export default async function PeoplePage() {
+async function PeoplePage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -28,14 +29,8 @@ export default async function PeoplePage() {
   }
 
   const [roles, organizations] = await Promise.all([
-    executeQuery(actor, listRoles, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return [];
-      throw error;
-    }),
-    executeQuery(actor, listOrganizations, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return [];
-      throw error;
-    }),
+    executeQuery(actor, listRoles, {}),
+    executeQuery(actor, listOrganizations, {}),
   ]);
 
   return (
@@ -55,3 +50,5 @@ export default async function PeoplePage() {
     </>
   );
 }
+
+export default withPageAccess(PeoplePage);

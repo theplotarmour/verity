@@ -115,9 +115,9 @@ describeDb("foundation acceptance: an unforeseen capability", () => {
       roleId = (await tx.role.create({ data: { tenantId: tenantA, name: "Pilot" } })).id;
       await tx.permission.createMany({
         data: [
-          { tenantId: tenantA, roleId, verb: "Read", entity: ENTITY, scope: "Organization" },
-          { tenantId: tenantA, roleId, verb: "Create", entity: ENTITY, scope: "Organization" },
-          { tenantId: tenantA, roleId, verb: "Edit", entity: ENTITY, scope: "Organization" },
+          { tenantId: tenantA, roleId, verb: "Read", entity: ENTITY, scope: "Tenant" },
+          { tenantId: tenantA, roleId, verb: "Create", entity: ENTITY, scope: "Tenant" },
+          { tenantId: tenantA, roleId, verb: "Edit", entity: ENTITY, scope: "Tenant" },
         ],
       });
 

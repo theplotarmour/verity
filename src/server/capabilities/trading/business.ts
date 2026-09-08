@@ -1,3 +1,4 @@
+import { GSTIN } from "./keys";
 import { z } from "zod";
 import {
   registerCommand,
@@ -151,16 +152,14 @@ export const registerGstRegistration: CommandDefinition<
   entity: ENTITY_GST_REGISTRATION,
   verb: "Create",
   input: z.object({
-    gstin: z
-      .string()
-      .regex(
-        /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/,
-        "GSTIN must be 15 characters: 2 state digits, 10 PAN characters, an entity code, Z, and a checksum",
-      ),
+    gstin: GSTIN,
     registrationType: z.enum(["regular", "composition"]).optional(),
     invoiceSeriesPrefix: z.string().min(1).max(20),
   }),
   handler: async (ctx, input) => {
+    if (input.registrationType === "composition") {
+      throw new ValidationError("E_VALIDATION: composition registration is not supported yet; a Bill of Supply workflow is required");
+    }
     // The state code is NOT asked for. It is the first two characters of the
     // GSTIN, always, and asking for it separately creates a field that can
     // disagree with the number it came from — a disagreement that decides
@@ -415,4 +414,14 @@ export function registerBusinessIdentity(): void {
   registerCommand(registerGstRegistration);
   registerQuery(onboardingChecklist);
   registerQuery(businessSettings);
+}
+
+/** Composition dealers cannot collect GST separately. Block unsupported tax
+ * workflows rather than emit an ordinary tax invoice/return for them.
+ * Authority: https://cbic-gst.gov.in/composition-rules.html */
+export async function assertRegularRegistration(tx: TenantScopedClient): Promise<void> {
+  const registration = await tx.tradingGstRegistration.findFirst({ where: { active: true } });
+  if (registration?.registrationType === "composition") {
+    throw new ValidationError("E_VALIDATION: composition registration requires a Bill of Supply and composition returns, which are not supported yet");
+  }
 }

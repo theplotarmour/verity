@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
@@ -18,7 +19,7 @@ export const dynamic = "force-dynamic";
  * from here rather than from a row in a list, because the decision needs the
  * context that only this page has.
  */
-export default async function PurchaseOrderPage({
+async function PurchaseOrderPage({
   params,
 }: {
   params: Promise<{ orderId: string }>;
@@ -38,3 +39,5 @@ export default async function PurchaseOrderPage({
 
   return <PurchaseOrderView order={order} />;
 }
+
+export default withPageAccess(PurchaseOrderPage);

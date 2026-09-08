@@ -1,4 +1,5 @@
 "use server";
+import { limitActorRequests } from "@/server/platform/request-limits";
 
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
@@ -50,6 +51,7 @@ export async function createTeamLogin(input: {
 }): Promise<ActionResult<{ userId: string; membershipId: string }>> {
   try {
     const actor = await requireActor();
+    await limitActorRequests(actor.tenantId, actor.userId, "command");
 
     // The same grant `invite_person` requires, checked before anything outside
     // this system is touched.
@@ -127,6 +129,7 @@ export async function resetTeamPassword(input: {
 }): Promise<ActionResult<null>> {
   try {
     const actor = await requireActor();
+    await limitActorRequests(actor.tenantId, actor.userId, "command");
     await withTenant(actor.tenantId, (tx) =>
       authorize(tx, actor.roleId, "Edit", ENTITY_MEMBERSHIP),
     );

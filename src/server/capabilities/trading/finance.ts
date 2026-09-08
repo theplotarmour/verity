@@ -1,3 +1,4 @@
+import { assertRegularRegistration } from "./business";
 import { z } from "zod";
 
 /**
@@ -10,7 +11,7 @@ import { sellerIdentity } from "./business";
 import { resolveTaxRate } from "./tax";
 import { assertPeriodOpen } from "./period";
 import { reachableGodownIds } from "./scope";
-import { businessZone } from "./clock";
+import { businessZone, businessPeriodKey, tenantZone } from "./clock";
 import {
   ValidationError,
   type CommandContext,
@@ -95,6 +96,12 @@ const INVOICEABLE_PURCHASE_ORDER_STATES = new Set([
  * So it is converted once, here, and a value that is not a number is refused
  * rather than propagated. Tax is the last place to trust coercion.
  */
+export function safeAggregate(value: bigint | number | string): number {
+  const result = Number(value);
+  if (!Number.isSafeInteger(result)) throw new ValidationError("E_VALIDATION: this financial total exceeds the supported integer range");
+  return result;
+}
+
 function configNumber(value: unknown, key: string): number | undefined {
   if (value === undefined || value === null) return undefined;
   const parsed =
@@ -112,10 +119,9 @@ function configNumber(value: unknown, key: string): number | undefined {
  * invoice series across two of them — and a series that restarts mid-year is not
  * the gapless sequence GST asks for.
  */
-export function financialYearOf(instant: Date): string {
-  const year = instant.getUTCFullYear();
-  const month = instant.getUTCMonth(); // 0-based; March is 2.
-  const start = month >= 3 ? year : year - 1;
+export function financialYearOf(instant: Date, zone = "UTC"): string {
+  const [year, month] = businessPeriodKey(zone, instant).split("-").map(Number);
+  const start = month >= 4 ? year : year - 1;
   return `${start}-${String((start + 1) % 100).padStart(2, "0")}`;
 }
 
@@ -183,6 +189,9 @@ export async function nextDocumentNumber(
   sequenceNumber: number;
   invoiceNumber: string;
 }> {
+  await assertRegularRegistration(tx);
+  // Also serializes an absent series row; row locks alone cannot do that.
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${JSON.stringify([tenantId, seriesKey, financialYear])}, 0))`;
   const locked = await tx.$queryRaw<{ id: string; next_number: number }[]>`
     SELECT id, next_number
       FROM trading_invoice_series
@@ -393,7 +402,7 @@ export async function issueSalesInvoice(
       igstRateBp: exempt ? 0 : (igstRateBp ?? 0),
     });
 
-    const financialYear = financialYearOf(issuedAt);
+    const financialYear = financialYearOf(issuedAt, await tenantZone(ctx.tx));
     const numbering = await nextInvoiceNumber(
       ctx.tx,
       ctx.actor.tenantId,
@@ -634,7 +643,7 @@ export const raisePurchaseInvoice: CommandDefinition<
 
     const issuedAt = new Date();
     await assertPeriodOpen(ctx.tx, issuedAt);
-    const financialYear = financialYearOf(issuedAt);
+    const financialYear = financialYearOf(issuedAt, await tenantZone(ctx.tx));
     const numbering = await nextInvoiceNumber(
       ctx.tx,
       ctx.actor.tenantId,
@@ -927,7 +936,7 @@ async function issueZeroTaxPurchaseBill(
       (await resolveConfig<unknown>(ctx.tx, CONFIG_TENANT_STATE_CODE)) ?? "",
     ).trim();
 
-  const financialYear = financialYearOf(issuedAt);
+  const financialYear = financialYearOf(issuedAt, await tenantZone(ctx.tx));
   const numbering = await nextInvoiceNumber(
     ctx.tx,
     ctx.actor.tenantId,
@@ -1058,7 +1067,7 @@ export async function issueProvisionalPurchaseBill(
     ...rates,
   });
 
-  const financialYear = financialYearOf(issuedAt);
+  const financialYear = financialYearOf(issuedAt, await tenantZone(ctx.tx));
   const numbering = await nextInvoiceNumber(
     ctx.tx,
     ctx.actor.tenantId,
@@ -1575,7 +1584,7 @@ export async function partyBalancePaise(
        AND (${party.supplierId ?? null}::uuid IS NULL OR supplier_id = ${party.supplierId ?? null}::uuid)
        AND (${party.customerId ?? null}::uuid IS NOT NULL OR customer_id IS NULL)
        AND (${party.supplierId ?? null}::uuid IS NOT NULL OR supplier_id IS NULL)`;
-  return Number(rows[0]?.balance ?? 0);
+  return safeAggregate(rows[0]?.balance ?? 0);
 }
 
 export const outstandingReceivables: QueryDefinition<
@@ -2408,6 +2417,7 @@ export const ownerConsole: QueryDefinition<
     eligibleItcPaise: number;
   }
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.owner_console",
   entity: ENTITY_INVOICE,
   input: z.object({}),
@@ -2562,7 +2572,7 @@ export const ownerConsole: QueryDefinition<
           AS low_stock`;
 
     const row = rows[0] ?? {};
-    const n = (key: string) => Number(row[key] ?? 0);
+    const n = (key: string) => safeAggregate(row[key] ?? 0);
     return {
       salesThisMonthPaise: n("sales_this_month"),
       salesLastMonthPaise: n("sales_last_month"),
@@ -2638,7 +2648,7 @@ export async function captureMetricSnapshot(
         AS payables`;
 
   const row = rows[0] ?? {};
-  const n = (key: string) => Number(row[key] ?? 0);
+  const n = (key: string) => safeAggregate(row[key] ?? 0);
 
   const snapshot = await tx.tradingMetricSnapshot.upsert({
     where: { tenantId_snapshotDate: { tenantId, snapshotDate: new Date(new Date().toISOString().slice(0, 10)) } },
@@ -2728,7 +2738,7 @@ async function weeklyTotals(
     zone,
     weeks,
   );
-  return rows.map((r) => Number(r.total));
+  return rows.map((r) => safeAggregate(r.total));
 }
 
 export const weeklySalesTotals: QueryDefinition<{ weeks?: number }, number[]> = {
@@ -2842,7 +2852,7 @@ export const recentActivityFeed: QueryDefinition<
   }>
 > = {
   key: "verity.trading.recent_activity_feed",
-  entity: ENTITY_INVOICE,
+  entity: "verity.platform.activity",
   input: z.object({ limit: z.number().int().min(1).max(100).optional() }),
   handler: async (ctx, input) => {
     const limit = input.limit ?? 20;
@@ -2913,8 +2923,8 @@ export const marginReport: QueryDefinition<
          WHERE kind = 'sales_outward' AND occurred_at >= ${since}`,
     ]);
 
-    const revenuePaise = Number(revenueRows[0]?.revenue ?? 0);
-    const costOfGoodsSoldPaise = Number(costRows[0]?.cost ?? 0);
+    const revenuePaise = safeAggregate(revenueRows[0]?.revenue ?? 0);
+    const costOfGoodsSoldPaise = safeAggregate(costRows[0]?.cost ?? 0);
     const marginPaise = revenuePaise - costOfGoodsSoldPaise;
 
     return {
@@ -2983,6 +2993,7 @@ export const purchaseMatch: QueryDefinition<
     /// scope was there to withhold.
   } | null
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.purchase_match",
   entity: ENTITY_PURCHASE_ORDER,
   input: z.object({ purchaseOrderId: z.string().uuid() }),
@@ -3113,6 +3124,7 @@ export const purchaseReviewQueue: QueryDefinition<
     blockers: string[];
   }>
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.purchase_review_queue",
   entity: ENTITY_PURCHASE_ORDER,
   input: z.object({}),
@@ -3226,6 +3238,7 @@ export const goodsReceiptDetail: QueryDefinition<
     /// reader's scope — indistinguishable on purpose.
   } | null
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.goods_receipt_detail",
   entity: ENTITY_PURCHASE_ORDER,
   input: z.object({ receiptId: z.string().uuid() }),
@@ -3360,7 +3373,7 @@ export const raiseInvoiceNote: CommandDefinition<
 
     const issuedAt = new Date();
     await assertPeriodOpen(ctx.tx, issuedAt);
-    const financialYear = financialYearOf(issuedAt);
+    const financialYear = financialYearOf(issuedAt, await tenantZone(ctx.tx));
     const seriesKey = input.noteType === "credit" ? "CN" : "DN";
     const numbering = await nextDocumentNumber(
       ctx.tx,

@@ -5,7 +5,7 @@ import {
   fieldLabelOf,
 } from "@/components/ui/business/vocabulary";
 import { withTenant } from "@/server/platform/tenancy";
-import { resolvePermissions } from "@/server/platform/authorization";
+import { hasTenantPermission } from "@/server/platform/authorization";
 import { DataTable } from "@/components/ui/DataTable";
 import {
   EmptyState,
@@ -45,13 +45,8 @@ export default async function AuditPage() {
   const actor = await requireActor();
 
   const data = await withTenant(actor.tenantId, async (tx) => {
-    const permissions = actor.roleId ? await resolvePermissions(tx, actor.roleId) : [];
-    if (permissions.length === 0) return null;
-
-    // Seeing security events is a stronger right than seeing record history.
-    const canSeeSecurity = permissions.some(
-      (p) => p.verb === "Edit" && p.entity.includes("role"),
-    ) || permissions.some((p) => p.verb === "Delete");
+    if (!await hasTenantPermission(tx, actor.roleId, "Read", "verity.platform.activity")) return null;
+    const canSeeSecurity = await hasTenantPermission(tx, actor.roleId, "Read", "verity.platform.security_event");
 
     const [activity, security, events] = await Promise.all([
       tx.activity.findMany({ orderBy: { occurredAt: "desc" }, take: 100 }),

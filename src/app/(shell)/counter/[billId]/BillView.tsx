@@ -1,5 +1,7 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, ErrorState, Field, Input, Panel, Select } from "@/components/ui/primitives";
@@ -198,9 +200,9 @@ export function BillView({ bill }: { bill: BillDetail }) {
                   <Input id="reference" name="reference" />
                 </Field>
 
-                <Button type="submit" variant="primary" disabled={pending}>
+                <CommandButton commands={"verity.dinein.record_payment"} type="submit" variant="primary" disabled={pending}>
                   {pending ? "Recording…" : "Record payment"}
-                </Button>
+                </CommandButton>
               </form>
             )}
           </Panel>
@@ -229,13 +231,13 @@ export function BillView({ bill }: { bill: BillDetail }) {
                   >
                     <Input id="reason" name="reason" required />
                   </Field>
-                  <Button type="submit" disabled={pending}>
+                  <CommandButton commands={"verity.dinein.apply_bill_discount"} type="submit" disabled={pending}>
                     Apply discount
-                  </Button>
+                  </CommandButton>
                 </form>
               </Panel>
 
-              <Button
+              <CommandButton commands={"verity.dinein.settle_bill"}
                 variant="primary"
                 disabled={pending || bill.outstandingMinor > 0}
                 onClick={() => run("verity.dinein.settle_bill", { billId: bill.id })}
@@ -243,7 +245,7 @@ export function BillView({ bill }: { bill: BillDetail }) {
                 {bill.outstandingMinor > 0
                   ? `${rupees(bill.outstandingMinor)} still to pay`
                   : "Settle and free the table"}
-              </Button>
+              </CommandButton>
             </>
           )}
 

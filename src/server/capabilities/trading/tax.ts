@@ -1,3 +1,4 @@
+import { assertRegularRegistration } from "./business";
 import { z } from "zod";
 import {
   registerCommand,
@@ -166,7 +167,7 @@ export const setTaxRule: CommandDefinition<
         hsnCode: input.hsnCode,
         // Half each within the state, the whole rate across a border. Stored
         // both ways so the invoice does no arithmetic at posting time.
-        cgstRateBp: Math.round(input.rateBp / 2),
+        cgstRateBp: Math.floor(input.rateBp / 2),
         sgstRateBp: Math.round(input.rateBp / 2),
         igstRateBp: 0,
         effectiveFrom,
@@ -540,6 +541,7 @@ export const gstr1Working: QueryDefinition<
     to: z.string().datetime().optional(),
   }),
   handler: async (ctx, input) => {
+    await assertRegularRegistration(ctx.tx);
     const now = new Date();
     const zone = await businessZone(ctx);
     const from = input.from
@@ -703,6 +705,7 @@ export const gstr3bWorking: QueryDefinition<
     to: z.string().datetime().optional(),
   }),
   handler: async (ctx, input) => {
+    await assertRegularRegistration(ctx.tx);
     const now = new Date();
     const zone = await businessZone(ctx);
     const from = input.from
@@ -712,7 +715,7 @@ export const gstr3bWorking: QueryDefinition<
 
     const invoices = await ctx.tx.tradingInvoice.findMany({
       where: { issuedAt: { gte: from, lte: to } },
-      include: { notes: true, customer: true, supplier: true },
+      include: { notes: true, customer: true, supplier: true, confirmation: true },
     });
 
     const taxOf = (row: {
@@ -755,7 +758,7 @@ export const gstr3bWorking: QueryDefinition<
         creditNoteTaxPaise,
     };
 
-    const unsubstantiated = purchases.filter((invoice) => taxOf(invoice) === 0);
+    const unsubstantiated = purchases.filter((invoice) => invoice.confirmation === null || taxOf(invoice) === 0);
     const booksItcPaise = purchases.reduce((sum, i) => sum + taxOf(i), 0);
 
     const inward = {
@@ -765,12 +768,9 @@ export const gstr3bWorking: QueryDefinition<
       igstPaise: purchases.reduce((sum, i) => sum + i.igstPaise, 0),
       invoiceCount: purchases.length,
       booksItcPaise,
-      // Identical today, and deliberately two separate fields: the moment a
-      // GSTR-2B import exists, eligible becomes "matched with the portal" and
-      // only this line changes. A single number would have to be split then,
-      // and every reader of it re-checked.
-      eligibleItcPaise: booksItcPaise,
-      unsubstantiatedItcPaise: 0,
+      eligibleItcPaise: purchases.filter((invoice) => invoice.confirmation !== null)
+        .reduce((sum, invoice) => sum + taxOf(invoice), 0),
+      unsubstantiatedItcPaise: unsubstantiated.reduce((sum, invoice) => sum + taxOf(invoice), 0),
       unsubstantiatedCount: unsubstantiated.length,
     };
 
@@ -780,7 +780,7 @@ export const gstr3bWorking: QueryDefinition<
     const blockers: string[] = [];
     if (unsubstantiated.length > 0) {
       blockers.push(
-        `${unsubstantiated.length} purchase invoice(s) carry no tax split, so no input ` +
+        `${unsubstantiated.length} purchase invoice(s) lack a confirmed supplier bill or tax split, so no input ` +
           "credit can be evidenced against them",
       );
     }

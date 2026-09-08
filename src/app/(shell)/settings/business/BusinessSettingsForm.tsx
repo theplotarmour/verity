@@ -1,8 +1,13 @@
 "use client";
 
+import { TaxCoverageNotice } from "@/components/ui/business/TaxCoverageNotice";
+
+
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Field, Input, Panel, Select } from "@/components/ui/primitives";
+import { Field, Input, Panel, Select } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 
 type Settings = {
@@ -53,6 +58,7 @@ export function BusinessSettingsForm({ settings }: { settings: Settings }) {
 
   return (
     <div className="flex flex-col gap-4">
+      <TaxCoverageNotice />
       {settings.outstanding.length > 0 && (
         <Panel title="Set up this business">
           <ol className="m-0 flex list-none flex-col gap-2 p-0 text-[15px]">
@@ -130,9 +136,9 @@ export function BusinessSettingsForm({ settings }: { settings: Settings }) {
             <Input id="currencyCode" name="currencyCode" defaultValue={settings.currencyCode} maxLength={3} />
           </Field>
           <div>
-            <Button type="submit" disabled={pending}>
+            <CommandButton commands={"verity.trading.set_business_profile"} type="submit" disabled={pending}>
               {settings.legalName ? "Save business details" : "Save and continue"}
-            </Button>
+            </CommandButton>
           </div>
         </form>
       </Panel>
@@ -168,9 +174,9 @@ export function BusinessSettingsForm({ settings }: { settings: Settings }) {
             <Field htmlFor="authority" label="Authority" hint="The notification an auditor will ask for.">
               <Input id="authority" name="authority" placeholder="Notification 1/2017" />
             </Field>
-            <Button type="submit" disabled={pending}>
+            <CommandButton commands={"verity.trading.set_tax_rule"} type="submit" disabled={pending}>
               Set rate
-            </Button>
+            </CommandButton>
           </form>
         </Panel>
       )}
@@ -210,16 +216,16 @@ export function BusinessSettingsForm({ settings }: { settings: Settings }) {
             <Field htmlFor="registrationType" label="Registration type">
               <Select id="registrationType" name="registrationType" defaultValue="regular">
                 <option value="regular">Regular</option>
-                <option value="composition">Composition</option>
+                <option value="composition" disabled>Composition — not supported</option>
               </Select>
             </Field>
             <Field htmlFor="invoiceSeriesPrefix" label="Invoice series" hint="Printed before the number, e.g. NK/26-27/0001.">
               <Input id="invoiceSeriesPrefix" name="invoiceSeriesPrefix" required placeholder="NK/" maxLength={20} />
             </Field>
             <div>
-              <Button type="submit" disabled={pending}>
+              <CommandButton commands={"verity.trading.register_gst_registration"} type="submit" disabled={pending}>
                 Add registration
-              </Button>
+              </CommandButton>
             </div>
           </form>
         )}

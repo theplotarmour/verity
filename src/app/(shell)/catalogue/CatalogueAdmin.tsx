@@ -1,5 +1,7 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import Link from "next/link";
 
 import { useMemo, useState, useTransition } from "react";
@@ -225,9 +227,9 @@ export function CatalogueAdmin({
         ) : (
           <span />
         )}
-        <Button variant="primary" onClick={() => setNewBrand(true)}>
+        <CommandButton commands={"verity.trading.create_brand"} variant="primary" onClick={() => setNewBrand(true)}>
           New brand
-        </Button>
+        </CommandButton>
       </div>
 
       <Modal
@@ -248,7 +250,7 @@ export function CatalogueAdmin({
               }}
               disabled={pending}
             />
-            <Button
+            <CommandButton commands={"verity.trading.create_brand"}
               variant="primary"
               disabled={pending || brandName.trim() === ""}
               onClick={() =>
@@ -263,7 +265,7 @@ export function CatalogueAdmin({
               }
             >
               {pending ? "Creating…" : "Create"}
-            </Button>
+            </CommandButton>
           </>
         }
       >
@@ -331,7 +333,7 @@ export function CatalogueAdmin({
                       No longer traded
                     </span>
                   )}
-                  <Button
+                  <CommandButton commands={"verity.trading.set_brand_active"}
                     size="sm"
                     disabled={pending}
                     onClick={() =>
@@ -342,15 +344,15 @@ export function CatalogueAdmin({
                     }
                   >
                     {brand.brandActive ? "Withdraw brand" : "Trade again"}
-                  </Button>
-                  <Button
+                  </CommandButton>
+                  <CommandButton commands={"verity.plywood.create_product"}
                     size="sm"
                     variant="primary"
                     disabled={!brand.brandActive}
                     onClick={() => setAddingTo(brand.brandId)}
                   >
                     Add product
-                  </Button>
+                  </CommandButton>
                 </div>
               }
             >
@@ -470,14 +472,14 @@ export function CatalogueAdmin({
                           </td>
                           <td className="border-b border-line px-3 py-2 text-right">
                             <div className="flex justify-end gap-2">
-                              <Button
+                              <CommandButton commands={"verity.plywood.edit_product"}
                                 size="sm"
                                 disabled={pending}
                                 onClick={() => setEditing(product)}
                               >
                                 Edit
-                              </Button>
-                              <Button
+                              </CommandButton>
+                              <CommandButton commands={"verity.plywood.set_product_active"}
                                 size="sm"
                                 disabled={pending}
                                 onClick={() =>
@@ -488,7 +490,7 @@ export function CatalogueAdmin({
                                 }
                               >
                                 {product.active ? "Withdraw" : "Trade again"}
-                              </Button>
+                              </CommandButton>
                             </div>
                           </td>
                         </tr>
@@ -765,7 +767,7 @@ function ProductModal({
       footer={
         <>
           <ModalCancel onClose={close} disabled={pending} />
-          <Button
+          <CommandButton commands={"verity.plywood.create_product"}
             variant="primary"
             disabled={pending || incomplete}
             onClick={() => {
@@ -812,7 +814,7 @@ function ProductModal({
               : generates
                 ? `Add ${variantCount} product${variantCount === 1 ? "" : "s"}`
                 : "Add"}
-          </Button>
+          </CommandButton>
         </>
       }
     >
@@ -1103,7 +1105,7 @@ function EditProductModal({
       footer={
         <>
           <ModalCancel onClose={close} disabled={pending} />
-          <Button
+          <CommandButton commands={"verity.plywood.edit_product"}
             variant="primary"
             disabled={pending || !product || name.trim() === ""}
             onClick={() => {
@@ -1123,7 +1125,7 @@ function EditProductModal({
             }}
           >
             {pending ? "Saving…" : "Save"}
-          </Button>
+          </CommandButton>
         </>
       }
     >

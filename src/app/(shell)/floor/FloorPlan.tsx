@@ -1,5 +1,7 @@
 "use client";
 
+import { CommandButton, useCommandAccess } from "@/components/ui/CommandAccess";
+
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -31,6 +33,7 @@ const STATE_STYLE: Record<string, { dot: string; label: string; tone: string }> 
 
 export function FloorPlan({ tables }: { tables: FloorTable[] }) {
   const router = useRouter();
+  const canCommand = useCommandAccess();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [seating, setSeating] = useState<FloorTable | null>(null);
   const [pending, startTransition] = useTransition();
@@ -122,9 +125,9 @@ export function FloorPlan({ tables }: { tables: FloorTable[] }) {
                   />
                 </Field>
               </div>
-              <Button type="submit" variant="primary" disabled={pending}>
+              <CommandButton commands={["verity.dinein.move_table","verity.dinein.create_order"]} type="submit" variant="primary" disabled={pending}>
                 {pending ? "Seating…" : "Seat and start order"}
-              </Button>
+              </CommandButton>
               <Button type="button" onClick={() => setSeating(null)} disabled={pending}>
                 Cancel
               </Button>
@@ -147,7 +150,9 @@ export function FloorPlan({ tables }: { tables: FloorTable[] }) {
                     <button
                       key={table.id}
                       type="button"
-                      disabled={pending}
+                      disabled={pending || (table.state === "available"
+                        ? !canCommand("verity.dinein.create_order") || !canCommand("verity.dinein.move_table")
+                        : table.state === "cleaning" && !canCommand("verity.dinein.move_table"))}
                       onClick={() => {
                         if (table.state === "available") setSeating(table);
                         else if (table.orderId) router.push(`/floor/${table.orderId}`);
@@ -227,9 +232,9 @@ export function FloorPlan({ tables }: { tables: FloorTable[] }) {
                       </td>
                       <td className="border-b border-line px-3 py-2 text-right">
                         {table.state === "available" && (
-                          <Button size="sm" disabled={pending} onClick={() => setSeating(table)}>
+                          <CommandButton commands={["verity.dinein.move_table","verity.dinein.create_order"]} size="sm" disabled={pending} onClick={() => setSeating(table)}>
                             Seat
-                          </Button>
+                          </CommandButton>
                         )}
                         {table.orderId && (
                           <Link
@@ -240,7 +245,7 @@ export function FloorPlan({ tables }: { tables: FloorTable[] }) {
                           </Link>
                         )}
                         {table.state === "cleaning" && (
-                          <Button
+                          <CommandButton commands={"verity.dinein.move_table"}
                             size="sm"
                             disabled={pending}
                             onClick={() =>
@@ -251,7 +256,7 @@ export function FloorPlan({ tables }: { tables: FloorTable[] }) {
                             }
                           >
                             Mark clean
-                          </Button>
+                          </CommandButton>
                         )}
                       </td>
                     </tr>

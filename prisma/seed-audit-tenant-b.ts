@@ -120,6 +120,10 @@ const OWNER_ENTITIES = [
   "verity.platform.organization",
   "verity.platform.membership",
   "verity.platform.role",
+  "verity.platform.activity",
+  "verity.platform.security_event",
+  "verity.platform.overview",
+  "verity.platform.capability",
   "verity.location.location",
   "verity.location.place",
   "verity.location.address",
@@ -476,7 +480,7 @@ async function main(): Promise<void> {
     // The state code is not passed: the command derives it from the first two
     // characters of the GSTIN, deliberately, so the two cannot disagree.
     await executeCommand(owner, registerGstRegistration, {
-      gstin: "07AAECV1234K1Z9",
+      gstin: "07AAECV1234K1ZC",
       registrationType: "regular",
       invoiceSeriesPrefix: "VTM",
     });
@@ -534,7 +538,7 @@ async function main(): Promise<void> {
         displayName: "Kandla Timber Imports",
         // Gujarat, not Delhi — so an inter-state purchase exists here and the
         // IGST path has a document of its own to be checked against.
-        gstin: "24AAACK5678M1Z4",
+        gstin: "24AAACK5678M1Z3",
         stateCode: "24",
         phone: "9820011223",
       }),

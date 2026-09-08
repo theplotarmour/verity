@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -44,7 +45,7 @@ function rupees(paise: number): string {
  * number, because two definitions of "receivables" is how a report and a ledger
  * end up disagreeing in front of a customer.
  */
-export default async function ReportsPage() {
+async function ReportsPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -65,7 +66,7 @@ export default async function ReportsPage() {
     try {
       return await run();
     } catch (error) {
-      if (error instanceof ForbiddenError) return null;
+      if (error instanceof ForbiddenError) throw error;
       throw error;
     }
   };
@@ -345,3 +346,5 @@ export default async function ReportsPage() {
     </>
   );
 }
+
+export default withPageAccess(ReportsPage);

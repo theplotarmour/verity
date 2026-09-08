@@ -333,6 +333,7 @@ export const inventoryAnalysis: QueryDefinition<
     adjustmentCount: number;
   }
 > = {
+  scopeHandling: "handler",
   key: "verity.trading.inventory_analysis",
   entity: ENTITY_STOCK_BALANCE,
   input: z.object({ sinceDays: z.number().int().min(1).max(3650).optional() }),
@@ -471,7 +472,7 @@ export const financeAgeing: QueryDefinition<
   handler: async (ctx) => {
     const invoices = await ctx.tx.tradingInvoice.findMany({
       include: {
-        payments: { select: { amountPaise: true } },
+        allocations: { select: { amountPaise: true } },
         notes: { select: { noteType: true, totalPaise: true } },
       },
     });
@@ -488,7 +489,7 @@ export const financeAgeing: QueryDefinition<
     const payable = shape();
 
     for (const invoice of invoices) {
-      const paid = invoice.payments.reduce((sum, p) => sum + p.amountPaise, 0);
+      const paid = invoice.allocations.reduce((sum, p) => sum + p.amountPaise, 0);
       const credited = invoice.notes
         .filter((n) => n.noteType === "credit")
         .reduce((sum, n) => sum + n.totalPaise, 0);

@@ -99,6 +99,14 @@ describeDb("HQ administration", () => {
           })),
         });
 
+        // Delegators must already hold the business authority they confer.
+        await tx.permission.createMany({ data: [
+          { entity: "verity.location.location", verb: "Read" as const },
+          { entity: "verity.evidence.evidence", verb: "Read" as const },
+          { entity: "verity.asset.asset", verb: "Read" as const },
+          { entity: "verity.asset.asset", verb: "Edit" as const },
+        ].map((grant) => ({ ...grant, tenantId, roleId: operatorRole.id, scope: "Tenant" as const })) });
+
         const identity = await provisionIdentity(tx, {
           organizationId: org.id,
           authUserId: randomUUID(),

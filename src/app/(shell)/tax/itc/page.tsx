@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
  * a count, because a reconciliation that makes someone scroll past agreement to
  * find disagreement has recreated the spreadsheet it replaced.
  */
-export default async function ItcPage({
+async function ItcPage({
   searchParams,
 }: {
   searchParams: Promise<{ period?: string }>;
@@ -44,3 +45,5 @@ export default async function ItcPage({
     </>
   );
 }
+
+export default withPageAccess(ItcPage);

@@ -1,3 +1,7 @@
+import { installCapabilities } from "@/server/capabilities/registry";
+import { installAdministration } from "@/server/platform/administration";
+import { limitActorRequests, RateLimitError, readBoundedJson } from "@/server/platform/request-limits";
+import { z } from "zod";
 import { NextResponse } from "next/server";
 import { requireActor } from "@/server/platform/auth";
 import {
@@ -24,12 +28,13 @@ type ChatRequestBody = {
   history?: ChatMessage[];
 };
 
+const chatRequestSchema = z.object({
+  message: z.string().trim().min(1).max(8000),
+  history: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(8000) }).strict()).max(20).optional(),
+}).strict();
+
 function isChatRequestBody(value: unknown): value is ChatRequestBody {
-  if (!value || typeof value !== "object") return false;
-  const body = value as Record<string, unknown>;
-  if (typeof body.message !== "string" || body.message.trim().length === 0) return false;
-  if (body.history !== undefined && !Array.isArray(body.history)) return false;
-  return true;
+  return chatRequestSchema.safeParse(value).success;
 }
 
 /** Task 81 rule 8 step 3 — the structural "Confirm" click on a preview
@@ -39,13 +44,12 @@ type ConfirmPreviewBody = {
   confirmPreview: { commandKey: string; inputs: unknown[] };
 };
 
+const confirmPreviewSchema = z.object({
+  confirmPreview: z.object({ commandKey: z.string().min(1).max(200), inputs: z.array(z.unknown()).min(1).max(50) }).strict(),
+}).strict();
+
 function isConfirmPreviewBody(value: unknown): value is ConfirmPreviewBody {
-  if (!value || typeof value !== "object") return false;
-  const body = value as Record<string, unknown>;
-  const cp = body.confirmPreview;
-  if (!cp || typeof cp !== "object") return false;
-  const { commandKey, inputs } = cp as Record<string, unknown>;
-  return typeof commandKey === "string" && commandKey.length > 0 && Array.isArray(inputs) && inputs.length > 0;
+  return confirmPreviewSchema.safeParse(value).success;
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -59,7 +63,16 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const body: unknown = await request.json().catch(() => null);
+  try { await limitActorRequests(actor.tenantId, actor.userId, "chat"); }
+  catch (error) {
+    if (error instanceof RateLimitError) return NextResponse.json(toActionFailure(error), {
+      status: 429, headers: { "Retry-After": String(error.retryAfterSeconds) },
+    });
+    throw error;
+  }
+  installCapabilities();
+  installAdministration();
+  const body = await readBoundedJson(request, 96 * 1024).catch(() => null);
 
   if (isConfirmPreviewBody(body)) {
     try {

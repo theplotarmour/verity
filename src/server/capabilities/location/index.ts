@@ -176,6 +176,7 @@ export const removeLocation: CommandDefinition<
   { locationId: string },
   { id: string; deleted: boolean }
 > = {
+  impact: "destructive",
   key: "verity.location.remove_location",
   entity: ENTITY_LOCATION,
   verb: "Edit",
@@ -325,6 +326,7 @@ export const listLocations: QueryDefinition<
   Record<string, never>,
   Array<Record<string, unknown>>
 > = {
+  scopeHandling: "handler",
   key: "verity.location.list_locations",
   entity: ENTITY_LOCATION,
   input: z.object({}),

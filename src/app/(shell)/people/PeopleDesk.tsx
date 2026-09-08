@@ -1,5 +1,7 @@
 "use client";
 
+import { CommandButton, useCommandAccess } from "@/components/ui/CommandAccess";
+
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -46,6 +48,7 @@ export function PeopleDesk({
   organizations: Array<{ id: string; name: string }>;
 }) {
   const router = useRouter();
+  const canCommand = useCommandAccess();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [inviting, setInviting] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -138,7 +141,7 @@ export function PeopleDesk({
                       onChange={(event) => setPassword(event.target.value)}
                     />
                   </div>
-                  <Button
+                  <CommandButton commands={"verity.platform.invite_person"}
                     disabled={pending}
                     onClick={() =>
                       startTransition(async () =>
@@ -147,7 +150,7 @@ export function PeopleDesk({
                     }
                   >
                     Suggest
-                  </Button>
+                  </CommandButton>
                 </div>
               </Field>
               <Field
@@ -187,7 +190,7 @@ export function PeopleDesk({
               <span />
             </FormRow>
             <div className="flex gap-2">
-              <Button
+              <CommandButton commands={"verity.platform.invite_person"}
                 variant="primary"
                 disabled={
                   pending ||
@@ -220,7 +223,7 @@ export function PeopleDesk({
                 }
               >
                 {pending ? "Creating…" : "Create login"}
-              </Button>
+              </CommandButton>
               <Button disabled={pending} onClick={() => setInviting(false)}>
                 Cancel
               </Button>
@@ -229,9 +232,9 @@ export function PeopleDesk({
         </Panel>
       ) : (
         <div>
-          <Button variant="primary" onClick={() => setInviting(true)}>
+          <CommandButton commands={"verity.platform.invite_person"} variant="primary" onClick={() => setInviting(true)}>
             Create a login
-          </Button>
+          </CommandButton>
         </div>
       )}
 
@@ -265,7 +268,7 @@ export function PeopleDesk({
                   <Select
                     aria-label={`Role for ${person.displayName}`}
                     value={person.roleId ?? ""}
-                    disabled={pending}
+                    disabled={pending || !canCommand("verity.platform.assign_role")}
                     onChange={(event) =>
                       run("verity.platform.assign_role", {
                         membershipId: person.membershipId,

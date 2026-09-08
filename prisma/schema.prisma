@@ -3859,3 +3859,16 @@ model TradingMetricSnapshot {
   @@unique([tenantId, snapshotDate])
   @@map("trading_metric_snapshot")
 }
+
+// Global pre-authentication counters. Runtime access is function-only; see
+// 20260908000000_shared_request_quotas for RLS and restricted SQL privileges.
+model RequestQuota {
+  keyHash  String   @map("key_hash")
+  kind     String
+  resetsAt DateTime @map("resets_at") @db.Timestamptz(6)
+  attempts Int
+
+  @@id([keyHash, kind])
+  @@index([resetsAt], map: "request_quota_expiry")
+  @@map("request_quota")
+}

@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
  * order is not a payable (§20, §54), and one column holding both would be the
  * error the specification spends two sections preventing.
  */
-export default async function SuppliersPage() {
+async function SuppliersPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -39,3 +40,5 @@ export default async function SuppliersPage() {
     </>
   );
 }
+
+export default withPageAccess(SuppliersPage);

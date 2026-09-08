@@ -57,10 +57,10 @@ function mockSupabaseClient(storageApi: {
   createSignedUploadUrl?: ReturnType<typeof vi.fn>;
   createSignedUrl?: ReturnType<typeof vi.fn>;
   remove?: ReturnType<typeof vi.fn>;
-}) {
+}, bucketPolicy: { public: boolean; file_size_limit?: number } = { public: false, file_size_limit: 25 * 1024 * 1024 }) {
   vi.doMock("@supabase/supabase-js", () => ({
     createClient: createClient.mockReturnValue({
-      storage: { from: vi.fn(() => storageApi) },
+      storage: { getBucket: vi.fn().mockResolvedValue({ data: bucketPolicy, error: null }), from: vi.fn(() => storageApi) },
     }),
   }));
 }
@@ -123,6 +123,19 @@ describe("installStorage(): conditional registration", () => {
 });
 
 describe("supabaseStorageDriver(): adapter behavior", () => {
+  it.each([
+    { public: true, file_size_limit: 1024 },
+    { public: false },
+    { public: false, file_size_limit: 26 * 1024 * 1024 },
+  ])("refuses unsafe bucket policy %j before minting an upload URL", async (policy) => {
+    const createSignedUploadUrl = vi.fn();
+    mockSupabaseClient({ createSignedUploadUrl }, policy);
+    const { supabaseStorageDriver } = await import("@/server/storage/supabase");
+    const driver = supabaseStorageDriver({ url: "https://test.supabase.co", serviceRoleKey: "test", bucket: "test" });
+    await expect(driver.createUploadUrl("t/file", "text/plain", 10)).rejects.toThrow(/private bucket/);
+    expect(createSignedUploadUrl).not.toHaveBeenCalled();
+  });
+
   async function driver(storageApi: Parameters<typeof mockSupabaseClient>[0]) {
     mockSupabaseClient(storageApi);
     const { supabaseStorageDriver } = await import("@/server/storage/supabase");

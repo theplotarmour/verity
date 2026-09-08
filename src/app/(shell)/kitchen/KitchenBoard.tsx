@@ -1,8 +1,10 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, EmptyState, ErrorState, Panel } from "@/components/ui/primitives";
+import { EmptyState, ErrorState, Panel } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 import type { KitchenTicket } from "@/server/capabilities/dinein";
@@ -165,14 +167,14 @@ export function KitchenBoard({ tickets }: { tickets: KitchenTicket[] }) {
                         </span>
 
                         {column.next && column.action && (
-                          <Button
+                          <CommandButton commands={"verity.dinein.advance_order_line"}
                             size="md"
                             variant="primary"
                             disabled={pending}
                             onClick={() => advance(ticket.lineId, column.next!)}
                           >
                             {column.action}
-                          </Button>
+                          </CommandButton>
                         )}
                       </div>
                     </li>

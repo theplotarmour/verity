@@ -262,6 +262,7 @@ describe("provider selection through the configuration boundary (P1, AC-04)", ()
     "NEXT_PUBLIC_SUPABASE_URL",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY",
     "SUPABASE_JWT_SECRET",
+    "JWT_SECRET",
     "VERITY_SESSION_SECRET",
     "VERITY_AUTH_PROVIDER",
     "VERITY_OIDC_ISSUER",
@@ -286,7 +287,8 @@ describe("provider selection through the configuration boundary (P1, AC-04)", ()
     }
   });
 
-  it("defaults to supabase, keeping every existing deployment unchanged (AC-05)", async () => {
+  it("defaults to supabase with private signing material (AC-05)", async () => {
+    process.env.VERITY_SESSION_SECRET = "private-configuration-test-secret";
     process.env.NEXT_PUBLIC_SUPABASE_URL = "https://ref.supabase.co";
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon";
 

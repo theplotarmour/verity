@@ -255,7 +255,7 @@ export const itcReconciliation: QueryDefinition<
     const [portal, invoices] = await Promise.all([
       ctx.tx.tradingGstPortalRecord.findMany({ where: { periodKey } }),
       ctx.tx.tradingInvoice.findMany({
-        where: { supplierId: { not: null }, issuedAt: { gte: from, lt: to } },
+        where: { supplierId: { not: null }, confirmation: { isNot: null }, issuedAt: { gte: from, lt: to } },
         include: { supplier: { select: { displayName: true, gstin: true } } },
       }),
     ]);

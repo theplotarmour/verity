@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -22,7 +23,7 @@ export const dynamic = "force-dynamic";
  * appears here so someone with authority can decide. Refusing outright is how a
  * business ends up keeping the real order in a notebook.
  */
-export default async function SalesPage() {
+async function SalesPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -36,24 +37,12 @@ export default async function SalesPage() {
   }
 
   const [customers, godowns, sellable, catalogue] = await Promise.all([
-    executeQuery(actor, listCustomers, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return [];
-      throw error;
-    }),
-    executeQuery(actor, listLocations, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return [];
-      throw error;
-    }),
+    executeQuery(actor, listCustomers, {}),
+    executeQuery(actor, listLocations, {}),
     // U0-1/U1-8: what is actually available, and what this customer has agreed
     // to pay, so the form can say both before an order is taken.
-    executeQuery(actor, sellableStock, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return [];
-      throw error;
-    }),
-    executeQuery(actor, listCatalogue, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return [];
-      throw error;
-    }),
+    executeQuery(actor, sellableStock, {}),
+    executeQuery(actor, listCatalogue, {}),
   ]);
 
   return (
@@ -88,3 +77,5 @@ export default async function SalesPage() {
     </>
   );
 }
+
+export default withPageAccess(SalesPage);

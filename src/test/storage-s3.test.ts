@@ -142,6 +142,7 @@ describe("both drivers satisfy one contract", () => {
     vi.doMock("@supabase/supabase-js", () => ({
       createClient: () => ({
         storage: {
+          getBucket: async () => ({ data: { public: false, file_size_limit: 25 * 1024 * 1024 }, error: null }),
           from: () => ({
             createSignedUploadUrl: async (key: string) => ({
               data: { signedUrl: `https://project-ref.supabase.co/storage/v1/${key}?token=x` },

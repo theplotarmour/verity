@@ -1,7 +1,8 @@
+import { hasTenantPermission } from "@/server/platform/authorization";
 import { redirect } from "next/navigation";
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
-import { PageHeader, Panel, Stat, StatRow, StateBadge } from "@/components/ui/primitives";
+import { PageHeader, PermissionDenied, Panel, Stat, StatRow, StateBadge } from "@/components/ui/primitives";
 import { CapabilityControls } from "./CapabilityControls";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +41,7 @@ export default async function CapabilityRegistryPage() {
   if (!isPlatform) redirect("/");
 
   const rows = await withTenant(actor.tenantId, async (tx) => {
+    if (!await hasTenantPermission(tx, actor.roleId, "Read", "verity.platform.capability")) return null;
     const [definitions, activations] = await Promise.all([
       tx.capabilityDefinition.findMany({ orderBy: { name: "asc" } }),
       tx.tenantActivation.findMany(),
@@ -81,6 +83,7 @@ export default async function CapabilityRegistryPage() {
     });
   });
 
+  if (!rows) return <PermissionDenied what="capabilities" />;
   const activeCount = rows.filter((row) => row.active).length;
 
   return (

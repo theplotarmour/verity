@@ -1,3 +1,4 @@
+import { validateCustomFields } from "@/server/platform/entity";
 import { z } from "zod";
 import { registerContribution } from "@/server/platform/contribution";
 import { registerCommand, type CommandDefinition } from "@/server/platform/command";
@@ -69,6 +70,7 @@ export const captureEvidence: CommandDefinition<
     }
   },
   handler: async (ctx, input) => {
+    if (input.payload) await validateCustomFields(ctx.tx, ENTITY_EVIDENCE, input.payload);
     // Judge against the fence now and record the verdict, because the fence may
     // move later and the verdict must not move with it.
     let withinFence: boolean | null = null;

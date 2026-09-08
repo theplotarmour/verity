@@ -1,6 +1,6 @@
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
-import { hasPermission } from "@/server/platform/authorization";
+import { hasTenantPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { ENTITY_APPROVAL } from "@/server/capabilities/approval";
 import {
@@ -30,13 +30,13 @@ export default async function ApprovalsPage() {
   const actor = await requireActor();
 
   const data = await withTenant(actor.tenantId, async (tx) => {
-    if (!(await hasPermission(tx, actor.roleId, "Read", ENTITY_APPROVAL))) return null;
+    if (!(await hasTenantPermission(tx, actor.roleId, "Read", ENTITY_APPROVAL))) return null;
 
     const requests = await tx.approvalRequest.findMany({
       orderBy: { createdAt: "desc" },
       include: { steps: { orderBy: { sequence: "asc" }, include: { role: true } } },
     });
-    const canDecide = await hasPermission(tx, actor.roleId, "ActionExecute", ENTITY_APPROVAL);
+    const canDecide = await hasTenantPermission(tx, actor.roleId, "ActionExecute", ENTITY_APPROVAL);
 
     const shaped = requests.map((request) => {
       const current = request.steps.find((s) => s.decision === "Pending");

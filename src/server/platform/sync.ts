@@ -41,25 +41,18 @@ export async function enqueueOfflineCommand(
   });
   if (existing) return { accepted: false, duplicateOf: existing.id };
 
-  try {
-    const row = await tx.offlineCommand.create({
-      data: {
-        tenantId: args.tenantId,
-        commandId: args.commandId,
-        commandKey: args.commandKey,
-        actorUserId: args.actorUserId,
-        payload: args.payload as never,
-        deviceTimestamp: args.deviceTimestamp,
-      },
-    });
-    return { accepted: true, duplicateOf: row.id };
-  } catch {
-    // Lost the race against a concurrent retry; the constraint decided.
-    const winner = await tx.offlineCommand.findUnique({
-      where: { tenantId_commandId: { tenantId: args.tenantId, commandId: args.commandId } },
-    });
-    return { accepted: false, duplicateOf: winner?.id };
-  }
+  // ON CONFLICT does not abort PostgreSQL's transaction; catching a unique
+  // violation and then querying in that same transaction cannot recover it.
+  const inserted = await tx.offlineCommand.createMany({
+    data: [{ tenantId: args.tenantId, commandId: args.commandId,
+      commandKey: args.commandKey, actorUserId: args.actorUserId,
+      payload: args.payload as never, deviceTimestamp: args.deviceTimestamp }],
+    skipDuplicates: true,
+  });
+  const row = await tx.offlineCommand.findUniqueOrThrow({
+    where: { tenantId_commandId: { tenantId: args.tenantId, commandId: args.commandId } },
+  });
+  return { accepted: inserted.count === 1, duplicateOf: row.id };
 }
 
 /** Classifies a replay failure into the Bible's conflict taxonomy (§2.C). */

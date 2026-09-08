@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import Link from "next/link";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
@@ -13,7 +14,7 @@ import { Related } from "@/components/ui/business/Related";
 export const dynamic = "force-dynamic";
 
 /** §73 Purchases — value by supplier and board, and how prices have moved (§16). */
-export default async function PurchaseReportPage() {
+async function PurchaseReportPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -121,3 +122,5 @@ export default async function PurchaseReportPage() {
     </>
   );
 }
+
+export default withPageAccess(PurchaseReportPage);

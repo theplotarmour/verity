@@ -1,5 +1,7 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -210,9 +212,9 @@ export function ItcView({ report }: { report: Report }) {
             owe is what your suppliers billed you, and this is only used to find disagreements.
           </p>
           <div className="mt-4">
-            <Button variant="primary" onClick={() => setImporting(true)}>
+            <CommandButton commands={"verity.trading.import_gst_portal_records"} variant="primary" onClick={() => setImporting(true)}>
               Import portal data
-            </Button>
+            </CommandButton>
           </div>
         </Panel>
       )}
@@ -255,9 +257,9 @@ export function ItcView({ report }: { report: Report }) {
               re-import when the portal is amended.
             </p>
             <div className="flex gap-2">
-              <Button variant="primary" disabled={pending || csv.trim().length === 0} onClick={submitImport}>
+              <CommandButton commands={"verity.trading.import_gst_portal_records"} variant="primary" disabled={pending || csv.trim().length === 0} onClick={submitImport}>
                 {pending ? "Importing…" : "Import"}
-              </Button>
+              </CommandButton>
               <Button disabled={pending} onClick={() => setImporting(false)}>
                 Cancel
               </Button>
@@ -354,7 +356,7 @@ export function ItcView({ report }: { report: Report }) {
 
       {report.portalRowCount > 0 && !importing && (
         <div>
-          <Button onClick={() => setImporting(true)}>Re-import portal data</Button>
+          <CommandButton commands={"verity.trading.import_gst_portal_records"} onClick={() => setImporting(true)}>Re-import portal data</CommandButton>
         </div>
       )}
 

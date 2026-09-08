@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -21,7 +22,7 @@ export const dynamic = "force-dynamic";
  * Everything it needs already existed. It reads one registered query and calls
  * one registered command; there is no kitchen-shaped contract anywhere.
  */
-export default async function KitchenPage() {
+async function KitchenPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -43,3 +44,5 @@ export default async function KitchenPage() {
     </>
   );
 }
+
+export default withPageAccess(KitchenPage);

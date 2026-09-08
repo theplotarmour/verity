@@ -1,5 +1,7 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, ErrorState, Field, Input, Select } from "@/components/ui/primitives";
@@ -27,9 +29,9 @@ export function CreateLocationForm({
 
   if (!open) {
     return (
-      <Button variant="primary" onClick={() => setOpen(true)}>
+      <CommandButton commands={"verity.location.create_location"} variant="primary" onClick={() => setOpen(true)}>
         New location
-      </Button>
+      </CommandButton>
     );
   }
 
@@ -80,9 +82,9 @@ export function CreateLocationForm({
       </Field>
 
       <div className="flex gap-2">
-        <Button type="submit" variant="primary" disabled={pending}>
+        <CommandButton commands={"verity.location.create_location"} type="submit" variant="primary" disabled={pending}>
           {pending ? "Creating…" : "Create"}
-        </Button>
+        </CommandButton>
         <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
           Cancel
         </Button>

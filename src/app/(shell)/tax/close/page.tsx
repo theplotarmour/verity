@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -20,7 +21,7 @@ export const dynamic = "force-dynamic";
  * period is closed nothing may be posted into it, which is what makes a filed
  * return reproducible.
  */
-export default async function ClosePeriodPage() {
+async function ClosePeriodPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -46,3 +47,5 @@ export default async function ClosePeriodPage() {
     </>
   );
 }
+
+export default withPageAccess(ClosePeriodPage);

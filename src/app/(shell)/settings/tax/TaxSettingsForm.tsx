@@ -1,10 +1,14 @@
 "use client";
 
+import { TaxCoverageNotice } from "@/components/ui/business/TaxCoverageNotice";
+
+
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Badge,
-  Button,
   DefinitionList,
   EmptyState,
   ErrorState,
@@ -57,6 +61,7 @@ export function TaxSettingsForm({ settings }: { settings: Settings }) {
 
   return (
     <div className="flex flex-col gap-5">
+      <TaxCoverageNotice />
       {failure && (
         <ErrorState
           title="That was refused"
@@ -90,6 +95,7 @@ export function TaxSettingsForm({ settings }: { settings: Settings }) {
       ) : (
         <Panel title="GST registration">
           <div className="flex flex-col gap-4">
+      <TaxCoverageNotice />
             <p className="m-0 text-[13px] text-text-secondary">
               Invoices cannot be raised until the business is registered here. The state code is
               read from the GSTIN rather than asked for again.
@@ -109,7 +115,7 @@ export function TaxSettingsForm({ settings }: { settings: Settings }) {
                 onChange={(event) => setRegistrationType(event.target.value)}
               >
                 <option value="regular">Regular</option>
-                <option value="composition">Composition</option>
+                <option value="composition" disabled>Composition — not supported</option>
               </Select>
             </Field>
             <Field
@@ -125,7 +131,7 @@ export function TaxSettingsForm({ settings }: { settings: Settings }) {
               />
             </Field>
             <div>
-              <Button
+              <CommandButton commands={"verity.trading.register_gst_registration"}
                 variant="primary"
                 disabled={pending || gstin.trim().length === 0 || seriesPrefix.trim().length === 0}
                 onClick={() =>
@@ -144,7 +150,7 @@ export function TaxSettingsForm({ settings }: { settings: Settings }) {
                 }
               >
                 {pending ? "Registering…" : "Register"}
-              </Button>
+              </CommandButton>
             </div>
           </div>
         </Panel>
@@ -153,6 +159,7 @@ export function TaxSettingsForm({ settings }: { settings: Settings }) {
       {settings.registration && (
         <Panel title="Add or change a rate">
           <div className="flex flex-col gap-4">
+      <TaxCoverageNotice />
             <p className="m-0 text-[13px] text-text-secondary">
               One rate, not three. 18% is 18% whether it is collected as 9 + 9 within the state or
               as 18 across a border, and asking for three numbers invites two of them to disagree.
@@ -189,7 +196,7 @@ export function TaxSettingsForm({ settings }: { settings: Settings }) {
               />
             </Field>
             <div>
-              <Button
+              <CommandButton commands={"verity.trading.set_tax_rule"}
                 variant="primary"
                 disabled={pending || hsn.trim().length === 0 || rate.trim().length === 0}
                 onClick={() =>
@@ -212,7 +219,7 @@ export function TaxSettingsForm({ settings }: { settings: Settings }) {
                 }
               >
                 {pending ? "Saving…" : "Set rate"}
-              </Button>
+              </CommandButton>
             </div>
           </div>
         </Panel>

@@ -1,8 +1,10 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, EmptyState, ErrorState, Field, Input, Panel, Select } from "@/components/ui/primitives";
+import { EmptyState, ErrorState, Field, Input, Panel, Select } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -66,9 +68,9 @@ export function MenuAdmin({ menu }: { menu: MenuCategory[] }) {
       )}
 
       <div className="mb-4 flex justify-end">
-        <Button variant="primary" onClick={() => setNewCategory((open) => !open)}>
+        <CommandButton commands={"verity.dinein.create_menu_category"} variant="primary" onClick={() => setNewCategory((open) => !open)}>
           {newCategory ? "Cancel" : "New section"}
-        </Button>
+        </CommandButton>
       </div>
 
       {newCategory && (
@@ -89,9 +91,9 @@ export function MenuAdmin({ menu }: { menu: MenuCategory[] }) {
                   <Input id="category-name" name="name" required autoFocus placeholder="Starters" />
                 </Field>
               </div>
-              <Button type="submit" variant="primary" disabled={pending}>
+              <CommandButton commands={"verity.dinein.create_menu_category"} type="submit" variant="primary" disabled={pending}>
                 Create
-              </Button>
+              </CommandButton>
             </form>
           </Panel>
         </div>
@@ -112,14 +114,14 @@ export function MenuAdmin({ menu }: { menu: MenuCategory[] }) {
               key={category.categoryId}
               title={category.categoryName}
               action={
-                <Button
+                <CommandButton commands={"verity.dinein.create_menu_item"}
                   size="sm"
                   onClick={() =>
                     setAddingTo(addingTo === category.categoryId ? null : category.categoryId)
                   }
                 >
                   {addingTo === category.categoryId ? "Close" : "Add item"}
-                </Button>
+                </CommandButton>
               }
             >
               {addingTo === category.categoryId && (
@@ -155,9 +157,9 @@ export function MenuAdmin({ menu }: { menu: MenuCategory[] }) {
                       />
                     </Field>
                   </div>
-                  <Button type="submit" variant="primary" disabled={pending}>
+                  <CommandButton commands={"verity.dinein.create_menu_item"} type="submit" variant="primary" disabled={pending}>
                     Add
-                  </Button>
+                  </CommandButton>
                 </form>
               )}
 
@@ -208,7 +210,7 @@ export function MenuAdmin({ menu }: { menu: MenuCategory[] }) {
                           </span>
                         </td>
                         <td className="border-b border-line px-3 py-2 text-right">
-                          <Button
+                          <CommandButton commands={"verity.dinein.set_menu_item_active"}
                             size="sm"
                             disabled={pending}
                             onClick={() =>
@@ -219,7 +221,7 @@ export function MenuAdmin({ menu }: { menu: MenuCategory[] }) {
                             }
                           >
                             {item.active ? "Retire" : "Bring back"}
-                          </Button>
+                          </CommandButton>
                         </td>
                       </tr>
                     ))}

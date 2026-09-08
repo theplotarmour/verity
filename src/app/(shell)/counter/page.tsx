@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import Link from "next/link";
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
@@ -28,7 +29,7 @@ function rupees(minor: number): string {
  * and need a bill, and bills waiting to be paid. Merging them into one queue
  * would hide which of the two a row actually needs.
  */
-export default async function CounterPage() {
+async function CounterPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -156,3 +157,5 @@ export default async function CounterPage() {
     </>
   );
 }
+
+export default withPageAccess(CounterPage);

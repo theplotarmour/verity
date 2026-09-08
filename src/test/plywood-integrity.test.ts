@@ -368,14 +368,16 @@ describeDb("plywood integrity foundation (slice 1)", () => {
   describe("invoice eligibility (P0-03)", () => {
     it("refuses to invoice an order still awaiting credit approval", async () => {
       const productId = await boardInStock(50);
-      // A limit smaller than the order forces pending_credit.
+      // Simulate a legacy pending-credit order; new orders no longer use this gate.
       const customerId = await freshCustomer(100_000);
 
       const order = await executeCommand(owner, createSalesOrder, {
         customerId, locationId: godownId,
         lines: [{ productId, qtyOrdered: 10, unitPricePaise: 150_000 }],
       });
-      expect(order.state).toBe("pending_credit");
+      await withTenant(tenantId, (tx) => tx.tradingSalesOrder.update({
+        where: { id: order.id }, data: { state: "pending_credit" },
+      }));
 
       // THE DEFECT: the old guard rejected only draft and cancelled, so a
       // financial document could be raised against credit the business had

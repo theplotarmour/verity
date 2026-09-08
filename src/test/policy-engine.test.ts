@@ -446,14 +446,14 @@ describeDb("authorization decision point (Task 37)", () => {
       const command: CommandDefinition<{ note: string }, { ok: true }> = {
         key: "verity.test.policy_job.update",
         entity: ENTITY,
-        verb: "Edit",
+        verb: "Read",
         input: z.object({ note: z.string() }),
         handler: async () => ({ result: { ok: true } as const }),
       };
       registerCommand(command);
 
       await expect(
-        executeCommand(actorIn(orgs.north, regionalRole), command, { note: "fine" }),
+        executeCommand(actorIn(orgs.north, tenantRole), command, { note: "fine" }),
       ).resolves.toEqual({ ok: true });
     });
 

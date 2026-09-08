@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
  * drawer — the restaurant takes the money the way it always has and records
  * what happened.
  */
-export default async function BillPage({ params }: { params: Promise<{ billId: string }> }) {
+async function BillPage({ params }: { params: Promise<{ billId: string }> }) {
   installCapabilities();
   const { billId } = await params;
   const actor = await requireActor();
@@ -43,3 +44,5 @@ export default async function BillPage({ params }: { params: Promise<{ billId: s
     </>
   );
 }
+
+export default withPageAccess(BillPage);

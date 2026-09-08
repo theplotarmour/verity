@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
  * back. There is no delete, anywhere, by design — a bill from last month
  * references what was sold.
  */
-export default async function MenuPage() {
+async function MenuPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -39,3 +40,5 @@ export default async function MenuPage() {
     </>
   );
 }
+
+export default withPageAccess(MenuPage);

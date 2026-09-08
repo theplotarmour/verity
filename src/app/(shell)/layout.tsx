@@ -1,3 +1,5 @@
+import { CommandAccessProvider } from "@/components/ui/CommandAccess";
+import { listCommands } from "@/server/platform/command";
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import {
@@ -53,19 +55,17 @@ export default async function ShellLayout({
     memberships.find((m) => m.membershipId === actor.membershipId) ??
     memberships[0]!;
 
-  const { capabilities, canAudit, canConfigure, grants } = await withTenant(
+  const { capabilities, canAudit, canConfigure, grants, commandKeys } = await withTenant(
     actor.tenantId,
     async (tx) => {
-      const activations = await tx.tenantActivation.findMany({
+      const activations = actor.roleId ? await tx.tenantActivation.findMany({
         where: { status: "Active" },
         include: { capability: true },
-      });
+      }) : [];
       const permissions = actor.roleId
         ? await resolvePermissions(tx, actor.roleId)
         : [];
-      const readable = new Set(
-        permissions.filter((p) => p.verb === "Read").map((p) => p.entity),
-      );
+
 
       return {
         // Every active capability is offered to the contribution layer, which
@@ -76,14 +76,18 @@ export default async function ShellLayout({
           id: a.capabilityId,
           name: a.capability.name,
         })),
+        commandKeys: listCommands().filter((command) => permissions.some((p) =>
+          p.entity === command.entity && p.verb === command.verb &&
+          (p.scope === "Tenant" || command.scopeHandling === "handler")
+        )).map((command) => command.key),
         grants: permissions.map((p) => ({ entity: p.entity, verb: p.verb })),
-        canAudit: readable.size > 0,
+        canAudit: permissions.some((p) => p.verb === "Read" && p.entity === "verity.platform.activity" && p.scope === "Tenant"),
         // Edit on the TENANT, not "holds any Edit at all". The old test let a
         // salesperson who may edit a customer see a Configuration link, and §0
         // is explicit that raw configuration keys are not a client surface. It
         // now matches what the page and the write command both require.
         canConfigure: permissions.some(
-          (p) => p.verb === "Edit" && p.entity === "verity.platform.tenant",
+          (p) => p.verb === "Edit" && p.entity === "verity.platform.tenant" && p.scope === "Tenant",
         ),
       };
     },
@@ -245,7 +249,7 @@ export default async function ShellLayout({
       userLabel={userLabel}
       userInitials={userInitials}
     >
-      {children}
+      <CommandAccessProvider commandKeys={commandKeys}>{children}</CommandAccessProvider>
     </ShellChrome>
   );
 }

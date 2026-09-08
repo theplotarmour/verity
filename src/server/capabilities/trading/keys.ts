@@ -72,3 +72,21 @@ export const CONFIG_TENANT_STATE_CODE = "verity.trading.tax.state_code";
 export const CONFIG_CGST_RATE_BP = "verity.trading.tax.cgst_rate_bp";
 export const CONFIG_SGST_RATE_BP = "verity.trading.tax.sgst_rate_bp";
 export const CONFIG_IGST_RATE_BP = "verity.trading.tax.igst_rate_bp";
+
+/** State master: https://docs.ewaybillgst.gov.in/apidocs/state-code.html
+ * Historical 25/28 remain accepted for existing records. */
+export const GST_STATE_CODE = z.string().regex(/^(0[1-9]|[12][0-9]|3[0-8]|97|99)$/, "enter a recognised GST state code");
+const GST_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+export function gstinCheckDigit(prefix: string): string {
+  if (!/^[0-9A-Z]{14}$/.test(prefix)) return "";
+  let sum = 0;
+  for (let index = 0; index < prefix.length; index++) {
+    const product = GST_ALPHABET.indexOf(prefix[index]) * (index % 2 === 0 ? 1 : 2);
+    sum += Math.floor(product / 36) + product % 36;
+  }
+  return GST_ALPHABET[(36 - sum % 36) % 36];
+}
+export const GSTIN = z.string().trim().toUpperCase()
+  .regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/, "that is not a valid GSTIN")
+  .refine((value) => GST_STATE_CODE.safeParse(value.slice(0, 2)).success, "GSTIN contains an unrecognised state code")
+  .refine((value) => gstinCheckDigit(value.slice(0, 14)) === value[14], "GSTIN check digit is invalid; check the number on the registration certificate");

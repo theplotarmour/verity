@@ -1,5 +1,7 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { FormDescriptor } from "@/server/platform/experience";
@@ -61,9 +63,9 @@ export function CustomFieldsPanel({
             descriptor.readOnly ? (
               <span className="text-[12px] text-text-tertiary">Locked — terminal state</span>
             ) : canEdit ? (
-              <Button size="sm" onClick={() => setEditing(true)}>
+              <CommandButton commands={"verity.location.set_custom_fields"} size="sm" onClick={() => setEditing(true)}>
                 Edit
-              </Button>
+              </CommandButton>
             ) : undefined
           }
         >
@@ -159,9 +161,9 @@ export function CustomFieldsPanel({
           })}
 
           <div className="flex gap-2">
-            <Button type="submit" variant="primary" disabled={pending}>
+            <CommandButton commands={"verity.location.set_custom_fields"} type="submit" variant="primary" disabled={pending}>
               {pending ? "Saving…" : "Save"}
-            </Button>
+            </CommandButton>
             <Button type="button" variant="ghost" onClick={() => setEditing(false)} disabled={pending}>
               Cancel
             </Button>

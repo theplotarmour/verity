@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -26,7 +27,7 @@ export const dynamic = "force-dynamic";
  * mostly empty, and why "blank uses the agreed price" so often had nothing
  * behind it.
  */
-export default async function PricesPage({
+async function PricesPage({
   searchParams,
 }: {
   searchParams: Promise<{ side?: string; party?: string }>;
@@ -47,22 +48,10 @@ export default async function PricesPage({
 
   const [suppliers, customers, agreedSupplier, agreedCustomer] =
     await Promise.all([
-      executeQuery(actor, listSuppliers, {}).catch((error) => {
-        if (error instanceof ForbiddenError) return [];
-        throw error;
-      }),
-      executeQuery(actor, listCustomers, {}).catch((error) => {
-        if (error instanceof ForbiddenError) return [];
-        throw error;
-      }),
-      executeQuery(actor, supplierPrices, {}).catch((error) => {
-        if (error instanceof ForbiddenError) return [];
-        throw error;
-      }),
-      executeQuery(actor, customerPrices, {}).catch((error) => {
-        if (error instanceof ForbiddenError) return [];
-        throw error;
-      }),
+      executeQuery(actor, listSuppliers, {}),
+      executeQuery(actor, listCustomers, {}),
+      executeQuery(actor, supplierPrices, {}),
+      executeQuery(actor, customerPrices, {}),
     ]);
 
   // Services are excluded: a price list is for things bought and sold by the
@@ -116,3 +105,5 @@ export default async function PricesPage({
     </>
   );
 }
+
+export default withPageAccess(PricesPage);

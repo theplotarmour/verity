@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -24,7 +25,7 @@ export const dynamic = "force-dynamic";
  * is a platform surface; a business administrator setting their legal name
  * should never see `verity.trading.tax.state_code`.
  */
-export default async function BusinessSettingsPage() {
+async function BusinessSettingsPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -46,3 +47,5 @@ export default async function BusinessSettingsPage() {
     </>
   );
 }
+
+export default withPageAccess(BusinessSettingsPage);

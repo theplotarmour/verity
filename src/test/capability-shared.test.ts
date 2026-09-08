@@ -121,7 +121,7 @@ describeDb("shared capabilities", () => {
     const history = await withTenant(tenantA, (tx) =>
       tx.activity.findMany({ where: { entityKey: ENTITY_ASSET, entityId: assetId } }),
     );
-    expect(history[0]).toMatchObject({ fieldChanged: "state", oldValue: "in_service", newValue: "maintenance" });
+    expect(history).toEqual(expect.arrayContaining([expect.objectContaining({ fieldChanged: "state", oldValue: "in_service", newValue: "maintenance" })]));
   });
 
   it("refuses an undeclared asset transition", async () => {

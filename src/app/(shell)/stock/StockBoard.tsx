@@ -1,11 +1,12 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import Link from "next/link";
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Button,
   EmptyState,
   ErrorState,
   Field,
@@ -211,9 +212,9 @@ export function StockBoard({
 
       {canMove && (
         <div className="mb-4 flex justify-end">
-          <Button variant="primary" onClick={() => setUpdating(true)}>
+          <CommandButton commands={["verity.trading.receive_stock","verity.trading.issue_stock","verity.trading.transfer_stock","verity.trading.adjust_stock","verity.trading.record_damaged_stock","verity.trading.record_returned_stock"]} variant="primary" onClick={() => setUpdating(true)}>
             Update stock
-          </Button>
+          </CommandButton>
         </div>
       )}
 
@@ -593,13 +594,13 @@ function MovementForm({
         </div>
       )}
 
-      <Button type="submit" variant="primary" disabled={pending}>
+      <CommandButton commands={movement === "receive" ? "verity.trading.receive_stock" : movement === "issue" ? "verity.trading.issue_stock" : "verity.trading.transfer_stock"} type="submit" variant="primary" disabled={pending}>
         {movement === "receive"
           ? "Receive"
           : movement === "issue"
             ? "Issue"
             : "Transfer"}
-      </Button>
+      </CommandButton>
 
       {movement !== "receive" && (
         <p className="m-0 w-full text-[12px] text-text-tertiary">
@@ -741,9 +742,9 @@ function CorrectionForm({
         </Field>
       </div>
 
-      <Button type="submit" variant="primary" disabled={pending}>
+      <CommandButton commands={correction === "adjust" ? "verity.trading.adjust_stock" : correction === "damaged" ? "verity.trading.record_damaged_stock" : "verity.trading.record_returned_stock"} type="submit" variant="primary" disabled={pending}>
         Record
-      </Button>
+      </CommandButton>
 
       <p className="m-0 w-full text-[12px] text-text-tertiary">
         {correction === "returned"

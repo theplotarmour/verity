@@ -1,6 +1,6 @@
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
-import { hasPermission } from "@/server/platform/authorization";
+import { hasTenantPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { ENTITY_EVIDENCE } from "@/server/capabilities/evidence";
 import { DataTable } from "@/components/ui/DataTable";
@@ -36,7 +36,7 @@ export default async function EvidencePage() {
   const actor = await requireActor();
 
   const rows = await withTenant(actor.tenantId, async (tx) => {
-    if (!(await hasPermission(tx, actor.roleId, "Read", ENTITY_EVIDENCE))) return null;
+    if (!(await hasTenantPermission(tx, actor.roleId, "Read", ENTITY_EVIDENCE))) return null;
 
     const evidence = await tx.evidence.findMany({ orderBy: { capturedAt: "desc" }, take: 200 });
     return evidence.map<Row>((e) => ({

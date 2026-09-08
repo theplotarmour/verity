@@ -1,5 +1,7 @@
 "use client";
 
+import { CommandButton, useCommandAccess } from "@/components/ui/CommandAccess";
+
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -33,6 +35,7 @@ type Activity = { key: string; label: string; group: string; note: string | null
 
 export function RolesDesk({ roles, activities }: { roles: Role[]; activities: Activity[] }) {
   const router = useRouter();
+  const canCommand = useCommandAccess();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(roles[0]?.id ?? null);
   const [creating, setCreating] = useState(false);
@@ -85,7 +88,7 @@ export function RolesDesk({ roles, activities }: { roles: Role[]; activities: Ac
               />
             </Field>
             <div className="flex gap-2">
-              <Button
+              <CommandButton commands={"verity.platform.create_role"}
                 variant="primary"
                 disabled={pending || newName.trim().length === 0}
                 onClick={() =>
@@ -96,7 +99,7 @@ export function RolesDesk({ roles, activities }: { roles: Role[]; activities: Ac
                 }
               >
                 {pending ? "Creating…" : "Create role"}
-              </Button>
+              </CommandButton>
               <Button disabled={pending} onClick={() => setCreating(false)}>
                 Cancel
               </Button>
@@ -109,9 +112,9 @@ export function RolesDesk({ roles, activities }: { roles: Role[]; activities: Ac
         </Panel>
       ) : (
         <div>
-          <Button variant="primary" onClick={() => setCreating(true)}>
+          <CommandButton commands={"verity.platform.create_role"} variant="primary" onClick={() => setCreating(true)}>
             New role
-          </Button>
+          </CommandButton>
         </div>
       )}
 
@@ -193,7 +196,7 @@ export function RolesDesk({ roles, activities }: { roles: Role[]; activities: Ac
                               </span>
                             }
                             checked={held}
-                            disabled={pending}
+                            disabled={pending || !canCommand("verity.trading.set_role_activity")}
                             onChange={(event) =>
                               run("verity.trading.set_role_activity", {
                                 roleId: selected.id,

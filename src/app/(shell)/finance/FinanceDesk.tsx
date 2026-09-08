@@ -1,11 +1,12 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Badge,
-  Button,
   EmptyState,
   ErrorState,
   Field,
@@ -251,7 +252,7 @@ export function FinanceDesk({
                     Delivered {rupees(order.valuePaise)}, not invoiced
                   </p>
                 </div>
-                <Button
+                <CommandButton commands={"verity.trading.raise_sales_invoice"}
                   size="sm"
                   disabled={pending}
                   onClick={() =>
@@ -261,7 +262,7 @@ export function FinanceDesk({
                   }
                 >
                   Raise invoice
-                </Button>
+                </CommandButton>
               </div>
             ))}
             {unbilledPurchases.map((order) => (
@@ -277,7 +278,7 @@ export function FinanceDesk({
                     Received {rupees(order.valuePaise)}, not billed
                   </p>
                 </div>
-                <Button
+                <CommandButton commands={"verity.trading.raise_purchase_bill_from_order"}
                   size="sm"
                   disabled={pending}
                   onClick={() =>
@@ -287,7 +288,7 @@ export function FinanceDesk({
                   }
                 >
                   Raise bill
-                </Button>
+                </CommandButton>
               </div>
             ))}
           </div>
@@ -357,13 +358,13 @@ export function FinanceDesk({
                     </td>
                     <td className="border-b border-line px-3 py-2 text-right">
                       {invoice.provisional && (
-                        <Button
+                        <CommandButton commands={"verity.trading.confirm_purchase_bill"}
                           size="sm"
                           disabled={pending}
                           onClick={() => setConfirming(invoice)}
                         >
                           Record their bill…
-                        </Button>
+                        </CommandButton>
                       )}
                     </td>
                   </tr>
@@ -446,7 +447,7 @@ function ConfirmBillModal({
             </span>
           )}
           <ModalCancel onClose={onClose} disabled={pending} />
-          <Button
+          <CommandButton commands={"verity.trading.confirm_purchase_bill"}
             variant="primary"
             disabled={pending || !canSave}
             onClick={() =>
@@ -463,7 +464,7 @@ function ConfirmBillModal({
             }
           >
             {pending ? "Recording…" : "Record"}
-          </Button>
+          </CommandButton>
         </>
       }
     >

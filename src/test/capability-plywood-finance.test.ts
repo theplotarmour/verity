@@ -195,6 +195,7 @@ describeDb("capability: Plywood trading — finance", () => {
       await tx.permission.createMany({
         data: [
           ENTITY_INVOICE,
+          "verity.platform.activity",
           ENTITY_PAYMENT,
           ENTITY_LEDGER_ENTRY,
           ENTITY_CUSTOMER,

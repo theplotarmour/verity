@@ -1,10 +1,11 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Button,
   EmptyState,
   ErrorState,
   Field,
@@ -229,20 +230,20 @@ export function SalesDesk({
       )}
 
       <div className="mb-1.5 flex flex-wrap justify-end gap-2">
-        <Button onClick={() => openPanel(() => setNewCustomer(true))}>
+        <CommandButton commands={"verity.trading.create_customer"} onClick={() => openPanel(() => setNewCustomer(true))}>
           New customer
-        </Button>
+        </CommandButton>
         {/* "Set a price" is NOT here any more. Agreeing prices is a rate card
             worked through in one sitting, which is what /prices is for; a
             one-at-a-time dialog on the selling desk was the reason those lists
             stayed empty. */}
-        <Button
+        <CommandButton commands={"verity.trading.create_sales_order"}
           variant="primary"
           disabled={!canOrder}
           onClick={() => openPanel(() => setNewOrder(true))}
         >
           New order
-        </Button>
+        </CommandButton>
       </div>
 
       {orderHint && (
@@ -387,25 +388,25 @@ export function SalesDesk({
                       <td className="border-b border-line px-3 py-2 text-right">
                         <div className="flex justify-end gap-2">
                           {order.amendable && (
-                            <Button
+                            <CommandButton commands={"verity.trading.edit_sales_order"}
                               size="sm"
                               disabled={pending}
                               onClick={() => openPanel(() => setAmending(order))}
                             >
                               Edit
-                            </Button>
+                            </CommandButton>
                           )}
                           {order.state === "approved" && (
-                            <Button
+                            <CommandButton commands={"verity.trading.reserve_for_order"}
                               size="sm"
                               disabled={pending}
                               onClick={() => setReserving(order.id)}
                             >
                               Hold stock for this
-                            </Button>
+                            </CommandButton>
                           )}
                           {order.state === "dispatching" && (
-                            <Button
+                            <CommandButton commands={"verity.trading.dispatch_order"}
                               size="sm"
                               variant="primary"
                               disabled={pending}
@@ -438,9 +439,9 @@ export function SalesDesk({
                               }
                             >
                               Hand over &amp; invoice
-                            </Button>
+                            </CommandButton>
                           )}
-                          <Button
+                          <CommandButton commands={"verity.trading.cancel_sales_order"}
                             size="sm"
                             disabled={pending}
                             onClick={() =>
@@ -454,7 +455,7 @@ export function SalesDesk({
                             {cancelling === order.id
                               ? "Keep order"
                               : "Cancel order…"}
-                          </Button>
+                          </CommandButton>
                         </div>
                       </td>
                     </tr>
@@ -494,9 +495,9 @@ export function SalesDesk({
                   />
                 </Field>
               </div>
-              <Button type="submit" variant="danger" disabled={pending}>
+              <CommandButton commands={"verity.trading.cancel_sales_order"} type="submit" variant="danger" disabled={pending}>
                 Cancel order
-              </Button>
+              </CommandButton>
               <p className="m-0 w-full text-[12px] text-text-tertiary">
                 Any stock held for this order is released in the same step.
                 Stock held for an order nobody will fulfil is stock that cannot

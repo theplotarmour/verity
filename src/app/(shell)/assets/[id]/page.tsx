@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
-import { hasPermission } from "@/server/platform/authorization";
+import { hasTenantPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { ENTITY_ASSET } from "@/server/capabilities/asset";
 import { ENTITY_EVIDENCE } from "@/server/capabilities/evidence";
@@ -38,7 +38,7 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
   const actor = await requireActor();
 
   const data = await withTenant(actor.tenantId, async (tx) => {
-    if (!(await hasPermission(tx, actor.roleId, "Read", ENTITY_ASSET))) return { denied: true as const };
+    if (!(await hasTenantPermission(tx, actor.roleId, "Read", ENTITY_ASSET))) return { denied: true as const };
 
     const asset = await tx.asset.findUnique({ where: { id }, include: { location: true } });
     if (!asset) return { notFound: true as const };
@@ -55,8 +55,8 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
     const byId = new Map(states.map((s) => [s.id, s]));
 
     const [canEdit, canCaptureEvidence, history, evidence, bookings] = await Promise.all([
-      hasPermission(tx, actor.roleId, "Edit", ENTITY_ASSET),
-      hasPermission(tx, actor.roleId, "Create", ENTITY_EVIDENCE),
+      hasTenantPermission(tx, actor.roleId, "Edit", ENTITY_ASSET),
+      hasTenantPermission(tx, actor.roleId, "Create", ENTITY_EVIDENCE),
       entityHistory(tx, ENTITY_ASSET, asset.id),
       tx.evidence.findMany({ where: { entityKey: ENTITY_ASSET, entityId: asset.id }, orderBy: { capturedAt: "desc" } }),
       tx.booking.findMany({

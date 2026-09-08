@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -25,7 +26,7 @@ export const dynamic = "force-dynamic";
  * different thing entirely: a document records what was agreed, a payment
  * records what moved. Nothing in Verity ever invents a payment.
  */
-export default async function TransactionsPage() {
+async function TransactionsPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -39,14 +40,8 @@ export default async function TransactionsPage() {
   }
 
   const [customers, suppliers] = await Promise.all([
-    executeQuery(actor, listCustomers, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return [];
-      throw error;
-    }),
-    executeQuery(actor, listSuppliers, {}).catch((error) => {
-      if (error instanceof ForbiddenError) return [];
-      throw error;
-    }),
+    executeQuery(actor, listCustomers, {}),
+    executeQuery(actor, listSuppliers, {}),
   ]);
 
   return (
@@ -69,3 +64,5 @@ export default async function TransactionsPage() {
     </>
   );
 }
+
+export default withPageAccess(TransactionsPage);

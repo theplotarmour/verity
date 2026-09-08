@@ -1,8 +1,10 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Field, Input, Panel, StatRow, Stat } from "@/components/ui/primitives";
+import { Field, Input, Panel, StatRow, Stat } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 
 type Checklist = {
@@ -101,27 +103,27 @@ export function ClosePeriodPanel({ checklist, tax }: { checklist: Checklist; tax
                 >
                   <Input id="reason" name="reason" required minLength={3} />
                 </Field>
-                <Button type="submit" disabled={pending}>
+                <CommandButton commands={"verity.trading.reopen_period"} type="submit" disabled={pending}>
                   Reopen {checklist.periodKey}
-                </Button>
+                </CommandButton>
               </form>
             ) : (
-              <Button variant="secondary" disabled={pending} onClick={() => setReopening(true)}>
+              <CommandButton commands={"verity.trading.reopen_period"} variant="secondary" disabled={pending} onClick={() => setReopening(true)}>
                 Reopen period
-              </Button>
+              </CommandButton>
             )
           ) : (
             <>
-              <Button
+              <CommandButton commands={"verity.trading.close_period"}
                 disabled={pending}
                 onClick={() =>
                   run("verity.trading.close_period", { periodKey: checklist.periodKey })
                 }
               >
                 Close {checklist.periodKey}
-              </Button>
+              </CommandButton>
               {checklist.blockers.length > 0 && (
-                <Button
+                <CommandButton commands={"verity.trading.close_period"}
                   variant="secondary"
                   disabled={pending}
                   onClick={() =>
@@ -132,7 +134,7 @@ export function ClosePeriodPanel({ checklist, tax }: { checklist: Checklist; tax
                   }
                 >
                   Close anyway, accepting {checklist.blockers.length} item(s)
-                </Button>
+                </CommandButton>
               )}
             </>
           )}

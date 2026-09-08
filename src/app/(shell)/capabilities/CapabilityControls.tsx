@@ -1,8 +1,10 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, ErrorState } from "@/components/ui/primitives";
+import { ErrorState } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -61,14 +63,14 @@ export function CapabilityControls({
 
   return (
     <div className="flex flex-col items-end gap-2">
-      <Button
+      <CommandButton commands={"verity.platform.set_capability_state"}
         size="sm"
         variant={active ? "secondary" : "primary"}
         disabled={pending || blockedFromActivating || blockedFromDeactivating}
         onClick={() => setState(!active)}
       >
         {active ? "Deactivate" : "Activate"}
-      </Button>
+      </CommandButton>
 
       {/* Said before the click, not after it. The database refuses either of
           these anyway; the point is that nobody has to find out that way. */}

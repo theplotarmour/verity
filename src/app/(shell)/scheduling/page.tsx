@@ -1,6 +1,6 @@
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
-import { hasPermission } from "@/server/platform/authorization";
+import { hasTenantPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { ENTITY_BOOKING } from "@/server/capabilities/scheduling";
 import {
@@ -34,7 +34,7 @@ export default async function SchedulingPage() {
   const actor = await requireActor();
 
   const data = await withTenant(actor.tenantId, async (tx) => {
-    if (!(await hasPermission(tx, actor.roleId, "Read", ENTITY_BOOKING))) return null;
+    if (!(await hasTenantPermission(tx, actor.roleId, "Read", ENTITY_BOOKING))) return null;
 
     const [resources, bookings, unavailable] = await Promise.all([
       tx.resource.findMany({

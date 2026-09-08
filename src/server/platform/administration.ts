@@ -4,7 +4,7 @@ import { registerCommand, type CommandDefinition } from "./command";
 import { registerQuery, type QueryDefinition } from "./query";
 import { diffFields, recordActivity, recordSecurityEvent } from "./audit";
 import { provisionIdentity } from "./identity";
-import { resolvePermissions } from "./authorization";
+import { resolvePermissions, assertGrantCeiling } from "./authorization";
 import { activateCapability, suspendCapability, setConfig } from "./capability";
 import { ValidationError } from "./command";
 import { OPERATOR_ROLE_NAME } from "./operator";
@@ -61,6 +61,7 @@ export const createOrganization: CommandDefinition<
   key: "verity.platform.create_organization",
   entity: ENTITY_ORGANIZATION,
   verb: "Create",
+  impact: "destructive",
   input: z.object({
     name: z.string().min(1).max(200),
     parentId: z.string().uuid().nullable().optional(),
@@ -102,6 +103,7 @@ export const updateOrganization: CommandDefinition<
   key: "verity.platform.update_organization",
   entity: ENTITY_ORGANIZATION,
   verb: "Edit",
+  impact: "destructive",
   input: z.object({
     organizationId: z.string().uuid(),
     name: z.string().min(1).max(200).optional(),
@@ -215,6 +217,7 @@ export const invitePerson: CommandDefinition<
   key: "verity.platform.invite_person",
   entity: ENTITY_MEMBERSHIP,
   verb: "Create",
+  impact: "destructive",
   input: z.object({
     displayName: z.string().min(1).max(200),
     email: z.string().email().optional(),
@@ -235,6 +238,7 @@ export const invitePerson: CommandDefinition<
     if (input.roleId) {
       const role = await ctx.tx.role.findUnique({ where: { id: input.roleId } });
       if (!role) throw new ValidationError("E_VALIDATION: role not found in this client");
+      await assertGrantCeiling(ctx.tx, ctx.actor, await resolvePermissions(ctx.tx, input.roleId));
     }
   },
   handler: async (ctx, input) => {
@@ -286,6 +290,7 @@ export const assignRole: CommandDefinition<
   key: "verity.platform.assign_role",
   entity: ENTITY_MEMBERSHIP,
   verb: "Edit",
+  impact: "destructive",
   input: z.object({
     membershipId: z.string().uuid(),
     // Null is a real choice, not a missing value: a membership with no role
@@ -294,9 +299,13 @@ export const assignRole: CommandDefinition<
     roleId: z.string().uuid().nullable(),
   }),
   preconditions: async (ctx, input) => {
+    if (input.membershipId === ctx.actor.membershipId) {
+      throw new ValidationError("E_VALIDATION: ask another administrator to change your role");
+    }
     if (!input.roleId) return;
     const role = await ctx.tx.role.findUnique({ where: { id: input.roleId } });
     if (!role) throw new ValidationError("E_VALIDATION: role not found in this client");
+    await assertGrantCeiling(ctx.tx, ctx.actor, await resolvePermissions(ctx.tx, input.roleId));
   },
   handler: async (ctx, input) => {
     const before = await ctx.tx.tenantMembership.findUniqueOrThrow({
@@ -346,6 +355,7 @@ export const revokeMembership: CommandDefinition<
   key: "verity.platform.revoke_membership",
   entity: ENTITY_MEMBERSHIP,
   verb: "Delete",
+  impact: "destructive",
   input: z.object({ membershipId: z.string().uuid() }),
   preconditions: async (ctx, input) => {
     if (input.membershipId === ctx.actor.membershipId) {
@@ -398,6 +408,7 @@ export const setPersonState: CommandDefinition<
   key: "verity.platform.set_person_state",
   entity: ENTITY_MEMBERSHIP,
   verb: "Edit",
+  impact: "destructive",
   input: z.object({
     membershipId: z.string().uuid(),
     state: z.enum(["Active", "Suspended"]),
@@ -485,6 +496,7 @@ export const createRole: CommandDefinition<{ name: string }, { id: string }> = {
   key: "verity.platform.create_role",
   entity: ENTITY_ROLE,
   verb: "Create",
+  impact: "destructive",
   input: z.object({ name: z.string().min(1).max(120) }),
   preconditions: async (ctx, input) => {
     const clash = await ctx.tx.role.findFirst({ where: { name: input.name } });
@@ -522,6 +534,7 @@ export const grantPermission: CommandDefinition<
   key: "verity.platform.grant_permission",
   entity: ENTITY_ROLE,
   verb: "Edit",
+  impact: "destructive",
   input: z.object({
     roleId: z.string().uuid(),
     verb: z.enum(["Read", "Create", "Edit", "Delete", "ActionExecute"]),
@@ -531,6 +544,7 @@ export const grantPermission: CommandDefinition<
   preconditions: async (ctx, input) => {
     const role = await ctx.tx.role.findUnique({ where: { id: input.roleId } });
     if (!role) throw new ValidationError("E_VALIDATION: role not found in this client");
+    await assertGrantCeiling(ctx.tx, ctx.actor, [input]);
 
     const existing = await ctx.tx.permission.findFirst({
       where: { roleId: input.roleId, verb: input.verb as never, entity: input.entity },
@@ -576,6 +590,7 @@ export const revokePermission: CommandDefinition<
   key: "verity.platform.revoke_permission",
   entity: ENTITY_ROLE,
   verb: "Edit",
+  impact: "destructive",
   input: z.object({ permissionId: z.string().uuid() }),
   handler: async (ctx, input) => {
     const before = await ctx.tx.permission.findUniqueOrThrow({ where: { id: input.permissionId } });
@@ -618,12 +633,14 @@ export const composeRole: CommandDefinition<
   key: "verity.platform.compose_role",
   entity: ENTITY_ROLE,
   verb: "Edit",
+  impact: "destructive",
   input: z.object({
     parentRoleId: z.string().uuid(),
     childRoleId: z.string().uuid(),
     attach: z.boolean(),
   }),
   preconditions: async (ctx, input) => {
+    if (input.attach) await assertGrantCeiling(ctx.tx, ctx.actor, await resolvePermissions(ctx.tx, input.childRoleId));
     if (input.parentRoleId === input.childRoleId) {
       throw new ValidationError("E_VALIDATION: a role cannot inherit from itself");
     }
@@ -721,6 +738,7 @@ export const setCapabilityState: CommandDefinition<
   key: "verity.platform.set_capability_state",
   entity: ENTITY_TENANT,
   verb: "ActionExecute",
+  impact: "destructive",
   input: z.object({ capabilityId: z.string().min(1), enabled: z.boolean() }),
   handler: async (ctx, input) => {
     if (input.enabled) {
@@ -823,7 +841,7 @@ export type GrantableGroup = { group: string; entities: GrantableEntity[] };
  * the platform administration entities are enumerated in code already
  * (`ENTITY_TENANT` etc., just above) and do not change per capability.
  */
-const PLATFORM_ADMIN_ENTITIES = [ENTITY_TENANT, ENTITY_ORGANIZATION, ENTITY_MEMBERSHIP, ENTITY_ROLE];
+const PLATFORM_ADMIN_ENTITIES = [ENTITY_TENANT, ENTITY_ORGANIZATION, ENTITY_MEMBERSHIP, ENTITY_ROLE, "verity.platform.activity", "verity.platform.security_event", "verity.platform.overview", "verity.platform.capability"];
 
 /**
  * Entities a role's permissions can target, grouped by owning capability —
@@ -915,6 +933,7 @@ export const setTenantConfiguration: CommandDefinition<
   key: "verity.platform.set_configuration",
   entity: ENTITY_TENANT,
   verb: "Edit",
+  impact: "destructive",
   input: z.object({
     key: z.string().min(1).max(120),
     // Null clears the setting. An absent value must be distinguishable from an

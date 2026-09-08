@@ -277,6 +277,7 @@ describeDb("authorization layers 2 and 3", () => {
   it("exposes the scope filter to a query handler", async () => {
     const scopedQuery: QueryDefinition<Record<string, never>, { orgs: string[] }> = {
       key: "verity.test.scoped",
+      scopeHandling: "handler",
       entity: ENTITY,
       input: z.object({}),
       handler: async (ctx) => ({ orgs: (await ctx.scope()).organizationId.in }),

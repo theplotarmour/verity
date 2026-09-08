@@ -10,6 +10,15 @@ via TenantMembership records") and INV-003, which requires exactly one Party per
 person even when they work for several tenants (PLA-IDE-004, the subcontractor).
 Adding a `tenantId` to either would force one row per tenant and break INV-003.
 
+F-021 decision: keep the existing globally shared identity contract. Display name,
+verified contact details, and Party lifecycle are platform-wide attributes, not
+private tenant profile fields. Authorized updates are visible to every tenant
+with membership reachability; concurrent updates use the last committed value.
+Tenant-specific labels belong on a tenant-scoped capability or membership profile,
+never on Party. Use membership revocation for tenant-local access removal;
+Party suspension affects the shared identity across all its memberships.
+
+
 Isolation for them is **reachability**, not a tenant column: a tenant sees an
 identity only when that identity holds a `TenantMembership` in it. `TenantMembership`
 is tenant-scoped and carries the ordinary RLS policy.
@@ -55,13 +64,18 @@ children hold (PLA-AUT-001).
   returning false, so forgetting to branch on the result cannot permit the action.
   MET-ACT-002 requires this on every command.
 
-**All three layers are enforced.** Layer 1 `authorize()` decides whether the role
-may touch the entity type; Layer 2 `assertRowInScope()` / `scopeFilter()` decides
-which records are theirs (Organization scope resolves to the actor's node plus
-descendants — PLA-ORG-002 downward visibility and PLA-ORG-003 sibling isolation
-in one subtree); Layer 3 `redactFields()` removes restricted fields. The query
-pipeline applies Layer 3 automatically to a top-level array result and offers
-Layer 2 through `ctx.scope()`.
+**Authorization is fail-closed at all three layers.** Layer 1 checks the entity
+verb. The command/query pipeline requires a Tenant grant unless the definition
+explicitly declares `scopeHandling: "handler"`; such handlers must filter or guard
+every row using their organization/location anchor. Unanchored records and
+capabilities without those guards require Tenant scope. Organization grants never
+silently become Tenant grants. Layer 3 removes declared restricted fields from
+arrays, detail objects and nested values before returning or grounding results.
+
+Shared roles can be assigned anywhere in a tenant, so conferring a permission
+requires the actor to hold that permission at Tenant scope. Role assignment,
+composition and both permission editors share this ceiling. Self-role assignment
+is refused. See `audit/2026-09-07/REMEDIATION.md` for rollout requirements.
 
 - Restricted fields are declared in `FieldPermission` and granted by an ordinary
   `Read` on the field-qualified key `<entityKey>#<fieldName>` — no separate
@@ -69,8 +83,7 @@ Layer 2 through `ctx.scope()`.
   sync with the first.
 - Redaction **omits** a field rather than nulling it; a null cannot be told apart
   from a genuinely absent value.
-- A `Location`-scoped grant currently reaches **nothing**, because Location does
-  not exist as an entity yet. It fails closed rather than widening to the tenant.
+- Location grants require a registered resolver and a handler that explicitly scopes its rows.
 
 ## Platform substrate added after the foundation (do not re-litigate)
 
@@ -84,7 +97,7 @@ Layer 2 through `ctx.scope()`.
   or labels. A capability that declares its states honestly gets correct SLA behaviour with no clock
   code. A resumed clock continues its budget; a record that ran over then completed keeps its breach.
 - **Files** (`files.ts`) — two-phase upload; a confirmed file's key, checksum and size are frozen by
-  trigger. No storage driver is bound; that is a deployment step, not a missing contract.
+  trigger. Confirmation verifies actual bytes and seals a fresh key; storage drivers bind only with deployment credentials.
 - **Notifications** (`notification.ts`) — suppressed notifications are recorded, not dropped.
   Templates substitute literally; an expression language would make a tenant template a stored program.
 - **Custom fields** are rendered, validated and submitted end to end. The command re-validates

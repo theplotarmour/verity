@@ -190,19 +190,19 @@ const BOARDS: Board[] = [
 ];
 
 const SUPPLIERS = [
-  { key: "sharma", name: "Sharma Timber Mills", gstin: "07AABCS1429B1ZQ", state: "07", phone: "9811023456" },
-  { key: "kandla", name: "Kandla Ply Industries", gstin: "24AACCK8821M1ZP", state: "24", phone: "9825011234" },
-  { key: "yamuna", name: "Yamuna Board Depot", gstin: "07AAGCY5567L1ZR", state: "07", phone: "9868122334" },
-  { key: "coastal", name: "Coastal Veneers Pvt Ltd", gstin: "32AAECC1188K1ZT", state: "32", phone: "9846099887" },
-  { key: "northern", name: "Northern Laminates", gstin: "06AADCN7712F1ZM", state: "06", phone: "9812233445" },
+  { key: "sharma", name: "Sharma Timber Mills", gstin: "07AABCS1429B1ZW", state: "07", phone: "9811023456" },
+  { key: "kandla", name: "Kandla Ply Industries", gstin: "24AACCK8821M1ZA", state: "24", phone: "9825011234" },
+  { key: "yamuna", name: "Yamuna Board Depot", gstin: "07AAGCY5567L1ZL", state: "07", phone: "9868122334" },
+  { key: "coastal", name: "Coastal Veneers Pvt Ltd", gstin: "32AAECC1188K1ZP", state: "32", phone: "9846099887" },
+  { key: "northern", name: "Northern Laminates", gstin: "06AADCN7712F1ZN", state: "06", phone: "9812233445" },
 ];
 
 const CUSTOMERS = [
-  { key: "verma", name: "Verma Furniture Works", gstin: "07AACCV3321H1ZB", state: "07", phone: "9810044556", limit: 500_000 },
-  { key: "modular", name: "Modular Interiors Delhi", gstin: "07AAFCM9087J1ZE", state: "07", phone: "9871200345", limit: 800_000 },
-  { key: "royal", name: "Royal Kitchens", gstin: "07AAGCR4412N1ZK", state: "07", phone: "9899011223", limit: 300_000 },
-  { key: "noida", name: "Noida Contract Fitouts", gstin: "09AAJCN2231P1ZW", state: "09", phone: "9911223344", limit: 1_200_000 },
-  { key: "gurgaon", name: "Gurgaon Office Interiors", gstin: "06AAKCG7765R1ZY", state: "06", phone: "9988776655", limit: 900_000 },
+  { key: "verma", name: "Verma Furniture Works", gstin: "07AACCV3321H1ZL", state: "07", phone: "9810044556", limit: 500_000 },
+  { key: "modular", name: "Modular Interiors Delhi", gstin: "07AAFCM9087J1ZV", state: "07", phone: "9871200345", limit: 800_000 },
+  { key: "royal", name: "Royal Kitchens", gstin: "07AAGCR4412N1Z6", state: "07", phone: "9899011223", limit: 300_000 },
+  { key: "noida", name: "Noida Contract Fitouts", gstin: "09AAJCN2231P1Z2", state: "09", phone: "9911223344", limit: 1_200_000 },
+  { key: "gurgaon", name: "Gurgaon Office Interiors", gstin: "06AAKCG7765R1ZL", state: "06", phone: "9988776655", limit: 900_000 },
   { key: "singh", name: "Singh Carpentry", gstin: null, state: "07", phone: "9818765432", limit: 100_000 },
   { key: "walkin", name: "Counter Sales (cash)", gstin: null, state: "07", phone: null, limit: 0 },
   // Deliberately NOT a separate row for the Yamuna dealer: createSupplier
@@ -257,7 +257,7 @@ async function main(): Promise<void> {
     await executeCommand(OWNER, registerGstRegistration, {
       // 07 is Delhi, and the state code is read from the GSTIN rather than
       // stored beside it.
-      gstin: "07AAGCS4471P1ZV",
+      gstin: "07AAGCS4471P1ZQ",
       registrationType: "regular",
       invoiceSeriesPrefix: "SGT",
     });

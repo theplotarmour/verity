@@ -304,7 +304,7 @@ describeDb("plywood business identity (slice 2)", () => {
 
   it("takes the registered state from the GSTIN instead of asking for it", async () => {
     const registration = await executeCommand(owner, registerGstRegistration, {
-      gstin: "07AAACN1234K1Z5",
+      gstin: "07AAACN1234K1ZO",
       invoiceSeriesPrefix: "NK/",
     });
 
@@ -314,7 +314,7 @@ describeDb("plywood business identity (slice 2)", () => {
     expect(registration.stateCode).toBe("07");
 
     const settings = await executeQuery(owner, businessSettings, {});
-    expect(settings.gstin).toBe("07AAACN1234K1Z5");
+    expect(settings.gstin).toBe("07AAACN1234K1ZO");
     expect(settings.invoiceSeriesPrefix).toBe("NK/");
     expect(settings.outstanding).toEqual([]);
 
@@ -339,7 +339,7 @@ describeDb("plywood business identity (slice 2)", () => {
   it("refuses a second active registration, because one is a product decision", async () => {
     await expect(
       executeCommand(owner, registerGstRegistration, {
-        gstin: "09AAACN1234K1Z3",
+        gstin: "09AAACN1234K1ZK",
         invoiceSeriesPrefix: "UP/",
       }),
     ).rejects.toThrow(/already has an active GST registration/);
@@ -382,7 +382,7 @@ describeDb("plywood business identity (slice 2)", () => {
     const stored = await withTenant(tenantId, (tx) =>
       tx.tradingInvoice.findUniqueOrThrow({ where: { id: invoice.id } }),
     );
-    expect(stored.sellerGstinSnapshot).toBe("07AAACN1234K1Z5");
+    expect(stored.sellerGstinSnapshot).toBe("07AAACN1234K1ZO");
     expect(stored.sellerLegalNameSnapshot).toBe("Naksh Plywood Private Limited");
     // Both parties in Delhi: CGST + SGST, no IGST.
     expect(stored.igstPaise).toBe(0);

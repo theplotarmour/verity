@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
  * which is precisely the "entered once, shown consistently" rule (§84) failing
  * on the read side instead of the write side.
  */
-export default async function SupplierPage({
+async function SupplierPage({
   params,
 }: {
   params: Promise<{ supplierId: string }>;
@@ -37,3 +38,5 @@ export default async function SupplierPage({
 
   return <SupplierWorkspace supplier={supplier} />;
 }
+
+export default withPageAccess(SupplierPage);

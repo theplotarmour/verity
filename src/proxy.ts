@@ -1,3 +1,4 @@
+import { contentSecurityPolicy } from "./server/platform/csp";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -18,7 +19,11 @@ import { NextResponse, type NextRequest } from "next/server";
  * requireActor().
  */
 export async function proxy(request: NextRequest): Promise<NextResponse> {
-  let response = NextResponse.next({ request });
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const csp = contentSecurityPolicy(nonce, process.env.NODE_ENV !== "production");
+  request.headers.set("x-nonce", nonce);
+  request.headers.set("Content-Security-Policy", csp);
+  let response = NextResponse.next({ request: { headers: request.headers } });
 
   try {
     // Deliberately NOT `runtimeConfig` (src/server/platform/config.ts): that
@@ -30,11 +35,12 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
-        cookies: {
+        cookieOptions: { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 60 * 60 * 24 * 7, path: "/" },
+      cookies: {
           getAll: () => request.cookies.getAll(),
           setAll: (list) => {
             list.forEach(({ name, value }) => request.cookies.set(name, value));
-            response = NextResponse.next({ request });
+            response = NextResponse.next({ request: { headers: request.headers } });
             list.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
           },
         },
@@ -66,6 +72,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     console.error("[verity] session refresh failed; continuing without it", error);
   }
 
+  response.headers.set("Content-Security-Policy", csp);
   return response;
 }
 

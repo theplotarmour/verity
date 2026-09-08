@@ -27,11 +27,9 @@ import type { StorageDriver } from "@/server/platform/files";
  * extensions would have made the next deployment a fork, which is the outcome
  * this whole seam exists to prevent.
  *
- * PRESIGNED URLS THROUGHOUT
- * Exactly as the Supabase driver does. Bytes travel directly between the client
- * and the object store and never transit the application — the shape
- * `reserveUpload` was written for, and the reason a 200MB site photograph does
- * not become a Node memory problem.
+ * Uploads use signed URLs; confirmation reads at most the reserved size and
+ * writes the verified bytes to a fresh, non-uploadable key. Reads are signed
+ * attachment downloads. Keep the bucket private at deployment.
  */
 
 export type S3Settings = {
@@ -90,7 +88,7 @@ export function s3StorageDriver(
     // buckets are legitimately different drivers to an operator reading a log.
     name: `s3:${settings.bucket}`,
 
-    async createUploadUrl(key, mimeType) {
+    async createUploadUrl(key, mimeType, byteSize) {
       try {
         const url = await sign(
           client,
@@ -98,6 +96,8 @@ export function s3StorageDriver(
             Bucket: settings.bucket,
             Key: key,
             ContentType: mimeType,
+            ContentLength: byteSize,
+            IfNoneMatch: "*",
           }),
           { expiresIn: 900 },
         );
@@ -106,7 +106,7 @@ export function s3StorageDriver(
           // Signed into the request, so it must be sent. The platform still
           // re-checks size and checksum on confirmation — a client-declared
           // content type is a convenience, never a control.
-          headers: { "content-type": mimeType },
+          headers: { "content-type": mimeType, "if-none-match": "*" },
         };
       } catch (error) {
         throw new Error(`E_STORAGE: could not create an upload URL (${message(error)})`);
@@ -117,12 +117,19 @@ export function s3StorageDriver(
       try {
         return await sign(
           client,
-          new GetObjectCommand({ Bucket: settings.bucket, Key: key }),
+          new GetObjectCommand({ Bucket: settings.bucket, Key: key, ResponseContentDisposition: "attachment" }),
           { expiresIn: expiresInSeconds },
         );
       } catch (error) {
         throw new Error(`E_STORAGE: could not create a read URL (${message(error)})`);
       }
+    },
+
+    async storeVerified(key, bytes, mimeType) {
+      await client.send(new PutObjectCommand({
+        Bucket: settings.bucket, Key: key, Body: bytes,
+        ContentType: mimeType, ContentLength: bytes.byteLength, IfNoneMatch: "*",
+      }));
     },
 
     async delete(key) {

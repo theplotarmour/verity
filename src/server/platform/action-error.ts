@@ -1,4 +1,6 @@
 import "server-only";
+import { RateLimitError } from "./request-limits";
+import { captureError } from "./observability";
 import { ForbiddenError } from "./authorization";
 import { CapabilityError } from "./capability";
 import { ValidationError } from "./command";
@@ -26,6 +28,7 @@ export type ActionFailure = {
     | "E_CONFLICT"
     | "E_CAPABILITY_INACTIVE"
     | "E_UNGROUNDED"
+    | "E_RATE_LIMIT"
     | "E_UNKNOWN";
   message: string;
   issues?: string[];
@@ -44,6 +47,7 @@ export type ActionResult<T> = { ok: true; data: T } | ActionFailure;
  * is told the details of.
  */
 export function toActionFailure(error: unknown): ActionFailure {
+  if (error instanceof RateLimitError) return { ok: false, code: "E_RATE_LIMIT", message: error.message, retryable: true };
   if (error instanceof ForbiddenError) {
     return { ok: false, code: "E_FORBIDDEN", message: error.message, retryable: false };
   }
@@ -65,7 +69,8 @@ export function toActionFailure(error: unknown): ActionFailure {
     // Someone else changed the record; reloading and retrying can succeed.
     return { ok: false, code: "E_CONFLICT", message: error.message, retryable: true };
   }
-  const message = error instanceof Error ? error.message : String(error);
+  captureError(error);
+  const message = "Something went wrong. Please try again. If it continues, contact support.";
   return { ok: false, code: "E_UNKNOWN", message, retryable: false };
 }
 

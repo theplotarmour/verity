@@ -81,4 +81,13 @@ describe("telemetry scrubbing (F-04)", () => {
     });
     expect(event!.breadcrumbs![0]!.data).toBeUndefined();
   });
+  it("withholds unknown exception bodies and stack context", () => {
+    const event = scrubTelemetryEvent({ exception: { values: [{
+      type: "PrismaClientKnownRequestError", value: "Invalid SELECT from tenant_private_table",
+      stacktrace: { frames: [{ filename: "/home/customer/secret.ts", vars: { password: "secret" } }] },
+    }] } });
+    expect(event!.exception!.values[0].value).toBe("Error: [message withheld]");
+    expect(event!.exception!.values[0].stacktrace).toBeUndefined();
+  });
+
 });

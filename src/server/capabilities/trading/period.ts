@@ -200,6 +200,7 @@ export const closePeriod: CommandDefinition<
   { periodKey: string; force?: boolean },
   { periodKey: string; state: string; blockersOverridden: number }
 > = {
+  impact: "destructive",
   key: "verity.trading.close_period",
   entity: ENTITY_ACCOUNTING_PERIOD,
   verb: "ActionExecute",
@@ -285,6 +286,7 @@ export const reopenPeriod: CommandDefinition<
   { periodKey: string; reason: string },
   { periodKey: string; state: string }
 > = {
+  impact: "destructive",
   key: "verity.trading.reopen_period",
   entity: ENTITY_ACCOUNTING_PERIOD,
   verb: "ActionExecute",

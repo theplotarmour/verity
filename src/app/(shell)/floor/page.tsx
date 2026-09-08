@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { installCapabilities } from "@/server/capabilities/registry";
@@ -21,7 +22,7 @@ export const dynamic = "force-dynamic";
  * with a screen reader, because a picture that is the only way to use the page
  * excludes people.
  */
-export default async function FloorPage() {
+async function FloorPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -60,3 +61,5 @@ export default async function FloorPage() {
     </>
   );
 }
+
+export default withPageAccess(FloorPage);

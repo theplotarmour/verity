@@ -8,7 +8,7 @@ import { clearCommands, clearHooks } from "@/server/platform/command";
 import { clearQueries } from "@/server/platform/query";
 import { clearScopeResolvers } from "@/server/platform/authorization";
 import { clearTransitionGuards } from "@/server/platform/state";
-import { clearContributions } from "@/server/platform/contribution";
+import { clearContributions, registerContribution, contributionFor } from "@/server/platform/contribution";
 import { LOCATION_CAPABILITY } from "@/server/capabilities/location";
 import { GET, POST } from "@/app/api/scheduled/route";
 
@@ -195,4 +195,26 @@ describeDb("scheduled work: the trigger", () => {
       SELECT * FROM verity.scheduler_tenant_ids() LIMIT 1`;
     expect(Object.keys(rows[0] ?? { tenant_id: null })).toEqual(["tenant_id"]);
   });
+  it("returns 503 on failed work and still runs the next tenant", async () => {
+    const original = contributionFor(LOCATION_CAPABILITY);
+    const reached: string[] = [];
+    registerContribution({ capabilityId: LOCATION_CAPABILITY, schedules: [{
+      key: "audit-failure", label: "Isolated failure probe", cadence: "daily",
+      run: async ({ tenantId }) => {
+        reached.push(tenantId);
+        if (tenantId === tenantA) throw new Error("isolated scheduled failure");
+        return {};
+      },
+    }] });
+    try {
+      const response = await call("/api/scheduled?tenant=all&cadence=daily", { secret: SECRET });
+      expect(response.status).toBe(503);
+      const body = await response.json();
+      expect(body.failed).toBe(true);
+      expect(reached).toEqual(expect.arrayContaining([tenantA, tenantB]));
+      expect(body.results.find((r: { tenantId: string }) => r.tenantId === tenantA).outcomes[0].status).toBe("failed");
+      expect(body.results.find((r: { tenantId: string }) => r.tenantId === tenantB).outcomes[0].status).toBe("ok");
+    } finally { if (original) registerContribution(original); }
+  });
+
 });

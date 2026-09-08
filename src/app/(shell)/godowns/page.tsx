@@ -1,3 +1,4 @@
+import { withPageAccess } from "@/components/ui/PageAccess";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
  * again: a godown is a `Location`, and there is no longer a second,
  * capability-owned layout to authorize separately.
  */
-export default async function GodownsPage() {
+async function GodownsPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -31,10 +32,7 @@ export default async function GodownsPage() {
   // §0 — hiding the generic Locations entry is only honest if a godown can be
   // created here. Otherwise onboarding step 3 leads to a menu item that no
   // longer exists.
-  const organizations = await executeQuery(actor, listOrganizations, {}).catch((error) => {
-    if (error instanceof ForbiddenError) return [];
-    throw error;
-  });
+  const organizations = await executeQuery(actor, listOrganizations, {});
 
   const godowns = locations.map((location) => ({
     id: String(location.id),
@@ -57,3 +55,5 @@ export default async function GodownsPage() {
     </>
   );
 }
+
+export default withPageAccess(GodownsPage);

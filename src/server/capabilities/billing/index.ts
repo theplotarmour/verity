@@ -205,7 +205,10 @@ export const generateInvoiceForMeter: CommandDefinition<
       where: { meterId: input.meterId, readAt: { gte: period.periodStart, lte: period.periodEnd } },
       _sum: { readingUnits: true },
     });
-    const usageUnits = usage._sum.readingUnits ?? 0;
+    if (usage._sum.readingUnits === null) {
+      throw new ValidationError("E_VALIDATION: no readings received for this period; record a reading before billing");
+    }
+    const usageUnits = usage._sum.readingUnits;
     const amountMinor = usageUnits * meter.ratePerUnitMinor;
 
     const invoice = await ctx.tx.billingInvoice.create({

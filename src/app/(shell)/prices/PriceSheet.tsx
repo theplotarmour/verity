@@ -1,9 +1,10 @@
 "use client";
 
+import { CommandButton } from "@/components/ui/CommandAccess";
+
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Button,
   EmptyState,
   ErrorState,
   Field,
@@ -243,7 +244,7 @@ export function PriceSheet({
                   aria-label="Filter boards"
                 />
               </div>
-              <Button
+              <CommandButton commands={"verity.trading.set_price_sheet"}
                 variant="primary"
                 disabled={pending || changed.length === 0}
                 onClick={save}
@@ -253,7 +254,7 @@ export function PriceSheet({
                   : changed.length === 0
                     ? "Nothing changed"
                     : `Save ${changed.length}`}
-              </Button>
+              </CommandButton>
             </div>
           }
         >
