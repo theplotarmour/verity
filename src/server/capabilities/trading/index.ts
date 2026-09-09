@@ -7,6 +7,7 @@ import {
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import { reachableGodownIds } from "./scope";
 import { registerBusinessIdentity } from "./business";
+import { registerTradingImport } from "./import";
 import { registerTax } from "./tax";
 import { registerBusinessActivities } from "./activities";
 import { registerReports } from "./reports";
@@ -121,6 +122,7 @@ export * from "./views";
 export * from "./activities";
 export * from "./reports";
 export * from "./itc";
+export * from "./import";
 
 /* ================================= brands ================================= */
 
@@ -180,6 +182,38 @@ export const setBrandActive: CommandDefinition<
     };
   },
 };
+
+/**
+ * Find-or-create, unlike `createBrand`'s create-only (clash-rejecting)
+ * semantics. Task 87's own precedent (`plywood/index.ts`'s `resolveAxis`
+ * for shades/textures): an import naming a brand by text cannot know
+ * whether that name already exists, and refusing a whole product import
+ * because "Century" was added last month is a worse answer than quietly
+ * meaning the same "Century". Deliberately its own command rather than a
+ * flag on `createBrand` — the two have different failure behaviour for
+ * the same clash, and a flag that flips which error path runs is the
+ * harder-to-read version of two named commands.
+ */
+export const ensureBrand: CommandDefinition<{ name: string }, { id: string }> =
+  {
+    key: "verity.trading.ensure_brand",
+    entity: ENTITY_BRAND,
+    verb: "Create",
+    input: z.object({ name: z.string().min(1).max(120) }),
+    handler: async (ctx, input) => {
+      const existing = await ctx.tx.tradingBrand.findFirst({
+        where: { name: input.name },
+      });
+      if (existing) return { result: { id: existing.id }, events: [] };
+      const brand = await ctx.tx.tradingBrand.create({
+        data: { tenantId: ctx.actor.tenantId, name: input.name },
+      });
+      return {
+        result: { id: brand.id },
+        events: [{ name: "verity.trading.brand_created", entityId: brand.id }],
+      };
+    },
+  };
 
 /* ============================== godown racks ============================== */
 
@@ -326,6 +360,7 @@ export const listGodownRacks: QueryDefinition<
  */
 export function registerTradingCapability(): void {
   registerBusinessIdentity();
+  registerTradingImport();
   registerTax();
   registerBusinessActivities();
   registerReports();
@@ -333,6 +368,7 @@ export function registerTradingCapability(): void {
   registerPeriods();
 
   registerCommand(createBrand);
+  registerCommand(ensureBrand);
   registerCommand(setBrandActive);
   registerCommand(defineGodownRack);
   registerCommand(setGodownRackActive);
