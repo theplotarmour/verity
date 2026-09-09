@@ -37,10 +37,10 @@ import {
   createSupplier,
   defineGodownRack,
   dispatchOrder,
+  invoiceDetail,
   marginReport,
   ownerConsole,
   partyLedger,
-  raiseSalesInvoice,
   receiveGoods,
   recordPayment,
   registerPlywoodCapability,
@@ -310,7 +310,14 @@ describeDb("plywood: the whole chain, from purchase to payment", () => {
   /* ------------------------------ 5. dispatch ------------------------------- */
 
   it("5 — dispatches, which moves the stock and releases the hold together", async () => {
-    await executeCommand(owner, dispatchOrder, { orderId: salesOrderId });
+    // Task 71 item 10: a dispatch that fully issues an order raises its
+    // sales invoice as part of the same command — captured here rather
+    // than re-raised by an explicit `raiseSalesInvoice` call in step 7,
+    // which now fails with "already been invoiced".
+    const dispatched = await executeCommand(owner, dispatchOrder, { orderId: salesOrderId });
+    expect(dispatched.invoicing).not.toBeNull();
+    invoiceId = dispatched.invoicing!.id;
+    invoiceTotalPaise = dispatched.invoicing!.totalPaise;
 
     const okhla = (await executeQuery(owner, stockOnHand, { productId })).find(
       (row) => row.locationId === okhlaId,
@@ -334,16 +341,20 @@ describeDb("plywood: the whole chain, from purchase to payment", () => {
 
   /* ------------------------------- 7. invoice ------------------------------- */
 
-  it("7 — raises a gapless, correctly taxed invoice", async () => {
-    const invoice = await executeCommand(owner, raiseSalesInvoice, { salesOrderId });
-    invoiceId = invoice.id;
-    invoiceTotalPaise = invoice.totalPaise;
+  it("7 — raised a gapless, correctly taxed invoice on dispatch", async () => {
+    // The invoice itself was already raised by step 5's dispatch (Task 71
+    // item 10, dispatch invoices on full issue) — this step checks what
+    // dispatch produced, not a second invoicing action. `raiseSalesInvoice`
+    // remains callable directly (a re-raise after a cancelled note, a
+    // different series) but calling it again on an already-dispatched
+    // order correctly fails with "already been invoiced".
+    const invoice = await executeQuery(owner, invoiceDetail, { invoiceId });
 
     // Both in Delhi, so CGST + SGST at 9% each on ₹76,800.
     const taxable = SOLD * PRICE_PER_SHEET;
-    expect(invoice.interState).toBe(false);
-    expect(invoice.totalPaise).toBe(taxable + Math.round(taxable * 0.09) * 2);
-    expect(invoice.invoiceNumber).toMatch(/^SALES\/\d{4}-\d{2}\/0001$/);
+    expect(invoice!.interState).toBe(false);
+    expect(invoiceTotalPaise).toBe(taxable + Math.round(taxable * 0.09) * 2);
+    expect(invoice!.invoiceNumber).toMatch(/^SALES\/\d{4}-\d{2}\/0001$/);
   });
 
   /* --------------------------------- 8. paid -------------------------------- */

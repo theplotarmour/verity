@@ -39,6 +39,16 @@ jobs:
       #   DATABASE_URL — the runtime role, NOSUPERUSER NOBYPASSRLS
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/verity
       DATABASE_URL: postgresql://verity_app:verity_app@localhost:5432/verity
+      # `config.ts`'s `loadConfig()` runs at module import time and throws
+      # `E_CONFIG_INVALID` if these are absent when `provider: "supabase"`
+      # (the default) — it never crashed CI before because the RLS-bypass
+      # step above always failed first. Plain placeholder strings, not real
+      # secrets: `configSchema` only checks presence (`z.string()`), never
+      # `.url()` format or a live Supabase project, so a fake value here is
+      # sufficient to let module loading and the test suite proceed.
+      NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+      SUPABASE_JWT_SECRET: ci-placeholder-jwt-secret
 
     steps:
       - uses: actions/checkout@v4
@@ -82,10 +92,17 @@ jobs:
 
       - name: Prove the runtime role cannot bypass RLS
         run: |
+          # `boolean || text` casts through boolean-to-text, which Postgres
+          # spells "true"/"false" — NOT the "t"/"f" psql prints for a raw
+          # boolean column. This step never matched since it was written
+          # (058711e): `rolsuper`/`rolbypassrls` concatenated with `||` here
+          # always print as "false", so the old `super=f bypassrls=f`
+          # pattern could never match and this "pass" was never actually
+          # proven, on any branch.
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tAc \
             "SELECT rolname||' super='||rolsuper||' bypassrls='||rolbypassrls
                FROM pg_roles WHERE rolname = current_user" | tee /tmp/role.txt
-          grep -q 'super=f bypassrls=f' /tmp/role.txt
+          grep -q 'super=false bypassrls=false' /tmp/role.txt
 
       - run: npm run typecheck
       - run: npm run lint

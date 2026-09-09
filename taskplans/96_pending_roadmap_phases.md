@@ -48,23 +48,31 @@ but the skill's value is forward-looking regardless.
    field, no new platform primitive, no plywood retrofit (its own
    non-goal). Taught in Task 82's skill.
 
-## Phase 2 — Plywood-scoped, single-client work — SKIPPED 2026-09-03
+## Phase 2 — Plywood-scoped, single-client work — REOPENED AND COMPLETE 2026-09-09
 
-User instruction: Shree Ganesh isn't the priority right now; go straight
-to Phase 3. Left recorded below, not deleted — the checkpoint at the end
-of this phase (Task 90's trigger) just doesn't fire yet since the phase
-didn't run.
+Originally SKIPPED 2026-09-03 ("Shree Ganesh isn't the priority right
+now; go straight to Phase 3"). Reopened 2026-09-09 on confirmation that
+Shree Ganesh remains Verity's one and only real client — its own trigger
+condition, not a new decision overriding the skip.
 
 No second client needed — these serve Shree Ganesh Timber Trading Co.
 directly and are real gaps in the one capability that exists.
 
-5. **Task 86** (dashboard states + per-panel isolation) — applied to the
-   existing Overview page.
-6. **Task 87** (import/export) — plywood's own customer/item/supplier
-   import; real need for a real client with pre-Verity records.
-7. **Task 93** (progressive setup) — build plywood's own concrete
-   onboarding sequence, not a generic engine (its own explicit scope
-   limit).
+5. ~~**Task 86**~~ **BUILT 2026-09-04** (`897ed08`) — dashboard states +
+   per-panel isolation, applied to the existing Overview page.
+6. ~~**Task 87**~~ **BUILT 2026-09-09** — plywood's own customer/item/
+   supplier CSV import, `/import` page. See
+   `taskplans/87_import_export_migration_framework.md`.
+7. ~~**Task 93**~~ **BUILT 2026-09-09** — turned out to be mostly already
+   built under Task 59, long before this phase note was written; this
+   session extended it with the two missing named steps (pricing, first
+   sale). See `taskplans/93_progressive_setup_capability_readiness.md`.
+
+**Checkpoint after Phase 2** (per this file's own note above): plywood
+now has import/export, catalogue, supplier/customer, orders, stock and
+onboarding-readiness sources. Task 90 (Attention) still correctly stays
+gated behind its own ADR — this session did not write one, and a phase
+checkpoint noting the option is not the same as the trigger firing.
 
 **Checkpoint after Phase 2:** re-evaluate Task 90 (Attention) — plywood
 alone may by now have three candidate sources (overdue receivables,

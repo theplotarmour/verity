@@ -56,4 +56,24 @@ describe("assertGrounded", () => {
     expect(() => assertGrounded(null, cache)).not.toThrow();
     expect(() => assertGrounded("string input", cache)).not.toThrow();
   });
+
+  it("throws when an *Id field came only from a multi-row query result (rule 2, structural)", () => {
+    const cache = new GroundingCache();
+    cache.record([{ id: "party-1" }, { id: "party-2" }]);
+    expect(() => assertGrounded({ partyId: "party-1" }, cache)).toThrow(GroundingError);
+  });
+
+  it("passes when a multi-row id was later disambiguated by a single-row query", () => {
+    const cache = new GroundingCache();
+    cache.record([{ id: "party-1" }, { id: "party-2" }]);
+    cache.record({ id: "party-1" }); // model re-queried narrower, got exactly one
+    expect(() => assertGrounded({ partyId: "party-1" }, cache)).not.toThrow();
+  });
+
+  it("passes when a single-row query result later also appears in a broader multi-row result", () => {
+    const cache = new GroundingCache();
+    cache.record({ id: "party-1" });
+    cache.record([{ id: "party-1" }, { id: "party-2" }]);
+    expect(() => assertGrounded({ partyId: "party-1" }, cache)).not.toThrow();
+  });
 });

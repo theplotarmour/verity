@@ -2,9 +2,34 @@
 
 Authority: User synthesis, 2026-09-03, item 12.
 
-## Status: PENDING — genuinely new gap, platform-primitive-shaped
+## Status: BUILT 2026-09-09 (mostly already existed, unnoticed)
 
-## What's missing
+Trigger fired: Shree Ganesh Timber Trading Co. is Verity's one real client
+(confirmed 2026-09-09) — this file's own trigger, "the next tenant
+onboarding for plywood that isn't a developer running the seed script,"
+already applies to it.
+
+**What was already built, before this session touched it** — Task 59
+(`c22c491`, pre-dating this taskplan's own PENDING status and never
+checked against it): `onboardingChecklist`
+(`src/server/capabilities/trading/business.ts`) computes real done/blocked
+state per step from live counts, and `SetupChecklist.tsx`
+(`src/app/(shell)/overview/`) renders it on `/overview` — one step
+highlighted as "Start here," done steps checked off, blocked steps show
+what they need first. This already delivers the concrete ask in full:
+"one step revealed at a time, each one aware of whether it's actually
+done," built specifically for plywood, not a generic engine (exactly this
+file's own non-goal).
+
+**What this session added**, the two named steps the built version was
+missing against the spec's eight (`Company details → Godown → Products →
+Suppliers → Customers → Pricing → First purchase → First sale`): `pricing`
+(done when a `TradingSupplierPrice` or `TradingCustomerPrice` row exists)
+and `first_sale` (done when a `TradingSalesOrder` exists), both reusing
+the same handler shape and counts already computed for the other six
+steps — no new primitive, no new table.
+
+## Original ask (now built, kept for the record)
 
 A new client should not see fifty configuration options at once. The
 concrete shape, from the user's own plywood-specific example: **Company

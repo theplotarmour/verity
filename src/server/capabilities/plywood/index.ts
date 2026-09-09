@@ -3,9 +3,11 @@ import { registerContribution } from "@/server/platform/contribution";
 import {
   registerCommand,
   ValidationError,
+  type ActorContext,
   type CommandDefinition,
 } from "@/server/platform/command";
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
+import { runCommandBatch, type BatchResult } from "@/server/platform/batch";
 import { diffFields, recordActivity } from "@/server/platform/audit";
 import { notify } from "@/server/platform/notification";
 import { withTenant, type TenantScopedClient } from "@/server/platform/tenancy";
@@ -13,6 +15,7 @@ import { ENTITY_PRODUCT_DETAIL, PLYWOOD_CAPABILITY } from "./keys";
 import { productDetail } from "./views";
 import {
   registerTradingCapability,
+  ENTITY_BRAND,
   ENTITY_PRODUCT,
   ENTITY_SUPPLIER,
   ENTITY_PURCHASE_ORDER,
@@ -28,6 +31,7 @@ import {
   ENTITY_BUSINESS_PROFILE,
   HSN_CODE,
   captureMetricSnapshot,
+  ensureBrand,
   stockOnHand as tradingStockOnHand,
 } from "../trading";
 
@@ -296,25 +300,29 @@ export const setTextureActive = textureCommands.setActive;
 export const listTextures = textureCommands.list;
 
 
+/** Named so `commitProductImport` below can type its per-row batch input
+ *  without re-declaring this shape. */
+type CreateProductInput = {
+  brandId: string;
+  name: string;
+  hsnCode?: string;
+  thicknessTenthMm?: number;
+  category?: ProductCategory;
+  widthTenth?: number;
+  heightTenth?: number;
+  grade?: string;
+  sheetWeightGrams?: number;
+  reorderLevelUnits?: number;
+  unitLabel?: string;
+  type?: RequestableProductType;
+  shadeIds?: string[];
+  newShades?: string[];
+  textureIds?: string[];
+  newTextures?: string[];
+};
+
 export const createProduct: CommandDefinition<
-  {
-    brandId: string;
-    name: string;
-    hsnCode?: string;
-    thicknessTenthMm?: number;
-    category?: ProductCategory;
-    widthTenth?: number;
-    heightTenth?: number;
-    grade?: string;
-    sheetWeightGrams?: number;
-    reorderLevelUnits?: number;
-    unitLabel?: string;
-    type?: RequestableProductType;
-    shadeIds?: string[];
-    newShades?: string[];
-    textureIds?: string[];
-    newTextures?: string[];
-  },
+  CreateProductInput,
   { id: string; variantIds: string[] }
 > = {
   key: "verity.plywood.create_product",
@@ -758,6 +766,190 @@ export const setProductActive: CommandDefinition<
   },
 };
 
+/* ================================= import ================================= */
+
+/**
+ * CSV import, plywood half — Task 87. Lives here rather than in
+ * `trading/import.ts` because it needs `createProduct` and brand-by-name
+ * resolution, both plywood-owned; `trading` has no dependency back onto
+ * `plywood` to point the other way (ADR-018's dependency direction).
+ *
+ * `brandName` stands in for `createProduct`'s `brandId` — a CSV cannot
+ * carry a UUID a person has never seen — so this is its own row schema,
+ * not `createProduct.input` reused verbatim the way the customer/supplier
+ * importer reuses `createCustomer.input`/`createSupplier.input` unchanged.
+ * Duplicates `createProduct`'s field list; kept narrow and named so the
+ * duplication is visible rather than hidden inside a generic mapper.
+ *
+ * Deliberately does not import variants (shades/textures) — a CSV row is
+ * one product, and the matrix-generating path stays a form-only feature
+ * until a client actually asks to import laminates in bulk.
+ */
+const productImportRowSchema = z.object({
+  brandName: z.string().min(1).max(120),
+  name: z.string().min(1).max(200),
+  hsnCode: HSN_CODE.optional(),
+  thicknessTenthMm: z.number().int().positive().optional(),
+  category: z.enum(PRODUCT_CATEGORIES).optional(),
+  widthTenth: z.number().int().positive().optional(),
+  heightTenth: z.number().int().positive().optional(),
+  grade: z.string().min(1).max(60).optional(),
+  sheetWeightGrams: z.number().int().positive().optional(),
+  reorderLevelUnits: z.number().int().min(0).optional(),
+  unitLabel: z.string().min(1).max(30).optional(),
+});
+export type ProductImportRow = z.infer<typeof productImportRowSchema>;
+
+const PRODUCT_IMPORT_FIELDS = [
+  "brandName",
+  "name",
+  "hsnCode",
+  "thicknessTenthMm",
+  "category",
+  "widthTenth",
+  "heightTenth",
+  "grade",
+  "sheetWeightGrams",
+  "reorderLevelUnits",
+  "unitLabel",
+] as const;
+const PRODUCT_IMPORT_NUMERIC_FIELDS = [
+  "thicknessTenthMm",
+  "widthTenth",
+  "heightTenth",
+  "sheetWeightGrams",
+  "reorderLevelUnits",
+] as const;
+
+/** Same header-matching contract as `trading/import.ts`'s `normalizeRow` —
+ *  duplicated rather than imported, since sharing it would mean this file
+ *  importing from `trading/import.ts` importing back the other way is not
+ *  a risk here, but keeping product import self-contained in one file
+ *  next to the schema it validates against is easier to audit than a
+ *  cross-file dependency for an eleven-line function. */
+function normalizeProductRow(raw: Record<string, string>): Record<string, unknown> {
+  const byLowerKey = new Map(Object.entries(raw).map(([k, v]) => [k.trim().toLowerCase(), v]));
+  const out: Record<string, unknown> = {};
+  for (const field of PRODUCT_IMPORT_FIELDS) {
+    const value = byLowerKey.get(field.toLowerCase());
+    const trimmed = value?.trim();
+    if (!trimmed) continue;
+    out[field] = (PRODUCT_IMPORT_NUMERIC_FIELDS as readonly string[]).includes(field)
+      ? Number(trimmed)
+      : trimmed;
+  }
+  return out;
+}
+
+export type ProductImportPreview = {
+  valid: Array<{ row: number; data: ProductImportRow }>;
+  invalid: Array<{ row: number; raw: Record<string, string>; errors: string[] }>;
+};
+
+export const previewProductImport: QueryDefinition<
+  { rows: Record<string, string>[] },
+  ProductImportPreview
+> = {
+  key: "verity.plywood.preview_product_import",
+  entity: ENTITY_PRODUCT,
+  input: z.object({ rows: z.array(z.record(z.string(), z.string())).min(1).max(2000) }),
+  handler: async (_ctx, input) => {
+    const valid: ProductImportPreview["valid"] = [];
+    const invalid: ProductImportPreview["invalid"] = [];
+    input.rows.forEach((raw, index) => {
+      const parsed = productImportRowSchema.safeParse(normalizeProductRow(raw));
+      if (parsed.success) {
+        valid.push({ row: index + 1, data: parsed.data });
+      } else {
+        invalid.push({
+          row: index + 1,
+          raw,
+          errors: parsed.error.issues.map(
+            (issue) => `${issue.path.join(".") || "<root>"}: ${issue.message}`,
+          ),
+        });
+      }
+    });
+    return { valid, invalid };
+  },
+};
+
+export type ProductImportCommitResult = {
+  brands: BatchResult<{ id: string }>;
+  products: BatchResult<{ id: string; variantIds: string[] }>;
+};
+
+/**
+ * Two-pass commit, never one giant transaction (Task 91's own anti-pattern
+ * rule): first every distinct brand name in the batch is resolved through
+ * `ensureBrand` (find-or-create, each row its own transaction), then every
+ * row whose brand resolved becomes a `createProduct` call in a second
+ * batch. A row whose brand failed to resolve is reported failed without
+ * ever reaching `createProduct` — never silently dropped, never guessed at
+ * with a placeholder brand.
+ *
+ * Called directly by the server action, not itself a `CommandDefinition`:
+ * it issues MULTIPLE real commands, exactly the shape `executeConfirmedPreview`
+ * (`agent-chat.ts`) already established for "run several real commands and
+ * report what happened to each."
+ */
+export async function commitProductImport(
+  actor: ActorContext,
+  rows: ProductImportRow[],
+): Promise<ProductImportCommitResult> {
+  const distinctBrandNames = [...new Set(rows.map((r) => r.brandName))];
+  const brands = await runCommandBatch(actor, ensureBrand, distinctBrandNames.map((name) => ({ name })));
+
+  const brandIdByName = new Map<string, string>();
+  for (const item of brands.items) {
+    if (item.outcome.status === "succeeded") {
+      brandIdByName.set(distinctBrandNames[item.index]!, item.outcome.result.id);
+    }
+  }
+
+  const productInputs: Array<CreateProductInput | null> = rows.map((row) => {
+    const brandId = brandIdByName.get(row.brandName);
+    if (!brandId) return null;
+    const { brandName: _brandName, ...rest } = row;
+    return { ...rest, brandId };
+  });
+
+  // Rows whose brand never resolved are reported failed at the SAME index
+  // the caller's `rows` array uses, without ever calling `createProduct` —
+  // `runCommandBatch` only sees the rows that did resolve, so its own
+  // indices are re-mapped back onto the original row numbers here.
+  const resolvedIndices = productInputs
+    .map((input, index) => (input === null ? null : index))
+    .filter((i): i is number => i !== null);
+  const resolvedInputs = resolvedIndices.map((i) => productInputs[i]!);
+  const resolvedBatch = await runCommandBatch(actor, createProduct, resolvedInputs);
+
+  const items: BatchResult<{ id: string; variantIds: string[] }>["items"] = rows.map((row, index) => {
+    const resolvedAt = resolvedIndices.indexOf(index);
+    if (resolvedAt === -1) {
+      return {
+        index,
+        outcome: {
+          status: "failed" as const,
+          reason: `E_VALIDATION: brand "${row.brandName}" could not be resolved`,
+          code: "E_VALIDATION",
+        },
+      };
+    }
+    return resolvedBatch.items[resolvedAt]!;
+  });
+
+  const products: BatchResult<{ id: string; variantIds: string[] }> = {
+    total: rows.length,
+    succeeded: items.filter((i) => i.outcome.status === "succeeded").length,
+    failed: items.filter((i) => i.outcome.status === "failed").length,
+    needsApproval: items.filter((i) => i.outcome.status === "needs_approval").length,
+    items,
+  };
+
+  return { brands, products };
+}
+
 /* ================================= queries ================================= */
 
 export const listCatalogue: QueryDefinition<
@@ -1107,6 +1299,21 @@ export function registerPlywoodCapability(): void {
         requiresVerb: "Edit",
         shells: ["platform"],
       },
+      {
+        // Task 87. Gated on Create/Customer — whoever may add a customer
+        // by hand may also add a batch of them; the finer-grained checks
+        // (Create/Supplier, Create/Product) are still enforced per row by
+        // the underlying commands this page's actions call, this is only
+        // the coarse menu-visibility filter.
+        href: "/import",
+        label: "Import data",
+        group: "Administration",
+        order: 61,
+        icon: "configuration",
+        requiresEntity: ENTITY_CUSTOMER,
+        requiresVerb: "Create",
+        shells: ["platform"],
+      },
     ],
     workspace: [
       {
@@ -1234,4 +1441,5 @@ export function registerPlywoodCapability(): void {
   registerQuery(stockOnHand);
   registerQuery(listShades);
   registerQuery(listTextures);
+  registerQuery(previewProductImport);
 }

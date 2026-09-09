@@ -50,16 +50,19 @@ import { applyMovement, serviceProductIds } from "./stock";
  * produce a union nobody can follow.
  */
 
-/** A GSTIN is 15 characters in a fixed shape; the column checks the same rule. */
-const GSTIN = z
+/** A GSTIN is 15 characters in a fixed shape; the column checks the same rule.
+ *  Exported for `import.ts` (Task 87), which validates the same field from a
+ *  CSV column and must not define this regex a second time. */
+export const GSTIN = z
   .string()
   .regex(
     /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
     "that is not a valid GSTIN",
   );
 
-/** Two digits. It decides CGST + SGST against IGST (P4). */
-const STATE_CODE = z
+/** Two digits. It decides CGST + SGST against IGST (P4). Exported for the
+ *  same reason as `GSTIN` above. */
+export const STATE_CODE = z
   .string()
   .regex(/^[0-9]{2}$/, "a GST state code is two digits");
 

@@ -44,7 +44,6 @@ import {
   ENTITY_SUPPLIER,
   ENTITY_SUPPLIER_PRICE,
   PLYWOOD_CAPABILITY,
-  approveCredit,
   createBrand,
   createCustomer,
   createProduct,
@@ -368,29 +367,38 @@ describeDb("plywood integrity foundation (slice 1)", () => {
   describe("invoice eligibility (P0-03)", () => {
     it("refuses to invoice an order still awaiting credit approval", async () => {
       const productId = await boardInStock(50);
-      // A limit smaller than the order forces pending_credit.
+      // A limit smaller than the order used to force pending_credit; the
+      // credit GATE is gone now (orders.ts createSalesOrder, "every order
+      // is approved" — the business's own decision, see
+      // capability-plywood-trading.test.ts for the fuller note), so this
+      // order is approved on creation regardless.
       const customerId = await freshCustomer(100_000);
 
       const order = await executeCommand(owner, createSalesOrder, {
         customerId, locationId: godownId,
         lines: [{ productId, qtyOrdered: 10, unitPricePaise: 150_000 }],
       });
-      expect(order.state).toBe("pending_credit");
+      expect(order.state).toBe("approved");
 
-      // THE DEFECT: the old guard rejected only draft and cancelled, so a
-      // financial document could be raised against credit the business had
-      // explicitly refused.
+      // THE DEFECT this test was written for (the old guard rejected only
+      // draft and cancelled, letting a financial document be raised
+      // against credit the business had explicitly refused) can no longer
+      // occur through normal creation, but the state guard itself is still
+      // real: `issueSalesInvoice`'s INVOICEABLE_SALES_ORDER_STATES allow-list
+      // (finance.ts) would still refuse a pending_credit order if one ever
+      // existed — vestigial defense-in-depth, worth still proving directly.
+      await withTenant(tenantId, (tx) =>
+        tx.tradingSalesOrder.update({ where: { id: order.id }, data: { state: "pending_credit" } }),
+      );
       await expect(
         executeCommand(owner, raiseSalesInvoice, { salesOrderId: order.id }),
       ).rejects.toThrow(/pending_credit cannot be invoiced/);
+      await withTenant(tenantId, (tx) =>
+        tx.tradingSalesOrder.update({ where: { id: order.id }, data: { state: "approved" } }),
+      );
 
-      await executeCommand(owner, approveCredit, {
-        orderId: order.id,
-        reason: "Owner approved a temporary extension",
-      });
-
-      // Slice 4 added the second half of P0-03: approval alone is not enough,
-      // because an invoice bills for goods that have actually left the yard.
+      // P0-03's still-live half: approval alone is not enough, because an
+      // invoice bills for goods that have actually left the yard.
       await expect(
         executeCommand(owner, raiseSalesInvoice, { salesOrderId: order.id }),
       ).rejects.toThrow(/nothing has been issued/);
