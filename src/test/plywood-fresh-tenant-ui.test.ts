@@ -326,11 +326,19 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
     expect(order.totalCostPaise).toBe(200 * paise(920));
 
     await ui("verity.trading.submit_purchase_order", { orderId: purchaseOrderId });
-    const received = await ui<{ state: string }>("verity.trading.receive_goods", {
+    // Receiving everything ordered completes the order and raises its
+    // provisional supplier bill in the same command — the explicit
+    // `raise_purchase_invoice` call step 9 used to make is now redundant
+    // and fails "already been invoiced" on an order this fully received.
+    const received = await ui<{
+      state: string;
+      billing: { id: string; invoiceNumber: string; totalPaise: number } | null;
+    }>("verity.trading.receive_goods", {
       orderId: purchaseOrderId,
       lines: [{ productId, qtyReceived: 200 }],
     });
     expect(received.state).toBe("completed");
+    expect(received.billing).not.toBeNull();
   });
 
   /* ------------------------------ 6. corrections ---------------------------- */
@@ -417,11 +425,9 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
     const taxable = 60 * paise(1280);
     expect(invoiceTotalPaise).toBe(taxable + Math.round(taxable * 0.09) * 2);
 
-    // Payables, from the Finance screen. The amount is the supplier's figure.
-    await ui("verity.trading.raise_purchase_invoice", {
-      purchaseOrderId,
-      supplierInvoiceTotalPaise: 200 * paise(920),
-    });
+    // Payables, from the Finance screen. The provisional bill was already
+    // raised by step 5's receipt (see its own comment) — the amount there
+    // was the PO's own cost, which is exactly the supplier's figure here.
 
     const half = Math.floor(invoiceTotalPaise / 2);
     await ui("verity.trading.record_payment", {
