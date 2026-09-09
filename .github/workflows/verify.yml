@@ -39,6 +39,16 @@ jobs:
       #   DATABASE_URL — the runtime role, NOSUPERUSER NOBYPASSRLS
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/verity
       DATABASE_URL: postgresql://verity_app:verity_app@localhost:5432/verity
+      # `config.ts`'s `loadConfig()` runs at module import time and throws
+      # `E_CONFIG_INVALID` if these are absent when `provider: "supabase"`
+      # (the default) — it never crashed CI before because the RLS-bypass
+      # step above always failed first. Plain placeholder strings, not real
+      # secrets: `configSchema` only checks presence (`z.string()`), never
+      # `.url()` format or a live Supabase project, so a fake value here is
+      # sufficient to let module loading and the test suite proceed.
+      NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+      SUPABASE_JWT_SECRET: ci-placeholder-jwt-secret
 
     steps:
       - uses: actions/checkout@v4
