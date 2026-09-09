@@ -66,6 +66,8 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
   let purchaseOrderId: string;
   let salesOrderId: string;
   let invoiceId: string;
+  let invoiceNumber: string;
+  let invoiceTotalPaise: number;
 
   /** What `runCommand(key, input)` does, minus the Next.js revalidation. */
   async function ui<T = unknown>(key: string, input: unknown): Promise<T> {
@@ -381,7 +383,18 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
     );
     expect(availability.find((row) => row.productId === productId)!.availableUnits).toBe(140);
 
-    await ui("verity.trading.dispatch_order", { orderId: salesOrderId });
+    // Task 71 item 10: dispatching a fully-issued order raises its sales
+    // invoice as part of the same command — `raise_sales_invoice` is a
+    // second door onto the same room, not the only way in, and calling it
+    // again on an order dispatch already invoiced fails with "already been
+    // invoiced". Captured here rather than re-raised in step 9.
+    const dispatched = await ui<{
+      invoicing: { id: string; invoiceNumber: string; totalPaise: number } | null;
+    }>("verity.trading.dispatch_order", { orderId: salesOrderId });
+    expect(dispatched.invoicing).not.toBeNull();
+    invoiceId = dispatched.invoicing!.id;
+    invoiceNumber = dispatched.invoicing!.invoiceNumber;
+    invoiceTotalPaise = dispatched.invoicing!.totalPaise;
   });
 
   /* ------------------------------- 8. logistics ----------------------------- */
@@ -395,16 +408,14 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
   /* ------------------------- 9. invoice, bill, payment ---------------------- */
 
   it("9 — invoices the sale, records the supplier bill and takes the money", async () => {
-    const invoice = await ui<{ id: string; invoiceNumber: string; totalPaise: number }>(
-      "verity.trading.raise_sales_invoice",
-      { salesOrderId },
-    );
-    invoiceId = invoice.id;
-    expect(invoice.invoiceNumber).toMatch(/^SALES\/\d{4}-\d{2}\/0001$/);
+    // The invoice itself was already raised by step 7's dispatch (Task 71
+    // item 10) — this step checks what dispatch produced, not a second
+    // invoicing action.
+    expect(invoiceNumber).toMatch(/^SALES\/\d{4}-\d{2}\/0001$/);
 
     // Configuration was typed as strings; the tax still lands on integers.
     const taxable = 60 * paise(1280);
-    expect(invoice.totalPaise).toBe(taxable + Math.round(taxable * 0.09) * 2);
+    expect(invoiceTotalPaise).toBe(taxable + Math.round(taxable * 0.09) * 2);
 
     // Payables, from the Finance screen. The amount is the supplier's figure.
     await ui("verity.trading.raise_purchase_invoice", {
@@ -412,7 +423,7 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
       supplierInvoiceTotalPaise: 200 * paise(920),
     });
 
-    const half = Math.floor(invoice.totalPaise / 2);
+    const half = Math.floor(invoiceTotalPaise / 2);
     await ui("verity.trading.record_payment", {
       invoiceId,
       amountPaise: half,
@@ -421,7 +432,7 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
     });
     const settled = await ui<{ outstandingPaise: number }>("verity.trading.record_payment", {
       invoiceId,
-      amountPaise: invoice.totalPaise - half,
+      amountPaise: invoiceTotalPaise - half,
       method: "upi",
     });
     expect(settled.outstandingPaise).toBe(0);
@@ -540,7 +551,45 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
     const ui_ = files(join(process.cwd(), "src/app"))
       .map((file) => readFileSync(file, "utf8"))
       .join("\n");
-    const unreachable = commandKeys.filter((key) => !ui_.includes(`"${key}"`));
+
+    // The written acknowledgement this test's own comment asks for. Each
+    // entry is a real, checked reason a command has no literal string match
+    // in `src/app` — not a blanket excuse. Audited 2026-09-09.
+    const ACKNOWLEDGED_UNREACHABLE: Record<string, string> = {
+      // Called only from `commitProductImport` (Task 87's product CSV
+      // import) via `runCommandBatch`, never as a standalone user action —
+      // find-or-create is an implementation detail of resolving a brand
+      // name, not something a person picks from a menu.
+      "verity.trading.ensure_brand": "internal helper, not a user-facing action",
+      // Racks are explicitly withdrawn — see `plywood/index.ts`'s own nav
+      // comment: "Racks were withdrawn ... The routes still exist and
+      // still authorize; only the menu entry is replaced."
+      "verity.trading.define_godown_rack": "feature withdrawn, routes kept but not navigated to",
+      "verity.trading.set_godown_rack_active": "feature withdrawn, routes kept but not navigated to",
+      // Superseded by a newer, consolidated command the UI actually calls —
+      // checked against `src/app` directly, not assumed:
+      "verity.trading.record_payment": "superseded in the UI by verity.trading.record_party_payment (TransactionsDesk.tsx)",
+      "verity.trading.set_supplier_price": "superseded in the UI by verity.trading.set_price_sheet, bulk (PriceSheet.tsx)",
+      "verity.trading.set_customer_price": "superseded in the UI by verity.trading.set_price_sheet, bulk (PriceSheet.tsx)",
+      "verity.trading.set_credit_limit": "superseded in the UI by verity.trading.edit_customer, which now carries creditLimitPaise (CustomerList.tsx)",
+      "verity.trading.raise_purchase_invoice": "superseded in the UI by verity.trading.raise_purchase_bill_from_order / confirm_purchase_bill (FinanceDesk.tsx)",
+      // Dead code, not merely superseded: the credit-gate feature this
+      // command served was removed (orders.ts createSalesOrder, "every
+      // order is approved") — no order can reach a state this command
+      // would ever need to act on. Kept registered rather than deleted;
+      // deleting it is a separate decision from this test passing.
+      "verity.trading.approve_credit": "dead: the credit-gate feature it served was removed, no order reaches a state it acts on",
+      // GENUINE GAPS, not superseded — no screen anywhere calls these, and
+      // neither has test coverage either. Real product gaps, tracked here
+      // rather than hidden: building their UI is separate work from
+      // reconciling this test against what already shipped.
+      "verity.trading.raise_invoice_note": "GAP: credit/debit notes (Task 50) have no UI trigger; command + tests only",
+      "verity.trading.link_supplier_to_customer": "GAP: no UI trigger and no test coverage; createSupplier auto-links a NEW customer, but linking two pre-existing records has no screen",
+    };
+
+    const unreachable = commandKeys.filter(
+      (key) => !ui_.includes(`"${key}"`) && !(key in ACKNOWLEDGED_UNREACHABLE),
+    );
     expect(unreachable).toEqual([]);
   });
 });

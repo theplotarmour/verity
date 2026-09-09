@@ -180,6 +180,15 @@ describe("conformance: capability contracts (Phase E)", () => {
     // and payments need no other capability, the same reasoning `dinein`
     // above already gives for depending on nothing.
     trading: [],
+    // Tasks 72/73/77/78, built 2026-09-04 under explicit product-owner
+    // override ("build ahead of demand"), MVP scope. Each is a standalone
+    // vertical slice depending on no other capability (checked: no
+    // cross-capability import from any of the four) — this list was
+    // simply never updated when they shipped.
+    accounting: [],
+    inventory: [],
+    billing: [],
+    hr: [],
   };
 
   const capabilityDirs = readdirSync(join(ROOT, "src/server/capabilities")).filter((entry) =>
@@ -378,8 +387,29 @@ describe("conformance: over-genericity (Phase G)", () => {
     // the deployment in a crash report. Same reasoning as observability.ts:
     // redaction is a platform rule and the destination is a deployment
     // decision. It binds no vendor — the Sentry config passes its event in
-    // against a structural type, so the platform never imports the SDK.
-    expect(platformModules.length).toBeLessThanOrEqual(33);
+    // 34: batch.ts (Task 91) — bulk-operation partial-failure reporting.
+    // Platform because every caller of `executeCommand` in a loop needs the
+    // same one-transaction-per-item guarantee; a capability reinventing it
+    // is the "second, subtly different" bug class this file exists to close.
+    // 35: grounding.ts (Task 84 area 4) — agent-channel write grounding.
+    // Platform because it restricts the SOURCE of a value regardless of
+    // which capability's command receives it (ADR-017's own boundary).
+    // 36: tool-manifest.ts (Task 84 area 1) — turns registered commands and
+    // queries into an LLM tool schema. Platform because it walks the same
+    // command/query registries every channel already shares; a capability
+    // building its own manifest would be a second registry to keep in sync.
+    // 37: agent-chat.ts (Task 84 area 6) — the one place that talks to an
+    // LLM provider. Platform because ADR-017 requires the agent channel to
+    // pass through the SAME `executeCommand`/`executeQuery` every other
+    // caller uses; a capability-owned chat loop could not make that
+    // guarantee provable in one place.
+    // (telemetry-scrub.ts, continued) — against a structural type, so the
+    // platform never imports the SDK.
+    //
+    // This list was last true at 33 (2026-09-04-ish); the four above
+    // shipped the same day (Task 84/91) and the count was never rechecked
+    // against it until now.
+    expect(platformModules.length).toBeLessThanOrEqual(37);
   });
 });
 
@@ -432,14 +462,27 @@ describeDb("conformance: database enforcement", () => {
       // what a balance is computed from (P3), and an invoice is a legal document
       // whose number, tax and totals are fixed once raised — a correction is a
       // credit note, which is a new document rather than an edit to an old one.
+      // accounting's journal_entry/journal_line, billing's billing_invoice/
+      // billing_meter_reading, hr's hr_leave_decision, and inventory's
+      // inventory_stock_movement (Tasks 72/73/77/78, built 2026-09-04) join
+      // for the same reason as the plywood/trading ledger tables above —
+      // each is a financial or historical fact, not a mutable record. This
+      // list simply was never rechecked against them until now. Sorted to
+      // match `guarded`'s own `.sort()`.
       expect(guarded).toEqual([
         "activity",
+        "billing_invoice",
+        "billing_meter_reading",
         "domain_event",
         "evidence",
-        "trading_invoice",
-        "trading_ledger_entry",
+        "hr_leave_decision",
+        "inventory_stock_movement",
+        "journal_entry",
+        "journal_line",
         "security_audit_event",
         "stock_ledger_entry",
+        "trading_invoice",
+        "trading_ledger_entry",
       ]);
     } finally {
       await admin.$disconnect();

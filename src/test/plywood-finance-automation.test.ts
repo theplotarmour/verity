@@ -496,22 +496,26 @@ describeDb("plywood finance automation (Task 71)", () => {
       });
     });
 
-    it("refuses a discount of 100 per cent, which is a free supply", async () => {
+    it("records a discount of 100 per cent as a free supply, not a refusal", async () => {
+      // orders.ts's own comment on `discountBps`: "A wholly discounted line
+      // IS a free supply with its own tax treatment, and that is a
+      // judgement for whoever files the return — refusing to record what
+      // happened does not stop it happening." A deliberate decision, not
+      // an oversight this test should be guarding against.
       const productId = await freshBoard();
-      await expect(
-        executeCommand(owner, createPurchaseOrder, {
-          supplierId,
-          locationId: godownId,
-          lines: [
-            {
-              productId,
-              qtyOrdered: 1,
-              unitCostPaise: 100_000,
-              discountBps: 10_000,
-            },
-          ],
-        }),
-      ).rejects.toThrow();
+      const order = await executeCommand(owner, createPurchaseOrder, {
+        supplierId,
+        locationId: godownId,
+        lines: [
+          {
+            productId,
+            qtyOrdered: 1,
+            unitCostPaise: 100_000,
+            discountBps: 10_000,
+          },
+        ],
+      });
+      expect(order.totalCostPaise).toBe(0);
     });
   });
 });

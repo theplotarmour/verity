@@ -376,7 +376,14 @@ describeDb("capability: Plywood trading — purchase and sale", () => {
 
   /* ---------------------------------- sale ---------------------------------- */
 
-  it("approves an order inside the credit limit and holds it outside", async () => {
+  it("approves every order regardless of exposure against the credit limit", async () => {
+    // The credit GATE is gone (orders.ts createSalesOrder, "every order is
+    // approved" — the business's own decision: what matters is whether the
+    // money is in hand, recorded as `paymentTerms`, not a hold someone has
+    // to release). `creditLimitPaise` is still tracked and still shown as
+    // over/under on the customer screen (CustomerList.tsx); it no longer
+    // blocks order creation. This test used to assert the second order
+    // here landed in `pending_credit` — it no longer can.
     const productId = await boardInStock(100);
     const customerId = await freshCustomer(500_000);
     await executeCommand(owner, setCustomerPrice, {
@@ -392,18 +399,25 @@ describeDb("capability: Plywood trading — purchase and sale", () => {
     });
     expect(withinLimit.state).toBe("approved");
 
-    // The next order tips the same customer over. The check is against total
-    // exposure, not this order alone — otherwise the limit is per order and
-    // means nothing.
+    // Tips the same customer's total exposure over their limit. Still
+    // approved: the limit is informational (Money screen, CustomerList),
+    // never a write-time gate.
     const overLimit = await executeCommand(rep, createSalesOrder, {
       customerId,
       locationId: godownId,
       lines: [{ productId, qtyOrdered: 1 }],
     });
-    expect(overLimit.state).toBe("pending_credit");
+    expect(overLimit.state).toBe("approved");
   });
 
-  it("records why a credit limit was overridden", async () => {
+  it("approveCredit remains callable and records why, for a directly-transitioned order", async () => {
+    // Vestigial: no live path reaches `pending_credit` any more (see the
+    // test above), so this command has no real caller and no UI screen
+    // (`plywood-fresh-tenant-ui.test.ts`'s reachability check documents it
+    // as dead). Kept registered rather than deleted — deleting a command
+    // is a separate decision from this file's own scope — so this test
+    // exercises it directly against a manually-transitioned order rather
+    // than asserting a flow that can no longer occur.
     const productId = await boardInStock(50);
     const customerId = await freshCustomer(0);
     const order = await executeCommand(rep, createSalesOrder, {
@@ -411,7 +425,11 @@ describeDb("capability: Plywood trading — purchase and sale", () => {
       locationId: godownId,
       lines: [{ productId, qtyOrdered: 1, unitPricePaise: 150_000 }],
     });
-    expect(order.state).toBe("pending_credit");
+    expect(order.state).toBe("approved");
+
+    await withTenant(tenantId, (tx) =>
+      tx.tradingSalesOrder.update({ where: { id: order.id }, data: { state: "pending_credit" } }),
+    );
 
     await executeCommand(owner, approveCredit, {
       orderId: order.id,
@@ -469,7 +487,7 @@ describeDb("capability: Plywood trading — purchase and sale", () => {
     // discover it could not keep at dispatch.
     await expect(
       executeCommand(owner, reserveForOrder, { orderId: order.id }),
-    ).rejects.toThrow(/has 10 available/);
+    ).rejects.toThrow(/is short by .+ \(Okhla has 10\)/);
   });
 
   it("does not let two orders hold the same sheets", async () => {
@@ -495,7 +513,7 @@ describeDb("capability: Plywood trading — purchase and sale", () => {
 
     await expect(
       executeCommand(owner, reserveForOrder, { orderId: second.id }),
-    ).rejects.toThrow(/has 10 available/);
+    ).rejects.toThrow(/is short by .+ \(Okhla has 10\)/);
   });
 
   it("releases the hold when an order is cancelled", async () => {
