@@ -34,11 +34,11 @@ walk of the 16 rules against what actually got built.
 | 1 — live-record grounding (prose claims) | `assertGrounded` only checked `*Id` fields on command INPUT, not a prose claim's numbers. | `GroundingCache` now also records every number reachable from a query result this turn; `checkProseClaims()` (`grounding.ts`) scans the final reply for currency/comma-grouped/decimal numbers and flags any not seen in a query result. **Deliberately a warning, not a block** (`AgentTurnResult.groundingWarnings`) — a false positive here would refuse a correct answer, worse than the gap it closes. Rendered as a small "double-check" note in the dock, never alters or suppresses the reply. Full response-time fact-checking of arbitrary claims (not just numbers) remains future work; this closes the concrete, worked numeric case. |
 | 8 — six-step contract, step 3 (preview) | No pause before executing a routine action whose resolution wasn't obvious (worked example: "mark all three overdue invoices written off"). | `agent-chat.ts`'s `detectBatchPreview()`: when one assistant message contains 2+ tool calls to the SAME routine (non-destructive) command, the turn stops before executing any of them and returns a `PendingPreview` (command description + exact resolved inputs) instead. `AgentChatDock.tsx` renders a structural Confirm/Cancel card. Confirm calls `executeConfirmedPreview()` with the EXACT previously-shown inputs — the model never re-derives them, so there is no drift between what was shown and what runs. Scope is deliberately bounded to this one shape (2+ same-key routine calls in one message) — not a general "preview anything ambiguous" engine, per the same over-build caution Task 93 states for a different primitive. |
 
-## Still open, not fixed (real design work, different mechanism than above)
+## Built 2026-09-09 (the one remaining gap from 2026-09-08)
 
-| Rule | Gap | Why not fixed now |
+| Rule | Gap | Fix |
 |---|---|---|
-| 2 — exact match, structural enforcement | Fixed at the prompt level only (2026-09-04 pass). A model can still ignore the instruction. No structural gate (e.g. refusing a create/update whose resolved entity came from a multi-candidate query without an explicit user pick) exists. | Would need the grounding mechanism extended to track "which specific candidate did the user pick," a different and larger addition than the numeric-claim check built today. |
+| 2 — exact match, structural enforcement | Fixed at the prompt level only (2026-09-04 pass). A model could ignore the instruction: nothing structurally stopped a write using an ID that came from a multi-candidate query. | `GroundingCache` now tags every id with its source: `multiSourceIds` (surfaced only by a >1-row result) vs `singleSourceIds` (surfaced by a result that resolved to exactly one row). `assertGrounded` (`grounding.ts`) rejects a write whose `*Id` field is still `isAmbiguous()` — in `multiSourceIds` and never also in `singleSourceIds` — with `E_UNGROUNDED`, same code and remedial instruction ("query again, narrower") the model already knows how to act on from rule 4 of the system prompt. A later, narrower query that returns the id alone clears the flag — that IS the "ask which one, then use it" flow, made structural rather than advisory. Deliberately does not track which literal candidate the human typed or clicked (a separate, larger primitive the 2026-09-08 note called out) — it enforces the cheaper, sufficient property: no write may run on an id that was never confirmed as the sole match of *some* query this turn. |
 
 ## Not yet applicable
 
@@ -54,8 +54,8 @@ until those surfaces exist.
 gaps recorded rather than rushed.
 
 2026-09-08: two of those three built (prose-claim numeric grounding as a
-warning, and the preview step for the batch-routine-action shape). One
-remains open — structural (non-prompt-level) exact-match enforcement —
-tracked above, not rushed for the same reason the others weren't: it needs
-the grounding mechanism extended in a different direction than either fix
-built today.
+warning, and the preview step for the batch-routine-action shape).
+
+2026-09-09: the third and last built — structural (non-prompt-level)
+exact-match enforcement. All 16 rules are now compliant or built; none
+remain open.
