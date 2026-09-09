@@ -82,10 +82,17 @@ jobs:
 
       - name: Prove the runtime role cannot bypass RLS
         run: |
+          # `boolean || text` casts through boolean-to-text, which Postgres
+          # spells "true"/"false" — NOT the "t"/"f" psql prints for a raw
+          # boolean column. This step never matched since it was written
+          # (058711e): `rolsuper`/`rolbypassrls` concatenated with `||` here
+          # always print as "false", so the old `super=f bypassrls=f`
+          # pattern could never match and this "pass" was never actually
+          # proven, on any branch.
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tAc \
             "SELECT rolname||' super='||rolsuper||' bypassrls='||rolbypassrls
                FROM pg_roles WHERE rolname = current_user" | tee /tmp/role.txt
-          grep -q 'super=f bypassrls=f' /tmp/role.txt
+          grep -q 'super=false bypassrls=false' /tmp/role.txt
 
       - run: npm run typecheck
       - run: npm run lint
