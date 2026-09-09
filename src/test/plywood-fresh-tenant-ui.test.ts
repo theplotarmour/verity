@@ -426,8 +426,7 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
     expect(invoiceTotalPaise).toBe(taxable + Math.round(taxable * 0.09) * 2);
 
     // Payables, from the Finance screen. The provisional bill was already
-    // raised by step 5's receipt (see its own comment) — the amount there
-    // was the PO's own cost, which is exactly the supplier's figure here.
+    // raised, taxed, by step 5's receipt (see its own comment).
 
     const half = Math.floor(invoiceTotalPaise / 2);
     await ui("verity.trading.record_payment", {
@@ -463,9 +462,15 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
     const payable = await read<{ balancePaise: number }>("verity.trading.party_ledger", {
       supplierId,
     });
+    // The purchase order has gstApplicable defaulting ON (createPurchaseOrder's
+    // own default), so step 5's auto-raised provisional bill
+    // (issueProvisionalPurchaseBill, finance.ts) is the taxed path, not the
+    // zero-tax one — CGST + SGST at 9% each, same as the sales side.
+    const purchaseTaxable = 200 * paise(920);
+    const purchasePayable = purchaseTaxable + Math.round(purchaseTaxable * 0.09) * 2;
     // Negative: this business owes the supplier. Debit and credit are named from
     // one point of view throughout, so the sign is the answer.
-    expect(payable.balancePaise).toBe(-200 * paise(920));
+    expect(payable.balancePaise).toBe(-purchasePayable);
 
     const console_ = await read<{
       receivablesPaise: number;
@@ -473,7 +478,7 @@ describeDb("plywood: a fresh tenant, set up and traded through the interface", (
       lowStockBoards: number;
     }>("verity.trading.owner_console", {});
     expect(console_.receivablesPaise).toBe(0);
-    expect(console_.payablesPaise).toBe(200 * paise(920));
+    expect(console_.payablesPaise).toBe(purchasePayable);
 
     const margin = await read<{ marginPaise: number; costingMethod: string }>(
       "verity.trading.margin_report",
