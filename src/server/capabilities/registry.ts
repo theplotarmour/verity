@@ -17,6 +17,7 @@ import { registerLoyaltyCapability } from "./loyalty";
 import { registerCouponCapability } from "./coupon";
 import { registerComplaintCapability } from "./complaint";
 import { registerAttendanceCapability } from "./attendance";
+import { registerFinanceCapability } from "./finance";
 import { installStorage } from "@/server/storage";
 
 /**
@@ -58,4 +59,5 @@ export function installCapabilities(): void {
   registerCouponCapability();
   registerComplaintCapability();
   registerAttendanceCapability();
+  registerFinanceCapability();
 }

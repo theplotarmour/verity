@@ -158,6 +158,8 @@ model Tenant {
   complaints         Complaint[]
   attendanceRecords  AttendanceRecord[]
   shifts             Shift[]
+  expenses           Expense[]
+  cashReconciliations DailyCashReconciliation[]
 
   // Capability: HR (Task 78). Back-relations only, as above.
   hrDepartments       HrDepartment[]
@@ -1163,6 +1165,8 @@ model Location {
   customers    Customer[]
   complaints   Complaint[]
   shifts       Shift[]
+  expenses     Expense[]
+  cashReconciliations DailyCashReconciliation[]
 
   @@unique([tenantId, id], name: "location_tenant_scoped_id")
   @@index([tenantId, organizationId])
@@ -3894,6 +3898,72 @@ model Complaint {
   @@index([tenantId, status])
   @@index([tenantId, locationId])
   @@map("complaint")
+}
+
+// ===========================================================================
+// CAPABILITY: Finance (Colonel Kebabz Phase 4, lean V1) — PRD §44-46, 48-49:
+// Expense Management, Cash Management, Payment Management (already covered
+// by dinein.salesSummary's own byMethod breakdown — zero new schema for
+// §46), Finance Dashboard, Outlet P&L.
+//
+// §47 (Delivery Platform Reconciliation) is NOT built — blocked on a real
+// Zomato/Swiggy integration decision (external credentials, API contract),
+// same posture as every other external-dependency item this project flags.
+// ===========================================================================
+
+/// PRD §44. `category`/`paymentMethod` are closed sets owned by the
+/// capability (EXPENSE_CATEGORIES / the payment-method vocabulary
+/// dinein.recordPayment already uses). Binary approve/reject, not a chain
+/// — same lean posture as coupon/wastage this session; `approval`'s
+/// multi-step chain is reusable later if a real threshold is decided.
+model Expense {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  locationId   String    @map("location_id") @db.Uuid
+  category     String
+  vendor       String?
+  amountMinor  Int       @map("amount_minor")
+  paymentMethod String   @map("payment_method")
+  expenseDate  DateTime  @map("expense_date") @db.Date
+  receiptEvidenceId String? @map("receipt_evidence_id") @db.Uuid
+  status       String    @default("Pending")
+  recordedById String    @map("recorded_by_id") @db.Uuid
+  approvedById String?   @map("approved_by_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  version      Int       @default(1)
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([tenantId, locationId, expenseDate])
+  @@map("expense")
+}
+
+/// PRD §45: Opening Cash + Cash Sales - Cash Expenses - Withdrawals =
+/// Expected Cash, compared with actual. `openingCashMinor`/
+/// `cashWithdrawnMinor`/`actualCashMinor` are the only genuinely NEW inputs
+/// — cash sales and cash expenses are derived at query time from existing
+/// Bill/Payment and Expense data, never duplicated here.
+model DailyCashReconciliation {
+  id                String   @id @default(uuid()) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  locationId        String   @map("location_id") @db.Uuid
+  date              DateTime @db.Date
+  openingCashMinor  Int      @map("opening_cash_minor")
+  cashWithdrawnMinor Int     @default(0) @map("cash_withdrawn_minor")
+  actualCashMinor   Int?     @map("actual_cash_minor")
+  varianceNote      String?  @map("variance_note")
+  recordedById      String   @map("recorded_by_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  version           Int      @default(1)
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, locationId, date])
+  @@map("daily_cash_reconciliation")
 }
 
 // ===========================================================================

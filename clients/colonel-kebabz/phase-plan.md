@@ -216,19 +216,37 @@ relationship, not silently skipped.
 
 ## Phase 4 — Finance & Reconciliation
 
-- Expenses (§44) — doesn't cleanly fit `trading` (vendor-order-shaped) or
-  `billing` (meter-shaped). Likely its own small entity: category, outlet,
-  amount, receipt (reuse `evidence`), approval (reuse `approval`).
-- Cash reconciliation (§45), payment tracking (§46) — `dinein.Payment`
-  already records method/amount per bill; this phase is a reporting layer
-  over data that already exists, not new writes.
-- Delivery-platform reconciliation (§47) — needs a real Zomato/Swiggy
+**SHIPPED (2026-09-10) — Expenses + Cash Reconciliation + lean Outlet
+P&L** (§44-46, 48-49). New `finance` capability. Binary approve/reject on
+`Expense`, not the `approval` capability's multi-step chain — same lean
+posture as coupon/wastage/complaint compensation this session (`approval`
+still reusable once a real threshold is decided). §46 (payment method
+breakdown) needed zero new code — `dinein.salesSummary`'s own `byMethod`
+already covered it, exactly as this section originally predicted.
+
+`getOutletPnL` is an explicit ESTIMATE, documented as such in its own
+result (`cogsIsApproximate: true` + a `note` field): COGS is valued at
+ingredients' CURRENT average cost (not the cost at the moment each was
+actually consumed — Issue movements don't carry a point-in-time unit cost),
+and labour cost is NOT included at all — `attendance` supplies hours/days
+worked, never a wage rate, so there is no real number to put on that line.
+Matches PRD §49's own framing ("estimated... allow actual accounting
+integration later").
+
+- Delivery-platform reconciliation (§47) — still needs a real Zomato/Swiggy
   integration decision first (EXTERNAL dependency, credentials, API
   contracts). IMPLEMENTATION DECISION REQUIRED — flag to product owner
-  before any code.
-- Outlet P&L / Finance dashboard (§48–49) — reporting over Phase 1
-  (inventory cost) + this phase (expenses) + `hr` (payroll inputs), so it
-  necessarily comes after those, not before.
+  before any code. Not built.
+
+Tested: `src/test/capability-finance.test.ts` (expense approval, cash
+reconciliation variance requiring an explanation, P&L math against a real
+settled sale + approved expense).
+
+## Phase 4 status: lean-V1 core SHIPPED (2026-09-10)
+
+Expenses, Cash Reconciliation, Outlet P&L all built and tested. Delivery-
+platform reconciliation remains blocked on a product-owner integration
+decision.
 
 ## Phase 5 — Intelligence (deferred, matches PRD's own Phase 4)
 
