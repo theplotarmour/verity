@@ -1142,6 +1142,12 @@ model Location {
   inventoryStockBalances  InventoryStockBalance[]
   inventoryStockMovements InventoryStockMovement[]
 
+  // Capability: dinein (Colonel Kebabz multi-outlet). Back-relations only.
+  diningZones  DiningZone[]
+  diningTables DiningTable[]
+  diningOrders DiningOrder[]
+  bills        Bill[]
+
   @@unique([tenantId, id], name: "location_tenant_scoped_id")
   @@index([tenantId, organizationId])
   @@map("location")
@@ -1891,9 +1897,14 @@ model MenuItemVariant {
 }
 
 /// A part of the floor — Ground, Mezzanine, Terrace.
+///
+/// Scoped to a Location (Task: Colonel Kebabz multi-outlet). A zone belongs to
+/// exactly one outlet; a chain with three outlets has three "Ground Floor"
+/// zones, not one shared across sites.
 model DiningZone {
   id           String   @id @default(uuid()) @db.Uuid
   tenantId     String   @map("tenant_id") @db.Uuid
+  locationId   String   @map("location_id") @db.Uuid
   name         String
   floorLabel   String?  @map("floor_label")
   sortOrder    Int      @default(0) @map("sort_order")
@@ -1902,11 +1913,13 @@ model DiningZone {
   version      Int      @default(1)
   customFields Json     @default("{}") @map("custom_fields")
 
-  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  tables DiningTable[]
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location      @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "dining_zone_location_fkey")
+  tables   DiningTable[]
 
-  @@unique([tenantId, name])
+  @@unique([tenantId, locationId, name])
   @@unique([tenantId, id], name: "dining_zone_tenant_scoped_id")
+  @@index([tenantId, locationId])
   @@map("dining_zone")
 }
 
@@ -1920,6 +1933,9 @@ model DiningTable {
   id           String   @id @default(uuid()) @db.Uuid
   tenantId     String   @map("tenant_id") @db.Uuid
   zoneId       String   @map("zone_id") @db.Uuid
+  /// Denormalized from the zone at creation, so floor/queue queries filter by
+  /// location without a join. A table never moves outlets, so this never drifts.
+  locationId   String   @map("location_id") @db.Uuid
   label        String
   seats        Int      @default(2)
   shape        String?
@@ -1933,13 +1949,15 @@ model DiningTable {
   version      Int      @default(1)
   customFields Json     @default("{}") @map("custom_fields")
 
-  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  zone   DiningZone    @relation(fields: [tenantId, zoneId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  orders DiningOrder[]
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  zone     DiningZone    @relation(fields: [tenantId, zoneId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  location Location      @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "dining_table_location_fkey")
+  orders   DiningOrder[]
 
-  @@unique([tenantId, label])
+  @@unique([tenantId, locationId, label])
   @@unique([tenantId, id], name: "dining_table_tenant_scoped_id")
   @@index([tenantId, state])
+  @@index([tenantId, locationId])
   @@map("dining_table")
 }
 
@@ -1952,6 +1970,8 @@ model DiningOrder {
   id            String    @id @default(uuid()) @db.Uuid
   tenantId      String    @map("tenant_id") @db.Uuid
   tableId       String    @map("table_id") @db.Uuid
+  /// Denormalized from the table at creation. An order never moves outlets.
+  locationId    String    @map("location_id") @db.Uuid
   /// Resolved from the session, never from a payload (PLA-TEN-006).
   takenByUserId String    @map("taken_by_user_id") @db.Uuid
   covers        Int       @default(1)
@@ -1968,14 +1988,16 @@ model DiningOrder {
   version       Int       @default(1)
   customFields  Json      @default("{}") @map("custom_fields")
 
-  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  table  DiningTable @relation(fields: [tenantId, tableId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  lines  OrderLine[]
-  bill   Bill?
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  table    DiningTable @relation(fields: [tenantId, tableId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  location Location    @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "dining_order_location_fkey")
+  lines    OrderLine[]
+  bill     Bill?
 
   @@unique([tenantId, id], name: "dining_order_tenant_scoped_id")
   @@index([tenantId, state])
   @@index([tenantId, tableId, state])
+  @@index([tenantId, locationId])
   @@map("dining_order")
 }
 
@@ -2023,6 +2045,8 @@ model Bill {
   id                String    @id @default(uuid()) @db.Uuid
   tenantId          String    @map("tenant_id") @db.Uuid
   orderId           String    @unique @map("order_id") @db.Uuid
+  /// Denormalized from the order at generation. A bill never moves outlets.
+  locationId        String    @map("location_id") @db.Uuid
   subtotalMinor     Int       @map("subtotal_minor")
   discountMinor     Int       @default(0) @map("discount_minor")
   /// The tax that applied, in columns rather than a JSON blob.
@@ -2053,6 +2077,7 @@ model Bill {
 
   tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   order    DiningOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  location Location    @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "bill_location_fkey")
   payments Payment[]
 
   // One bill per order in v1. The pair is unique as well as the id, because the
@@ -2060,6 +2085,7 @@ model Bill {
   // defining side of a one-to-one to be unique on exactly those columns.
   @@unique([tenantId, orderId], name: "bill_tenant_scoped_order")
   @@unique([tenantId, id], name: "bill_tenant_scoped_id")
+  @@index([tenantId, locationId])
   @@index([tenantId, state])
   @@map("bill")
 }
@@ -2199,29 +2225,29 @@ model TradingProduct {
 /// reason money is stored in paise — 18.0 mm and 8 ft x 4 ft are exact facts
 /// and a float would make them approximately exact.
 model PlywoodProductDetail {
-  productId        String @id @map("product_id") @db.Uuid
-  tenantId         String @map("tenant_id") @db.Uuid
+  productId        String  @id @map("product_id") @db.Uuid
+  tenantId         String  @map("tenant_id") @db.Uuid
   /// Tenths of a millimetre. 180 is 18.0 mm. Not basis points: a thickness is
   /// not a rate, and the two units are kept apart deliberately.
   /// Nullable: a SERVICE product (sawing, estimating) and most hardware items
   /// have no sheet dimensions at all. `plywood_product_detail_dimensions_positive`
   /// allows NULL but still refuses zero or negative when a value is given.
-  thicknessTenthMm Int?   @map("thickness_tenth_mm")
+  thicknessTenthMm Int?    @map("thickness_tenth_mm")
   /// BOARD, PLYWOOD, LAMINATE, LOUVRE or OTHER. What the trade calls this
   /// thing, and — because each family is quoted in its own unit — what decides
   /// how its size is read. A plain string, validated at the command layer
   /// (`ProductCategory` in index.ts) and by a CHECK constraint, consistent with
   /// every other closed set in this file.
-  category         String @default("OTHER")
+  category         String  @default("OTHER")
   /// MM, FT or IN. The unit `widthTenth` and `heightTenth` are counted in.
   /// Stored rather than derived from `category`, because it is a fact about
   /// what was recorded — boards entered before the trade's own units were
   /// modelled hold genuine millimetres, and rewriting them would be a lie.
-  sizeUnit         String @default("MM") @map("size_unit")
+  sizeUnit         String  @default("MM") @map("size_unit")
   /// Tenths of `sizeUnit`. 80 is 8.0 ft; 24400 is 2440.0 mm. Tenths for the
   /// same reason thickness is: 8 ft is an exact fact and is not 2438.4 mm.
-  widthTenth       Int?   @map("width_tenth")
-  heightTenth      Int?   @map("height_tenth")
+  widthTenth       Int?    @map("width_tenth")
+  heightTenth      Int?    @map("height_tenth")
   /// BWR, MR, Marine. A free string: grades are the client's vocabulary and an
   /// enum here would need a platform migration the first time a supplier
   /// invents one.
@@ -2230,7 +2256,7 @@ model PlywoodProductDetail {
   /// behaves in water. A decorative laminate has no grade at all, and the
   /// column was forcing the catalogue to invent one for every laminate row.
   grade            String?
-  sheetWeightGrams Int?   @map("sheet_weight_grams")
+  sheetWeightGrams Int?    @map("sheet_weight_grams")
   /// The shade and texture this variant is. Both null on an ordinary product
   /// and on the template a variant was generated from; both set on a
   /// generated variant. Nullable rather than a separate table per variant
@@ -2579,27 +2605,27 @@ model TradingPurchaseOrder {
 /// a partial receipt turns on, and what is still owed on a given order must be
 /// answerable without loading every purchase order.
 model TradingPurchaseOrderLine {
-  id                  String @id @default(uuid()) @db.Uuid
-  tenantId            String @map("tenant_id") @db.Uuid
-  purchaseOrderId     String @map("purchase_order_id") @db.Uuid
-  productId           String @map("product_id") @db.Uuid
+  id                  String  @id @default(uuid()) @db.Uuid
+  tenantId            String  @map("tenant_id") @db.Uuid
+  purchaseOrderId     String  @map("purchase_order_id") @db.Uuid
+  productId           String  @map("product_id") @db.Uuid
   /// Snapshots. A catalogue edit must never rewrite a placed order.
-  productNameSnapshot String @map("product_name_snapshot")
+  productNameSnapshot String  @map("product_name_snapshot")
   hsnCodeSnapshot     String? @map("hsn_code_snapshot")
-  qtyOrdered          Int    @map("qty_ordered")
-  qtyReceived         Int    @default(0) @map("qty_received")
+  qtyOrdered          Int     @map("qty_ordered")
+  qtyReceived         Int     @default(0) @map("qty_received")
   /// NET of any discount — what this business actually agreed to pay per unit.
   /// Everything downstream (stock valuation, the payable, the purchase
   /// register) reads this one field, so a discount cannot be applied twice or
   /// forgotten by a reader that predates it.
-  unitCostPaise       Int    @map("unit_cost_paise")
+  unitCostPaise       Int     @map("unit_cost_paise")
   /// The pre-discount figure, kept only so the order can show what was struck
   /// off. Null when nothing was. Task 71 item 9.
-  listUnitCostPaise   Int?   @map("list_unit_cost_paise")
+  listUnitCostPaise   Int?    @map("list_unit_cost_paise")
   /// Basis points off the list price. 1250 is 12.5%. Stored as the rate that
   /// was agreed, alongside the money it produced, because recomputing money
   /// from a rate at read time lets a later edit restate a placed order.
-  discountBps         Int    @default(0) @map("discount_bps")
+  discountBps         Int     @default(0) @map("discount_bps")
 
   tenant        Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   purchaseOrder TradingPurchaseOrder      @relation(fields: [tenantId, purchaseOrderId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
@@ -2657,19 +2683,19 @@ model TradingSalesOrder {
 
 /// One board on a sales order.
 model TradingSalesOrderLine {
-  id                  String @id @default(uuid()) @db.Uuid
-  tenantId            String @map("tenant_id") @db.Uuid
-  salesOrderId        String @map("sales_order_id") @db.Uuid
-  productId           String @map("product_id") @db.Uuid
-  productNameSnapshot String @map("product_name_snapshot")
+  id                  String  @id @default(uuid()) @db.Uuid
+  tenantId            String  @map("tenant_id") @db.Uuid
+  salesOrderId        String  @map("sales_order_id") @db.Uuid
+  productId           String  @map("product_id") @db.Uuid
+  productNameSnapshot String  @map("product_name_snapshot")
   hsnCodeSnapshot     String? @map("hsn_code_snapshot")
-  qtyOrdered          Int    @map("qty_ordered")
-  qtyShipped          Int    @default(0) @map("qty_shipped")
+  qtyOrdered          Int     @map("qty_ordered")
+  qtyShipped          Int     @default(0) @map("qty_shipped")
   /// NET of any discount. See the note on the purchase line: one field carries
   /// the money, so no reader can miss the discount.
-  unitPricePaise      Int    @map("unit_price_paise")
-  listUnitPricePaise  Int?   @map("list_unit_price_paise")
-  discountBps         Int    @default(0) @map("discount_bps")
+  unitPricePaise      Int     @map("unit_price_paise")
+  listUnitPricePaise  Int?    @map("list_unit_price_paise")
+  discountBps         Int     @default(0) @map("discount_bps")
 
   tenant     Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   salesOrder TradingSalesOrder       @relation(fields: [tenantId, salesOrderId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
@@ -3079,15 +3105,15 @@ model TradingInvoice {
 
 /// One line on an invoice, snapshotted whole.
 model TradingInvoiceLine {
-  id                  String @id @default(uuid()) @db.Uuid
-  tenantId            String @map("tenant_id") @db.Uuid
-  invoiceId           String @map("invoice_id") @db.Uuid
-  productId           String @map("product_id") @db.Uuid
-  productNameSnapshot String @map("product_name_snapshot")
+  id                  String  @id @default(uuid()) @db.Uuid
+  tenantId            String  @map("tenant_id") @db.Uuid
+  invoiceId           String  @map("invoice_id") @db.Uuid
+  productId           String  @map("product_id") @db.Uuid
+  productNameSnapshot String  @map("product_name_snapshot")
   hsnCodeSnapshot     String? @map("hsn_code_snapshot")
-  qtyUnits            Int    @map("qty_units")
-  unitPricePaise      Int    @map("unit_price_paise")
-  lineTotalPaise      Int    @map("line_total_paise")
+  qtyUnits            Int     @map("qty_units")
+  unitPricePaise      Int     @map("unit_price_paise")
+  lineTotalPaise      Int     @map("line_total_paise")
 
   tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   invoice TradingInvoice @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)

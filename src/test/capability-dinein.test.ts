@@ -86,6 +86,7 @@ describeDb("capability: Dine-in", () => {
   const otherTenantId = randomUUID();
 
   let organizationId: string;
+  let locationId: string;
   let manager: ActorContext;
   let waiter: ActorContext;
   let zoneId: string;
@@ -112,6 +113,9 @@ describeDb("capability: Dine-in", () => {
 
       organizationId = (
         await tx.organization.create({ data: { tenantId, name: "Defence Colony" } })
+      ).id;
+      locationId = (
+        await tx.location.create({ data: { tenantId, organizationId, name: "Defence Colony" } })
       ).id;
 
       // GST as configuration. 2.5 + 2.5 is the restaurant rate; the arithmetic
@@ -235,7 +239,7 @@ describeDb("capability: Dine-in", () => {
       })
     ).id;
 
-    zoneId = (await executeCommand(manager, defineZone, { name: "Ground Floor" })).id;
+    zoneId = (await executeCommand(manager, defineZone, { locationId, name: "Ground Floor" })).id;
     tableId = (
       await executeCommand(manager, defineTable, { zoneId, label: "T-12", seats: 4 })
     ).id;

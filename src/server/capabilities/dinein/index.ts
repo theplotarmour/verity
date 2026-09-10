@@ -15,6 +15,25 @@ import { notify } from "@/server/platform/notification";
 import { resolveConfig } from "@/server/platform/capability";
 import { withTenant, type TenantScopedClient } from "@/server/platform/tenancy";
 import { effectiveTimeZone } from "@/server/platform/temporal";
+import { assertOutletInScope, reachableOutletIds } from "./scope";
+import type { ActorContext as DineinActor } from "@/server/platform/command";
+
+/**
+ * The outlet ids a query should read: the requested one, narrowed to scope
+ * (empty if outside it), or every outlet the actor can reach when none is
+ * requested. Shared by every location-scoped dinein query so "ask for an
+ * outlet you cannot reach" behaves identically everywhere: an empty result,
+ * not a thrown error, because these are polled dashboards and reports.
+ */
+async function scopedLocationIds(
+  tx: TenantScopedClient,
+  actor: DineinActor,
+  entity: string,
+  requested: string | undefined,
+): Promise<string[]> {
+  const reachable = await reachableOutletIds(tx, actor, entity, "Read");
+  return requested ? reachable.filter((id) => id === requested) : reachable;
+}
 
 /**
  * CAPABILITY: Dine-in — `verity.capability.dinein`
@@ -255,21 +274,32 @@ export const createMenuVariant: CommandDefinition<
 /* ================================= floor ================================== */
 
 export const defineZone: CommandDefinition<
-  { name: string; floorLabel?: string; sortOrder?: number },
+  { locationId: string; name: string; floorLabel?: string; sortOrder?: number },
   { id: string }
 > = {
   key: "verity.dinein.define_zone",
   entity: ENTITY_ZONE,
   verb: "Create",
   input: z.object({
+    locationId: z.string().uuid(),
     name: z.string().min(1).max(120),
     floorLabel: z.string().max(60).optional(),
     sortOrder: z.number().int().min(0).optional(),
   }),
+  preconditions: async (ctx, input) => {
+    const location = await ctx.tx.location.findUnique({ where: { id: input.locationId } });
+    if (!location) throw new ValidationError("E_VALIDATION: outlet not found");
+    await assertOutletInScope(ctx.tx, ctx.actor, ENTITY_ZONE, "Create", input.locationId);
+    const clash = await ctx.tx.diningZone.findFirst({
+      where: { locationId: input.locationId, name: input.name },
+    });
+    if (clash) throw new ValidationError("E_VALIDATION: a zone with that name already exists at this outlet");
+  },
   handler: async (ctx, input) => {
     const zone = await ctx.tx.diningZone.create({
       data: {
         tenantId: ctx.actor.tenantId,
+        locationId: input.locationId,
         name: input.name,
         floorLabel: input.floorLabel ?? null,
         sortOrder: input.sortOrder ?? 0,
@@ -300,14 +330,19 @@ export const defineTable: CommandDefinition<
   preconditions: async (ctx, input) => {
     const zone = await ctx.tx.diningZone.findUnique({ where: { id: input.zoneId } });
     if (!zone) throw new ValidationError("E_VALIDATION: zone not found");
-    const clash = await ctx.tx.diningTable.findFirst({ where: { label: input.label } });
-    if (clash) throw new ValidationError("E_VALIDATION: a table with that label already exists");
+    await assertOutletInScope(ctx.tx, ctx.actor, ENTITY_TABLE, "Create", zone.locationId);
+    const clash = await ctx.tx.diningTable.findFirst({
+      where: { locationId: zone.locationId, label: input.label },
+    });
+    if (clash) throw new ValidationError("E_VALIDATION: a table with that label already exists at this outlet");
   },
   handler: async (ctx, input) => {
+    const zone = await ctx.tx.diningZone.findUniqueOrThrow({ where: { id: input.zoneId } });
     const table = await ctx.tx.diningTable.create({
       data: {
         tenantId: ctx.actor.tenantId,
         zoneId: input.zoneId,
+        locationId: zone.locationId,
         label: input.label,
         seats: input.seats,
         shape: input.shape ?? null,
@@ -410,6 +445,7 @@ export const createOrder: CommandDefinition<
   preconditions: async (ctx, input) => {
     const table = await ctx.tx.diningTable.findUnique({ where: { id: input.tableId } });
     if (!table) throw new ValidationError("E_VALIDATION: table not found");
+    await assertOutletInScope(ctx.tx, ctx.actor, ENTITY_ORDER, "Create", table.locationId);
     if (table.state !== "occupied") {
       throw new ValidationError("E_VALIDATION: seat the guests first — the table is not occupied");
     }
@@ -422,10 +458,12 @@ export const createOrder: CommandDefinition<
     if (open) throw new ValidationError("E_VALIDATION: that table already has an open order");
   },
   handler: async (ctx, input) => {
+    const table = await ctx.tx.diningTable.findUniqueOrThrow({ where: { id: input.tableId } });
     const order = await ctx.tx.diningOrder.create({
       data: {
         tenantId: ctx.actor.tenantId,
         tableId: input.tableId,
+        locationId: table.locationId,
         // From the session. A waiter cannot record an order as someone else by
         // putting their id in the payload (PLA-TEN-006).
         takenByUserId: ctx.actor.userId,
@@ -852,6 +890,7 @@ export const generateBill: CommandDefinition<
   preconditions: async (ctx, input) => {
     const order = await ctx.tx.diningOrder.findUnique({ where: { id: input.orderId } });
     if (!order) throw new ValidationError("E_VALIDATION: order not found");
+    await assertOutletInScope(ctx.tx, ctx.actor, ENTITY_BILL, "Create", order.locationId);
     if (order.state !== "served") {
       throw new ValidationError("E_VALIDATION: the order is not served yet");
     }
@@ -883,10 +922,12 @@ export const generateBill: CommandDefinition<
       sgstRateBp,
     });
 
+    const orderForBill = await ctx.tx.diningOrder.findUniqueOrThrow({ where: { id: input.orderId } });
     const bill = await ctx.tx.bill.create({
       data: {
         tenantId: ctx.actor.tenantId,
         orderId: input.orderId,
+        locationId: orderForBill.locationId,
         subtotalMinor,
         discountMinor: 0,
         // The rate is stored beside the amount: a reprint a year from now must
@@ -1193,13 +1234,17 @@ export type FloorTable = {
 };
 
 /** The floor map feed: every table, where it sits, and what it is doing. */
-export const listFloor: QueryDefinition<Record<string, never>, FloorTable[]> = {
+export const listFloor: QueryDefinition<{ locationId?: string }, FloorTable[]> = {
   key: "verity.dinein.list_floor",
   entity: ENTITY_TABLE,
-  input: z.object({}),
-  handler: async (ctx) => {
+  input: z.object({ locationId: z.string().uuid().optional() }),
+  handler: async (ctx, input) => {
+    const locationIds = await scopedLocationIds(ctx.tx, ctx.actor, ENTITY_TABLE, input.locationId);
     const tables = await ctx.tx.diningTable.findMany({
-      where: { state: { not: "retired" } },
+      where: {
+        state: { not: "retired" },
+        locationId: { in: locationIds },
+      },
       orderBy: [{ zone: { sortOrder: "asc" } }, { label: "asc" }],
       include: {
         zone: { select: { id: true, name: true } },
@@ -1261,6 +1306,7 @@ export const getOrderDetail: QueryDefinition<{ orderId: string }, OrderDetail | 
       include: { table: { select: { id: true, label: true } }, lines: { orderBy: { createdAt: "asc" } } },
     });
     if (!order) return null;
+    await assertOutletInScope(ctx.tx, ctx.actor, ENTITY_ORDER, "Read", order.locationId);
 
     const lines = order.lines.map((line) => ({
       id: line.id,
@@ -1312,13 +1358,17 @@ export type KitchenTicket = {
  * contract is capability code and unambiguous, so it exists; the surface waits
  * for the owner.
  */
-export const kitchenQueue: QueryDefinition<Record<string, never>, KitchenTicket[]> = {
+export const kitchenQueue: QueryDefinition<{ locationId?: string }, KitchenTicket[]> = {
   key: "verity.dinein.kitchen_queue",
   entity: ENTITY_ORDER_LINE,
-  input: z.object({}),
-  handler: async (ctx) => {
+  input: z.object({ locationId: z.string().uuid().optional() }),
+  handler: async (ctx, input) => {
+    const locationIds = await scopedLocationIds(ctx.tx, ctx.actor, ENTITY_ORDER_LINE, input.locationId);
     const lines = await ctx.tx.orderLine.findMany({
-      where: { state: { in: ["queued", "preparing", "ready"] } },
+      where: {
+        state: { in: ["queued", "preparing", "ready"] },
+        order: { is: { locationId: { in: locationIds } } },
+      },
       orderBy: { createdAt: "asc" },
       include: {
         order: { include: { table: { select: { label: true } } } },
@@ -1397,6 +1447,7 @@ export const getBillDetail: QueryDefinition<{ billId: string }, BillDetail | nul
       },
     });
     if (!bill) return null;
+    await assertOutletInScope(ctx.tx, ctx.actor, ENTITY_BILL, "Read", bill.locationId);
 
     const paidMinor = bill.payments.reduce((sum, payment) => sum + payment.amountMinor, 0);
 
@@ -1432,15 +1483,16 @@ export const getBillDetail: QueryDefinition<{ billId: string }, BillDetail | nul
 };
 
 export const listOpenBills: QueryDefinition<
-  Record<string, never>,
+  { locationId?: string },
   Array<{ id: string; tableLabel: string; totalMinor: number; paidMinor: number }>
 > = {
   key: "verity.dinein.list_open_bills",
   entity: ENTITY_BILL,
-  input: z.object({}),
-  handler: async (ctx) => {
+  input: z.object({ locationId: z.string().uuid().optional() }),
+  handler: async (ctx, input) => {
+    const locationIds = await scopedLocationIds(ctx.tx, ctx.actor, ENTITY_BILL, input.locationId);
     const bills = await ctx.tx.bill.findMany({
-      where: { state: "open" },
+      where: { state: "open", locationId: { in: locationIds } },
       orderBy: { createdAt: "asc" },
       include: {
         payments: { select: { amountMinor: true } },
@@ -1500,17 +1552,25 @@ export async function serviceDayRange(
   return { from: rows.from, to: rows.to, day: chosen, timeZone };
 }
 
-export const salesSummary: QueryDefinition<{ day?: string }, SalesSummary & { day: string }> = {
+export const salesSummary: QueryDefinition<
+  { day?: string; locationId?: string },
+  SalesSummary & { day: string }
+> = {
   key: "verity.dinein.sales_summary",
   entity: ENTITY_BILL,
-  input: z.object({ day: z.string().optional() }),
+  input: z.object({ day: z.string().optional(), locationId: z.string().uuid().optional() }),
   handler: async (ctx, input) => {
     const range = await serviceDayRange(ctx.tx, ctx.actor.organizationId, input.day);
     const from = range.from;
     const to = range.to;
+    const locationIds = await scopedLocationIds(ctx.tx, ctx.actor, ENTITY_BILL, input.locationId);
 
     const bills = await ctx.tx.bill.findMany({
-      where: { state: "settled", settledAt: { gte: from, lte: to } },
+      where: {
+        state: "settled",
+        settledAt: { gte: from, lte: to },
+        locationId: { in: locationIds },
+      },
       include: {
         payments: true,
         order: { include: { lines: { where: { state: { not: "voided" } } } } },
