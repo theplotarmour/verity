@@ -156,6 +156,8 @@ model Tenant {
   loyaltyPointEntries LoyaltyPointEntry[]
   coupons            Coupon[]
   complaints         Complaint[]
+  attendanceRecords  AttendanceRecord[]
+  shifts             Shift[]
 
   // Capability: HR (Task 78). Back-relations only, as above.
   hrDepartments       HrDepartment[]
@@ -1160,6 +1162,7 @@ model Location {
   bills        Bill[]
   customers    Customer[]
   complaints   Complaint[]
+  shifts       Shift[]
 
   @@unique([tenantId, id], name: "location_tenant_scoped_id")
   @@index([tenantId, organizationId])
@@ -3894,6 +3897,67 @@ model Complaint {
 }
 
 // ===========================================================================
+// CAPABILITY: Attendance (Colonel Kebabz Phase 3, lean V1) — PRD §39-40, 42:
+// Attendance, Shift Management, Payroll Inputs.
+//
+// A sibling to `hr`, not a fork of it — Task 78's own header comment
+// explicitly scopes `hr` to "people operations before payroll" and excludes
+// attendance/shifts/payroll. Payroll inputs (§42) are derived at query time
+// from AttendanceRecord (days worked, hours, late/absent/leave counts) —
+// never a stored payroll entity; Verity supplies payroll-READY data, not a
+// payroll engine, per the PRD's own framing. Lean V1 drops: overtime as a
+// distinct tracked figure, late deductions, incentives, advances, and
+// shift-gap detection (needs a shift-template concept nothing asks for
+// yet) — all per the 2026-09-10 scope correction.
+// ===========================================================================
+
+/// One row per employee per day. `status` is a closed set owned by the
+/// capability (`ATTENDANCE_STATUSES`). Upserted by (tenantId, employeeId,
+/// date) — a second check-in the same day corrects the same row, it does
+/// not create a duplicate attendance fact for that day.
+model AttendanceRecord {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  employeeId String    @map("employee_id") @db.Uuid
+  date       DateTime  @db.Date
+  status     String
+  checkInAt  DateTime? @map("check_in_at")
+  checkOutAt DateTime? @map("check_out_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  version    Int       @default(1)
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee HrEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, employeeId, date])
+  @@map("attendance_record")
+}
+
+/// A shift assignment — free-text `label` (Morning/Evening/Night are the
+/// client's own vocabulary, not a platform enum) with plain HH:MM start/end.
+model Shift {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  locationId String   @map("location_id") @db.Uuid
+  employeeId String   @map("employee_id") @db.Uuid
+  date       DateTime @db.Date
+  label      String
+  startTime  String   @map("start_time")
+  endTime    String   @map("end_time")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  version    Int      @default(1)
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location   @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  employee HrEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, locationId, date])
+  @@map("shift")
+}
+
+// ===========================================================================
 // CAPABILITY: HR (Task 78) — MVP scope only.
 //
 // "People operations before payroll" — Task 78's own framing. An Employee is
@@ -3940,10 +4004,12 @@ model HrEmployee {
   version       Int       @default(1)
   customFields  Json      @default("{}") @map("custom_fields")
 
-  tenant     Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  party      Party                @relation(fields: [partyId], references: [id], onDelete: Restrict)
-  department HrDepartment?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  leaveApps  HrLeaveApplication[]
+  tenant            Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  party             Party                @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  department        HrDepartment?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  leaveApps         HrLeaveApplication[]
+  attendanceRecords AttendanceRecord[]
+  shifts            Shift[]
 
   @@unique([tenantId, partyId])
   @@map("hr_employee")

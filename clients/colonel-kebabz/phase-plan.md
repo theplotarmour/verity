@@ -153,41 +153,66 @@ explicitly deferred: `preferredChannel`, `anniversary` fields (plain
 columns, trivial to add when campaigns/birthday-automation exist);
 "favourite items" derivation (real per-item aggregation, no consumer yet).
 
-**Not yet designed (separate future cycles, each its own brainstorm):**
-Loyalty points/tiers/rewards (§31), Coupons/Offers (§32), Marketing
-Calendar (§34, internal-only, no external dependency). **Blocked on a
-product-owner decision, not buildable yet:** Marketing Campaigns (§33 —
-needs a WhatsApp/SMS/email provider choice + credentials), Review
-aggregation (§35 — needs Google/delivery-platform API access). Complaint
-Management (§36) and Service Recovery (§37) have no blocker, just not
-designed yet — next in line after Loyalty/Coupons.
+**SHIPPED (2026-09-10) — Loyalty** (§31, points only — see Phase 2's own
+entry above, and `src/server/capabilities/loyalty/`).
 
-## Phase 2 — CRM & Loyalty (new-build)
+**SHIPPED (2026-09-10) — Coupons** (§32, percent/flat codes only — see
+`src/server/capabilities/coupon/`).
 
-No existing capability covers guest CRM. `dinein.DiningOrder` deliberately
-carries only `customerName`/`customerPhone` (ADR-001/ADR-007: a walk-in diner
-is not a Party). Customer 360, segmentation, loyalty points, coupons,
-campaigns, reviews, and complaints (§28–37) are all new. This needs its own
-brainstorming pass before any code — in particular, whether a guest who
-returns often ever becomes a Party (and if so, under what identity-resolution
-rule, given ADR-007 already governs Party de-duplication).
+**SHIPPED (2026-09-10) — Complaints + Service Recovery** (§36-37 — see
+`src/server/capabilities/complaint/`). `approval` was NOT wired in this
+cycle — no compensation threshold has been decided; still reusable once one
+is.
 
-`approval` is reusable for complaint-resolution / service-recovery sign-off
-(§37) once the Complaint entity exists.
+## Phase 2 status: lean-V1 core SHIPPED (2026-09-10)
+
+Customer/360, Loyalty, Coupons, Complaints/Service Recovery all built and
+tested (`capability-crm.test.ts`, `capability-coupon.test.ts`,
+`capability-complaint.test.ts`). Not built, by explicit choice:
+
+- Marketing Calendar (§34) — a plain list of dates already knowable from
+  existing data (Coupon.expiresAt, complaint dates); no consumer asking for
+  a dedicated calendar view yet, so not built ahead of that need.
+- Marketing Campaigns (§33) — **blocked on a product-owner decision**: which
+  WhatsApp/SMS/email provider, and its credentials.
+- Review aggregation (§35) — **blocked on a product-owner decision**: Google
+  Reviews / delivery-platform API access.
+- Loyalty tiers, rewards catalogue, birthday/anniversary automation, visit
+  rewards — dropped per the lean-scope correction; points-only ledger is V1.
+- Coupon types beyond Percent/Flat (Buy-X-Get-Y, item/category-scoped,
+  first-order, returning-customer, outlet-specific, time-specific) — same.
 
 ## Phase 3 — People & Franchise
 
 **Reuse:** `hr` for employees, departments, leave (§38, §41) — activate as-is.
 
-**New-build:**
-- Attendance, shifts, payroll inputs (§39–40, §42) — explicitly out of
-  `hr`'s stated scope per its own header comment. Smallest correct shape:
-  a sibling capability, not an `hr` fork.
-- Franchise partner, agreement, territory, royalty, compliance, audits
-  (§50–53) — no existing capability. `approval` reusable for compliance
-  sign-off chains; `evidence` reusable for audit photos; `billing`
-  (meter/periodic invoicing of a Party) is worth evaluating against a
-  purpose-built royalty calculator before committing either way.
+**SHIPPED (2026-09-10) — Attendance + Shifts + Payroll Inputs** (§39-40,
+42). New `attendance` capability, sibling to `hr` not a fork (Task 78's own
+header comment excludes this scope). `AttendanceRecord` upserted per
+employee per day (a second check-in the same day corrects the row, no
+duplicate). Payroll inputs (days worked, hours from check-in/out, late/
+absent/leave counts) computed at query time — never a stored payroll
+entity, matching every other derived-data convention this project uses.
+Dropped this cycle: overtime as a distinct figure, late deductions,
+incentives, advances, shift-gap detection (needs a shift-template concept
+nothing asks for yet). Tested: `src/test/capability-attendance.test.ts`.
+
+**NOT BUILT — Franchise** (§50-53: partner, agreement, territory, royalty,
+compliance, audits). Deliberately not building this: Colonel Kebabz's three
+outlets are centrally owned (Phase 0's own bootstrap — one tenant, one
+owner, child Organizations per outlet), not separate franchisee
+relationships. There is no real franchise partner to model yet. Building
+royalty/territory/compliance infrastructure now would be exactly the
+"advanced workflow with no consumer" the lean-scope correction warns
+against. Revisit if/when Colonel Kebabz actually franchises to a third
+party — `approval` (compliance sign-off) and `evidence` (audit photos) are
+still the right reuse call whenever that happens.
+
+## Phase 3 status: lean-V1 core SHIPPED (2026-09-10), Franchise deferred
+
+Phase 3's real, currently-needed scope (Attendance/Shifts/Payroll Inputs)
+is done. Franchise is explicitly deferred pending a real franchise
+relationship, not silently skipped.
 
 ## Phase 4 — Finance & Reconciliation
 
