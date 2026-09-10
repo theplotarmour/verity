@@ -151,6 +151,9 @@ model Tenant {
   recipes           Recipe[]
   recipeIngredients RecipeIngredient[]
 
+  // Capability: CRM (Colonel Kebabz Phase 2). Back-relations only.
+  customers Customer[]
+
   // Capability: HR (Task 78). Back-relations only, as above.
   hrDepartments       HrDepartment[]
   hrEmployees         HrEmployee[]
@@ -1152,6 +1155,7 @@ model Location {
   diningTables DiningTable[]
   diningOrders DiningOrder[]
   bills        Bill[]
+  customers    Customer[]
 
   @@unique([tenantId, id], name: "location_tenant_scoped_id")
   @@index([tenantId, organizationId])
@@ -3755,6 +3759,42 @@ model RecipeIngredient {
   @@unique([tenantId, recipeId, inventoryItemId])
   @@unique([tenantId, id], name: "recipe_ingredient_tenant_scoped_id")
   @@map("recipe_ingredient")
+}
+
+// ===========================================================================
+// CAPABILITY: CRM (Colonel Kebabz Phase 2, lean V1) — PRD §28-30: Customer
+// CRM, Customer 360, Segmentation.
+//
+// A walk-in diner is not a Party (ADR-001, ADR-007) — Customer is a new,
+// tenant-scoped, capability-private identity concept matched by phone
+// number, never the platform's Party. Spend/visit/AOV/last-order are
+// deliberately NOT columns here — computed at query time from
+// DiningOrder/Bill joined on phone, so there is one ledger for that data,
+// not a cached copy that can drift. Segmentation (VIP/Frequent/At
+// Risk/...) is query filters over those same derived numbers, not a stored
+// segment table. Lean V1 scope decision 2026-09-10: no loyalty, coupons,
+// campaigns, reviews, or complaints in this capability — each is its own
+// later slice.
+// ===========================================================================
+
+model Customer {
+  id                  String    @id @default(uuid()) @db.Uuid
+  tenantId            String    @map("tenant_id") @db.Uuid
+  phone               String
+  name                String?
+  email               String?
+  birthday            DateTime? @db.Date
+  marketingConsent    Boolean   @default(false) @map("marketing_consent")
+  preferredLocationId String?   @map("preferred_location_id") @db.Uuid
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  version             Int       @default(1)
+
+  tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  preferredLocation Location? @relation(fields: [tenantId, preferredLocationId], references: [tenantId, id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@unique([tenantId, phone])
+  @@map("customer")
 }
 
 // ===========================================================================

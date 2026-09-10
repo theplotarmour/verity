@@ -120,6 +120,48 @@ Phase 1 follow-ups (§16 variance report, GRN→inventory routing, the
 pre-existing unrelated migration drift) are tracked above as explicit
 non-blocking items, not silently deferred.
 
+## Scope correction (2026-09-10, product owner)
+
+Colonel Kebabz does not need the PRD's full ERP depth right now — build the
+minimum modules/workflows the client's team actually needs, lean and
+functional, extensible later rather than deep now. Applies to every
+remaining phase below: skip derived analytics, advanced workflows,
+forecasting, and speculative config until there's a real trigger for them.
+Recorded as a standing memory (`feedback_lean_v1_scope`) so it isn't
+re-litigated per phase.
+
+## Phase 2 — CRM & Loyalty (in progress, lean V1)
+
+**SHIPPED (2026-09-10) — Customer/360** (§28-30: Customer CRM, Customer
+360, Segmentation). New `crm` capability, `Customer` as a new tenant-scoped
+identity — deliberately NOT a Party (ADR-001/ADR-007 sidestepped entirely,
+not extended). Matched by phone, shared across outlets. Auto-upserted from
+`dinein.generateBill` (same posture as recipe's consumption hook: a plain
+function call under an existing authorized command, not a second command).
+Spend/visits/AOV/last-order computed live from settled Bills — never
+cached. Segmentation is query filters (`minSpendMinor`/`minVisits`/
+`daysSinceLastOrder`/`locationId`), not a stored segment table or rules
+engine. Design: `docs/superpowers/specs/2026-09-10-colonel-kebabz-customer-
+360-design.md`. Tested: `src/test/capability-crm.test.ts` (two visits, one
+Customer, correct aggregates, segment filter). Backfill script for
+Colonel Kebabz's pre-existing order history:
+`prisma/backfill-crm-customers.ts` (idempotent, not yet run against the
+live tenant — run when ready).
+
+**Dropped from V1 per the lean-scope correction** — not silently missing,
+explicitly deferred: `preferredChannel`, `anniversary` fields (plain
+columns, trivial to add when campaigns/birthday-automation exist);
+"favourite items" derivation (real per-item aggregation, no consumer yet).
+
+**Not yet designed (separate future cycles, each its own brainstorm):**
+Loyalty points/tiers/rewards (§31), Coupons/Offers (§32), Marketing
+Calendar (§34, internal-only, no external dependency). **Blocked on a
+product-owner decision, not buildable yet:** Marketing Campaigns (§33 —
+needs a WhatsApp/SMS/email provider choice + credentials), Review
+aggregation (§35 — needs Google/delivery-platform API access). Complaint
+Management (§36) and Service Recovery (§37) have no blocker, just not
+designed yet — next in line after Loyalty/Coupons.
+
 ## Phase 2 — CRM & Loyalty (new-build)
 
 No existing capability covers guest CRM. `dinein.DiningOrder` deliberately

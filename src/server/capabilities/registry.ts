@@ -12,6 +12,7 @@ import { registerInventoryCapability } from "./inventory";
 import { registerHrCapability } from "./hr";
 import { registerBillingCapability } from "./billing";
 import { registerRecipeCapability } from "./recipe";
+import { registerCrmCapability } from "./crm";
 import { installStorage } from "@/server/storage";
 
 /**
@@ -48,4 +49,5 @@ export function installCapabilities(): void {
   registerHrCapability();
   registerBillingCapability();
   registerRecipeCapability();
+  registerCrmCapability();
 }

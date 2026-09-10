@@ -16,6 +16,7 @@ import { resolveConfig } from "@/server/platform/capability";
 import { withTenant, type TenantScopedClient } from "@/server/platform/tenancy";
 import { effectiveTimeZone } from "@/server/platform/temporal";
 import { postConsumptionForOrder } from "@/server/capabilities/recipe";
+import { upsertCustomerForOrder } from "@/server/capabilities/crm";
 import { assertOutletInScope, reachableOutletIds } from "./scope";
 import type { ActorContext as DineinActor } from "@/server/platform/command";
 
@@ -955,6 +956,11 @@ export const generateBill: CommandDefinition<
       where: { id: order.id },
       data: { state: "billed", version: { increment: 1 } },
     });
+
+    // A phone-bearing guest gets a Customer record the moment they're
+    // billed (PRD §28) — same posture as recipe's consumption hook: one
+    // authorized command, a natural side effect, no second permission gate.
+    await upsertCustomerForOrder(ctx, order.id);
 
     return {
       result: { id: bill.id, totalMinor: bill.totalMinor },
