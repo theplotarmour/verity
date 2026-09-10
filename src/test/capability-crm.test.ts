@@ -45,6 +45,13 @@ import {
   listCustomers,
   registerCrmCapability,
 } from "@/server/capabilities/crm";
+import {
+  ENTITY_LOYALTY_ENTRY,
+  LOYALTY_CAPABILITY,
+  getLoyaltyBalance,
+  redeemPoints,
+  registerLoyaltyCapability,
+} from "@/server/capabilities/loyalty";
 
 /**
  * CAPABILITY: CRM — a bill for a phone-bearing guest creates a Customer,
@@ -86,6 +93,7 @@ describeDb("capability: CRM", () => {
     registerLocationCapability();
     registerDineinCapability();
     registerCrmCapability();
+    registerLoyaltyCapability();
 
     await withTenant(tenantId, async (tx) => {
       await tx.tenant.create({
@@ -94,6 +102,7 @@ describeDb("capability: CRM", () => {
       await activateCapability(tx, tenantId, LOCATION_CAPABILITY);
       await activateCapability(tx, tenantId, DINEIN_CAPABILITY);
       await activateCapability(tx, tenantId, CRM_CAPABILITY);
+      await activateCapability(tx, tenantId, LOYALTY_CAPABILITY);
 
       organizationId = (await tx.organization.create({ data: { tenantId, name: "Outlet 1" } })).id;
       locationId = (
@@ -115,6 +124,7 @@ describeDb("capability: CRM", () => {
         ENTITY_BILL,
         ENTITY_PAYMENT,
         ENTITY_CUSTOMER,
+        ENTITY_LOYALTY_ENTRY,
       ];
       await tx.permission.createMany({
         data: everything.flatMap((entity) =>
@@ -227,5 +237,23 @@ describeDb("capability: CRM", () => {
 
     const filtered = await executeQuery(manager, listCustomers, { minVisits: 3 });
     expect(filtered.some((c) => c.phone === guestPhone)).toBe(false);
+
+    // Loyalty: default rate is 5 points per Rs 100 (10,000 paise) spent,
+    // earned automatically on settle for each of the two visits above.
+    const expectedPoints =
+      Math.floor((firstTotal / 10_000) * 5) + Math.floor((secondTotal / 10_000) * 5);
+    const balance = await executeQuery(manager, getLoyaltyBalance, { customerId: customer!.id });
+    expect(balance.balance).toBe(expectedPoints);
+
+    const redeemed = await executeCommand(manager, redeemPoints, {
+      customerId: customer!.id,
+      points: expectedPoints,
+    });
+    expect(redeemed.valuePaise).toBe(expectedPoints * 20);
+    expect(redeemed.remainingBalance).toBe(0);
+
+    await expect(
+      executeCommand(manager, redeemPoints, { customerId: customer!.id, points: 1 }),
+    ).rejects.toThrow(/only 0 points available/);
   });
 });

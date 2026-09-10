@@ -17,6 +17,7 @@ import { withTenant, type TenantScopedClient } from "@/server/platform/tenancy";
 import { effectiveTimeZone } from "@/server/platform/temporal";
 import { postConsumptionForOrder } from "@/server/capabilities/recipe";
 import { upsertCustomerForOrder } from "@/server/capabilities/crm";
+import { awardPointsForOrder } from "@/server/capabilities/loyalty";
 import { assertOutletInScope, reachableOutletIds } from "./scope";
 import type { ActorContext as DineinActor } from "@/server/platform/command";
 
@@ -1153,6 +1154,9 @@ export const settleBill: CommandDefinition<
     // see recipe/index.ts's module doc for why this is a plain function call
     // under settle_bill's own authorize(), not a second registered command.
     await postConsumptionForOrder(ctx, order.id);
+
+    // Loyalty points earned on final (post-discount) spend — same posture.
+    await awardPointsForOrder(ctx, order.id, bill.id);
 
     const table = await ctx.tx.diningTable.findUniqueOrThrow({ where: { id: order.tableId } });
     const tableMove = await transition(ctx, {

@@ -152,7 +152,8 @@ model Tenant {
   recipeIngredients RecipeIngredient[]
 
   // Capability: CRM (Colonel Kebabz Phase 2). Back-relations only.
-  customers Customer[]
+  customers          Customer[]
+  loyaltyPointEntries LoyaltyPointEntry[]
 
   // Capability: HR (Task 78). Back-relations only, as above.
   hrDepartments       HrDepartment[]
@@ -3790,11 +3791,34 @@ model Customer {
   updatedAt           DateTime  @updatedAt @map("updated_at")
   version             Int       @default(1)
 
-  tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  preferredLocation Location? @relation(fields: [tenantId, preferredLocationId], references: [tenantId, id], onDelete: SetNull, onUpdate: NoAction)
+  tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  preferredLocation Location?           @relation(fields: [tenantId, preferredLocationId], references: [tenantId, id], onDelete: SetNull, onUpdate: NoAction)
+  loyaltyEntries    LoyaltyPointEntry[]
 
   @@unique([tenantId, phone])
   @@map("customer")
+}
+
+/// Append-only points ledger (PRD §31, lean V1: points only — no tiers,
+/// birthday/anniversary automation, or visit rewards, per the 2026-09-10
+/// scope correction). Positive = earned, negative = redeemed. Balance is
+/// SUM(points), never a stored running total — same ledger reasoning as
+/// InventoryStockMovement.
+model LoyaltyPointEntry {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  points     Int
+  /// Closed set owned by the capability: "earn" | "redeem" | "adjustment".
+  reason     String
+  billId     String?  @map("bill_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, customerId])
+  @@map("loyalty_point_entry")
 }
 
 // ===========================================================================
