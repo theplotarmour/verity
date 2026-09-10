@@ -14,6 +14,7 @@ import { registerBillingCapability } from "./billing";
 import { registerRecipeCapability } from "./recipe";
 import { registerCrmCapability } from "./crm";
 import { registerLoyaltyCapability } from "./loyalty";
+import { registerCouponCapability } from "./coupon";
 import { installStorage } from "@/server/storage";
 
 /**
@@ -52,4 +53,5 @@ export function installCapabilities(): void {
   registerRecipeCapability();
   registerCrmCapability();
   registerLoyaltyCapability();
+  registerCouponCapability();
 }

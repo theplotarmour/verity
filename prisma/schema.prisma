@@ -154,6 +154,7 @@ model Tenant {
   // Capability: CRM (Colonel Kebabz Phase 2). Back-relations only.
   customers          Customer[]
   loyaltyPointEntries LoyaltyPointEntry[]
+  coupons            Coupon[]
 
   // Capability: HR (Task 78). Back-relations only, as above.
   hrDepartments       HrDepartment[]
@@ -3819,6 +3820,33 @@ model LoyaltyPointEntry {
 
   @@index([tenantId, customerId])
   @@map("loyalty_point_entry")
+}
+
+/// PRD §32, lean V1: percent/flat discount codes only — no Buy-X-Get-Y,
+/// item/category-scoped, first-order, returning-customer, outlet-specific,
+/// or time-specific offer types (all deferred per the 2026-09-10 scope
+/// correction). `value` is basis points for Percent, paise for Flat — same
+/// integer-money convention as everywhere else in this schema.
+model Coupon {
+  id                 String    @id @default(uuid()) @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  code               String
+  /// Closed set owned by the capability: "Percent" | "Flat".
+  discountType       String    @map("discount_type")
+  value              Int
+  minOrderValueMinor Int?      @map("min_order_value_minor")
+  usageLimit         Int?      @map("usage_limit")
+  usedCount          Int       @default(0) @map("used_count")
+  active             Boolean   @default(true)
+  expiresAt          DateTime? @map("expires_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  version            Int       @default(1)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, code])
+  @@map("coupon")
 }
 
 // ===========================================================================
