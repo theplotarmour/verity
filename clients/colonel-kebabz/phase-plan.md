@@ -14,8 +14,9 @@ exists instead of forking. Companion to
 |---|---|---|---|
 | `dinein` | yes | Menu, floor, order→kitchen→bill→pay, GST, day summary | Built for exactly this — now multi-outlet |
 | `location` | yes | Place/Address/Location/Geofence, Location-scoped permission axis | Outlet backbone — already in use |
-| `trading` | **only via `plywood`**, not standalone | Vendors, purchase/sales orders, GRN, invoices, payments, GST, stock ledger | Procurement (§21–27) — generic, godown-terminology not restaurant-terminology |
-| `inventory` | yes | Item groups, items, Location-scoped stock balance, append-only movement ledger | Stock/ledger (§17–20) — already Location-scoped like `dinein` now is |
+| `trading` | yes (standalone since 2026-09-10) | Vendors, purchase/sales orders, GRN, invoices, payments, GST, stock ledger | Procurement (§21–27) — generic, godown-terminology not restaurant-terminology |
+| `inventory` | yes | Item groups, items, Location-scoped stock balance + cost, append-only movement ledger | Stock/ledger (§17–20) — already Location-scoped like `dinein` now is |
+| `recipe` | yes (new, 2026-09-10) | Recipe/BOM per MenuItem, food-cost query, posts theoretical consumption on order settlement | Recipe Management / BOM / Food Cost (§14–16) |
 | `hr` | yes | Departments, employees (wraps Party), leave types/applications | Staff + leave (§38, §41) only — no attendance/shifts/payroll |
 | `approval` | yes | Generic role-based sequential approval chains on any entity | Approval Engine (§73) directly — expense/PO/discount/refund thresholds |
 | `evidence` | yes | Immutable photo/GPS/signature capture tied to a geofence | Wastage photos (§20), audit photos (§53) — zero fork needed |
@@ -34,27 +35,90 @@ detail. **Known gaps carried forward from that slice:**
 
 ## Phase 1 — Procurement & Inventory (mostly reuse)
 
-**Reuse, activate for Colonel Kebabz:**
-- `inventory` — ingredients as items, Location-scoped stock balance and
-  movement ledger. Covers §17–19 (Inventory, Stock Ledger, Stock Count).
-- `trading` — needs to be **registered standalone** (currently reachable only
-  through `registerPlywoodCapability()`); covers §21–26 (Purchase Requests,
-  POs, GRN, Vendor Management, Price History). This is an
-  IMPLEMENTATION DECISION REQUIRED item: confirm `trading` truly has no
-  plywood-specific residue before activating it for a restaurant tenant —
-  needs a read of what ADR-018's extraction actually left behind.
+**DECIDED (2026-09-10) — Trading:** `trading` audited. Zero plywood import
+dependency exists in `src/server/capabilities/trading/*` — every `plywood`
+string match is a doc comment, not code coupling. Direction runs the other
+way: `plywood/index.ts` imports and calls `registerTradingCapability()` as
+composition. `trading` is already a clean, standalone-registerable
+capability; the only gap is `registry.ts` calling
+`registerPlywoodCapability()` but not `registerTradingCapability()` at
+top level. Fix is a registry wiring addition, not an extraction — no fork,
+no thin restaurant-specific layer needed. Covers §21–26 (Purchase Requests,
+POs, GRN, Vendor Management, Price History) as-is; restaurant terminology
+(vendor/GRN language vs. godown language) is a display-label concern, not
+a schema fork.
 
-**New-build (real gaps, no existing capability covers these):**
-- **Recipe-driven theoretical consumption** (§14–16: Recipe, BOM, Food Cost
-  variance). `dinein.MenuItem` has no ingredient linkage today. This is the
-  single most architecturally significant piece of Phase 1 — it's the
-  `ORDER COMPLETED → Inventory Consumption` event chain the PRD's own §128
-  names as the difference between an ERP and a dashboard. Needs its own
-  design pass: does the recipe live in `dinein` (menu owns it) or a new
-  capability that references both `dinein.MenuItem` and `inventory.Item`?
-- **Wastage** (§20) as its own reason-coded record — `inventory`'s
-  `Adjustment` movement type is the mechanism; wastage reason + `evidence`
-  photo attachment is additive, not a fork.
+**DECIDED (2026-09-10) — Recipe/BOM placement:** Recipe/BOM lives in the
+Inventory/Procurement domain, not `dinein`. `MenuItem` (what's sold) stays
+in `dinein`; `Recipe`/`BOM` (what's consumed to produce it) is new, owned
+alongside `inventory.Item` (what's stocked), referencing `dinein.MenuItem`
+by id rather than the reverse. Chain: MenuItem → Recipe/BOM → Ingredient →
+Inventory → Stock Ledger. Consumption chain: Completed Order → Recipe/BOM →
+Theoretical Consumption → Inventory Ledger → Food Cost/Variance. This
+makes Recipe/BOM the load-bearing abstraction for food cost, wastage
+variance, forecasting, and AI procurement in later phases — do not let it
+drift into a `dinein`-owned concept.
+
+**SHIPPED (2026-09-10) — Recipe-driven theoretical consumption** (§14–16:
+Recipe, BOM, Food Cost). New `recipe` capability: `saveRecipe`/
+`setRecipeActive`/`getRecipeCost`, plus `postConsumptionForOrder` called
+from `dinein.settle_bill` — the `ORDER COMPLETED → Inventory Consumption`
+chain PRD §128 names. Tested end to end in
+`src/test/capability-recipe.test.ts` (recipe cost query + a full seat →
+order → serve → bill → settle flow asserting the correct ingredient
+quantity was debited from `inventory`'s ledger).
+
+**Follow-ups, not blocking, noted for later:**
+- Food cost % is only computable once `InventoryItem.avgUnitCostPaise` is
+  populated — no command currently threads a unit cost through
+  `inventory.recordStockMovement`'s Receipt path (the field exists on the
+  model; the command's input doesn't accept it yet). Needed before §16's
+  variance report is meaningful, not before Recipe/BOM itself. **SHIPPED
+  2026-09-10** — `recordStockMovement` now accepts `unitCostPaise` on a
+  Receipt and folds it into `InventoryItem.avgUnitCostPaise` as a
+  quantity-weighted moving average across every location. `getRecipeCost`
+  now returns real numbers (tested: 21.44% food cost on the fixture recipe).
+- §16's theoretical-vs-actual variance report itself (Opening + Purchases -
+  Closing vs. recipe-derived expected consumption) is not built — this
+  slice only posts the consumption side of that ledger.
+- Trading's own GRN command chain doesn't yet route ingredient receipts
+  into `inventory` (the ledger-ownership decision below) — still posts to
+  `trading`'s separate ledger. Needed before Colonel Kebabz can receive
+  ingredient stock through a real PO/GRN flow rather than the test's direct
+  `recordStockMovement` calls.
+- Migration-drift incident hit and resolved during this slice: a
+  pre-existing dead rolled-back row in `_prisma_migrations` for
+  `20260904180000_trading_capability_extraction` blocked `migrate dev`;
+  cleared via the product owner running a targeted `DELETE` in an
+  unrestricted session (per `verity-migration-safety`'s own incident
+  playbook). Separately, that same migration's file still doesn't fully
+  match live DB state — `prisma migrate diff` shows ~600 lines of pending
+  `plywood_*` → `trading_*` constraint renames and index changes never
+  applied. Untouched by this slice (isolated out of the hand-written
+  Recipe/BOM migration deliberately) but real, unresolved drift — worth its
+  own dedicated pass before it surprises a future `migrate dev`.
+- **DECIDED (2026-09-10) — ingredient ledger ownership:** `inventory` owns
+  quantity AND cost for ingredients (`InventoryItem.avgUnitCostPaise`,
+  `InventoryStockMovement.unitCostPaise`), extending Task 73's original
+  quantity-only scope. Procurement (GRN) and consumption (recipe) post to
+  the same ledger — not `trading`'s separate one — so there is one number
+  for stock and cost, not two that can drift.
+- **SHIPPED (2026-09-10) — Wastage** (§20). New `recordWastage` command in
+  `inventory`: posts an Adjustment movement plus a companion
+  `InventoryWastageRecord` (reason from PRD §20's own closed list, a
+  `valuePaise` snapshot computed from `avgUnitCostPaise` at record time,
+  notes, optional `evidenceId`). Append-only (ADR-009). Tested. Not built:
+  approval-if-required — no threshold has been decided (open decision, not
+  a silent gap).
+
+## Phase 1 status: SHIPPED (2026-09-10)
+
+Recipe/BOM, food cost, and wastage all built and tested
+(`src/test/capability-recipe.test.ts`, 3 passing tests covering cost query,
+order→consumption, and wastage). `trading` standalone-registered. Remaining
+Phase 1 follow-ups (§16 variance report, GRN→inventory routing, the
+pre-existing unrelated migration drift) are tracked above as explicit
+non-blocking items, not silently deferred.
 
 ## Phase 2 — CRM & Loyalty (new-build)
 
@@ -110,6 +174,10 @@ assistant (§60–67, §102–104). Lowest priority; PRD itself places this last
   food-cost, wastage-variance, and procurement-forecast feature depends on
   it existing first. It should be brainstormed before Phase 1's inventory/
   trading activation work, not after.
+- **Do not start Phase 2 until Phase 1's order → recipe → consumption →
+  inventory chain works end-to-end.** Later CRM/finance/intelligence layers
+  depend on reliable operational data from that chain; building on top of
+  it before it's proven risks compounding rework.
 - Phase 2 (CRM) and Phase 3 (People/Franchise) don't depend on each other and
   could run in either order once Phase 1 lands.
 - Phase 4 depends on Phase 1 (inventory cost) and Phase 3 (payroll inputs)

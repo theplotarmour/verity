@@ -159,7 +159,14 @@ export const listItems: QueryDefinition<
  * enforce, since this module does not know what a sales order is).
  */
 export const recordStockMovement: CommandDefinition<
-  { itemId: string; locationId: string; kind: MovementKind; qty: number; reference?: string },
+  {
+    itemId: string;
+    locationId: string;
+    kind: MovementKind;
+    qty: number;
+    reference?: string;
+    unitCostPaise?: number;
+  },
   { balanceId: string; qty: number }
 > = {
   key: "verity.inventory.record_stock_movement",
@@ -174,11 +181,20 @@ export const recordStockMovement: CommandDefinition<
     // returned-issue or a negative adjustment are both legitimate.
     qty: z.number().int().refine((n) => n !== 0, "quantity must not be zero"),
     reference: z.string().max(200).optional(),
+    // Only meaningful on a Receipt (a GRN posting the price paid). Folds into
+    // InventoryItem.avgUnitCostPaise as a quantity-weighted moving average —
+    // decision 2026-09-10 (Colonel Kebabz phase plan): one ingredient ledger
+    // for both quantity and cost, so a recipe's food-cost query has a real
+    // number to read.
+    unitCostPaise: z.number().int().min(0).optional(),
   }),
   preconditions: async (ctx, input) => {
     const item = await ctx.tx.inventoryItem.findUnique({ where: { id: input.itemId } });
     if (!item) throw new ValidationError("E_VALIDATION: item not found in this tenant");
     if (!item.active) throw new ValidationError("E_VALIDATION: item is deactivated");
+    if (input.unitCostPaise !== undefined && input.kind !== "Receipt") {
+      throw new ValidationError("E_VALIDATION: unitCostPaise only applies to a Receipt movement");
+    }
 
     const existing = await ctx.tx.inventoryStockBalance.findUnique({
       where: { tenantId_itemId_locationId: { tenantId: ctx.actor.tenantId, itemId: input.itemId, locationId: input.locationId } },
@@ -191,6 +207,10 @@ export const recordStockMovement: CommandDefinition<
     }
   },
   handler: async (ctx, input) => {
+    // Total on-hand across every location BEFORE this movement — the base
+    // the moving average weights against. Read before either write below.
+    const priorTotal = input.unitCostPaise === undefined ? 0 : await totalOnHand(ctx.tx, input.itemId);
+
     await ctx.tx.inventoryStockMovement.create({
       data: {
         tenantId: ctx.actor.tenantId,
@@ -199,6 +219,7 @@ export const recordStockMovement: CommandDefinition<
         kind: input.kind,
         qty: input.qty,
         reference: input.reference ?? null,
+        unitCostPaise: input.unitCostPaise ?? null,
         movedById: ctx.actor.userId,
       },
     });
@@ -211,6 +232,20 @@ export const recordStockMovement: CommandDefinition<
       update: { qty: { increment: input.qty } },
     });
 
+    if (input.unitCostPaise !== undefined) {
+      const item = await ctx.tx.inventoryItem.findUniqueOrThrow({ where: { id: input.itemId } });
+      const newAvg =
+        item.avgUnitCostPaise === null || priorTotal <= 0
+          ? input.unitCostPaise
+          : Math.round(
+              (item.avgUnitCostPaise * priorTotal + input.unitCostPaise * input.qty) / (priorTotal + input.qty),
+            );
+      await ctx.tx.inventoryItem.update({
+        where: { id: input.itemId },
+        data: { avgUnitCostPaise: newAvg },
+      });
+    }
+
     return {
       result: { balanceId: balance.id, qty: balance.qty },
       events: [
@@ -218,6 +253,123 @@ export const recordStockMovement: CommandDefinition<
           name: "verity.inventory.stock_moved",
           entityId: input.itemId,
           payload: { kind: input.kind, qty: input.qty, locationId: input.locationId },
+        },
+      ],
+    };
+  },
+};
+
+async function totalOnHand(
+  tx: import("@/server/platform/tenancy").TenantScopedClient,
+  itemId: string,
+): Promise<number> {
+  const agg = await tx.inventoryStockBalance.aggregate({ where: { itemId }, _sum: { qty: true } });
+  return agg._sum.qty ?? 0;
+}
+
+/* =================================== wastage =================================== */
+
+export const WASTAGE_REASONS = [
+  "Spoilage",
+  "Expired",
+  "Overproduction",
+  "Burnt",
+  "Damaged",
+  "Preparation waste",
+  "Customer return",
+  "Quality issue",
+  "Storage issue",
+  "Other",
+] as const;
+export type WastageReason = (typeof WASTAGE_REASONS)[number];
+
+/**
+ * PRD §20. Posts the stock-side effect (an Adjustment movement, same as any
+ * other correction) and the wastage-specific detail (reason, value snapshot,
+ * notes, photo) in one transaction. `valuePaise` is computed here, at
+ * record time, from the item's current `avgUnitCostPaise` — a snapshot, not
+ * a value this command re-derives on every later read (see the model's own
+ * doc comment). Approval-if-required is explicitly not built: no threshold
+ * has been decided yet.
+ */
+export const recordWastage: CommandDefinition<
+  {
+    itemId: string;
+    locationId: string;
+    qty: number;
+    reason: WastageReason;
+    notes?: string;
+    evidenceId?: string;
+  },
+  { movementId: string; wastageRecordId: string; valuePaise: number }
+> = {
+  key: "verity.inventory.record_wastage",
+  entity: ENTITY_INVENTORY_STOCK,
+  verb: "Create",
+  input: z.object({
+    itemId: z.string().uuid(),
+    locationId: z.string().uuid(),
+    qty: z.number().int().positive(),
+    reason: z.enum(WASTAGE_REASONS),
+    notes: z.string().max(500).optional(),
+    evidenceId: z.string().uuid().optional(),
+  }),
+  preconditions: async (ctx, input) => {
+    const item = await ctx.tx.inventoryItem.findUnique({ where: { id: input.itemId } });
+    if (!item) throw new ValidationError("E_VALIDATION: item not found in this tenant");
+    if (!item.active) throw new ValidationError("E_VALIDATION: item is deactivated");
+
+    const existing = await ctx.tx.inventoryStockBalance.findUnique({
+      where: {
+        tenantId_itemId_locationId: { tenantId: ctx.actor.tenantId, itemId: input.itemId, locationId: input.locationId },
+      },
+    });
+    if ((existing?.qty ?? 0) - input.qty < 0) {
+      throw new ValidationError(
+        `E_VALIDATION: wastage of ${input.qty} would take stock negative (on hand: ${existing?.qty ?? 0})`,
+      );
+    }
+  },
+  handler: async (ctx, input) => {
+    const item = await ctx.tx.inventoryItem.findUniqueOrThrow({ where: { id: input.itemId } });
+    const valuePaise = (item.avgUnitCostPaise ?? 0) * input.qty;
+
+    const movement = await ctx.tx.inventoryStockMovement.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        itemId: input.itemId,
+        locationId: input.locationId,
+        kind: "Adjustment",
+        qty: -input.qty,
+        reference: "wastage",
+        movedById: ctx.actor.userId,
+      },
+    });
+    await ctx.tx.inventoryStockBalance.upsert({
+      where: {
+        tenantId_itemId_locationId: { tenantId: ctx.actor.tenantId, itemId: input.itemId, locationId: input.locationId },
+      },
+      create: { tenantId: ctx.actor.tenantId, itemId: input.itemId, locationId: input.locationId, qty: -input.qty },
+      update: { qty: { decrement: input.qty } },
+    });
+    const wastageRecord = await ctx.tx.inventoryWastageRecord.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        movementId: movement.id,
+        reason: input.reason,
+        valuePaise,
+        notes: input.notes ?? null,
+        evidenceId: input.evidenceId ?? null,
+      },
+    });
+
+    return {
+      result: { movementId: movement.id, wastageRecordId: wastageRecord.id, valuePaise },
+      events: [
+        {
+          name: "verity.inventory.wastage_recorded",
+          entityId: wastageRecord.id,
+          payload: { itemId: input.itemId, qty: input.qty, reason: input.reason, valuePaise },
         },
       ],
     };
@@ -287,6 +439,7 @@ export function registerInventoryCapability(): void {
   registerCommand(createItem);
   registerCommand(setItemActive);
   registerCommand(recordStockMovement);
+  registerCommand(recordWastage);
   registerQuery(listItems);
   registerQuery(stockOnHand);
   registerQuery(stockLedger);

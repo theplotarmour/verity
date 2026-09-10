@@ -15,6 +15,7 @@ import { notify } from "@/server/platform/notification";
 import { resolveConfig } from "@/server/platform/capability";
 import { withTenant, type TenantScopedClient } from "@/server/platform/tenancy";
 import { effectiveTimeZone } from "@/server/platform/temporal";
+import { postConsumptionForOrder } from "@/server/capabilities/recipe";
 import { assertOutletInScope, reachableOutletIds } from "./scope";
 import type { ActorContext as DineinActor } from "@/server/platform/command";
 
@@ -1140,6 +1141,12 @@ export const settleBill: CommandDefinition<
       where: { id: order.id },
       data: { state: "settled", version: { increment: 1 } },
     });
+
+    // ORDER COMPLETED -> Inventory Consumption (PRD §128). A settled order is
+    // this platform's completion point for a Work-shaped restaurant order —
+    // see recipe/index.ts's module doc for why this is a plain function call
+    // under settle_bill's own authorize(), not a second registered command.
+    await postConsumptionForOrder(ctx, order.id);
 
     const table = await ctx.tx.diningTable.findUniqueOrThrow({ where: { id: order.tableId } });
     const tableMove = await transition(ctx, {

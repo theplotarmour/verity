@@ -145,6 +145,11 @@ model Tenant {
   inventoryItems          InventoryItem[]
   inventoryStockBalances  InventoryStockBalance[]
   inventoryStockMovements InventoryStockMovement[]
+  inventoryWastageRecords InventoryWastageRecord[]
+
+  // Capability: recipe (Colonel Kebabz Phase 1). Back-relations only.
+  recipes           Recipe[]
+  recipeIngredients RecipeIngredient[]
 
   // Capability: HR (Task 78). Back-relations only, as above.
   hrDepartments       HrDepartment[]
@@ -1870,6 +1875,7 @@ model MenuItem {
   category MenuCategory      @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   variants MenuItemVariant[]
   lines    OrderLine[]
+  recipe   Recipe?
 
   @@unique([tenantId, id], name: "menu_item_tenant_scoped_id")
   @@index([tenantId, categoryId, sortOrder])
@@ -3584,16 +3590,25 @@ model InventoryItem {
   name         String
   unitLabel    String   @default("units") @map("unit_label")
   reorderLevel Int      @default(0) @map("reorder_level")
+  /// Moving-average unit cost in paise, updated only by a Receipt movement
+  /// that supplies `unitCostPaise` (`recordStockMovement`). Null until the
+  /// first costed receipt. Extends Task 73's original quantity-only scope —
+  /// decision 2026-09-10 (Colonel Kebabz phase plan): a recipe needs one
+  /// ingredient ledger for both quantity and cost, so procurement (GRN) and
+  /// consumption (recipe) post to the same InventoryItem rather than forking
+  /// cost into `trading`'s separate ledger.
+  avgUnitCostPaise Int?  @map("avg_unit_cost_paise")
   active       Boolean  @default(true)
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
   version      Int      @default(1)
   customFields Json     @default("{}") @map("custom_fields")
 
-  tenant    Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  itemGroup InventoryItemGroup?      @relation(fields: [itemGroupId], references: [id], onDelete: SetNull)
-  balances  InventoryStockBalance[]
-  movements InventoryStockMovement[]
+  tenant            Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  itemGroup         InventoryItemGroup?      @relation(fields: [itemGroupId], references: [id], onDelete: SetNull)
+  balances          InventoryStockBalance[]
+  movements         InventoryStockMovement[]
+  recipeIngredients RecipeIngredient[]
 
   @@unique([tenantId, sku])
   @@unique([tenantId, id], name: "inventory_item_tenant_scoped_id")
@@ -3636,17 +3651,110 @@ model InventoryStockMovement {
   /// would make a return-of-issued-goods a special case instead of a normal
   /// positive Receipt-shaped movement.
   qty        Int
+  /// Unit cost in paise for a Receipt movement — the value that folds into
+  /// `InventoryItem.avgUnitCostPaise`'s moving average. Null on non-Receipt
+  /// kinds and on a Receipt with no known cost (e.g. a manual stock-count
+  /// correction). See `InventoryItem.avgUnitCostPaise` for why this field
+  /// exists at all.
+  unitCostPaise Int?  @map("unit_cost_paise")
   reference  String?
   movedById  String   @map("moved_by_id") @db.Uuid
   movedAt    DateTime @default(now()) @map("moved_at")
 
-  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  item     InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  location Location      @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  tenant        Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  item          InventoryItem           @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  location      Location                @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  wastageRecord InventoryWastageRecord?
 
   @@index([tenantId, itemId])
   @@index([tenantId, locationId, movedAt])
   @@map("inventory_stock_movement")
+}
+
+/// Wastage detail for one Adjustment movement (PRD §20). Item, quantity,
+/// outlet, staff, and date/time already live on the InventoryStockMovement
+/// this row attaches to (kind=Adjustment, negative qty) — this table adds
+/// only what's genuinely new: reason, a value snapshot, notes, and an
+/// optional Evidence photo. `valuePaise` is a SNAPSHOT (qty x the item's
+/// avgUnitCostPaise at recording time), never re-derived later — a wastage
+/// report a year on should show what it cost then, not what the ingredient
+/// costs now. Approval-if-required (the PRD's own phrase) is not built:
+/// no threshold has been decided yet — see phase-plan's open decisions.
+model InventoryWastageRecord {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  movementId String   @unique @map("movement_id") @db.Uuid
+  /// Closed set owned by the capability (`WASTAGE_REASONS`) — PRD §20's own
+  /// list, same reasoning as MovementKind above.
+  reason     String
+  valuePaise Int      @map("value_paise")
+  notes      String?
+  evidenceId String?  @map("evidence_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  movement InventoryStockMovement @relation(fields: [movementId], references: [id], onDelete: Cascade)
+
+  @@map("inventory_wastage_record")
+}
+
+// ===========================================================================
+// CAPABILITY: Recipe (Colonel Kebabz Phase 1) — PRD §14-16: Recipe
+// Management, Recipe BOM, Food Cost.
+//
+// One MenuItem has at most one Recipe (BOM), which lists InventoryItem
+// ingredients and quantities. This is the load-bearing abstraction the
+// phase plan names: MenuItem (what's sold) -> Recipe/BOM (what's consumed)
+// -> InventoryItem (what's stocked) -> InventoryStockMovement (the ledger).
+// `dinein.settle_bill` calls into this capability to post the theoretical
+// consumption for each served line once a bill settles (order completed).
+// ===========================================================================
+
+/// A menu item's Bill of Materials. 1:1 with MenuItem — a variant-specific
+/// recipe is out of this slice's scope (PRD gives no per-variant example).
+model Recipe {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  menuItemId String   @map("menu_item_id") @db.Uuid
+  /// Portions this BOM produces in one batch — ingredient quantities scale
+  /// by (order qty / yieldQty). Almost always 1 (one recipe = one portion).
+  yieldQty   Int      @default(1) @map("yield_qty")
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  version    Int      @default(1)
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  menuItem    MenuItem           @relation(fields: [tenantId, menuItemId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  ingredients RecipeIngredient[]
+
+  @@unique([tenantId, menuItemId])
+  @@unique([tenantId, id], name: "recipe_tenant_scoped_id")
+  @@map("recipe")
+}
+
+/// One BOM line — an ingredient quantity per Recipe.
+model RecipeIngredient {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  recipeId        String   @map("recipe_id") @db.Uuid
+  inventoryItemId String   @map("inventory_item_id") @db.Uuid
+  /// Decimal, not Int — ingredient quantities are fractional (8g spices,
+  /// 12ml oil per the PRD's own example), unlike InventoryStockMovement's
+  /// whole-unit ledger.
+  qty             Decimal  @db.Decimal(12, 3)
+  unitLabel       String   @map("unit_label")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  version         Int      @default(1)
+
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recipe        Recipe        @relation(fields: [tenantId, recipeId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  inventoryItem InventoryItem @relation(fields: [tenantId, inventoryItemId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, recipeId, inventoryItemId])
+  @@unique([tenantId, id], name: "recipe_ingredient_tenant_scoped_id")
+  @@map("recipe_ingredient")
 }
 
 // ===========================================================================

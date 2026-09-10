@@ -14,7 +14,6 @@ import { withTenant, type TenantScopedClient } from "@/server/platform/tenancy";
 import { ENTITY_PRODUCT_DETAIL, PLYWOOD_CAPABILITY } from "./keys";
 import { productDetail } from "./views";
 import {
-  registerTradingCapability,
   ENTITY_BRAND,
   ENTITY_PRODUCT,
   ENTITY_SUPPLIER,
@@ -1041,7 +1040,8 @@ export const listCatalogue: QueryDefinition<
  * one brought in by `export *`), so anything importing `stockOnHand` from
  * `@/server/capabilities/plywood` gets this version. Registered under its
  * own key — `verity.trading.stock_on_hand` is already taken by the
- * ungraded version `registerTradingCapability()` registers.
+ * ungraded version `registerTradingCapability()` registers (now called
+ * standalone at top level in `registry.ts`, before `registerPlywoodCapability()`).
  */
 export const stockOnHand: QueryDefinition<
   { locationId?: string; productId?: string },
@@ -1079,8 +1079,6 @@ export const stockOnHand: QueryDefinition<
 /* ============================== registration ============================== */
 
 export function registerPlywoodCapability(): void {
-  registerTradingCapability();
-
   registerContribution({
     capabilityId: PLYWOOD_CAPABILITY,
     navigation: [
