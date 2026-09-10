@@ -51,6 +51,7 @@ import { LOCATION_CAPABILITY, registerLocationCapability } from "@/server/capabi
 import {
   ENTITY_RECIPE,
   RECIPE_CAPABILITY,
+  getMenuAnalytics,
   getRecipeCost,
   registerRecipeCapability,
   saveRecipe,
@@ -298,5 +299,20 @@ describeDb("capability: Recipe", () => {
 
     const after = await executeQuery(manager, stockOnHand, { itemId: spiceIngredientId, locationId });
     expect((before[0]?.qty ?? 0) - (after[0]?.qty ?? 0)).toBe(50);
+  });
+
+  it("classifies the kebab into a menu-analytics quadrant from real sales", async () => {
+    const from = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const to = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const rows = await executeQuery(manager, getMenuAnalytics, { fromDate: from, toDate: to, locationId });
+
+    const kebab = rows.find((r) => r.menuItemId === kebabItemId);
+    expect(kebab).toBeDefined();
+    // 3 portions sold across the earlier consumption test.
+    expect(kebab!.qtySold).toBe(3);
+    expect(kebab!.marginPercent).not.toBeNull();
+    // Only one recipe-costed item in this fixture set, so it is its own
+    // median on both axes — Star by construction (>= median on both).
+    expect(kebab!.quadrant).toBe("Star");
   });
 });

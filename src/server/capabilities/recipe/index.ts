@@ -203,6 +203,129 @@ export const getRecipeCost: QueryDefinition<
   },
 };
 
+/* ============================== menu analytics ============================== */
+
+export const MENU_QUADRANTS = ["Star", "PlowHorse", "Puzzle", "Dog", "Unclassified"] as const;
+export type MenuQuadrant = (typeof MENU_QUADRANTS)[number];
+
+/**
+ * PRD §62 — the only Phase 5 (Intelligence) piece built this cycle: a
+ * derived quadrant classification (Star/Plow Horse/Puzzle/Dog), no
+ * forecasting or ML. High/low sales and margin are relative to the MEDIAN
+ * across items sold in the range — not a fixed threshold, since "high
+ * sales" means nothing without a comparison set. An item with no Recipe
+ * (unknown margin) is "Unclassified" rather than guessed into a quadrant.
+ *
+ * NOT BUILT this cycle, per the 2026-09-10 lean-scope correction: Sales/
+ * Customer Analytics, Cohort Analysis, Outlet Benchmarking (§61, 63-65 —
+ * `dinein.salesSummary` and `crm.listCustomers`/`getCustomer360` already
+ * cover most of this ground without a dedicated dashboard); Demand/
+ * Procurement Forecasting (§66-67 — forecasting is explicitly named as
+ * something to skip until a real trigger exists); AI Business Assistant
+ * and AI Commands (§103-104 — a genuinely separate, large feature, not an
+ * incremental data query like everything else in this capability).
+ */
+export const getMenuAnalytics: QueryDefinition<
+  { fromDate: string; toDate: string; locationId?: string },
+  Array<{
+    menuItemId: string;
+    name: string;
+    qtySold: number;
+    revenueMinor: number;
+    marginPercent: number | null;
+    quadrant: MenuQuadrant;
+  }>
+> = {
+  key: "verity.recipe.get_menu_analytics",
+  entity: ENTITY_RECIPE,
+  input: z.object({
+    fromDate: z.string().date(),
+    toDate: z.string().date(),
+    locationId: z.string().uuid().optional(),
+  }),
+  handler: async (ctx, input) => {
+    const lines = await ctx.tx.orderLine.findMany({
+      where: {
+        state: { not: "voided" },
+        order: {
+          state: { in: ["served", "billed", "settled"] },
+          createdAt: { gte: new Date(input.fromDate), lte: new Date(`${input.toDate}T23:59:59.999Z`) },
+          ...(input.locationId ? { locationId: input.locationId } : {}),
+        },
+      },
+      select: { itemId: true, itemNameSnapshot: true, qty: true, unitPriceMinor: true },
+    });
+    if (lines.length === 0) return [];
+
+    const byItem = new Map<string, { name: string; qty: number; revenueMinor: number }>();
+    for (const line of lines) {
+      const current = byItem.get(line.itemId) ?? { name: line.itemNameSnapshot, qty: 0, revenueMinor: 0 };
+      current.qty += line.qty;
+      current.revenueMinor += line.unitPriceMinor * line.qty;
+      byItem.set(line.itemId, current);
+    }
+
+    const menuItemIds = [...byItem.keys()];
+    const recipes = await ctx.tx.recipe.findMany({
+      where: { menuItemId: { in: menuItemIds }, active: true },
+      include: { ingredients: { include: { inventoryItem: { select: { avgUnitCostPaise: true } } } } },
+    });
+    const menuItems = await ctx.tx.menuItem.findMany({
+      where: { id: { in: menuItemIds } },
+      select: { id: true, priceMinor: true },
+    });
+    const priceById = new Map(menuItems.map((m) => [m.id, m.priceMinor]));
+
+    const marginById = new Map<string, number>();
+    for (const recipe of recipes) {
+      const price = priceById.get(recipe.menuItemId);
+      if (!price) continue;
+      let totalCostPaise: number | null = 0;
+      for (const ing of recipe.ingredients) {
+        const unitCostPaise = ing.inventoryItem.avgUnitCostPaise;
+        if (unitCostPaise === null) {
+          totalCostPaise = null;
+          break;
+        }
+        totalCostPaise += Math.round(unitCostPaise * Number(ing.qty));
+      }
+      if (totalCostPaise === null) continue;
+      const perPortionCostPaise = totalCostPaise / recipe.yieldQty;
+      const foodCostPercent = (perPortionCostPaise / price) * 100;
+      marginById.set(recipe.menuItemId, 100 - foodCostPercent);
+    }
+
+    const knownMargins = [...marginById.values()].sort((a, b) => a - b);
+    const knownQtys = menuItemIds
+      .filter((id) => marginById.has(id))
+      .map((id) => byItem.get(id)!.qty)
+      .sort((a, b) => a - b);
+    const median = (sorted: number[]) =>
+      sorted.length === 0 ? 0 : sorted[Math.floor((sorted.length - 1) / 2)]!;
+    const medianMargin = median(knownMargins);
+    const medianQty = median(knownQtys);
+
+    return menuItemIds.map((itemId) => {
+      const { name, qty, revenueMinor } = byItem.get(itemId)!;
+      const marginPercent = marginById.get(itemId) ?? null;
+      let quadrant: MenuQuadrant = "Unclassified";
+      if (marginPercent !== null) {
+        const highSales = qty >= medianQty;
+        const highMargin = marginPercent >= medianMargin;
+        quadrant = highSales && highMargin ? "Star" : highSales ? "PlowHorse" : highMargin ? "Puzzle" : "Dog";
+      }
+      return {
+        menuItemId: itemId,
+        name,
+        qtySold: qty,
+        revenueMinor,
+        marginPercent: marginPercent === null ? null : Math.round(marginPercent * 100) / 100,
+        quadrant,
+      };
+    });
+  },
+};
+
 /* ============================ order consumption ============================ */
 
 /**
@@ -305,4 +428,5 @@ export function registerRecipeCapability(): void {
   registerCommand(saveRecipe);
   registerCommand(setRecipeActive);
   registerQuery(getRecipeCost);
+  registerQuery(getMenuAnalytics);
 }

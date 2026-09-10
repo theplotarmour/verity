@@ -248,10 +248,37 @@ Expenses, Cash Reconciliation, Outlet P&L all built and tested. Delivery-
 platform reconciliation remains blocked on a product-owner integration
 decision.
 
-## Phase 5 — Intelligence (deferred, matches PRD's own Phase 4)
+## Phase 5 — Intelligence (matches PRD's own Phase 4)
 
-Menu analytics (Star/Plow Horse/Puzzle/Dog), demand forecasting, AI business
-assistant (§60–67, §102–104). Lowest priority; PRD itself places this last.
+**SHIPPED (2026-09-10) — Menu Analytics** (§62: Star/Plow Horse/Puzzle/Dog
+classification). Added as `recipe.getMenuAnalytics` — no new schema,
+composes existing `OrderLine`/`Recipe`/`InventoryItem` data. Classifies
+each item sold in a date range by sales volume vs. margin, both relative to
+the MEDIAN across items actually sold in that range (not a fixed
+threshold — "high sales" is meaningless without a comparison set). An item
+with no costed Recipe is "Unclassified," never guessed into a quadrant.
+Tested: `src/test/capability-recipe.test.ts`.
+
+**NOT BUILT, per the 2026-09-10 lean-scope correction** — explicit
+deferrals, not silent gaps:
+- Sales/Customer Analytics, Cohort Analysis, Outlet Benchmarking (§61,
+  63-65) — `dinein.salesSummary` and `crm.listCustomers`/`getCustomer360`
+  already cover most of this ground without a dedicated dashboard; no
+  stated need for more yet.
+- Demand Forecasting, Procurement Forecasting (§66-67) — forecasting is
+  explicitly named in the scope correction as something to skip until
+  there's a real trigger.
+- AI Business Assistant, AI Commands (§102-104) — a genuinely separate,
+  large feature (an actual conversational agent over the platform), not an
+  incremental data query like the rest of this phase. Would need its own
+  brainstorm and design cycle if picked up.
+
+## Phase 5 status: lean-V1 core SHIPPED (2026-09-10)
+
+Menu Analytics — the one directly actionable, non-forecasting piece of
+Intelligence — is built and tested. Everything else in this phase is
+either already covered by existing queries or explicitly out of scope for
+now.
 
 ## Sequencing notes
 
