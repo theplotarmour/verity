@@ -155,6 +155,7 @@ model Tenant {
   customers          Customer[]
   loyaltyPointEntries LoyaltyPointEntry[]
   coupons            Coupon[]
+  complaints         Complaint[]
 
   // Capability: HR (Task 78). Back-relations only, as above.
   hrDepartments       HrDepartment[]
@@ -1158,6 +1159,7 @@ model Location {
   diningOrders DiningOrder[]
   bills        Bill[]
   customers    Customer[]
+  complaints   Complaint[]
 
   @@unique([tenantId, id], name: "location_tenant_scoped_id")
   @@index([tenantId, organizationId])
@@ -3795,6 +3797,7 @@ model Customer {
   tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   preferredLocation Location?           @relation(fields: [tenantId, preferredLocationId], references: [tenantId, id], onDelete: SetNull, onUpdate: NoAction)
   loyaltyEntries    LoyaltyPointEntry[]
+  complaints        Complaint[]
 
   @@unique([tenantId, phone])
   @@map("customer")
@@ -3847,6 +3850,47 @@ model Coupon {
 
   @@unique([tenantId, code])
   @@map("coupon")
+}
+
+/// PRD §36-37: Complaint Management + Service Recovery, lean V1. `status`
+/// is a plain closed-set string (New|Assigned|InProgress|AwaitingCustomer|
+/// Resolved|Closed) validated in code, NOT wired into the platform's full
+/// StateDefinition/transition machinery — a complaint ticket doesn't need
+/// SLA clocks or guarded transitions for this cycle; deliberately lighter
+/// than dinein's order/table state machine. Service recovery
+/// (compensation) lives on the same row rather than a separate entity —
+/// PRD §37 frames it as "how this complaint was resolved," not an
+/// independent workflow.
+model Complaint {
+  id                String    @id @default(uuid()) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  locationId        String    @map("location_id") @db.Uuid
+  customerId        String?   @map("customer_id") @db.Uuid
+  orderId           String?   @map("order_id") @db.Uuid
+  category          String
+  /// Closed set owned by the capability: "Low" | "Medium" | "High" | "Critical".
+  severity          String
+  description       String
+  assignedToUserId  String?   @map("assigned_to_user_id") @db.Uuid
+  status            String    @default("New")
+  resolution        String?
+  /// Closed set: "Coupon" | "Refund" | "Replacement" | "Complimentary" |
+  /// "LoyaltyPoints" | null (no compensation issued).
+  compensationType  String?   @map("compensation_type")
+  /// Paise for Coupon/Refund/Complimentary, point count for LoyaltyPoints.
+  compensationValue Int?      @map("compensation_value")
+  closedAt          DateTime? @map("closed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  version           Int       @default(1)
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location  @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([tenantId, locationId])
+  @@map("complaint")
 }
 
 // ===========================================================================
