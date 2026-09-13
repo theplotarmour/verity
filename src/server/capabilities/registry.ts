@@ -18,6 +18,7 @@ import { registerCouponCapability } from "./coupon";
 import { registerComplaintCapability } from "./complaint";
 import { registerAttendanceCapability } from "./attendance";
 import { registerFinanceCapability } from "./finance";
+import { registerOutreachCapability } from "./outreach";
 import { installStorage } from "@/server/storage";
 
 /**
@@ -60,4 +61,5 @@ export function installCapabilities(): void {
   registerComplaintCapability();
   registerAttendanceCapability();
   registerFinanceCapability();
+  registerOutreachCapability();
 }

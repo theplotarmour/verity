@@ -177,6 +177,17 @@ model Tenant {
   plywoodShades         PlywoodShade[]
   plywoodTextures       PlywoodTexture[]
 
+  // Capability: outreach (Task 105). Back-relations only, as above.
+  outreachTeams                 OutreachTeam[]
+  outreachTeamMemberships       OutreachTeamMembership[]
+  outreachLeads                 OutreachLead[]
+  outreachActivities            OutreachActivity[]
+  outreachTargets               OutreachTarget[]
+  outreachCheckIns              OutreachCheckIn[]
+  outreachWeeklyReports         OutreachWeeklyReport[]
+  outreachTeamWeeklyAssessments OutreachTeamWeeklyAssessment[]
+  outreachDirections            OutreachDirection[]
+
   @@map("tenant")
 }
 
@@ -4264,4 +4275,295 @@ model TradingMetricSnapshot {
 
   @@unique([tenantId, snapshotDate])
   @@map("trading_metric_snapshot")
+}
+
+// ===========================================================================
+// CAPABILITY: OUTREACH — `verity.capability.outreach` (Task 105, P0 scope)
+//
+// Authority: `taskplans/105_pa_oms_outreach_capability.md`, grounded in
+// `clients/pa-oms/PlotArmour_Outreach_Team_Management_System_Master_Context.md`
+// (build brief) and `clients/pa-oms/handbook-outreach.html` (operating
+// constitution — the higher-ranked authority for exact field/state values,
+// per the handbook's own Ch. 00 source-of-truth hierarchy).
+//
+// PlotArmour Studio's own internal client-acquisition operating system —
+// NOT a generalized CRM primitive, and NOT the same domain as
+// `verity.capability.crm` (Colonel Kebabz's restaurant-guest 360, phone-
+// matched, no employee hierarchy). Runs on its own new tenant.
+//
+// `OutreachTeam` is capability-private (ADR-005 reserves `Organization` for
+// a tenant's own nested business-unit hierarchy; this is a lead-gen pod,
+// same category as `HrDepartment`). No member-count cap in code — the
+// Internship Agreement's "4-5 Junior Outreach Officers" is organizational
+// guidance, not a technical maximum (Team 1 runs 7 live).
+//
+// `OutreachLead`'s `state` column is a platform state-machine key
+// (`verity.outreach.lead`, seeded in this capability's own migration) per
+// handbook Ch. 22's 13 linear stages + 5 terminal/negative statuses.
+// Reactivating a terminal lead never reopens it (INV-002) — it spawns a new
+// `OutreachLead` row via `reactivatedFromLeadId`, preserving handbook Ch. 02's
+// 90-day-window origination-credit rule.
+//
+// Three named attribution roles (handbook Ch. 02), not one flat "owner":
+// `leadOriginatorId` (immutable once set), `opportunityOwnerId`
+// (reassignable — 14-day-no-activity makes it eligible), `closerId` (set
+// only at Closed Won). All three are bare Party-id columns with no Prisma
+// relation object and no DB foreign key, matching `HrLeaveDecision
+// .decidedById`'s existing precedent for "the person who did X" fields.
+//
+// NOT built in this pass (P0 only, taskplan's own Scope section): lead
+// quality scoring, duplicate detection, vertical/channel intelligence,
+// experiments, AI assistance, email integration, a standalone compensation-
+// view UI, promotion support, onboarding-flow UI.
+// ===========================================================================
+
+/// Capability-private outreach pod. `leaderId` is the Senior Outreach
+/// Officer (bare Party id, no relation object — see module note above).
+model OutreachTeam {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  leaderId  String   @map("leader_id") @db.Uuid
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  tenant            Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships       OutreachTeamMembership[]
+  leads             OutreachLead[]
+  weeklyAssessments OutreachTeamWeeklyAssessment[]
+
+  @@unique([tenantId, name])
+  @@map("outreach_team")
+}
+
+/// Junior Outreach Officer roster for a team. No maximum size enforced —
+/// see module note above.
+model OutreachTeamMembership {
+  id       String   @id @default(uuid()) @db.Uuid
+  tenantId String   @map("tenant_id") @db.Uuid
+  teamId   String   @map("team_id") @db.Uuid
+  partyId  String   @map("party_id") @db.Uuid
+  active   Boolean  @default(true)
+  joinedAt DateTime @default(now()) @map("joined_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  team   OutreachTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, teamId, partyId])
+  @@map("outreach_team_membership")
+}
+
+/// A prospect company record. `state` is a `verity.outreach.lead` state-
+/// machine key (ADR-009 `StateCategory` binding lives in `state_definition`,
+/// seeded by this capability's migration) — never branch business logic on
+/// the raw key, only on its category.
+model OutreachLead {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  teamId   String @map("team_id") @db.Uuid
+
+  companyName String  @map("company_name")
+  website     String?
+  industry    String?
+  /// Closed set owned by the capability: Agency | Verity | Both | Undetermined.
+  track       String  @default("Undetermined")
+  whyRelevant String? @map("why_relevant")
+
+  contactName        String? @map("contact_name")
+  contactDesignation String? @map("contact_designation")
+  contactEmail       String? @map("contact_email")
+  contactPhone       String? @map("contact_phone")
+
+  /// `verity.outreach.lead` state-machine key.
+  state String @default("research")
+
+  /// Handbook Ch. 02's three attribution roles. Bare Party ids, no relation
+  /// object or DB FK — see module note above.
+  leadOriginatorId   String  @map("lead_originator_id") @db.Uuid
+  opportunityOwnerId String  @map("opportunity_owner_id") @db.Uuid
+  closerId           String? @map("closer_id") @db.Uuid
+
+  /// Drives the 14-day reassignment-eligibility rule (handbook Ch. 02) —
+  /// updated whenever an `OutreachActivity` is logged against this lead.
+  lastActivityAt DateTime? @map("last_activity_at")
+  nextActionNote String?   @map("next_action_note")
+  nextActionAt   DateTime? @map("next_action_at")
+
+  /// Closed set owned by the capability (handbook Ch. 20's 9-value
+  /// taxonomy): NoFit | NoBudget | NoTiming | NotInterested | WrongPerson |
+  /// RevisitLater | LostToCompetitor | LostOnPrice | LostOnScopeTrust.
+  /// Only meaningful once `state` is one of the 5 terminal/negative states.
+  rejectionReason String? @map("rejection_reason")
+
+  /// Handbook Ch. 02's closing edge cases: converts only once CUMULATIVE
+  /// receipts clear the threshold, never on the first partial payment.
+  advanceThresholdMinor Int? @map("advance_threshold_minor")
+  advanceReceivedMinor  Int  @default(0) @map("advance_received_minor")
+  closedAt              DateTime? @map("closed_at")
+
+  /// INV-002: a terminal lead is never reopened. Reactivating it (handbook
+  /// Ch. 02's 90-day origination-credit window) spawns a new row instead.
+  reactivatedFromLeadId String? @map("reactivated_from_lead_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  team       OutreachTeam       @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  activities OutreachActivity[]
+
+  @@index([tenantId, teamId, state])
+  @@index([tenantId, opportunityOwnerId])
+  @@index([tenantId, nextActionAt])
+  @@map("outreach_lead")
+}
+
+/// APPEND-ONLY outreach/activity log — the timeline (master-context spec
+/// §31-33). One row per meaningful contact, response, or milestone.
+model OutreachActivity {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  leadId        String   @map("lead_id") @db.Uuid
+  actorPartyId  String   @map("actor_party_id") @db.Uuid
+  /// Closed set: LinkedIn | Email | WhatsApp | Call | Referral | Meeting | Other.
+  channel       String
+  /// Closed set: FirstOutreach | FollowUp | Response | MeetingBooked |
+  /// MeetingCompleted | ProposalSent | Other.
+  activityType  String   @map("activity_type")
+  message       String?
+  response      String?
+  occurredAt    DateTime @default(now()) @map("occurred_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   OutreachLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, leadId, occurredAt])
+  @@map("outreach_activity")
+}
+
+/// Flat target row — company/team/individual x daily/weekly (master-context
+/// spec §11-12). Progress is always computed live from `OutreachActivity`/
+/// `OutreachLead` counts, never hand-typed (Task 93's `onboardingChecklist`
+/// precedent) and never stored on this row.
+model OutreachTarget {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+
+  /// Closed set: Company | Team | Individual.
+  scope   String
+  teamId  String? @map("team_id") @db.Uuid
+  partyId String? @map("party_id") @db.Uuid
+
+  /// Closed set: Daily | Weekly.
+  period String
+  /// Closed set: QualifiedProspects | Outreach | FollowUps | Responses |
+  /// Meetings | Proposals | Closed.
+  metric      String
+  targetValue Int    @map("target_value")
+
+  periodStart DateTime @map("period_start") @db.Date
+  periodEnd   DateTime @map("period_end") @db.Date
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, scope, teamId, partyId, periodStart])
+  @@map("outreach_target")
+}
+
+/// Junior's daily check-in (master-context spec §20-23). Numeric activity
+/// is NEVER stored here — it is queried live from `OutreachActivity`/
+/// `OutreachLead` at read time (spec §21's own automatic-vs-manual rule).
+/// This row holds only what a person must type by hand.
+model OutreachCheckIn {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  partyId       String   @map("party_id") @db.Uuid
+  checkInDate   DateTime @map("check_in_date") @db.Date
+  summary       String
+  bestLeadId    String?  @map("best_lead_id") @db.Uuid
+  learning      String?
+  blocker       String?
+  tomorrowPlan  String?  @map("tomorrow_plan")
+  submittedAt   DateTime @default(now()) @map("submitted_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, partyId, checkInDate])
+  @@map("outreach_check_in")
+}
+
+/// Junior's weekly reflection (master-context spec §24). Aggregation is a
+/// live query, same discipline as the daily check-in above.
+model OutreachWeeklyReport {
+  id                    String   @id @default(uuid()) @db.Uuid
+  tenantId              String   @map("tenant_id") @db.Uuid
+  partyId               String   @map("party_id") @db.Uuid
+  weekStart             DateTime @map("week_start") @db.Date
+  whatWorked            String?  @map("what_worked")
+  whatDidntWork         String?  @map("what_didnt_work")
+  strongestOpportunityId String? @map("strongest_opportunity_id") @db.Uuid
+  biggestLearning       String?  @map("biggest_learning")
+  nextWeekChange        String?  @map("next_week_change")
+  nextWeekTargetValue   Int?     @map("next_week_target_value")
+  submittedAt           DateTime @default(now()) @map("submitted_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, partyId, weekStart])
+  @@map("outreach_weekly_report")
+}
+
+/// Senior's weekly team roll-up + written assessment (master-context spec
+/// §25) — submitted to Company Core. Member/pipeline numbers are live
+/// queries; only the assessment text and the roll-up's identity is stored.
+model OutreachTeamWeeklyAssessment {
+  id                    String   @id @default(uuid()) @db.Uuid
+  tenantId              String   @map("tenant_id") @db.Uuid
+  teamId                String   @map("team_id") @db.Uuid
+  weekStart             DateTime @map("week_start") @db.Date
+  strongestPerformerId  String?  @map("strongest_performer_id") @db.Uuid
+  strongestProspectId   String?  @map("strongest_prospect_id") @db.Uuid
+  strongestVertical     String?  @map("strongest_vertical")
+  biggestProblem        String?  @map("biggest_problem")
+  biggestLearning       String?  @map("biggest_learning")
+  nextWeekPriority      String?  @map("next_week_priority")
+  submittedAt           DateTime @default(now()) @map("submitted_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  team   OutreachTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, teamId, weekStart])
+  @@map("outreach_team_weekly_assessment")
+}
+
+/// Company-wide direction (master-context spec §10-11) — a dated text/target
+/// record a Founder posts, cascading to team/individual targets. Narrower
+/// than `WorkflowDefinition`, closer to `NotificationTemplate`'s shape.
+/// APPEND-ONLY: a new direction supersedes the old one; it never edits it
+/// (ADR-009 — a wrong fact is corrected by a new fact, not an edit).
+model OutreachDirection {
+  id                       String   @id @default(uuid()) @db.Uuid
+  tenantId                 String   @map("tenant_id") @db.Uuid
+  weekLabel                String   @map("week_label")
+  priorityVertical         String?  @map("priority_vertical")
+  /// Closed set: Agency | Verity | Both | Undetermined — same as OutreachLead.track.
+  primaryTrack             String   @default("Undetermined") @map("primary_track")
+  companyProspectingTarget Int?     @map("company_prospecting_target")
+  strategicNote            String?  @map("strategic_note")
+  /// Closed set: Active | Closed.
+  status                   String   @default("Active")
+  postedById               String   @map("posted_by_id") @db.Uuid
+  postedAt                 DateTime @default(now()) @map("posted_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, postedAt])
+  @@map("outreach_direction")
 }
