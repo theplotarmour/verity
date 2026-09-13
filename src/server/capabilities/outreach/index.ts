@@ -43,6 +43,17 @@ export const ENTITY_CHECK_IN = "verity.outreach.check_in";
 export const ENTITY_WEEKLY_REPORT = "verity.outreach.weekly_report";
 export const ENTITY_TEAM_WEEKLY_ASSESSMENT = "verity.outreach.team_weekly_assessment";
 export const ENTITY_DIRECTION = "verity.outreach.direction";
+/**
+ * Nav-gating markers (2026-09-14). Founder/Senior/Junior share broad
+ * Read/Create/Edit grants on `ENTITY_LEAD` etc. at Tenant scope (a
+ * documented P0 MVP limitation — see `seed-pa-oms.ts`), so entity+verb
+ * alone can't tell the three roles apart for `requiresEntity` nav
+ * gating. These two are Read-only markers granted to exactly one role
+ * each, existing only so "Team Command" and "My Workspace" stop
+ * appearing in every role's sidebar regardless of relevance.
+ */
+export const ENTITY_TEAM_LEADERSHIP = "verity.outreach.team_leadership";
+export const ENTITY_JUNIOR_WORKSPACE = "verity.outreach.junior_workspace";
 
 /** The 5 terminal/negative lead states (handbook Ch. 22). */
 const TERMINAL_STATES = ["not_a_fit", "unresponsive", "lost", "deferred", "disqualified"] as const;
@@ -1145,9 +1156,9 @@ export function registerOutreachCapability(): void {
       { href: "/outreach", label: "Outreach", group: "Overview", order: 30, icon: "sales",
         requiresEntity: ENTITY_LEAD, shells: ["platform", "operations"] },
       { href: "/outreach/workspace", label: "My Workspace", group: "Overview", order: 29, icon: "workspace",
-        requiresEntity: ENTITY_LEAD, shells: ["platform", "operations"] },
+        requiresEntity: ENTITY_JUNIOR_WORKSPACE, shells: ["platform", "operations"] },
       { href: "/outreach/team", label: "Team Command", group: "Overview", order: 29, icon: "people",
-        requiresEntity: ENTITY_LEAD, shells: ["platform", "operations"] },
+        requiresEntity: ENTITY_TEAM_LEADERSHIP, shells: ["platform", "operations"] },
       { href: "/outreach/check-in", label: "Daily check-in", group: "Overview", order: 31, icon: "check",
         requiresEntity: ENTITY_CHECK_IN, requiresVerb: "Create", shells: ["platform", "operations"] },
       { href: "/outreach/targets", label: "Targets", group: "Overview", order: 32, icon: "overview",

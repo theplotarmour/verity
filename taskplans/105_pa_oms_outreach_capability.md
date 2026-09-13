@@ -141,13 +141,39 @@ outreach_lead_research_fields`, no removal of any existing field):
   `getTeamComparison` (additive keys, `Record<string, number>` returns
   already tolerated new keys) and the daily check-in page's summary line.
 
-4 new tests (26/26 passing): fields round-trip on create, both new
+2 new tests (22/22 passing): fields round-trip on create, both new
 activity types log correctly and feed `getDailyMetrics`. Live-verified
 end to end via Chrome DevTools MCP: created a real prospect from the
 sheet ("Mia Coosh") with every new field filled, confirmed all 6 render
 correctly on the lead detail page (including a live LinkedIn link),
 logged a `PitchDeck` activity and confirmed the check-in page's
 "Pitch decks" count updated from 0 to 1.
+
+### Nav role-separation — DONE 2026-09-14
+
+User asked directly whether Core and Junior flows were actually
+separated. They weren't, fully: every role saw the same 6 sidebar links
+(`Outreach`, `My Workspace`, `Team Command`, `Daily check-in`, `Targets`,
+`Reports`) because the nav contribution's `requiresEntity` check used
+`ENTITY_LEAD`, which Founder/Senior/Junior all hold broadly (the
+documented Tenant-scope P0 limitation) — entity+verb couldn't tell the
+roles apart. Every page's own data/action gating was already correct (a
+Junior opening Team Command just saw "you don't lead a team," no leak) —
+this was a nav-clutter gap, not a security one.
+
+Fixed with two new Read-only marker entities
+(`verity.outreach.team_leadership`, `verity.outreach.junior_workspace`)
+granted to exactly the Senior and Junior roles respectively (seed script
+updated for future tenants, live tenant granted via a one-off script,
+same pattern as the earlier Junior-Edit-on-lead fix). "Team Command" now
+requires the Senior marker, "My Workspace" requires the Junior marker.
+Live-verified with 3 real accounts: Divo (Founder) — Outreach, Daily
+check-in, Targets, Reports, Audit, Account only, no My Workspace/Team
+Command; Kulsoom (Senior) — Team Command present, My Workspace absent;
+Shreya (Junior) — My Workspace present, Team Command absent. `Outreach`,
+`Daily check-in`, `Targets`, `Reports` stay shared across all three,
+matching the architecture doc's own nav maps (each role's list includes
+some form of all four).
 
 **Phase 2 (role-scoped views) — DONE**, scoped pragmatically rather than
 as the full ground-up redesign the roadmap flagged as "real design work."

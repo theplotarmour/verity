@@ -53,6 +53,8 @@ import {
   ENTITY_WEEKLY_REPORT,
   ENTITY_TEAM_WEEKLY_ASSESSMENT,
   ENTITY_DIRECTION,
+  ENTITY_TEAM_LEADERSHIP,
+  ENTITY_JUNIOR_WORKSPACE,
 } from "../src/server/capabilities/outreach";
 
 const TENANT_NAME = "PlotArmour Studio";
@@ -197,15 +199,21 @@ async function main() {
       // Organization-scope grant (teams are capability-private, per the
       // taskplan's resolved decision). Known P0 limitation.
       await tx.permission.createMany({
-        data: outreachEntities.flatMap((entity) =>
-          (["Read", "Create", "Edit", "ActionExecute"] as const).map((verb) => ({
-            tenantId,
-            roleId: seniorRole.id,
-            verb,
-            entity,
-            scope: "Tenant" as const,
-          })),
-        ),
+        data: [
+          ...outreachEntities.flatMap((entity) =>
+            (["Read", "Create", "Edit", "ActionExecute"] as const).map((verb) => ({
+              tenantId,
+              roleId: seniorRole.id,
+              verb,
+              entity,
+              scope: "Tenant" as const,
+            })),
+          ),
+          // Nav-gating marker only (2026-09-14) — Senior/Junior share the
+          // broad grants above, so entity+verb alone can't tell them apart
+          // for the "Team Command"/"My Workspace" sidebar items.
+          { tenantId, roleId: seniorRole.id, verb: "Read" as const, entity: ENTITY_TEAM_LEADERSHIP, scope: "Tenant" as const },
+        ],
       });
       // Junior: can create/read/act on their own work; cannot edit team or
       // membership rows (master-context §16/§68 — Juniors don't reassign
@@ -227,6 +235,8 @@ async function main() {
           { tenantId, roleId: juniorRole.id, verb: "Read" as const, entity: ENTITY_TEAM, scope: "Tenant" as const },
           { tenantId, roleId: juniorRole.id, verb: "Read" as const, entity: ENTITY_TARGET, scope: "Tenant" as const },
           { tenantId, roleId: juniorRole.id, verb: "Read" as const, entity: ENTITY_DIRECTION, scope: "Tenant" as const },
+          // Nav-gating marker only (2026-09-14) — see the Senior grant above.
+          { tenantId, roleId: juniorRole.id, verb: "Read" as const, entity: ENTITY_JUNIOR_WORKSPACE, scope: "Tenant" as const },
         ],
       });
 
