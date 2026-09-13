@@ -1,0 +1,55 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Button, ErrorState, Input } from "@/components/ui/primitives";
+import { runCommand } from "@/server/actions/platform";
+import type { ActionFailure } from "@/server/platform/action-error";
+
+export function RenameTeamForm({ teamId, currentName }: { teamId: string; currentName: string }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [failure, setFailure] = useState<ActionFailure | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="cursor-pointer border-none bg-transparent p-0 text-[12px] text-text-tertiary underline decoration-dotted hover:text-accent-ink"
+      >
+        Rename team
+      </button>
+    );
+  }
+
+  return (
+    <form
+      className="flex items-center gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const form = new FormData(e.currentTarget);
+        setFailure(null);
+        startTransition(async () => {
+          const result = await runCommand("verity.outreach.rename_team", { teamId, name: String(form.get("name") ?? "") }, "/outreach/team");
+          if (result.ok) {
+            setEditing(false);
+            router.refresh();
+          } else {
+            setFailure(result);
+          }
+        });
+      }}
+    >
+      <Input name="name" defaultValue={currentName} required className="h-9 w-56" />
+      <Button type="submit" size="sm" disabled={pending}>
+        Save
+      </Button>
+      <Button type="button" size="sm" variant="secondary" onClick={() => setEditing(false)}>
+        Cancel
+      </Button>
+      {failure && <ErrorState title="Could not rename" message={failure.message} issues={failure.issues} retryable={failure.retryable} />}
+    </form>
+  );
+}

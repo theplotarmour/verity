@@ -155,6 +155,67 @@ export const listOutreachTeams: QueryDefinition<Record<string, never>, Array<Rec
     }),
 };
 
+/** Soft-removes a member — deactivates the membership, never deletes it, so attribution history stays intact. */
+export const removeTeamMember: CommandDefinition<{ teamId: string; partyId: string }, { id: string }> = {
+  key: "verity.outreach.remove_team_member",
+  entity: ENTITY_TEAM_MEMBERSHIP,
+  verb: "Edit",
+  input: z.object({ teamId: z.string().uuid(), partyId: z.string().uuid() }),
+  handler: async (ctx, input) => {
+    const membership = await ctx.tx.outreachTeamMembership.findFirstOrThrow({
+      where: { teamId: input.teamId, partyId: input.partyId },
+    });
+    await ctx.tx.outreachTeamMembership.update({ where: { id: membership.id }, data: { active: false } });
+    return {
+      result: { id: membership.id },
+      events: [{ name: "verity.outreach.member_removed", entityId: membership.id, payload: { teamId: input.teamId } }],
+    };
+  },
+};
+
+export const renameTeam: CommandDefinition<{ teamId: string; name: string }, { id: string }> = {
+  key: "verity.outreach.rename_team",
+  entity: ENTITY_TEAM,
+  verb: "Edit",
+  input: z.object({ teamId: z.string().uuid(), name: z.string().min(1) }),
+  handler: async (ctx, input) => {
+    const team = await ctx.tx.outreachTeam.update({
+      where: { id: input.teamId },
+      data: { name: input.name, version: { increment: 1 } },
+    });
+    return { result: { id: team.id }, events: [{ name: "verity.outreach.team_renamed", entityId: team.id }] };
+  },
+};
+
+/**
+ * People reachable in this tenant who aren't already on an active team
+ * roster — the only pool an "add member" picker offers, so it can never be
+ * used to create a new login. Provisioning a brand-new person stays an
+ * admin/seed action, deliberately not exposed here.
+ */
+export const listAvailableParties: QueryDefinition<Record<string, never>, Array<{ id: string; name: string }>> = {
+  key: "verity.outreach.list_available_parties",
+  entity: ENTITY_TEAM_MEMBERSHIP,
+  input: z.object({}),
+  handler: async (ctx) => {
+    const [memberships, leaders, allMemberships] = await Promise.all([
+      ctx.tx.outreachTeamMembership.findMany({ where: { active: true }, select: { partyId: true } }),
+      ctx.tx.outreachTeam.findMany({ where: { active: true }, select: { leaderId: true } }),
+      ctx.tx.tenantMembership.findMany({ include: { user: { include: { party: true } } } }),
+    ]);
+    const taken = new Set([...memberships.map((m) => m.partyId), ...leaders.map((l) => l.leaderId)]);
+    const seen = new Set<string>();
+    const candidates: Array<{ id: string; name: string }> = [];
+    for (const m of allMemberships) {
+      const party = m.user.party;
+      if (taken.has(party.id) || seen.has(party.id)) continue;
+      seen.add(party.id);
+      candidates.push({ id: party.id, name: party.displayName });
+    }
+    return candidates.sort((a, b) => a.name.localeCompare(b.name));
+  },
+};
+
 // ---------------------------------------------------------------------------
 // LEADS
 // ---------------------------------------------------------------------------
@@ -391,6 +452,37 @@ export const reactivateLead: CommandDefinition<
   },
 };
 
+/** Founder Escalation Queue (spec §57) — the Junior/Senior side: flag a lead, with why. */
+export const flagForEscalation: CommandDefinition<{ leadId: string; note: string }, { id: string }> = {
+  key: "verity.outreach.flag_escalation",
+  entity: ENTITY_LEAD,
+  verb: "Edit",
+  input: z.object({ leadId: z.string().uuid(), note: z.string().min(1) }),
+  handler: async (ctx, input) => {
+    const actorId = await actorPartyId(ctx.tx, ctx.actor.userId);
+    const lead = await ctx.tx.outreachLead.update({
+      where: { id: input.leadId },
+      data: { escalated: true, escalationNote: input.note, escalatedById: actorId, escalatedAt: new Date(), version: { increment: 1 } },
+    });
+    return { result: { id: lead.id }, events: [{ name: "verity.outreach.lead_escalated", entityId: lead.id }] };
+  },
+};
+
+/** The Founder side: mark an escalation handled. Doesn't touch the lead's own pipeline stage. */
+export const resolveEscalation: CommandDefinition<{ leadId: string }, { id: string }> = {
+  key: "verity.outreach.resolve_escalation",
+  entity: ENTITY_LEAD,
+  verb: "Edit",
+  input: z.object({ leadId: z.string().uuid() }),
+  handler: async (ctx, input) => {
+    const lead = await ctx.tx.outreachLead.update({
+      where: { id: input.leadId },
+      data: { escalated: false, version: { increment: 1 } },
+    });
+    return { result: { id: lead.id }, events: [{ name: "verity.outreach.escalation_resolved", entityId: lead.id }] };
+  },
+};
+
 export const listOutreachLeads: QueryDefinition<
   { teamId?: string; ownerId?: string; state?: string },
   Array<Record<string, unknown>>
@@ -446,6 +538,65 @@ export const getFunnelCounts: QueryDefinition<{ teamId?: string }, Array<{ state
       _count: { _all: true },
     });
     return rows.map((r) => ({ state: r.state, count: r._count._all }));
+  },
+};
+
+/** Founder Escalation Queue — the read side (spec §57). Tenant-wide by design; never team-scoped. */
+export const listEscalatedLeads: QueryDefinition<Record<string, never>, Array<Record<string, unknown>>> = {
+  key: "verity.outreach.list_escalated_leads",
+  entity: ENTITY_LEAD,
+  input: z.object({}),
+  handler: async (ctx) =>
+    ctx.tx.outreachLead.findMany({ where: { escalated: true }, orderBy: { escalatedAt: "desc" } }),
+};
+
+/** Company Core's team-to-team comparison (master-context spec §8's own table shape). */
+export const getTeamComparison: QueryDefinition<
+  Record<string, never>,
+  Array<{
+    teamId: string;
+    teamName: string;
+    memberCount: number;
+    leads: number;
+    outreach: number;
+    followUps: number;
+    responses: number;
+    meetings: number;
+    proposals: number;
+    pipeline: number;
+    closed: number;
+  }>
+> = {
+  key: "verity.outreach.team_comparison",
+  entity: ENTITY_TEAM,
+  input: z.object({}),
+  handler: async (ctx) => {
+    const [teams, allLeads] = await Promise.all([
+      ctx.tx.outreachTeam.findMany({ where: { active: true }, include: { memberships: { where: { active: true } } } }),
+      ctx.tx.outreachLead.findMany(),
+    ]);
+    const teamIds = teams.map((t) => t.id);
+    const activities = teamIds.length
+      ? await ctx.tx.outreachActivity.findMany({ where: { lead: { teamId: { in: teamIds } } }, include: { lead: true } })
+      : [];
+
+    return teams.map((t) => {
+      const leads = allLeads.filter((l) => l.teamId === t.id);
+      const acts = activities.filter((a) => a.lead.teamId === t.id);
+      return {
+        teamId: t.id,
+        teamName: t.name,
+        memberCount: t.memberships.length,
+        leads: leads.length,
+        outreach: acts.filter((a) => a.activityType === "FirstOutreach").length,
+        followUps: acts.filter((a) => a.activityType === "FollowUp").length,
+        responses: acts.filter((a) => a.activityType === "Response").length,
+        meetings: acts.filter((a) => a.activityType === "MeetingBooked" || a.activityType === "MeetingCompleted").length,
+        proposals: acts.filter((a) => a.activityType === "ProposalSent").length,
+        pipeline: leads.filter((l) => !(TERMINAL_STATES as readonly string[]).includes(l.state) && l.state !== "closed_won").length,
+        closed: leads.filter((l) => l.state === "closed_won").length,
+      };
+    });
   },
 };
 
@@ -949,6 +1100,10 @@ export function registerOutreachCapability(): void {
   registerCommand(submitWeeklyReport);
   registerCommand(submitTeamWeeklyAssessment);
   registerCommand(postCompanyDirection);
+  registerCommand(removeTeamMember);
+  registerCommand(renameTeam);
+  registerCommand(flagForEscalation);
+  registerCommand(resolveEscalation);
 
   registerQuery(listOutreachTeams);
   registerQuery(listOutreachLeads);
@@ -961,4 +1116,7 @@ export function registerOutreachCapability(): void {
   registerQuery(getCurrentDirection);
   registerQuery(listDirections);
   registerQuery(getAttentionExceptions);
+  registerQuery(listAvailableParties);
+  registerQuery(listEscalatedLeads);
+  registerQuery(getTeamComparison);
 }

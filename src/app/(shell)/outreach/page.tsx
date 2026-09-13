@@ -12,11 +12,14 @@ import {
   PageHeader,
   Panel,
   PermissionDenied,
+  Row,
+  RowList,
   Stat,
   StatRow,
 } from "@/components/ui/primitives";
 import { NewLeadForm } from "./NewLeadForm";
 import { DirectionForm } from "./DirectionForm";
+import { ResolveEscalationButton } from "./ResolveEscalationButton";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +63,7 @@ export default async function OutreachPage({
       throw error;
     }
 
-    const [teams, leads, states, canCreate, canPostDirection, currentDirection] = await Promise.all([
+    const [teams, leads, states, canCreate, canPostDirection, currentDirection, directionHistory] = await Promise.all([
       tx.outreachTeam.findMany({
         where: { active: true },
         include: { _count: { select: { memberships: true } }, memberships: { where: { active: true } } },
@@ -78,6 +81,7 @@ export default async function OutreachPage({
       hasPermission(tx, actor.roleId, "Create", ENTITY_LEAD),
       hasPermission(tx, actor.roleId, "Create", ENTITY_DIRECTION),
       tx.outreachDirection.findFirst({ where: { status: "Active" }, orderBy: { postedAt: "desc" } }),
+      tx.outreachDirection.findMany({ orderBy: { postedAt: "desc" }, take: 20 }),
     ]);
 
     // Attention/exceptions (master-context spec §9) and Company Direction
@@ -109,6 +113,49 @@ export default async function OutreachPage({
         if (missing.length > 0)
           exceptions.push({ kind: "missing_check_in", message: `${team.name}: ${missing.length} of ${memberIds.length} haven't checked in today.` });
       }
+    }
+
+    // Team-to-team comparison (master-context spec §8's own table shape) —
+    // Founder-only, company-wide, so it needs every lead/activity, not just
+    // the current `?team=` filter's slice.
+    let teamComparison: Array<{
+      id: string;
+      name: string;
+      members: number;
+      leads: number;
+      outreach: number;
+      followUps: number;
+      responses: number;
+      meetings: number;
+      proposals: number;
+      pipeline: number;
+      closed: number;
+    }> = [];
+    if (!filters.team && canPostDirection) {
+      const teamIds = teams.map((t) => t.id);
+      const [allLeads, allActivities] = await Promise.all([
+        tx.outreachLead.findMany(),
+        teamIds.length
+          ? tx.outreachActivity.findMany({ where: { lead: { teamId: { in: teamIds } } }, include: { lead: true } })
+          : Promise.resolve([]),
+      ]);
+      teamComparison = teams.map((t) => {
+        const tLeads = allLeads.filter((l) => l.teamId === t.id);
+        const tActs = allActivities.filter((a) => a.lead.teamId === t.id);
+        return {
+          id: t.id,
+          name: t.name,
+          members: t.memberships.length,
+          leads: tLeads.length,
+          outreach: tActs.filter((a) => a.activityType === "FirstOutreach").length,
+          followUps: tActs.filter((a) => a.activityType === "FollowUp").length,
+          responses: tActs.filter((a) => a.activityType === "Response").length,
+          meetings: tActs.filter((a) => a.activityType === "MeetingBooked" || a.activityType === "MeetingCompleted").length,
+          proposals: tActs.filter((a) => a.activityType === "ProposalSent").length,
+          pipeline: tLeads.filter((l) => !TERMINAL_STATES.includes(l.state) && l.state !== "closed_won").length,
+          closed: tLeads.filter((l) => l.state === "closed_won").length,
+        };
+      });
     }
 
     const category = new Map(states.map((s) => [s.key, s.category]));
@@ -145,6 +192,20 @@ export default async function OutreachPage({
         count: leads.filter((l) => l.state === s.key).length,
       }));
 
+    // Founder Escalation Queue (spec §57) — company-wide, Founder-only.
+    const escalated = canPostDirection
+      ? await tx.outreachLead.findMany({ where: { escalated: true }, orderBy: { escalatedAt: "desc" } })
+      : [];
+    const escalatedByIds = [...new Set(escalated.map((l) => l.escalatedById).filter((x): x is string => Boolean(x)))];
+    const escalators = escalatedByIds.length ? await tx.party.findMany({ where: { id: { in: escalatedByIds } } }) : [];
+    const escalatorName = new Map(escalators.map((p) => [p.id, p.displayName]));
+    const escalations = escalated.map((l) => ({
+      id: l.id,
+      companyName: l.companyName,
+      note: l.escalationNote,
+      by: l.escalatedById ? escalatorName.get(l.escalatedById) ?? "—" : "—",
+    }));
+
     return {
       teams: teams.map((t) => ({ id: t.id, name: t.name, members: t._count.memberships })),
       members,
@@ -159,7 +220,10 @@ export default async function OutreachPage({
       canCreate,
       canPostDirection,
       currentDirection,
+      directionHistory: !filters.team && canPostDirection ? directionHistory : [],
       exceptions,
+      teamComparison,
+      escalations,
     };
   });
 
@@ -227,6 +291,29 @@ export default async function OutreachPage({
         </div>
       )}
 
+      {data.directionHistory.length > 1 && (
+        <div className="mb-6">
+          <Panel title="Direction history" flush>
+            <RowList>
+              {data.directionHistory.map((d) => (
+                <Row key={d.id}>
+                  <span className="flex flex-col gap-0.5">
+                    <span className="text-[14px] text-text">{d.weekLabel}</span>
+                    <span className="text-[12px] text-text-secondary">
+                      {d.priorityVertical ?? "No priority vertical set"}
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <Badge>{d.primaryTrack}</Badge>
+                    <Badge tone={d.status === "Active" ? "accent" : undefined}>{d.status}</Badge>
+                  </span>
+                </Row>
+              ))}
+            </RowList>
+          </Panel>
+        </div>
+      )}
+
       <StatRow cols={4} className="mb-6">
         <Stat label="Teams" value={data.teams.length} />
         <Stat label="Active leads" value={data.activeLeads} />
@@ -249,6 +336,72 @@ export default async function OutreachPage({
                 ))}
               </div>
             )}
+          </Panel>
+        </div>
+      )}
+
+      {data.escalations.length > 0 && (
+        <div className="mb-6 rounded-xl border border-danger/25 bg-danger-subtle">
+          <Panel title="Founder escalation queue" flush className="border-none bg-transparent">
+            <RowList>
+              {data.escalations.map((e) => (
+                <Row key={e.id}>
+                  <span className="flex flex-col gap-0.5">
+                    <Link href={`/outreach/${e.id}`} className="text-[14px] text-text no-underline hover:text-accent-ink">
+                      {e.companyName}
+                    </Link>
+                    {e.note && <span className="text-[12px] text-text-secondary">{e.note}</span>}
+                    <span className="text-[11px] text-text-tertiary">Flagged by {e.by}</span>
+                  </span>
+                  <ResolveEscalationButton leadId={e.id} />
+                </Row>
+              ))}
+            </RowList>
+          </Panel>
+        </div>
+      )}
+
+      {data.teamComparison.length > 0 && (
+        <div className="mb-6">
+          <Panel title="Team performance" flush>
+            <div className="overflow-x-auto px-6">
+              <table className="w-full min-w-[720px] border-collapse text-[13px]">
+                <thead>
+                  <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-text-tertiary">
+                    <th className="py-2 font-medium">Team</th>
+                    <th className="py-2 text-right font-medium">Members</th>
+                    <th className="py-2 text-right font-medium">Leads</th>
+                    <th className="py-2 text-right font-medium">Outreach</th>
+                    <th className="py-2 text-right font-medium">Follow-ups</th>
+                    <th className="py-2 text-right font-medium">Responses</th>
+                    <th className="py-2 text-right font-medium">Meetings</th>
+                    <th className="py-2 text-right font-medium">Proposals</th>
+                    <th className="py-2 text-right font-medium">Pipeline</th>
+                    <th className="py-2 text-right font-medium">Closed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.teamComparison.map((t) => (
+                    <tr key={t.id} className="border-b border-line last:border-none">
+                      <td className="py-2.5 text-text">
+                        <Link href={`/outreach?team=${t.id}`} className="text-text no-underline hover:text-accent-ink">
+                          {t.name}
+                        </Link>
+                      </td>
+                      <td className="tabular py-2.5 text-right text-text-secondary">{t.members}</td>
+                      <td className="tabular py-2.5 text-right text-text-secondary">{t.leads}</td>
+                      <td className="tabular py-2.5 text-right text-text-secondary">{t.outreach}</td>
+                      <td className="tabular py-2.5 text-right text-text-secondary">{t.followUps}</td>
+                      <td className="tabular py-2.5 text-right text-text-secondary">{t.responses}</td>
+                      <td className="tabular py-2.5 text-right text-text-secondary">{t.meetings}</td>
+                      <td className="tabular py-2.5 text-right text-text-secondary">{t.proposals}</td>
+                      <td className="tabular py-2.5 text-right text-text-secondary">{t.pipeline}</td>
+                      <td className="tabular py-2.5 text-right font-medium text-text">{t.closed}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </Panel>
         </div>
       )}

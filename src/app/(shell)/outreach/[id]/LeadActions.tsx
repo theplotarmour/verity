@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, ErrorState, Field, Select } from "@/components/ui/primitives";
+import { Badge, Button, ErrorState, Field, Select } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -46,6 +46,7 @@ export function LeadActions({
   advanceReceivedMinor,
   teamMembers,
   currentOwnerId,
+  isEscalated,
 }: {
   leadId: string;
   transitions: Array<{ key: string; category: string }>;
@@ -56,6 +57,7 @@ export function LeadActions({
   advanceReceivedMinor: number;
   teamMembers: Array<{ id: string; name: string }>;
   currentOwnerId: string;
+  isEscalated: boolean;
 }) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
@@ -63,6 +65,7 @@ export function LeadActions({
   const [pendingTerminal, setPendingTerminal] = useState<string | null>(null);
   const [reason, setReason] = useState<(typeof REJECTION_REASONS)[number]>("NoFit");
   const [logOpen, setLogOpen] = useState(false);
+  const [escalateOpen, setEscalateOpen] = useState(false);
   const [reassignOpen, setReassignOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [reactivateOpen, setReactivateOpen] = useState(false);
@@ -110,6 +113,12 @@ export function LeadActions({
             {reactivateOpen ? "Close reactivate form" : "Reactivate"}
           </Button>
         )}
+        {canEdit && !isTerminal && !isEscalated && (
+          <Button size="sm" variant="secondary" onClick={() => setEscalateOpen((v) => !v)}>
+            {escalateOpen ? "Close escalation form" : "Escalate to Founders"}
+          </Button>
+        )}
+        {isEscalated && <Badge tone="accent">Escalated</Badge>}
         {canEdit &&
           !isTerminal &&
           transitions.map((t) => {
@@ -168,6 +177,7 @@ export function LeadActions({
       {reactivateOpen && (
         <ReactivateForm leadId={leadId} teamMembers={teamMembers} onDone={() => setReactivateOpen(false)} />
       )}
+      {escalateOpen && <EscalateForm leadId={leadId} onDone={() => setEscalateOpen(false)} />}
 
       {failure && (
         <div className="w-full sm:w-96">
@@ -462,6 +472,61 @@ function ReactivateForm({
       <div className="flex gap-2">
         <Button type="submit" size="sm" disabled={pending}>
           {pending ? "Saving…" : "Create new lead from this"}
+        </Button>
+        <Button type="button" size="sm" variant="secondary" onClick={onDone}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/** Founder Escalation Queue (master-context spec §57) — the flag side. */
+function EscalateForm({ leadId, onDone }: { leadId: string; onDone: () => void }) {
+  const router = useRouter();
+  const [failure, setFailure] = useState<ActionFailure | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  return (
+    <form
+      className="flex w-full flex-col gap-3 rounded-lg border border-line bg-surface p-4 sm:w-[420px]"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const form = new FormData(e.currentTarget);
+        setFailure(null);
+        startTransition(async () => {
+          const result = await runCommand(
+            "verity.outreach.flag_escalation",
+            { leadId, note: String(form.get("note") ?? "") },
+            `/outreach/${leadId}`,
+          );
+          if (result.ok) {
+            onDone();
+            router.refresh();
+          } else {
+            setFailure(result);
+          }
+        });
+      }}
+    >
+      <Field
+        label="Why does this need Founders' attention?"
+        htmlFor="escalationNote"
+        required
+        hint="Large deal, unusual technical requirement, Agency+Verity cross-sell, ..."
+      >
+        <textarea
+          id="escalationNote"
+          name="note"
+          required
+          rows={2}
+          className="glass-control w-full rounded-lg px-4 py-2.5 text-[14px] text-text focus:outline-none focus:border-accent"
+        />
+      </Field>
+      {failure && <ErrorState title="Could not escalate" message={failure.message} issues={failure.issues} retryable={failure.retryable} />}
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={pending}>
+          {pending ? "Sending…" : "Escalate"}
         </Button>
         <Button type="button" size="sm" variant="secondary" onClick={onDone}>
           Cancel

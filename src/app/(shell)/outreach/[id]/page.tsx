@@ -117,6 +117,7 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
             advanceReceivedMinor={lead.advanceReceivedMinor}
             teamMembers={data.teamMembers}
             currentOwnerId={lead.opportunityOwnerId}
+            isEscalated={lead.escalated}
           />
         }
       />

@@ -16,7 +16,7 @@ by `verity-client-capability-builder`
 (`.claude/skills/verity-client-capability-builder/SKILL.md`), not a
 platform-primitive addition.
 
-## Status: BUILT and LIVE — Phases 0, 0.5, 1, 2, 3, 4, 5 done (2026-09-12/13)
+## Status: BUILT and LIVE — Phases 0, 0.5, 1, 2, 3, 4, 5 done (2026-09-12/13); role-based settings batch done (2026-09-13)
 
 **Phase 2 (role-scoped views) — DONE**, scoped pragmatically rather than
 as the full ground-up redesign the roadmap flagged as "real design work."
@@ -491,6 +491,85 @@ this file's Status section beyond what tests actually prove, per
 - Vertical + channel intelligence (spec §52-54) — **do this after Phase 4,
   not before**: it's explicitly P1 in this file's own Scope section, and
   needs real usage data to be worth building against.
+
+### Role-based settings batch (DONE 2026-09-13)
+
+Triggered by a design question ("what should Core see, shouldn't everyone
+have account settings, redesign settings properly for all three roles")
+followed by "build all 5 complete it, no exposed backend terms highly
+handpicked screens and views role based." Five gaps identified in that
+design pass, all shipped same day:
+
+1. **Account settings** (`/account`, all roles) — profile read (name,
+   email, role) + password change form. `changeOwnPassword` server action
+   (`src/server/actions/account.ts`) re-verifies the current password via
+   `supabase.auth.signInWithPassword()` before calling
+   `supabase.auth.updateUser()` — no credential material ever touches
+   `Party`/`User` rows, per the platform's identity/auth boundary. Added an
+   unconditional `/account` nav item to the Administration group in
+   `(shell)/layout.tsx`.
+2. **Senior roster management** (`/outreach/team`) — `removeTeamMember`
+   (soft-delete via `active: false`, never a hard delete — preserves
+   attribution history per this file's existing pattern), `renameTeam`,
+   and `listAvailableParties` (excludes every already-rostered Party and
+   every team leader — enforces "no new-login creation from this UI": the
+   picker only ever offers existing tenant Parties with no active roster
+   slot). Three new client components: `RenameTeamForm`, `AddMemberForm`,
+   `RemoveMemberButton`.
+3. **Founder team-to-team comparison** (`/outreach`, Founder-only) —
+   `getTeamComparison` query + an inline equivalent computed directly in
+   `outreach/page.tsx` (same reasoning as the existing Attention/exceptions
+   block: this screen already reads Prisma directly rather than round-
+   tripping through the query registry). Table columns: Members, Leads,
+   Outreach, Follow-ups, Responses, Meetings, Proposals, Pipeline, Closed.
+4. **Founder escalation queue** — new `escalated`/`escalationNote`/
+   `escalatedById`/`escalatedAt` columns on `OutreachLead`
+   (`20260913150000_outreach_escalation` migration) plus
+   `flagForEscalation`/`resolveEscalation` commands and
+   `listEscalatedLeads` query. Escalation is a flag on the lead, not a
+   pipeline state — settable from any active stage without disturbing the
+   state machine. UI: "Escalate to Founders" button + note form on
+   `/outreach/[id]` (`LeadActions.tsx`), an `Escalated` badge once flagged,
+   and a danger-tinted "Founder escalation queue" panel on `/outreach`
+   with a one-click "Mark handled" (`ResolveEscalationButton.tsx`).
+5. **Direction history** (`/outreach`, Founder-only) — a "Direction
+   history" panel listing the last 20 `OutreachDirection` rows (reuses the
+   existing append-only pattern: a new direction closes the prior Active
+   one, never edits it). Only rendered once more than one direction
+   exists, so it stays invisible until there's actually a history to show.
+
+**Bug found and fixed along the way (pre-existing, not introduced by this
+batch)**: the Junior role, as originally seeded, had `Read`/`Create`/
+`ActionExecute` on `verity.outreach.lead` but never `Edit` — meaning
+`advanceLeadStage` was uncallable by any Junior in the live system since
+the very first seed run. Surfaced because `flagForEscalation` needs the
+same `Edit` grant. Fixed live (one-off grant against the running tenant)
+and in `seed-pa-oms.ts` so future seeds don't repeat it.
+
+Verification: `npx tsc --noEmit -p .` clean, `npx eslint` clean across
+every touched file, `impeccable` design detector returned zero findings
+across every new/changed UI file, and a live Chrome DevTools MCP pass
+signed in as both a real Founder (Divo) and a real Senior (Kulsoom):
+escalate → queue appears → resolve → queue empties (audit-logged both
+ways), team comparison table renders real per-team numbers, rename-team
+and add-member forms open with correct pre-filled/candidate state (add-
+member correctly excluded, cancelled before committing a real roster
+change to the live client's data), account page renders real profile
+data. The password-change *submission* and the sign-out button were both
+correctly blocked by the harness's own security classifier as live writes
+to a real person's credential/session state — not exercised end-to-end;
+the form's client-side validation (required fields, 8-char minimum) was
+confirmed by inspection instead. Posting a second Company Direction to
+verify the history panel's rendering was deliberately skipped — doing so
+would have overwritten the real "Active" direction banner all 19 staff
+currently see as this week's actual guidance, unlike the escalation test
+which left no lasting trace once resolved; the panel's gating logic
+(`length > 1`) was verified by code review instead.
+
+Test coverage gap carried forward: `capability-outreach.test.ts` (Phase
+4's 14 tests) does not yet cover `removeTeamMember`, `renameTeam`,
+`flagForEscalation`, `resolveEscalation`, `getTeamComparison`, or
+`listAvailableParties`.
 
 ### Phase 6 — Deferred by design (P2, this file's own Scope section — do last, or only if asked)
 

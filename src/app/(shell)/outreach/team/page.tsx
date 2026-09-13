@@ -5,6 +5,9 @@ import { installCapabilities } from "@/server/capabilities/registry";
 import { ENTITY_LEAD } from "@/server/capabilities/outreach";
 import { DataTable } from "@/components/ui/DataTable";
 import { EmptyState, PageHeader, Panel, PermissionDenied, Stat, StatRow } from "@/components/ui/primitives";
+import { RemoveMemberButton } from "./RemoveMemberButton";
+import { AddMemberForm } from "./AddMemberForm";
+import { RenameTeamForm } from "./RenameTeamForm";
 
 export const dynamic = "force-dynamic";
 
@@ -66,9 +69,30 @@ export default async function TeamCommandPage() {
       (l) => l.nextActionAt != null && l.nextActionAt < new Date() && !TERMINAL_STATES.includes(l.state) && l.state !== "closed_won",
     );
 
+    // Roster management: who could be added — reachable in the tenant,
+    // not already on an active roster anywhere (never a pool for creating
+    // new logins — see the query's own doc comment).
+    const [takenMemberships, takenLeaders, allMemberships] = await Promise.all([
+      tx.outreachTeamMembership.findMany({ where: { active: true }, select: { partyId: true } }),
+      tx.outreachTeam.findMany({ where: { active: true }, select: { leaderId: true } }),
+      tx.tenantMembership.findMany({ include: { user: { include: { party: true } } } }),
+    ]);
+    const taken = new Set([...takenMemberships.map((m) => m.partyId), ...takenLeaders.map((l) => l.leaderId)]);
+    const seen = new Set<string>();
+    const availableParties: Array<{ id: string; name: string }> = [];
+    for (const m of allMemberships) {
+      const party = m.user.party;
+      if (taken.has(party.id) || seen.has(party.id)) continue;
+      seen.add(party.id);
+      availableParties.push({ id: party.id, name: party.displayName });
+    }
+    availableParties.sort((a, b) => a.name.localeCompare(b.name));
+
     return {
       noTeam: false as const,
+      teamId: team.id,
       teamName: team.name,
+      availableParties,
       memberCount: memberPartyIds.length,
       activeLeads: leads.filter((l) => !TERMINAL_STATES.includes(l.state) && l.state !== "closed_won").length,
       closedWon: leads.filter((l) => l.state === "closed_won").length,
@@ -105,6 +129,9 @@ export default async function TeamCommandPage() {
         <p className="mb-0 mt-2 max-w-[62ch] text-[14px] text-text-secondary">
           Is my team executing the company direction effectively?
         </p>
+        <div className="mt-3">
+          <RenameTeamForm teamId={data.teamId} currentName={data.teamName} />
+        </div>
       </header>
 
       <StatRow cols={4} className="mb-6">
@@ -115,7 +142,7 @@ export default async function TeamCommandPage() {
       </StatRow>
 
       <div className="mb-6">
-        <Panel title="Member performance" flush>
+        <Panel title="Member performance" flush action={<AddMemberForm teamId={data.teamId} candidates={data.availableParties} />}>
           <div className="flex flex-col divide-y divide-line px-6">
             <div className="flex items-center gap-4 py-2 text-[11px] uppercase tracking-wide text-text-tertiary">
               <span className="w-3" />
@@ -124,6 +151,7 @@ export default async function TeamCommandPage() {
               <span className="w-20 text-right">Outreach</span>
               <span className="w-16 text-right">Closed</span>
               <span className="w-16 text-right">Overdue</span>
+              <span className="w-8" />
             </div>
             {data.memberRows.map((m) => {
               // Status dot, cockpit-instrument style: 0 overdue reads Active
@@ -139,6 +167,9 @@ export default async function TeamCommandPage() {
                   <span className="tabular w-16 text-right text-[13px] text-text-secondary">{m.closed}</span>
                   <span className={`tabular w-16 text-right text-[13px] ${m.overdue > 0 ? "text-danger" : "text-text-secondary"}`}>
                     {m.overdue}
+                  </span>
+                  <span className="w-8 text-right">
+                    <RemoveMemberButton teamId={data.teamId} partyId={m.id} name={m.name} />
                   </span>
                 </div>
               );

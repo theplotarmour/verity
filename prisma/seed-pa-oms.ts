@@ -209,7 +209,9 @@ async function main() {
       });
       // Junior: can create/read/act on their own work; cannot edit team or
       // membership rows (master-context §16/§68 — Juniors don't reassign
-      // ownership or set targets).
+      // ownership or set targets). Edit on leads is deliberate, not an
+      // oversight: advancing a lead's own stage and flagging it for
+      // escalation are both ordinary Junior responsibilities (spec §17-19).
       await tx.permission.createMany({
         data: [
           ...[ENTITY_LEAD, ENTITY_ACTIVITY, ENTITY_CHECK_IN, ENTITY_WEEKLY_REPORT].flatMap((entity) =>
@@ -221,6 +223,7 @@ async function main() {
               scope: "Tenant" as const,
             })),
           ),
+          { tenantId, roleId: juniorRole.id, verb: "Edit" as const, entity: ENTITY_LEAD, scope: "Tenant" as const },
           { tenantId, roleId: juniorRole.id, verb: "Read" as const, entity: ENTITY_TEAM, scope: "Tenant" as const },
           { tenantId, roleId: juniorRole.id, verb: "Read" as const, entity: ENTITY_TARGET, scope: "Tenant" as const },
           { tenantId, roleId: juniorRole.id, verb: "Read" as const, entity: ENTITY_DIRECTION, scope: "Tenant" as const },

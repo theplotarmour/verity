@@ -4407,6 +4407,16 @@ model OutreachLead {
   /// Ch. 02's 90-day origination-credit window) spawns a new row instead.
   reactivatedFromLeadId String? @map("reactivated_from_lead_id") @db.Uuid
 
+  /// Founder Escalation Queue (master-context spec §57). Flagged by whoever
+  /// owns the lead when it needs Founders' Office attention (large deal,
+  /// unusual technical requirement, Agency+Verity cross-sell, ...) — not a
+  /// state, since escalation can happen from any active stage without
+  /// otherwise changing the pipeline.
+  escalated      Boolean   @default(false)
+  escalationNote String?   @map("escalation_note")
+  escalatedById  String?   @map("escalated_by_id") @db.Uuid
+  escalatedAt    DateTime? @map("escalated_at")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   version   Int      @default(1)
