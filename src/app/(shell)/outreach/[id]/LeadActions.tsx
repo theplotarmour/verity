@@ -27,6 +27,8 @@ const ACTIVITY_TYPES = [
   "MeetingBooked",
   "MeetingCompleted",
   "ProposalSent",
+  "PitchDeck",
+  "BusinessResearch",
   "Other",
 ] as const;
 

@@ -145,10 +145,32 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
               items={[
                 { term: "Website", value: lead.website ?? "—" },
                 { term: "Industry", value: lead.industry ?? "—" },
+                { term: "Location", value: lead.location ?? "—" },
                 { term: "Contact", value: lead.contactName ?? "—" },
                 { term: "Designation", value: lead.contactDesignation ?? "—" },
                 { term: "Email", value: lead.contactEmail ?? "—" },
                 { term: "Phone", value: lead.contactPhone ?? "—" },
+                {
+                  term: "LinkedIn",
+                  value: lead.linkedinUrl ? (
+                    <a href={lead.linkedinUrl} target="_blank" rel="noreferrer" className="text-accent-ink no-underline hover:underline">
+                      {lead.linkedinUrl}
+                    </a>
+                  ) : (
+                    "—"
+                  ),
+                },
+              ]}
+            />
+          </Panel>
+
+          <Panel title="Research">
+            <DefinitionList
+              items={[
+                { term: "What they do", value: lead.whatTheyDo ?? "—" },
+                { term: "Potential need", value: lead.potentialNeed ?? "—" },
+                { term: "Sales hypothesis", value: lead.salesHypothesis ?? "—" },
+                { term: "Fit score", value: lead.qualityScore != null ? `${lead.qualityScore} / 10` : "—" },
               ]}
             />
           </Panel>

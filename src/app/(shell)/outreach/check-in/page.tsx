@@ -39,6 +39,8 @@ export default async function CheckInPage() {
         followUps: activities.filter((a) => a.activityType === "FollowUp").length,
         responses: activities.filter((a) => a.activityType === "Response").length,
         meetings: activities.filter((a) => a.activityType === "MeetingBooked" || a.activityType === "MeetingCompleted").length,
+        pitchDecks: activities.filter((a) => a.activityType === "PitchDeck").length,
+        businessResearch: activities.filter((a) => a.activityType === "BusinessResearch").length,
       },
       recentCheckIns,
       alreadySubmittedToday: Boolean(alreadySubmittedToday),
@@ -60,7 +62,9 @@ export default async function CheckInPage() {
         <Stat label="Follow-ups" value={data.metrics.followUps} />
         <Stat label="Responses" value={data.metrics.responses} />
       </StatRow>
-      <p className="mb-6 text-[13px] text-text-secondary">Meetings today: {data.metrics.meetings}</p>
+      <p className="mb-6 text-[13px] text-text-secondary">
+        Meetings today: {data.metrics.meetings} · Pitch decks: {data.metrics.pitchDecks} · Business R&amp;A: {data.metrics.businessResearch}
+      </p>
 
       {data.alreadySubmittedToday ? (
         <Panel title="Today">

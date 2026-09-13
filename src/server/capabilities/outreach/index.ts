@@ -68,6 +68,13 @@ const ACTIVITY_TYPES = [
   "MeetingBooked",
   "MeetingCompleted",
   "ProposalSent",
+  // The daily workbook's own "Pitch Decks" and "Business R&A" columns
+  // (2026-09-13) — distinct from ProposalSent/research-at-creation:
+  // PitchDeck logs sending a deck at any stage, BusinessResearch logs
+  // research time spent on a company that hasn't necessarily become a
+  // lead yet (master-context doc §49: "make it a real activity").
+  "PitchDeck",
+  "BusinessResearch",
   "Other",
 ] as const;
 const TRACKS = ["Agency", "Verity", "Both", "Undetermined"] as const;
@@ -229,6 +236,12 @@ export const createOutreachLead: CommandDefinition<
     track?: (typeof TRACKS)[number];
     whyRelevant: string;
     opportunityOwnerId: string;
+    location?: string;
+    whatTheyDo?: string;
+    potentialNeed?: string;
+    salesHypothesis?: string;
+    linkedinUrl?: string;
+    qualityScore?: number;
   },
   { id: string }
 > = {
@@ -245,6 +258,15 @@ export const createOutreachLead: CommandDefinition<
     // name is not a qualified lead.
     whyRelevant: z.string().min(1),
     opportunityOwnerId: z.string().uuid(),
+    // The real prospect-research sheet's own columns (2026-09-13) — see
+    // the schema-field doc comment for why each is distinct from
+    // `whyRelevant`.
+    location: z.string().min(1).optional(),
+    whatTheyDo: z.string().min(1).optional(),
+    potentialNeed: z.string().min(1).optional(),
+    salesHypothesis: z.string().min(1).optional(),
+    linkedinUrl: z.string().min(1).optional(),
+    qualityScore: z.number().int().min(1).max(10).optional(),
   }),
   handler: async (ctx, input) => {
     const originatorId = await actorPartyId(ctx.tx, ctx.actor.userId);
@@ -259,6 +281,12 @@ export const createOutreachLead: CommandDefinition<
         whyRelevant: input.whyRelevant,
         leadOriginatorId: originatorId,
         opportunityOwnerId: input.opportunityOwnerId,
+        location: input.location ?? null,
+        whatTheyDo: input.whatTheyDo ?? null,
+        potentialNeed: input.potentialNeed ?? null,
+        salesHypothesis: input.salesHypothesis ?? null,
+        linkedinUrl: input.linkedinUrl ?? null,
+        qualityScore: input.qualityScore ?? null,
       },
     });
     return { result: { id: lead.id }, events: [{ name: "verity.outreach.lead_created", entityId: lead.id }] };
@@ -597,6 +625,8 @@ export const getTeamComparison: QueryDefinition<
     responses: number;
     meetings: number;
     proposals: number;
+    pitchDecks: number;
+    businessResearch: number;
     pipeline: number;
     closed: number;
   }>
@@ -627,6 +657,8 @@ export const getTeamComparison: QueryDefinition<
         responses: acts.filter((a) => a.activityType === "Response").length,
         meetings: acts.filter((a) => a.activityType === "MeetingBooked" || a.activityType === "MeetingCompleted").length,
         proposals: acts.filter((a) => a.activityType === "ProposalSent").length,
+        pitchDecks: acts.filter((a) => a.activityType === "PitchDeck").length,
+        businessResearch: acts.filter((a) => a.activityType === "BusinessResearch").length,
         pipeline: leads.filter((l) => !(TERMINAL_STATES as readonly string[]).includes(l.state) && l.state !== "closed_won").length,
         closed: leads.filter((l) => l.state === "closed_won").length,
       };
@@ -850,6 +882,8 @@ export const getDailyMetrics: QueryDefinition<{ partyId: string; date: string },
       responses: activities.filter((a) => a.activityType === "Response").length,
       meetings: activities.filter((a) => a.activityType === "MeetingBooked" || a.activityType === "MeetingCompleted").length,
       proposals: activities.filter((a) => a.activityType === "ProposalSent").length,
+      pitchDecks: activities.filter((a) => a.activityType === "PitchDeck").length,
+      businessResearch: activities.filter((a) => a.activityType === "BusinessResearch").length,
     };
   },
 };
@@ -966,6 +1000,8 @@ export const getTeamWeeklyRollup: QueryDefinition<{ teamId: string; weekStart: s
       responses: activities.filter((a) => a.activityType === "Response").length,
       meetings: activities.filter((a) => a.activityType === "MeetingBooked" || a.activityType === "MeetingCompleted").length,
       proposals: activities.filter((a) => a.activityType === "ProposalSent").length,
+      pitchDecks: activities.filter((a) => a.activityType === "PitchDeck").length,
+      businessResearch: activities.filter((a) => a.activityType === "BusinessResearch").length,
       closed,
     };
   },

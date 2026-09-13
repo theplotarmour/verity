@@ -25,6 +25,7 @@ import {
   createOutreachLead,
   createOutreachTeam,
   flagForEscalation,
+  getDailyMetrics,
   getFunnelCounts,
   getTeamComparison,
   getTeamWeeklyRollup,
@@ -201,6 +202,55 @@ describeDb("capability: Outreach", () => {
     expect(row.state).toBe("research");
     expect(row.leadOriginatorId).toBe(founderPartyId);
     expect(row.opportunityOwnerId).toBe(seniorAPartyId);
+  });
+
+  it("stores the prospect-research sheet's fields when given (2026-09-13 batch)", async () => {
+    const lead = await executeCommand(founder, createOutreachLead, {
+      teamId: teamAId,
+      companyName: "Research Fields Co",
+      whyRelevant: "Fresh funding round per press release.",
+      opportunityOwnerId: seniorAPartyId,
+      location: "Melbourne, Australia",
+      whatTheyDo: "A vegan-leather pet accessories brand.",
+      potentialNeed: "Brand photography, launch campaign production.",
+      salesHypothesis: "New launch needs a content library before competitors crowd them out.",
+      linkedinUrl: "https://www.linkedin.com/in/example",
+      qualityScore: 8,
+    });
+    const row = await withTenant(tenantId, (tx) => tx.outreachLead.findUniqueOrThrow({ where: { id: lead.id } }));
+    expect(row.location).toBe("Melbourne, Australia");
+    expect(row.whatTheyDo).toBe("A vegan-leather pet accessories brand.");
+    expect(row.potentialNeed).toBe("Brand photography, launch campaign production.");
+    expect(row.salesHypothesis).toBe("New launch needs a content library before competitors crowd them out.");
+    expect(row.linkedinUrl).toBe("https://www.linkedin.com/in/example");
+    expect(row.qualityScore).toBe(8);
+  });
+
+  it("logs PitchDeck and BusinessResearch activity types (daily workbook columns, 2026-09-13 batch)", async () => {
+    const lead = await executeCommand(founder, createOutreachLead, {
+      teamId: teamAId,
+      companyName: "Pitch Deck Co",
+      whyRelevant: "Test.",
+      opportunityOwnerId: seniorAPartyId,
+    });
+    await executeCommand(founder, logOutreachActivity, {
+      leadId: lead.id,
+      channel: "Email",
+      activityType: "PitchDeck",
+      message: "Sent the deck.",
+    });
+    await executeCommand(founder, logOutreachActivity, {
+      leadId: lead.id,
+      channel: "Other",
+      activityType: "BusinessResearch",
+      message: "Reviewed their site and LinkedIn.",
+    });
+    const timeline = await withTenant(tenantId, (tx) => tx.outreachActivity.findMany({ where: { leadId: lead.id } }));
+    expect(timeline.map((a) => a.activityType).sort()).toEqual(["BusinessResearch", "PitchDeck"]);
+
+    const metrics = await executeQuery(founder, getDailyMetrics, { partyId: founderPartyId, date: new Date().toISOString() });
+    expect(metrics.pitchDecks).toBeGreaterThanOrEqual(1);
+    expect(metrics.businessResearch).toBeGreaterThanOrEqual(1);
   });
 
   describe("state machine (handbook Ch. 22)", () => {

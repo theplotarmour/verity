@@ -4371,10 +4371,23 @@ model OutreachLead {
   track       String  @default("Undetermined")
   whyRelevant String? @map("why_relevant")
 
+  /// The real prospect-research sheet's own columns (2026-09-13), added so
+  /// nothing from the actual workbook is lost by moving to Verity: city/
+  /// country, what the business does, the specific service opportunity
+  /// (distinct from `whyRelevant`'s timing/trigger reasoning), the outreach
+  /// angle to open with, and a 1-10 fit score.
+  location         String?
+  whatTheyDo       String? @map("what_they_do")
+  potentialNeed    String? @map("potential_need")
+  salesHypothesis  String? @map("sales_hypothesis")
+  /// 1-10, matches the sheet's "Score" column.
+  qualityScore     Int?    @map("quality_score")
+
   contactName        String? @map("contact_name")
   contactDesignation String? @map("contact_designation")
   contactEmail       String? @map("contact_email")
   contactPhone       String? @map("contact_phone")
+  linkedinUrl        String? @map("linkedin_url")
 
   /// `verity.outreach.lead` state-machine key.
   state String @default("research")

@@ -121,6 +121,34 @@ task list, daily report review loop, funnel-based framing, duplicate/
 cross-team detection, notification digest, Core's 2-team weekly review)
 remain NOT YET STARTED.
 
+### Prospect-sheet field parity — DONE 2026-09-14
+
+User supplied a real PlotArmour prospect-research sheet (10 real leads)
+plus the daily intern workbook's own columns as evidence of fields
+Verity's lead form was missing, with the same additive-only instruction.
+Added, all nullable/additive (migrations `20260913190000_
+outreach_lead_research_fields`, no removal of any existing field):
+
+- `OutreachLead` gained `location`, `whatTheyDo`, `potentialNeed`,
+  `salesHypothesis`, `linkedinUrl`, `qualityScore` (1-10) — matching the
+  sheet's Location / What They Do / Potential Need / Sales Hypothesis /
+  LinkedIn / Score columns 1:1. `createOutreachLead` takes all 6 as
+  optional inputs; `NewLeadForm` and the lead detail page (`[id]/page.tsx`,
+  new "Research" panel) both updated to capture/display them.
+- Activity types gained `PitchDeck` and `BusinessResearch` — the
+  workbook's own "Pitch Decks" and "Business R&A" columns, previously
+  uncounted. Wired into `getDailyMetrics`, `getTeamWeeklyRollup`, and
+  `getTeamComparison` (additive keys, `Record<string, number>` returns
+  already tolerated new keys) and the daily check-in page's summary line.
+
+4 new tests (26/26 passing): fields round-trip on create, both new
+activity types log correctly and feed `getDailyMetrics`. Live-verified
+end to end via Chrome DevTools MCP: created a real prospect from the
+sheet ("Mia Coosh") with every new field filled, confirmed all 6 render
+correctly on the lead detail page (including a live LinkedIn link),
+logged a `PitchDeck` activity and confirmed the check-in page's
+"Pitch decks" count updated from 0 to 1.
+
 **Phase 2 (role-scoped views) — DONE**, scoped pragmatically rather than
 as the full ground-up redesign the roadmap flagged as "real design work."
 What shipped:
