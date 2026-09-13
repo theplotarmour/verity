@@ -24,8 +24,12 @@ import {
   advanceLeadStage,
   createOutreachLead,
   createOutreachTeam,
+  flagForEscalation,
   getFunnelCounts,
+  getTeamComparison,
   getTeamWeeklyRollup,
+  listAvailableParties,
+  listEscalatedLeads,
   listOutreachLeads,
   listOverdueFollowUps,
   logOutreachActivity,
@@ -33,6 +37,9 @@ import {
   reassignOpportunityOwner,
   recordAdvancePayment,
   registerOutreachCapability,
+  removeTeamMember,
+  renameTeam,
+  resolveEscalation,
   setOutreachTarget,
   submitDailyCheckIn,
   submitTeamWeeklyAssessment,
@@ -478,5 +485,113 @@ describeDb("capability: Outreach", () => {
       tx.outreachTeamMembership.findMany({ where: { teamId: team.id } }),
     );
     expect(memberships).toHaveLength(8); // no cap — 8 exceeds any "4-5" guidance, and succeeds
+  });
+
+  describe("roster management (2026-09-13 batch)", () => {
+    it("soft-removes a member (active: false) rather than deleting the row", async () => {
+      const identity = await withTenant(tenantId, (tx) =>
+        provisionIdentity(tx, { organizationId, authUserId: randomUUID(), displayName: "Removable Junior" }),
+      );
+      await executeCommand(founder, addTeamMember, { teamId: teamAId, partyId: identity.partyId });
+      await executeCommand(founder, removeTeamMember, { teamId: teamAId, partyId: identity.partyId });
+
+      const membership = await withTenant(tenantId, (tx) =>
+        tx.outreachTeamMembership.findFirstOrThrow({ where: { teamId: teamAId, partyId: identity.partyId } }),
+      );
+      expect(membership.active).toBe(false);
+    });
+
+    it("renames a team", async () => {
+      const team = await executeCommand(founder, createOutreachTeam, {
+        name: `Rename Me ${randomUUID()}`,
+        leaderId: seniorAPartyId,
+      });
+      await executeCommand(founder, renameTeam, { teamId: team.id, name: "Renamed Team" });
+      const row = await withTenant(tenantId, (tx) => tx.outreachTeam.findUniqueOrThrow({ where: { id: team.id } }));
+      expect(row.name).toBe("Renamed Team");
+    });
+
+    it("lists only parties with no active roster slot, excluding leaders", async () => {
+      const identity = await withTenant(tenantId, (tx) =>
+        provisionIdentity(tx, { organizationId, authUserId: randomUUID(), displayName: "Unrostered Party" }),
+      );
+      const candidates = await executeQuery(founder, listAvailableParties, {});
+      const ids = candidates.map((c) => c.id);
+      expect(ids).toContain(identity.partyId); // never rostered anywhere — a legitimate candidate
+      expect(ids).not.toContain(seniorAPartyId); // leads teamA — never offered as addable
+    });
+  });
+
+  describe("escalation (2026-09-13 batch)", () => {
+    it("flags a lead for escalation and resolves it", async () => {
+      const lead = await executeCommand(founder, createOutreachLead, {
+        teamId: teamAId,
+        companyName: "Escalate Me Co",
+        whyRelevant: "Test.",
+        opportunityOwnerId: seniorAPartyId,
+      });
+
+      const flagged = await executeCommand(seniorA, flagForEscalation, {
+        leadId: lead.id,
+        note: "Large deal, needs Founder sign-off.",
+        type: "Commercial",
+        urgency: "High",
+      });
+      const flaggedRow = await withTenant(tenantId, (tx) =>
+        tx.outreachLead.findUniqueOrThrow({ where: { id: flagged.id } }),
+      );
+      expect(flaggedRow.escalated).toBe(true);
+      expect(flaggedRow.escalationNote).toBe("Large deal, needs Founder sign-off.");
+      expect(flaggedRow.escalationType).toBe("Commercial");
+      expect(flaggedRow.escalationUrgency).toBe("High");
+      expect(flaggedRow.escalatedById).toBe(seniorAPartyId);
+      expect(flaggedRow.escalatedAt).not.toBeNull();
+
+      await executeCommand(founder, resolveEscalation, { leadId: lead.id });
+      const resolvedRow = await withTenant(tenantId, (tx) =>
+        tx.outreachLead.findUniqueOrThrow({ where: { id: lead.id } }),
+      );
+      expect(resolvedRow.escalated).toBe(false);
+    });
+
+    it("routes escalations to the Team Leader first (2026-09-13 hierarchical-architecture doc)", async () => {
+      const leadA = await executeCommand(founder, createOutreachLead, {
+        teamId: teamAId,
+        companyName: "Team A Escalation Co",
+        whyRelevant: "Test.",
+        opportunityOwnerId: seniorAPartyId,
+      });
+      await executeCommand(seniorA, flagForEscalation, {
+        leadId: leadA.id,
+        note: "Needs a second look.",
+        type: "TeamIssue",
+        urgency: "Normal",
+      });
+
+      // Senior A, scoped to their own team, sees it.
+      const seniorAView = await executeQuery(seniorA, listEscalatedLeads, { teamId: teamAId });
+      expect(seniorAView.some((l) => l.id === leadA.id)).toBe(true);
+
+      // Senior A cannot see Team B's escalation queue.
+      await expect(executeQuery(seniorA, listEscalatedLeads, { teamId: teamBId })).rejects.toThrow(ForbiddenError);
+
+      // Core, unscoped, still sees everything — no visibility was removed.
+      const founderView = await executeQuery(founder, listEscalatedLeads, {});
+      expect(founderView.some((l) => l.id === leadA.id)).toBe(true);
+
+      await executeCommand(founder, resolveEscalation, { leadId: leadA.id });
+    });
+  });
+
+  describe("team comparison (2026-09-13 batch)", () => {
+    it("reports per-team member and lead counts across all teams", async () => {
+      const rows = await executeQuery(founder, getTeamComparison, {});
+      const teamARow = rows.find((r) => r.teamId === teamAId);
+      expect(teamARow).toBeDefined();
+      expect(teamARow!.teamName).toBe("Team A");
+      expect(typeof teamARow!.leads).toBe("number");
+      expect(typeof teamARow!.pipeline).toBe("number");
+      expect(typeof teamARow!.closed).toBe("number");
+    });
   });
 });

@@ -452,17 +452,41 @@ export const reactivateLead: CommandDefinition<
   },
 };
 
-/** Founder Escalation Queue (spec §57) — the Junior/Senior side: flag a lead, with why. */
-export const flagForEscalation: CommandDefinition<{ leadId: string; note: string }, { id: string }> = {
+const ESCALATION_TYPES = ["Commercial", "Technical", "ClientIssue", "Attribution", "TeamIssue", "Other"] as const;
+const ESCALATION_URGENCIES = ["Normal", "High", "Critical"] as const;
+
+/**
+ * Escalation (2026-09-13 hierarchical-architecture doc §38-39) — typed,
+ * Junior -> Senior -> Core, not straight to Core: `type`/`urgency` are
+ * optional so the pre-existing untyped flag flow keeps working, but the
+ * new UI always sends them.
+ */
+export const flagForEscalation: CommandDefinition<
+  { leadId: string; note: string; type?: string; urgency?: string },
+  { id: string }
+> = {
   key: "verity.outreach.flag_escalation",
   entity: ENTITY_LEAD,
   verb: "Edit",
-  input: z.object({ leadId: z.string().uuid(), note: z.string().min(1) }),
+  input: z.object({
+    leadId: z.string().uuid(),
+    note: z.string().min(1),
+    type: z.enum(ESCALATION_TYPES).optional(),
+    urgency: z.enum(ESCALATION_URGENCIES).optional(),
+  }),
   handler: async (ctx, input) => {
     const actorId = await actorPartyId(ctx.tx, ctx.actor.userId);
     const lead = await ctx.tx.outreachLead.update({
       where: { id: input.leadId },
-      data: { escalated: true, escalationNote: input.note, escalatedById: actorId, escalatedAt: new Date(), version: { increment: 1 } },
+      data: {
+        escalated: true,
+        escalationNote: input.note,
+        escalationType: input.type ?? null,
+        escalationUrgency: input.urgency ?? null,
+        escalatedById: actorId,
+        escalatedAt: new Date(),
+        version: { increment: 1 },
+      },
     });
     return { result: { id: lead.id }, events: [{ name: "verity.outreach.lead_escalated", entityId: lead.id }] };
   },
@@ -541,13 +565,23 @@ export const getFunnelCounts: QueryDefinition<{ teamId?: string }, Array<{ state
   },
 };
 
-/** Founder Escalation Queue — the read side (spec §57). Tenant-wide by design; never team-scoped. */
-export const listEscalatedLeads: QueryDefinition<Record<string, never>, Array<Record<string, unknown>>> = {
+/**
+ * Escalation queue — the read side. Core calls with no `teamId` for the
+ * tenant-wide view (unchanged from spec §57's original Founder-only
+ * queue). Senior calls with their own `teamId` for Team Command's
+ * first-line view (2026-09-13 doc §38-39: Junior -> Senior -> Core).
+ */
+export const listEscalatedLeads: QueryDefinition<{ teamId?: string }, Array<Record<string, unknown>>> = {
   key: "verity.outreach.list_escalated_leads",
   entity: ENTITY_LEAD,
-  input: z.object({}),
-  handler: async (ctx) =>
-    ctx.tx.outreachLead.findMany({ where: { escalated: true }, orderBy: { escalatedAt: "desc" } }),
+  input: z.object({ teamId: z.string().uuid().optional() }),
+  handler: async (ctx, input) => {
+    await assertTeamScopeAllowed(ctx.tx, ctx.actor.userId, input.teamId);
+    return ctx.tx.outreachLead.findMany({
+      where: { escalated: true, ...(input.teamId ? { teamId: input.teamId } : {}) },
+      orderBy: { escalatedAt: "desc" },
+    });
+  },
 };
 
 /** Company Core's team-to-team comparison (master-context spec §8's own table shape). */

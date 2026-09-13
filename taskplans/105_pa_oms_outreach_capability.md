@@ -1,7 +1,15 @@
 # Task 105 — PlotArmour Outreach Team Management System (PA-OMS) capability
 
-Authority: `clients/pa-oms/PlotArmour_Outreach_Team_Management_System_Master_Context.md`
-(full spec, 120 sections) plus `clients/pa-oms/handbook-outreach.html` (the
+Authority: `clients/pa-oms/PlotArmour_Outreach_Hierarchical_Architecture_2026-09-13.md`
+(**authoritative for authority model and information architecture,
+2026-09-13, supersedes role-view framing below wherever the two
+conflict** — Core is mostly-read-only observe/analyse/judge/direct, Senior
+owns full team execution, Junior executes with minimal ambiguity,
+escalation runs Junior→Senior→Core not Junior→Core) plus
+`clients/pa-oms/PlotArmour_Outreach_Team_Management_System_Master_Context.md`
+(full spec, 120 sections, still authoritative for domain rules: state
+machine, rejection taxonomy, attribution windows) plus
+`clients/pa-oms/handbook-outreach.html` (the
 operating constitution PlotArmour interns work under — source-of-truth rank,
 per the handbook's own Ch. 00: Internship Agreement > approved commercial
 info > **this handbook** > leadership instructions; the master-context doc
@@ -16,7 +24,102 @@ by `verity-client-capability-builder`
 (`.claude/skills/verity-client-capability-builder/SKILL.md`), not a
 platform-primitive addition.
 
-## Status: BUILT and LIVE — Phases 0, 0.5, 1, 2, 3, 4, 5 done (2026-09-12/13); role-based settings batch done (2026-09-13)
+## Status: BUILT and LIVE — Phases 0, 0.5, 1, 2, 3, 4, 5 done (2026-09-12/13); role-based settings batch done (2026-09-13); hierarchical-architecture rebuild NOT YET STARTED (authority doc landed 2026-09-13)
+
+## Hierarchical-architecture gap analysis (2026-09-13)
+
+The 2026-09-13 architecture doc (see Authority above) reframes the whole
+capability's authority model. Existing data/schema mostly already fits —
+this is an authority-shape and IA correction, not a rewrite. Gaps, in the
+order they'll be built:
+
+1. **Core de-escalated to mostly-read-only.** Today's `/outreach` still
+   carries `+ Add prospect` and direct-management affordances alongside
+   analysis. The doc's own §57 says a Founder shouldn't see
+   "+ Assign Task" everywhere — needs a pass removing/relocating Core's
+   direct-management actions in favor of observe/analyse/judge/direct.
+2. **Escalation chain is wrong today.** `flagForEscalation` always routes
+   to Core (`listEscalatedLeads` is Core-only). The doc's §38-39 wants
+   Junior → Senior → Core, with the Senior resolving most and only
+   material issues reaching Core. Needs a typed escalation (Commercial /
+   Technical / Client issue / Attribution / Team issue / Other) with
+   urgency, and Senior-first routing.
+3. **Senior needs per-member target distribution with an audit trail.**
+   `OutreachTarget` already supports `Individual` scope — the gap is a
+   Senior-facing distribution UI plus the original→adjusted→reason→who→
+   when history the doc's §22 requires, not a schema gap.
+4. **Junior's "My Day" needs leader-assigned tasks and team-direction
+   context**, not just a lead list — today's `/outreach/workspace` shows
+   targets/leads/check-in but no leader-assigned task list or the
+   current direction's focus market/product surfaced inline.
+5. **Daily report review loop.** Today's check-in is free-text + auto
+   metrics with no review status. The doc's §18-20 wants a richer
+   qualitative report (most important prospects, what happened, learned,
+   blockers, tomorrow's priority) plus a status chain (Submitted →
+   Reviewed → Needs Clarification → Resolved) and Senior feedback notes.
+6. **Funnel-based performance framing**, not raw counts — today's tables
+   (Team Command, team comparison) show leads/outreach/closed as flat
+   numbers. Needs response-rate/conversion framing so quality beats
+   volume in the read (doc §50-51).
+7. **Duplicate/cross-team-conflict detection** on lead creation — not
+   built at all (doc §45-46).
+8. **A notification digest** ("3 things need your attention") — today's
+   `/audit` is a raw event log, not a digest (doc §42-43).
+9. **Core's weekly review restructured** to 2 team reports with
+   drill-down to evidence, not equal-prominence access to all 13
+   individual reports (doc §33-35).
+
+**Build order** (agreed with the user 2026-09-13): work through 1-9 above
+in sequence, each phase typechecked/linted/design-detector-clean/live-
+verified before moving to the next, taskplan updated after each phase —
+same discipline as Phases 0-5 and the role-based settings batch. Given
+the scope (9 phases, several touching permission/authority shape), this
+will span multiple sessions, not one pass.
+
+**Additive-only constraint (2026-09-13, user instruction):** "dont remove
+if anything extra is built just add whats not present or fix if built
+wrong" — every phase below adds missing surfaces or corrects a routing/
+copy mistake against the new authority doc; nothing already built is
+removed or has its access narrowed. Where the new doc's language implies
+narrowing (e.g. Core "should not" do X), the existing affordance stays
+and only the missing pieces are added — see item 1's note below.
+
+### Gap #2 (escalation chain) — DONE 2026-09-13
+
+Typed escalation (`escalationType`/`escalationUrgency`, closed sets, both
+nullable/additive columns via migration `20260913170000_
+outreach_escalation_type`) and Junior→Senior→Core routing:
+`listEscalatedLeads` gained an optional `teamId` (team-scoped via
+`assertTeamScopeAllowed`, Core's existing unscoped call is untouched —
+Core's visibility was not narrowed). Team Command (Senior) gained an
+"Escalations" panel — same danger-tinted treatment as Core's queue, same
+`ResolveEscalationButton` reused, not duplicated — so a Senior now
+resolves most escalations without Core ever seeing them appear or
+disappear differently than before. `LeadActions.tsx`'s escalate button
+and copy fixed from "Escalate to Founders" / "does this need Founders'
+attention" to "Escalate" / "does your Team Leader need to know" — a copy
+fix, not a removal, since the underlying command and Core's full access
+are unchanged. 2 new tests added (20/20 passing): typed fields round-trip,
+and a Senior can see/resolve their own team's escalations while a
+cross-team Senior is still blocked (`ForbiddenError`) and Core's unscoped
+view still returns everything. Live-verified end to end via Chrome
+DevTools MCP: Junior (Shreya) escalates with type=Commercial/urgency=High
+→ appears on Senior's (Kulsoom's) Team Command first → Senior resolves →
+disappears from both Senior's and Core's queues; Core's queue was
+independently confirmed to still show the item before resolution (nothing
+was removed from Core's page).
+
+**Item 1 (Core de-escalated) — reinterpreted under the additive-only
+constraint**: the plan is no longer to remove Core's `+ Add prospect` or
+any existing action — only to *add* the missing observe/analyse/judge
+surfaces (company pulse time selector, richer attention/judgement
+detail, individual drill-down, reporting-discipline widget) alongside
+what already exists. Not yet started.
+
+Items 3-9 (per-member target distribution + audit trail, Junior "My Day"
+task list, daily report review loop, funnel-based framing, duplicate/
+cross-team detection, notification digest, Core's 2-team weekly review)
+remain NOT YET STARTED.
 
 **Phase 2 (role-scoped views) — DONE**, scoped pragmatically rather than
 as the full ground-up redesign the roadmap flagged as "real design work."

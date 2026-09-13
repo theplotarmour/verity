@@ -115,7 +115,7 @@ export function LeadActions({
         )}
         {canEdit && !isTerminal && !isEscalated && (
           <Button size="sm" variant="secondary" onClick={() => setEscalateOpen((v) => !v)}>
-            {escalateOpen ? "Close escalation form" : "Escalate to Founders"}
+            {escalateOpen ? "Close escalation form" : "Escalate"}
           </Button>
         )}
         {isEscalated && <Badge tone="accent">Escalated</Badge>}
@@ -482,6 +482,21 @@ function ReactivateForm({
 }
 
 /** Founder Escalation Queue (master-context spec §57) — the flag side. */
+const ESCALATION_TYPES = [
+  { value: "Commercial", label: "Commercial" },
+  { value: "Technical", label: "Technical" },
+  { value: "ClientIssue", label: "Client / prospect issue" },
+  { value: "Attribution", label: "Attribution" },
+  { value: "TeamIssue", label: "Team issue" },
+  { value: "Other", label: "Other" },
+] as const;
+const ESCALATION_URGENCIES = ["Normal", "High", "Critical"] as const;
+
+/**
+ * Escalation goes to the Team Leader first, Company Core only if
+ * unresolved (2026-09-13 hierarchical-architecture doc §38-39) — not a
+ * straight line to Founders, which is what the copy said before.
+ */
 function EscalateForm({ leadId, onDone }: { leadId: string; onDone: () => void }) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
@@ -497,7 +512,12 @@ function EscalateForm({ leadId, onDone }: { leadId: string; onDone: () => void }
         startTransition(async () => {
           const result = await runCommand(
             "verity.outreach.flag_escalation",
-            { leadId, note: String(form.get("note") ?? "") },
+            {
+              leadId,
+              note: String(form.get("note") ?? ""),
+              type: String(form.get("type") ?? ""),
+              urgency: String(form.get("urgency") ?? ""),
+            },
             `/outreach/${leadId}`,
           );
           if (result.ok) {
@@ -509,8 +529,26 @@ function EscalateForm({ leadId, onDone }: { leadId: string; onDone: () => void }
         });
       }}
     >
+      <Field label="Type" htmlFor="escalationType" required>
+        <Select id="escalationType" name="type" required defaultValue="Other">
+          {ESCALATION_TYPES.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="Urgency" htmlFor="escalationUrgency" required>
+        <Select id="escalationUrgency" name="urgency" required defaultValue="Normal">
+          {ESCALATION_URGENCIES.map((u) => (
+            <option key={u} value={u}>
+              {u}
+            </option>
+          ))}
+        </Select>
+      </Field>
       <Field
-        label="Why does this need Founders' attention?"
+        label="What does your Team Leader need to know?"
         htmlFor="escalationNote"
         required
         hint="Large deal, unusual technical requirement, Agency+Verity cross-sell, ..."
