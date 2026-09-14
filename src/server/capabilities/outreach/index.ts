@@ -43,6 +43,7 @@ export const ENTITY_CHECK_IN = "verity.outreach.check_in";
 export const ENTITY_WEEKLY_REPORT = "verity.outreach.weekly_report";
 export const ENTITY_TEAM_WEEKLY_ASSESSMENT = "verity.outreach.team_weekly_assessment";
 export const ENTITY_DIRECTION = "verity.outreach.direction";
+export const ENTITY_CONTACT = "verity.outreach.contact";
 /**
  * Nav-gating markers (2026-09-14). Founder/Senior/Junior share broad
  * Read/Create/Edit grants on `ENTITY_LEAD` etc. at Tenant scope (a
@@ -89,6 +90,8 @@ const ACTIVITY_TYPES = [
   "Other",
 ] as const;
 const TRACKS = ["Agency", "Verity", "Both", "Undetermined"] as const;
+/** Closed set (spec §24): a contact's decision-influence classification. */
+const CONTACT_CLASSIFICATIONS = ["DecisionMaker", "Influencer", "Champion", "Gatekeeper", "Unknown"] as const;
 
 const REASSIGNMENT_ELIGIBLE_AFTER_MS = 14 * 24 * 60 * 60 * 1000;
 const REACTIVATION_CREDIT_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
@@ -779,6 +782,73 @@ export const getLeadTimeline: QueryDefinition<{ leadId: string }, Array<Record<s
 };
 
 // ---------------------------------------------------------------------------
+// CONTACTS (Task 106 Phase 3, spec §24-25) — a named person at a prospect
+// company. Separate entity from OutreachLead (the company); not a Party
+// (ADR-001, same reasoning as OutreachLead itself).
+// ---------------------------------------------------------------------------
+
+export const createOutreachContact: CommandDefinition<
+  {
+    leadId: string;
+    fullName: string;
+    designation?: string;
+    department?: string;
+    email?: string;
+    phone?: string;
+    linkedinUrl?: string;
+    classification?: (typeof CONTACT_CLASSIFICATIONS)[number];
+    notes?: string;
+  },
+  { id: string }
+> = {
+  key: "verity.outreach.create_contact",
+  entity: ENTITY_CONTACT,
+  verb: "Create",
+  input: z.object({
+    leadId: z.string().uuid(),
+    fullName: z.string().min(1),
+    designation: z.string().min(1).optional(),
+    department: z.string().min(1).optional(),
+    email: z.string().min(1).optional(),
+    phone: z.string().min(1).optional(),
+    linkedinUrl: z.string().min(1).optional(),
+    classification: z.enum(CONTACT_CLASSIFICATIONS).optional(),
+    notes: z.string().min(1).optional(),
+  }),
+  handler: async (ctx, input) => {
+    // Lead must exist and be in-tenant (RLS enforces tenant, this just
+    // 404s cleanly instead of a raw FK violation) — same lookup shape as
+    // logOutreachActivity.
+    await ctx.tx.outreachLead.findUniqueOrThrow({ where: { id: input.leadId } });
+    const createdBy = await actorPartyId(ctx.tx, ctx.actor.userId);
+    const contact = await ctx.tx.outreachContact.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        leadId: input.leadId,
+        fullName: input.fullName,
+        designation: input.designation ?? null,
+        department: input.department ?? null,
+        email: input.email ?? null,
+        phone: input.phone ?? null,
+        linkedinUrl: input.linkedinUrl ?? null,
+        classification: input.classification ?? "Unknown",
+        notes: input.notes ?? null,
+        createdByPartyId: createdBy,
+      },
+    });
+    return { result: { id: contact.id }, events: [{ name: "verity.outreach.contact_created", entityId: contact.id }] };
+  },
+};
+
+export const listOutreachContacts: QueryDefinition<{ leadId: string }, Array<Record<string, unknown>>> = {
+  key: "verity.outreach.list_contacts",
+  entity: ENTITY_CONTACT,
+  input: z.object({ leadId: z.string().uuid() }),
+  handler: async (ctx, input) =>
+    ctx.tx.outreachContact.findMany({ where: { leadId: input.leadId }, orderBy: { createdAt: "asc" } }),
+};
+
+// ---------------------------------------------------------------------------
 // TARGETS
 // ---------------------------------------------------------------------------
 
@@ -1215,8 +1285,10 @@ export function registerOutreachCapability(): void {
   registerCommand(renameTeam);
   registerCommand(flagForEscalation);
   registerCommand(resolveEscalation);
+  registerCommand(createOutreachContact);
 
   registerQuery(listOutreachTeams);
+  registerQuery(listOutreachContacts);
   registerQuery(listOutreachLeads);
   registerQuery(listOverdueFollowUps);
   registerQuery(getFunnelCounts);

@@ -182,6 +182,7 @@ model Tenant {
   outreachTeamMemberships       OutreachTeamMembership[]
   outreachLeads                 OutreachLead[]
   outreachActivities            OutreachActivity[]
+  outreachContacts               OutreachContact[]
   outreachTargets               OutreachTarget[]
   outreachCheckIns              OutreachCheckIn[]
   outreachWeeklyReports         OutreachWeeklyReport[]
@@ -4442,6 +4443,7 @@ model OutreachLead {
   tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   team       OutreachTeam       @relation(fields: [teamId], references: [id], onDelete: Restrict)
   activities OutreachActivity[]
+  contacts   OutreachContact[]
 
   @@index([tenantId, teamId, state])
   @@index([tenantId, opportunityOwnerId])
@@ -4470,6 +4472,41 @@ model OutreachActivity {
 
   @@index([tenantId, leadId, occurredAt])
   @@map("outreach_activity")
+}
+
+/// A named contact person at a prospect company (Task 106 Phase 3, spec
+/// §24-25). Separate from `OutreachLead` (the company) and NOT a `Party` —
+/// same ADR-001 reasoning as `OutreachLead` itself: a prospect's contact
+/// person is not a platform identity until/unless they become one (e.g. a
+/// client user after conversion). One lead may have multiple contacts.
+model OutreachContact {
+  id       String  @id @default(uuid()) @db.Uuid
+  tenantId String  @map("tenant_id") @db.Uuid
+  leadId   String  @map("lead_id") @db.Uuid
+
+  fullName    String  @map("full_name")
+  designation String?
+  department  String?
+  email       String?
+  phone       String?
+  linkedinUrl String? @map("linkedin_url")
+
+  /// Closed set: DecisionMaker | Influencer | Champion | Gatekeeper | Unknown.
+  classification String  @default("Unknown")
+  notes          String?
+
+  lastContactedAt   DateTime? @map("last_contacted_at")
+  createdByPartyId  String    @map("created_by_party_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   OutreachLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, leadId])
+  @@map("outreach_contact")
 }
 
 /// Flat target row — company/team/individual x daily/weekly (master-context
