@@ -4322,9 +4322,10 @@ model TradingMetricSnapshot {
 model OutreachTeam {
   id        String   @id @default(uuid()) @db.Uuid
   tenantId  String   @map("tenant_id") @db.Uuid
-  name      String
-  leaderId  String   @map("leader_id") @db.Uuid
-  active    Boolean  @default(true)
+  name       String
+  leaderId   String   @map("leader_id") @db.Uuid
+  coLeaderId String?  @map("co_leader_id") @db.Uuid
+  active     Boolean  @default(true)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   version   Int      @default(1)

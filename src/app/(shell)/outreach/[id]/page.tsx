@@ -68,7 +68,9 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
     const stateById = new Map(states.map((s) => [s.id, s]));
     const category = new Map(states.map((s) => [s.key, s.category]));
 
-    const teamMemberPartyIds = team ? [team.leaderId, ...team.memberships.map((m) => m.partyId)] : [];
+    const teamMemberPartyIds = team
+      ? [team.leaderId, ...(team.coLeaderId ? [team.coLeaderId] : []), ...team.memberships.map((m) => m.partyId)]
+      : [];
     const partyIds = [
       ...new Set([
         lead.leadOriginatorId,

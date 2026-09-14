@@ -164,13 +164,18 @@ export default async function OutreachPage({
     // Every team member plus every team's leader — either can be an
     // Opportunity Owner (master-context §16: Senior "help move opportunities
     // forward" too), and every current lead owner even if now inactive.
-    const memberPartyIds = teams.flatMap((t) => [t.leaderId, ...t.memberships.map((m) => m.partyId)]);
+    const memberPartyIds = teams.flatMap((t) => [
+      t.leaderId,
+      ...(t.coLeaderId ? [t.coLeaderId] : []),
+      ...t.memberships.map((m) => m.partyId),
+    ]);
     const ownerIds = [...new Set([...memberPartyIds, ...leads.map((l) => l.opportunityOwnerId)])];
     const owners = ownerIds.length ? await tx.party.findMany({ where: { id: { in: ownerIds } } }) : [];
     const ownerName = new Map(owners.map((p) => [p.id, p.displayName]));
 
     const members = teams.flatMap((t) => [
       { id: t.leaderId, name: ownerName.get(t.leaderId) ?? "Unknown", teamId: t.id },
+      ...(t.coLeaderId ? [{ id: t.coLeaderId, name: ownerName.get(t.coLeaderId) ?? "Unknown", teamId: t.id }] : []),
       ...t.memberships.map((m) => ({ id: m.partyId, name: ownerName.get(m.partyId) ?? "Unknown", teamId: t.id })),
     ]);
 

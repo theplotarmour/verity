@@ -34,7 +34,7 @@ export default async function TeamCommandPage() {
 
     const user = await tx.user.findUniqueOrThrow({ where: { id: actor.userId } });
     const ledTeams = await tx.outreachTeam.findMany({
-      where: { leaderId: user.partyId, active: true },
+      where: { OR: [{ leaderId: user.partyId }, { coLeaderId: user.partyId }], active: true },
       include: { memberships: { where: { active: true } } },
     });
     if (ledTeams.length === 0) return { noTeam: true as const };
@@ -80,10 +80,14 @@ export default async function TeamCommandPage() {
     // new logins — see the query's own doc comment).
     const [takenMemberships, takenLeaders, allMemberships] = await Promise.all([
       tx.outreachTeamMembership.findMany({ where: { active: true }, select: { partyId: true } }),
-      tx.outreachTeam.findMany({ where: { active: true }, select: { leaderId: true } }),
+      tx.outreachTeam.findMany({ where: { active: true }, select: { leaderId: true, coLeaderId: true } }),
       tx.tenantMembership.findMany({ include: { user: { include: { party: true } } } }),
     ]);
-    const taken = new Set([...takenMemberships.map((m) => m.partyId), ...takenLeaders.map((l) => l.leaderId)]);
+    const taken = new Set([
+      ...takenMemberships.map((m) => m.partyId),
+      ...takenLeaders.map((l) => l.leaderId),
+      ...takenLeaders.flatMap((l) => (l.coLeaderId ? [l.coLeaderId] : [])),
+    ]);
     const seen = new Set<string>();
     const availableParties: Array<{ id: string; name: string }> = [];
     for (const m of allMemberships) {

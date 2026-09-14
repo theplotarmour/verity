@@ -121,7 +121,9 @@ export async function assertTeamScopeAllowed(
 ): Promise<void> {
   if (!teamId) return;
   const partyId = await actorPartyId(tx, actorUserId);
-  const led = await tx.outreachTeam.findFirst({ where: { leaderId: partyId } });
+  const led = await tx.outreachTeam.findFirst({
+    where: { OR: [{ leaderId: partyId }, { coLeaderId: partyId }] },
+  });
   if (led && led.id !== teamId) {
     throw new ForbiddenError("E_FORBIDDEN: not authorized to view another team's pipeline");
   }
@@ -131,16 +133,39 @@ export async function assertTeamScopeAllowed(
 // TEAMS
 // ---------------------------------------------------------------------------
 
-export const createOutreachTeam: CommandDefinition<{ name: string; leaderId: string }, { id: string }> = {
+export const createOutreachTeam: CommandDefinition<
+  { name: string; leaderId: string; coLeaderId?: string },
+  { id: string }
+> = {
   key: "verity.outreach.create_team",
   entity: ENTITY_TEAM,
   verb: "Create",
-  input: z.object({ name: z.string().min(1), leaderId: z.string().uuid() }),
+  input: z.object({ name: z.string().min(1), leaderId: z.string().uuid(), coLeaderId: z.string().uuid().optional() }),
   handler: async (ctx, input) => {
     const team = await ctx.tx.outreachTeam.create({
-      data: { tenantId: ctx.actor.tenantId, name: input.name, leaderId: input.leaderId },
+      data: {
+        tenantId: ctx.actor.tenantId,
+        name: input.name,
+        leaderId: input.leaderId,
+        coLeaderId: input.coLeaderId ?? null,
+      },
     });
     return { result: { id: team.id }, events: [{ name: "verity.outreach.team_created", entityId: team.id }] };
+  },
+};
+
+/** Sets or clears a team's co-leader. Co-leader is authorized identically to `leaderId` everywhere it's checked. */
+export const setTeamCoLeader: CommandDefinition<{ teamId: string; coLeaderId: string | null }, { id: string }> = {
+  key: "verity.outreach.set_team_co_leader",
+  entity: ENTITY_TEAM,
+  verb: "Edit",
+  input: z.object({ teamId: z.string().uuid(), coLeaderId: z.string().uuid().nullable() }),
+  handler: async (ctx, input) => {
+    const team = await ctx.tx.outreachTeam.update({
+      where: { id: input.teamId },
+      data: { coLeaderId: input.coLeaderId, version: { increment: 1 } },
+    });
+    return { result: { id: team.id }, events: [{ name: "verity.outreach.co_leader_set", entityId: team.id }] };
   },
 };
 
@@ -218,10 +243,14 @@ export const listAvailableParties: QueryDefinition<Record<string, never>, Array<
   handler: async (ctx) => {
     const [memberships, leaders, allMemberships] = await Promise.all([
       ctx.tx.outreachTeamMembership.findMany({ where: { active: true }, select: { partyId: true } }),
-      ctx.tx.outreachTeam.findMany({ where: { active: true }, select: { leaderId: true } }),
+      ctx.tx.outreachTeam.findMany({ where: { active: true }, select: { leaderId: true, coLeaderId: true } }),
       ctx.tx.tenantMembership.findMany({ include: { user: { include: { party: true } } } }),
     ]);
-    const taken = new Set([...memberships.map((m) => m.partyId), ...leaders.map((l) => l.leaderId)]);
+    const taken = new Set([
+      ...memberships.map((m) => m.partyId),
+      ...leaders.map((l) => l.leaderId),
+      ...leaders.flatMap((l) => (l.coLeaderId ? [l.coLeaderId] : [])),
+    ]);
     const seen = new Set<string>();
     const candidates: Array<{ id: string; name: string }> = [];
     for (const m of allMemberships) {
@@ -1169,6 +1198,7 @@ export function registerOutreachCapability(): void {
   });
 
   registerCommand(createOutreachTeam);
+  registerCommand(setTeamCoLeader);
   registerCommand(addTeamMember);
   registerCommand(createOutreachLead);
   registerCommand(advanceLeadStage);

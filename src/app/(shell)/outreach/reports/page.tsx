@@ -48,7 +48,9 @@ export default async function ReportsPage() {
 
     const user = await tx.user.findUniqueOrThrow({ where: { id: actor.userId } });
     const ledTeams = canSubmitAssessment
-      ? await tx.outreachTeam.findMany({ where: { leaderId: user.partyId, active: true } })
+      ? await tx.outreachTeam.findMany({
+          where: { OR: [{ leaderId: user.partyId }, { coLeaderId: user.partyId }], active: true },
+        })
       : [];
 
     const [recentReports, recentAssessments] = await Promise.all([

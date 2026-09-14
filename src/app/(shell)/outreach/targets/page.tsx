@@ -23,7 +23,11 @@ export default async function TargetsPage() {
     ]);
 
     const teamName = new Map(teams.map((t) => [t.id, t.name]));
-    const memberPartyIds = teams.flatMap((t) => [t.leaderId, ...t.memberships.map((m) => m.partyId)]);
+    const memberPartyIds = teams.flatMap((t) => [
+      t.leaderId,
+      ...(t.coLeaderId ? [t.coLeaderId] : []),
+      ...t.memberships.map((m) => m.partyId),
+    ]);
     const parties = memberPartyIds.length
       ? await tx.party.findMany({ where: { id: { in: [...new Set(memberPartyIds)] } } })
       : [];
