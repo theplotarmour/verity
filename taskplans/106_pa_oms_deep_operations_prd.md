@@ -21,7 +21,7 @@ not as a reason to cut the phase list itself. If a phase turns out to be
 overbuild in practice, that's a stop-and-ask moment per CLAUDE.md, not a
 silent trim.
 
-## Status: DRAFT — Phase 1 (audit) done via this file + 105; Phase 2 (this doc) in progress; Phase 3+ not started
+## Status: Phase 1/2 DONE (this file); Phase 3 first slice DONE 2026-09-14 — `OutreachContact` (model, migration, RLS, commands, permissions, UI panel + add-contact form on `/outreach/[id]`, 3 tests, 25/25 suite green). Remaining Phase 3 items (ownership/target audit-trail tables, file-authorization check, health-state derivation) and Phase 4+ not started
 
 ## Phase 1 — Repository audit (§114-117)
 
