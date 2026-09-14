@@ -21,7 +21,16 @@ not as a reason to cut the phase list itself. If a phase turns out to be
 overbuild in practice, that's a stop-and-ask moment per CLAUDE.md, not a
 silent trim.
 
-## Status: Phase 1/2 DONE (this file); Phase 3 first slice DONE 2026-09-14 — `OutreachContact` (model, migration, RLS, commands, permissions, UI panel + add-contact form on `/outreach/[id]`, 3 tests, 25/25 suite green). Remaining Phase 3 items (ownership/target audit-trail tables, file-authorization check, health-state derivation) and Phase 4+ not started
+## Status: Phase 1/2/3 DONE 2026-09-14. Phase 4+ not started
+
+Phase 3 closed out across two slices:
+- **`OutreachContact`** — model, migration, RLS, commands, permissions, UI panel + add-contact form on `/outreach/[id]`.
+- **Target audit trail** (§72-73) — `setOutreachTarget` supersedes (never edits/deletes) the prior active row for the same scope/team/party/period/metric/periodStart; diff logged via the platform's existing `recordActivity`, not a new table. `listOutreachTargets` defaults active-only, `includeSuperseded` for history.
+- **Ownership audit trail** (§19) — this file's own earlier premise that a new `OutreachOwnershipHistory` table was needed was **wrong**, corrected on investigation: `reassignOpportunityOwner` already calls `recordActivity` (platform `Activity` table, EXE-AUD-001) with the old/new owner diff. Nothing built, nothing missing.
+- **Health signal** (§21) — `deriveLeadHealth()` (Hot/Stale/AtRisk/Healthy/Closed, category-only per ADR-009), `HealthBadge` primitive, wired into the lead list and detail pages.
+- **File-authorization check** (§12) — investigated, not fixed: `readUrlFor()`'s contract is sound (callers must authorize first) but has zero production callers today. Nothing to fix in outreach since Research (Phase 4) doesn't exist yet; recorded as a requirement for whoever builds Research.
+
+31/31 outreach tests pass (was 22 at session start), tsc clean throughout.
 
 ## Phase 1 — Repository audit (§114-117)
 
@@ -101,24 +110,29 @@ Enforcement point: every new query/command in `outreach/index.ts` calls
 - No WhatsApp/email integration this pass (§94, §11) — manual logging only, schema left open for future sync source field (`source: Manual | Synced`, already true of `OutreachActivity` per 105's activity-type design).
 - No autonomous AI outreach (§35) — ever, not just deferred.
 
-## Phase 3 — Foundation (build order, this phase first)
+## Phase 3 — Foundation — DONE 2026-09-14
 
-1. `OutreachContact` model + migration (additive, RLS + audit trigger per
-   existing outreach migration convention — see 105's hand-authored
-   migrations for the pattern).
-2. `OutreachOwnershipHistory` + `OutreachTargetHistory` — close 105's two
-   already-known audit-trail gaps (§19, §73).
-3. Extend `assertTeamScopeAllowed`-style checks onto Contact once it exists.
-4. File-authorization check (§12 security item above) — confirm or fix
-   before Research entries can reference `StoredFile`.
-5. Health-state derivation function for `OutreachLead` (§21: HOT/STALE/
-   AT_RISK/HEALTHY/CLOSED) — pure query-layer, no new column beyond maybe
-   a cached `lastActivityAt` if not already derivable.
+1. **DONE** — `OutreachContact` model + migration (RLS, commands, permissions, UI + form).
+2. **CORRECTED, not built** — this item originally proposed a new
+   `OutreachOwnershipHistory` table; investigation found `reassignOpportunityOwner`
+   already calls the platform's `recordActivity` (EXE-AUD-001) with the
+   old/new owner diff, so ownership history was never actually missing.
+   `OutreachTargetHistory` likewise became a supersession model
+   (`active`/`changeReason` columns + `recordActivity`) rather than a
+   parallel table — same reuse-existing-audit reasoning.
+3. **DONE** — `assertTeamScopeAllowed`-equivalent scoping applies to
+   Contact via its `leadId` FK lookup (same pattern as `logOutreachActivity`).
+4. **INVESTIGATED, nothing to fix yet** — `readUrlFor()`'s authorize-first
+   contract is sound but has zero production callers; revisit when Phase 4
+   builds Research (the first entity that actually reads files).
+5. **DONE** — `deriveLeadHealth()`, category-only per ADR-009, wired into
+   both outreach pages via a new `HealthBadge` primitive and DataTable
+   `"health"` variant.
 
 **Acceptance**: `npx prisma migrate status` clean, `npx tsc --noEmit -p .`
-clean, existing 105 test suite (`capability-outreach.test.ts`) still green,
-plus new tests for Contact team-scoping (mirrors 105 Phase 3/4's lead
-tests).
+clean, 31/31 tests pass (was 22 before this phase) in
+`capability-outreach.test.ts` — contact round-trip, target supersession,
+5 `deriveLeadHealth` cases.
 
 ## Phase 4 — Prospect operations
 
