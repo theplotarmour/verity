@@ -20,6 +20,7 @@ import {
 import { NewLeadForm } from "./NewLeadForm";
 import { DirectionForm } from "./DirectionForm";
 import { ResolveEscalationButton } from "./ResolveEscalationButton";
+import { Donut, Legend } from "@/components/ui/charts";
 
 export const dynamic = "force-dynamic";
 
@@ -197,6 +198,19 @@ export default async function OutreachPage({
         count: leads.filter((l) => l.state === s.key).length,
       }));
 
+    // Pipeline distribution by ADR-009 category (Draft/Pending/Active/Blocked/
+    // Completed/Cancelled), same tonal-accent-ladder-not-semantic-color choice
+    // as the platform overview's asset-state donut — a distribution, not a
+    // single record's status.
+    const countByCategory = (cat: string) => leads.filter((l) => category.get(l.state) === cat).length;
+    const pipelineSegments = [
+      { label: "Active", value: countByCategory("Active"), color: "var(--accent-500)" },
+      { label: "Pending", value: countByCategory("Pending"), color: "var(--accent-400)" },
+      { label: "Blocked", value: countByCategory("Blocked"), color: "var(--accent-300)" },
+      { label: "Completed", value: countByCategory("Completed"), color: "var(--accent-200)" },
+      { label: "Cancelled", value: countByCategory("Cancelled"), color: "var(--color-text-tertiary)" },
+    ].filter((s) => s.value > 0);
+
     // Founder Escalation Queue (spec §57) — company-wide, Founder-only.
     const escalated = canPostDirection
       ? await tx.outreachLead.findMany({ where: { escalated: true }, orderBy: { escalatedAt: "desc" } })
@@ -216,6 +230,7 @@ export default async function OutreachPage({
       members,
       rows,
       funnel,
+      pipelineSegments,
       totalLeads: leads.length,
       activeLeads: leads.filter((l) => !TERMINAL_STATES.includes(l.state) && l.state !== "closed_won").length,
       closedWon: leads.filter((l) => l.state === "closed_won").length,
@@ -411,7 +426,7 @@ export default async function OutreachPage({
         </div>
       )}
 
-      <div className="mb-6 grid gap-6 lg:grid-cols-[1fr_1.6fr]">
+      <div className="mb-6 grid gap-6 lg:grid-cols-3">
         <Panel title="Teams" flush>
           <div className="flex flex-col divide-y divide-line px-6">
             {data.teams.map((t) => (
@@ -430,6 +445,25 @@ export default async function OutreachPage({
               </Link>
             )}
           </div>
+        </Panel>
+
+        <Panel title="Pipeline">
+          {data.pipelineSegments.length > 0 ? (
+            <div className="flex items-center gap-5">
+              <div className="min-w-0 flex-1">
+                <Legend segments={data.pipelineSegments} />
+              </div>
+              <Donut
+                segments={data.pipelineSegments}
+                centreValue={data.totalLeads}
+                centreLabel="Total leads"
+                size={130}
+                thickness={9}
+              />
+            </div>
+          ) : (
+            <p className="py-6 text-center text-[13px] text-text-tertiary">No leads in the pipeline yet.</p>
+          )}
         </Panel>
 
         <Panel title="Funnel" flush>
