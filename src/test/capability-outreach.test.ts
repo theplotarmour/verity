@@ -13,6 +13,7 @@ import { provisionIdentity } from "@/server/platform/identity";
 import {
   ENTITY_ACTIVITY,
   ENTITY_CHECK_IN,
+  ENTITY_CONTACT,
   ENTITY_LEAD,
   ENTITY_TARGET,
   ENTITY_TEAM,
@@ -22,8 +23,10 @@ import {
   OUTREACH_CAPABILITY,
   addTeamMember,
   advanceLeadStage,
+  createOutreachContact,
   createOutreachLead,
   createOutreachTeam,
+  listOutreachContacts,
   flagForEscalation,
   getDailyMetrics,
   getFunnelCounts,
@@ -99,6 +102,7 @@ describeDb("capability: Outreach", () => {
       ENTITY_CHECK_IN,
       ENTITY_WEEKLY_REPORT,
       ENTITY_TEAM_WEEKLY_ASSESSMENT,
+      ENTITY_CONTACT,
     ];
 
     await withTenant(tenantId, async (tx) => {
@@ -251,6 +255,57 @@ describeDb("capability: Outreach", () => {
     const metrics = await executeQuery(founder, getDailyMetrics, { partyId: founderPartyId, date: new Date().toISOString() });
     expect(metrics.pitchDecks).toBeGreaterThanOrEqual(1);
     expect(metrics.businessResearch).toBeGreaterThanOrEqual(1);
+  });
+
+  describe("contacts (Task 106 Phase 3)", () => {
+    it("creates a contact on a lead and lists it back", async () => {
+      const lead = await executeCommand(founder, createOutreachLead, {
+        teamId: teamAId,
+        companyName: "Contact Test Co",
+        whyRelevant: "Test.",
+        opportunityOwnerId: seniorAPartyId,
+      });
+      const contact = await executeCommand(founder, createOutreachContact, {
+        leadId: lead.id,
+        fullName: "Priya Sharma",
+        designation: "Operations Head",
+        email: "priya@contacttest.example",
+        classification: "DecisionMaker",
+      });
+      const contacts = await executeQuery(founder, listOutreachContacts, { leadId: lead.id });
+      expect(contacts).toHaveLength(1);
+      expect(contacts[0]).toMatchObject({
+        id: contact.id,
+        fullName: "Priya Sharma",
+        designation: "Operations Head",
+        email: "priya@contacttest.example",
+        classification: "DecisionMaker",
+      });
+    });
+
+    it("defaults classification to Unknown when omitted", async () => {
+      const lead = await executeCommand(founder, createOutreachLead, {
+        teamId: teamAId,
+        companyName: "Contact Default Co",
+        whyRelevant: "Test.",
+        opportunityOwnerId: seniorAPartyId,
+      });
+      const contact = await executeCommand(founder, createOutreachContact, {
+        leadId: lead.id,
+        fullName: "Unclassified Person",
+      });
+      const stored = await withTenant(tenantId, (tx) => tx.outreachContact.findUniqueOrThrow({ where: { id: contact.id } }));
+      expect(stored.classification).toBe("Unknown");
+    });
+
+    it("rejects a contact on a lead that does not exist", async () => {
+      await expect(
+        executeCommand(founder, createOutreachContact, {
+          leadId: randomUUID(),
+          fullName: "Ghost Contact",
+        }),
+      ).rejects.toThrow();
+    });
   });
 
   describe("state machine (handbook Ch. 22)", () => {

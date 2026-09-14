@@ -3,7 +3,7 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { ENTITY_LEAD, assertTeamScopeAllowed } from "@/server/capabilities/outreach";
+import { ENTITY_LEAD, ENTITY_CONTACT, assertTeamScopeAllowed } from "@/server/capabilities/outreach";
 import { ForbiddenError } from "@/server/platform/authorization";
 import {
   Badge,
@@ -19,6 +19,7 @@ import {
   StateBadge,
 } from "@/components/ui/primitives";
 import { LeadActions } from "./LeadActions";
+import { ContactForm } from "./ContactForm";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,7 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
       throw error;
     }
 
-    const [states, transitions, activities, team, canEdit, canLog] = await Promise.all([
+    const [states, transitions, activities, team, canEdit, canLog, contacts, canCreateContact] = await Promise.all([
       tx.stateDefinition.findMany({ where: { entityKey: ENTITY_LEAD } }),
       (async () => {
         const current = await tx.stateDefinition.findUnique({
@@ -63,6 +64,8 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
       tx.outreachTeam.findUnique({ where: { id: lead.teamId }, include: { memberships: { where: { active: true } } } }),
       hasPermission(tx, actor.roleId, "Edit", ENTITY_LEAD),
       hasPermission(tx, actor.roleId, "Create", "verity.outreach.activity"),
+      tx.outreachContact.findMany({ where: { leadId: id }, orderBy: { createdAt: "asc" } }),
+      hasPermission(tx, actor.roleId, "Create", ENTITY_CONTACT),
     ]);
 
     const stateById = new Map(states.map((s) => [s.id, s]));
@@ -94,6 +97,8 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
       partyName,
       canEdit,
       canLog,
+      contacts,
+      canCreateContact,
     };
   });
 
@@ -175,6 +180,44 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
                 { term: "Fit score", value: lead.qualityScore != null ? `${lead.qualityScore} / 10` : "—" },
               ]}
             />
+          </Panel>
+
+          <Panel title="Contacts">
+            {data.contacts.length === 0 ? (
+              <p className="text-[13px] text-text-tertiary">No contacts added yet.</p>
+            ) : (
+              <ul className="m-0 flex list-none flex-col gap-3 p-0">
+                {data.contacts.map((c) => (
+                  <li key={c.id} className="flex flex-col gap-1 border-b border-line pb-3 last:border-none last:pb-0">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-[14px] text-text">{c.fullName}</span>
+                      {c.classification !== "Unknown" && (
+                        <Badge>{c.classification.replace(/([A-Z])/g, " $1").trim()}</Badge>
+                      )}
+                    </div>
+                    {(c.designation || c.department) && (
+                      <span className="text-[12px] text-text-secondary">
+                        {[c.designation, c.department].filter(Boolean).join(" · ")}
+                      </span>
+                    )}
+                    <span className="text-[12px] text-text-tertiary">
+                      {[c.email, c.phone].filter(Boolean).join(" · ") || "No contact details on file"}
+                    </span>
+                    {c.linkedinUrl && (
+                      <a href={c.linkedinUrl} target="_blank" rel="noreferrer" className="text-[12px] text-accent-ink no-underline hover:underline">
+                        {c.linkedinUrl}
+                      </a>
+                    )}
+                    {c.notes && <span className="text-[12px] text-text-tertiary">{c.notes}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {data.canCreateContact && (
+              <div className="mt-4">
+                <ContactForm leadId={lead.id} />
+              </div>
+            )}
           </Panel>
 
           <Panel title="Attribution">
