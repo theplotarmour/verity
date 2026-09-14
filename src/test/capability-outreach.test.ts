@@ -26,6 +26,7 @@ import {
   createOutreachContact,
   createOutreachLead,
   createOutreachTeam,
+  deriveLeadHealth,
   listOutreachContacts,
   flagForEscalation,
   getDailyMetrics,
@@ -35,6 +36,7 @@ import {
   listAvailableParties,
   listEscalatedLeads,
   listOutreachLeads,
+  listOutreachTargets,
   listOverdueFollowUps,
   logOutreachActivity,
   reactivateLead,
@@ -308,6 +310,33 @@ describeDb("capability: Outreach", () => {
     });
   });
 
+  describe("deriveLeadHealth (Task 106 Phase 3, spec §21 — category-only per ADR-009)", () => {
+    const now = new Date();
+    const daysAgo = (n: number) => new Date(now.getTime() - n * DAY_MS);
+    const daysAhead = (n: number) => new Date(now.getTime() + n * DAY_MS);
+
+    it("is Closed for Completed/Cancelled categories regardless of activity", () => {
+      expect(deriveLeadHealth({ category: "Completed", lastActivityAt: daysAgo(100), nextActionAt: null, createdAt: daysAgo(100) })).toBe("Closed");
+      expect(deriveLeadHealth({ category: "Cancelled", lastActivityAt: null, nextActionAt: null, createdAt: daysAgo(1) })).toBe("Closed");
+    });
+
+    it("is Stale when idle beyond 14 days, even with an Active category", () => {
+      expect(deriveLeadHealth({ category: "Active", lastActivityAt: daysAgo(20), nextActionAt: null, createdAt: daysAgo(30) })).toBe("Stale");
+    });
+
+    it("is AtRisk when the next action is overdue but activity is recent", () => {
+      expect(deriveLeadHealth({ category: "Active", lastActivityAt: daysAgo(1), nextActionAt: daysAgo(2), createdAt: daysAgo(10) })).toBe("AtRisk");
+    });
+
+    it("is Hot when Active with a real upcoming action", () => {
+      expect(deriveLeadHealth({ category: "Active", lastActivityAt: daysAgo(1), nextActionAt: daysAhead(3), createdAt: daysAgo(10) })).toBe("Hot");
+    });
+
+    it("is Healthy for a fresh Draft/Pending lead with no overdue action", () => {
+      expect(deriveLeadHealth({ category: "Draft", lastActivityAt: null, nextActionAt: null, createdAt: daysAgo(1) })).toBe("Healthy");
+    });
+  });
+
   describe("state machine (handbook Ch. 22)", () => {
     it("advances only through declared transitions", async () => {
       const lead = await executeCommand(founder, createOutreachLead, {
@@ -548,6 +577,47 @@ describeDb("capability: Outreach", () => {
     });
     const list = await withTenant(tenantId, (tx) => tx.outreachTarget.findMany({ where: { teamId: teamAId } }));
     expect(list.length).toBeGreaterThan(0);
+  });
+
+  it("supersedes rather than duplicates a target for the same scope/period/metric (Task 106 Phase 3)", async () => {
+    const periodStart = new Date(Date.now() + 30 * DAY_MS).toISOString();
+    const periodEnd = new Date(Date.now() + 37 * DAY_MS).toISOString();
+    const first = await executeCommand(founder, setOutreachTarget, {
+      scope: "Team",
+      teamId: teamBId,
+      period: "Weekly",
+      metric: "Outreach",
+      targetValue: 20,
+      periodStart,
+      periodEnd,
+    });
+    const second = await executeCommand(founder, setOutreachTarget, {
+      scope: "Team",
+      teamId: teamBId,
+      period: "Weekly",
+      metric: "Outreach",
+      targetValue: 30,
+      periodStart,
+      periodEnd,
+      changeReason: "Raised after strong week 1 response rate.",
+    });
+
+    const activeOnly = await executeQuery(founder, listOutreachTargets, { teamId: teamBId });
+    const activeForPeriod = activeOnly.filter((t) => t.id === first.id || t.id === second.id);
+    expect(activeForPeriod).toHaveLength(1);
+    expect(activeForPeriod[0]).toMatchObject({ id: second.id, targetValue: 30, active: true });
+
+    const withHistory = await executeQuery(founder, listOutreachTargets, { teamId: teamBId, includeSuperseded: true });
+    const bothForPeriod = withHistory.filter((t) => t.id === first.id || t.id === second.id);
+    expect(bothForPeriod).toHaveLength(2);
+    const oldRow = bothForPeriod.find((t) => t.id === first.id);
+    expect(oldRow).toMatchObject({ active: false, targetValue: 20 });
+
+    const auditRows = await withTenant(tenantId, (tx) =>
+      tx.activity.findMany({ where: { entityKey: ENTITY_TARGET, entityId: second.id, fieldChanged: "targetValue" } }),
+    );
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0]).toMatchObject({ oldValue: "20", newValue: "30" });
   });
 
   describe("Phase 3: per-team query scoping", () => {

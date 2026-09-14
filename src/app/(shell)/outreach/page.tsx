@@ -3,7 +3,7 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { ENTITY_DIRECTION, ENTITY_LEAD, assertTeamScopeAllowed } from "@/server/capabilities/outreach";
+import { ENTITY_DIRECTION, ENTITY_LEAD, assertTeamScopeAllowed, deriveLeadHealth } from "@/server/capabilities/outreach";
 import { ForbiddenError } from "@/server/platform/authorization";
 import { DataTable } from "@/components/ui/DataTable";
 import {
@@ -34,6 +34,7 @@ type LeadRow = Record<string, unknown> & {
   track: string;
   state: string;
   category: string;
+  health: string;
 };
 
 /**
@@ -188,6 +189,12 @@ export default async function OutreachPage({
       track: l.track,
       state: l.state.replace(/_/g, " "),
       category: category.get(l.state) ?? "Draft",
+      health: deriveLeadHealth({
+        category: category.get(l.state) ?? "Draft",
+        lastActivityAt: l.lastActivityAt,
+        nextActionAt: l.nextActionAt,
+        createdAt: l.createdAt,
+      }),
     }));
 
     const funnel = states
@@ -495,6 +502,7 @@ export default async function OutreachPage({
             { key: "team", header: "Team" },
             { key: "owner", header: "Owner" },
             { key: "state", header: "Stage", variant: "state", categoryKey: "category" },
+            { key: "health", header: "Health", variant: "health" },
           ]}
           emptyTitle="No leads yet"
           emptyDescription="A lead is a researched prospect company with a stated reason it's relevant. None exists in this scope yet."

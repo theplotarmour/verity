@@ -95,6 +95,37 @@ const CONTACT_CLASSIFICATIONS = ["DecisionMaker", "Influencer", "Champion", "Gat
 
 const REASSIGNMENT_ELIGIBLE_AFTER_MS = 14 * 24 * 60 * 60 * 1000;
 const REACTIVATION_CREDIT_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
+const STALE_AFTER_MS = 14 * 24 * 60 * 60 * 1000;
+
+export type LeadHealth = "Hot" | "Stale" | "AtRisk" | "Healthy" | "Closed";
+
+/**
+ * Task 106 Phase 3 (spec §21): a meaningful, explainable health signal
+ * instead of styling-only status. Branches ONLY on the ADR-009 category
+ * (Draft/Pending/Active/Blocked/Completed/Cancelled) — never on the raw
+ * state key, per ADR-009's hard rule that SLA/overdue logic must not read
+ * `key`. Order matters: closed first, then stale (no activity at all
+ * outranks a merely-overdue action), then overdue, then real momentum.
+ */
+export function deriveLeadHealth(lead: {
+  category: string;
+  lastActivityAt: Date | null;
+  nextActionAt: Date | null;
+  createdAt: Date;
+}): LeadHealth {
+  if (lead.category === "Completed" || lead.category === "Cancelled") return "Closed";
+
+  const idleSince = lead.lastActivityAt ?? lead.createdAt;
+  if (Date.now() - idleSince.getTime() > STALE_AFTER_MS) return "Stale";
+
+  const overdue = lead.nextActionAt != null && lead.nextActionAt.getTime() < Date.now();
+  if (overdue) return "AtRisk";
+
+  const hasUpcomingAction = lead.nextActionAt != null && lead.nextActionAt.getTime() >= Date.now();
+  if (lead.category === "Active" && hasUpcomingAction) return "Hot";
+
+  return "Healthy";
+}
 
 /** Resolves the actor's Party id. `ActorContext` carries `userId`, not `partyId` directly. */
 async function actorPartyId(tx: TenantScopedClient, userId: string): Promise<string> {
@@ -862,6 +893,7 @@ export const setOutreachTarget: CommandDefinition<
     targetValue: number;
     periodStart: string;
     periodEnd: string;
+    changeReason?: string;
   },
   { id: string }
 > = {
@@ -877,8 +909,34 @@ export const setOutreachTarget: CommandDefinition<
     targetValue: z.number().int().positive(),
     periodStart: z.string().datetime(),
     periodEnd: z.string().datetime(),
+    changeReason: z.string().min(1).optional(),
   }),
   handler: async (ctx, input) => {
+    // Task 106 Phase 3 (spec §72-73): a second call for the same scope/
+    // team/party/period/metric/periodStart supersedes the prior active row
+    // instead of leaving two ambiguous "current" targets. The old row is
+    // never edited or deleted — only flipped inactive — and the value
+    // change is recorded through the platform's own append-only audit log
+    // (recordActivity), not a parallel history table.
+    const previous = await ctx.tx.outreachTarget.findFirst({
+      where: {
+        active: true,
+        scope: input.scope,
+        teamId: input.teamId ?? null,
+        partyId: input.partyId ?? null,
+        period: input.period,
+        metric: input.metric,
+        periodStart: new Date(input.periodStart),
+      },
+    });
+
+    if (previous) {
+      await ctx.tx.outreachTarget.update({
+        where: { id: previous.id },
+        data: { active: false, version: { increment: 1 } },
+      });
+    }
+
     const target = await ctx.tx.outreachTarget.create({
       data: {
         tenantId: ctx.actor.tenantId,
@@ -890,14 +948,29 @@ export const setOutreachTarget: CommandDefinition<
         targetValue: input.targetValue,
         periodStart: new Date(input.periodStart),
         periodEnd: new Date(input.periodEnd),
+        changeReason: input.changeReason ?? null,
       },
     });
+
+    if (previous) {
+      await recordActivity(ctx, {
+        entityKey: ENTITY_TARGET,
+        entityId: target.id,
+        commandKey: "verity.outreach.set_target",
+        changes: diffFields(
+          { targetValue: previous.targetValue },
+          { targetValue: target.targetValue },
+          [],
+        ),
+      });
+    }
+
     return { result: { id: target.id }, events: [] };
   },
 };
 
 export const listOutreachTargets: QueryDefinition<
-  { scope?: "Company" | "Team" | "Individual"; teamId?: string; partyId?: string },
+  { scope?: "Company" | "Team" | "Individual"; teamId?: string; partyId?: string; includeSuperseded?: boolean },
   Array<Record<string, unknown>>
 > = {
   key: "verity.outreach.list_targets",
@@ -906,11 +979,15 @@ export const listOutreachTargets: QueryDefinition<
     scope: z.enum(["Company", "Team", "Individual"]).optional(),
     teamId: z.string().uuid().optional(),
     partyId: z.string().uuid().optional(),
+    // Task 106 Phase 3: default view is "what's current" — a superseded
+    // target only shows when explicitly asked for (e.g. a history panel).
+    includeSuperseded: z.boolean().optional(),
   }),
   handler: async (ctx, input) => {
     await assertTeamScopeAllowed(ctx.tx, ctx.actor.userId, input.teamId);
     return ctx.tx.outreachTarget.findMany({
       where: {
+        ...(input.includeSuperseded ? {} : { active: true }),
         ...(input.scope ? { scope: input.scope } : {}),
         ...(input.teamId ? { teamId: input.teamId } : {}),
         ...(input.partyId ? { partyId: input.partyId } : {}),

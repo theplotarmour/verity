@@ -3,7 +3,7 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { ENTITY_LEAD, ENTITY_CONTACT, assertTeamScopeAllowed } from "@/server/capabilities/outreach";
+import { ENTITY_LEAD, ENTITY_CONTACT, assertTeamScopeAllowed, deriveLeadHealth } from "@/server/capabilities/outreach";
 import { ForbiddenError } from "@/server/platform/authorization";
 import {
   Badge,
@@ -17,6 +17,7 @@ import {
   Stat,
   StatRow,
   StateBadge,
+  HealthBadge,
 } from "@/components/ui/primitives";
 import { LeadActions } from "./LeadActions";
 import { ContactForm } from "./ContactForm";
@@ -107,6 +108,12 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
 
   const { lead } = data;
   const overdue = lead.nextActionAt != null && lead.nextActionAt < new Date() && !data.isTerminal;
+  const health = deriveLeadHealth({
+    category: data.category,
+    lastActivityAt: lead.lastActivityAt,
+    nextActionAt: lead.nextActionAt,
+    createdAt: lead.createdAt,
+  });
 
   return (
     <>
@@ -136,8 +143,13 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
           </span>
           <span className="mt-2 text-[12px] leading-[1.3] text-text-tertiary">Stage</span>
         </div>
+        <div className="flex flex-col px-5 py-4">
+          <span className="flex h-[26px] items-center text-[15px]">
+            <HealthBadge health={health} />
+          </span>
+          <span className="mt-2 text-[12px] leading-[1.3] text-text-tertiary">Health</span>
+        </div>
         <Stat label="Team" value={data.teamName} />
-        <Stat label="Track" value={lead.track} />
         <Stat
           label="Next action"
           value={lead.nextActionAt ? lead.nextActionAt.toISOString().slice(0, 10) : "None set"}
@@ -150,6 +162,7 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
           <Panel title="Identity">
             <DefinitionList
               items={[
+                { term: "Track", value: lead.track },
                 { term: "Website", value: lead.website ?? "—" },
                 { term: "Industry", value: lead.industry ?? "—" },
                 { term: "Location", value: lead.location ?? "—" },
