@@ -21,16 +21,24 @@ not as a reason to cut the phase list itself. If a phase turns out to be
 overbuild in practice, that's a stop-and-ask moment per CLAUDE.md, not a
 silent trim.
 
-## Status: Phase 1/2/3 DONE 2026-09-14. Phase 4+ not started
+## Status: Phase 1/2/3/4 DONE 2026-09-14/15. Phase 5+ not started
 
 Phase 3 closed out across two slices:
 - **`OutreachContact`** — model, migration, RLS, commands, permissions, UI panel + add-contact form on `/outreach/[id]`.
 - **Target audit trail** (§72-73) — `setOutreachTarget` supersedes (never edits/deletes) the prior active row for the same scope/team/party/period/metric/periodStart; diff logged via the platform's existing `recordActivity`, not a new table. `listOutreachTargets` defaults active-only, `includeSuperseded` for history.
 - **Ownership audit trail** (§19) — this file's own earlier premise that a new `OutreachOwnershipHistory` table was needed was **wrong**, corrected on investigation: `reassignOpportunityOwner` already calls `recordActivity` (platform `Activity` table, EXE-AUD-001) with the old/new owner diff. Nothing built, nothing missing.
 - **Health signal** (§21) — `deriveLeadHealth()` (Hot/Stale/AtRisk/Healthy/Closed, category-only per ADR-009), `HealthBadge` primitive, wired into the lead list and detail pages.
-- **File-authorization check** (§12) — investigated, not fixed: `readUrlFor()`'s contract is sound (callers must authorize first) but has zero production callers today. Nothing to fix in outreach since Research (Phase 4) doesn't exist yet; recorded as a requirement for whoever builds Research.
+- **File-authorization check** (§12) — investigated in Phase 3, closed in Phase 4: `getResearchFileUrl` now authorizes against the owning lead before calling `readUrlFor`.
 
-31/31 outreach tests pass (was 22 at session start), tsc clean throughout.
+Phase 4 (§26-29, §45-46, §49, §96) — Research + duplicate detection:
+- **`OutreachResearchEntry`** — append-only timeline entity. Note/Url types created directly; file types (Pdf/Docx/Spreadsheet/Presentation/Image/Screenshot/Other) go through the platform's real two-phase upload (`reserveUpload`/`confirmUpload` from `files.ts`, previously exercised only by tests — this is the first production caller). `StoredFile.entityKey`/`entityId` set to the owning lead, closing the file-authorization gap.
+- **Duplicate detection** — `checkDuplicateProspect`, company-wide normalized match on name/domain/LinkedIn URL. Confidentiality-preserving: an inaccessible match returns a generic message only. Wired into `NewLeadForm` as a warning banner on company/website blur.
+- UI: Research panel on `/outreach/[id]` (renamed the old flat-field panel to "Qualification" to avoid a name collision) with `ResearchForm` (3 modes) and `ViewFileLink` (fetches a fresh signed URL per click).
+- Live-verified via chrome-devtools MCP against the real PlotArmour tenant: a real note round-tripped end to end, the duplicate-detection banner rendered correctly against a real existing lead ("Acme Manufacturing Pvt Ltd"), zero console errors. **Note**: that live test left one real research-entry row on a real lead (append-only, can't be deleted via command) — flagged to the product owner, not silently cleaned up.
+
+38/38 outreach tests pass (was 22 at session start), tsc clean throughout.
+
+**Not done, still Phase 4-adjacent**: AI-assisted duplicate/gap detection (explicitly Phase 8, deferred by design), profile-completeness indicator (§51, not requested this pass).
 
 ## Phase 1 — Repository audit (§114-117)
 
@@ -134,19 +142,21 @@ clean, 31/31 tests pass (was 22 before this phase) in
 `capability-outreach.test.ts` — contact round-trip, target supersession,
 5 `deriveLeadHealth` cases.
 
-## Phase 4 — Prospect operations
+## Phase 4 — Prospect operations — DONE 2026-09-15
 
-- `OutreachContact` CRUD + UI (profile card on `/outreach/[id]`, per §24-25).
-- `OutreachResearchEntry` CRUD + timeline UI (§26-29) — write note, add URL,
-  upload file (reuses `StoredFile`), chronological render.
-- Duplicate detection on prospect creation (§45-46, §96, §49) — normalized
-  name/domain/LinkedIn match; confidentiality-preserving message for
-  cross-owner hits ("an existing record may already exist... ask your
-  Team Leader") per §8.
-- Next-action + health-state fields surfaced on lead header.
+- **DONE** (Phase 3) — `OutreachContact` CRUD + UI.
+- **DONE** — `OutreachResearchEntry` CRUD + timeline UI (§26-29): write note,
+  add URL, upload file (real two-phase `StoredFile` upload, not a mock).
+- **DONE** — Duplicate detection on prospect creation (§45-46, §96, §49):
+  normalized name/domain/LinkedIn match, confidentiality-preserving message
+  for inaccessible hits, wired into `NewLeadForm` as a blur-triggered banner.
+- **DONE** (Phase 3) — Health-state field (`deriveLeadHealth`) surfaced on
+  lead header and list. Next-action field was already present from 105.
 
-**Acceptance**: §131's Junior-day acceptance test items covering research/
-contact/duplicate — live-browser-verified same discipline as 105.
+**Acceptance**: met — live-browser-verified via chrome-devtools MCP against
+the real PlotArmour tenant (note round-trip, duplicate banner against a
+real lead), 38/38 tests, tsc clean. §131's Junior-day items covering
+research/contact/duplicate all exercised live.
 
 ## Phase 5 — Daily execution
 
