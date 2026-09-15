@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { reachableGodownIds } from "./scope";
-import { resolveTaxRate } from "./tax";
+import { productTaxRateMap } from "./tax";
 import { type QueryDefinition } from "@/server/platform/query";
 import {
   ENTITY_PRODUCT,
@@ -483,8 +483,9 @@ export const sellableStock: QueryDefinition<
      * needs it to show an order total including tax before the order is placed,
      * and 18% is 18% whether it is collected as 9+9 within the state or as 18
      * across a border, so the split would be three numbers the form could get
-     * wrong for no gain. Null when no rule covers the HSN — the form then says
-     * the tax is unknown rather than showing a total that is short.
+     * wrong for no gain. Null only when neither a rule for the HSN nor the
+     * tenant's default rate exists — the form then says the tax is unknown
+     * rather than showing a total that is short.
      */
     taxRateBp: number | null;
   }>
@@ -523,31 +524,16 @@ export const sellableStock: QueryDefinition<
         : Promise.resolve([]),
     ]);
 
-    // The rate in force today for every HSN on the shelf, resolved once rather
-    // than per row: a catalogue of four hundred boards shares a handful of HSN
-    // codes between them.
-    const registration = await ctx.tx.tradingGstRegistration.findFirst({
-      where: { active: true },
-    });
-    const rateByHsn = new Map<string, number>();
-    if (registration) {
-      const now = new Date();
-      for (const hsn of new Set(balances.map((b) => b.product.hsnCode))) {
-        if (!hsn) continue;
-        try {
-          const rate = await resolveTaxRate(ctx.tx, {
-            registrationId: registration.id,
-            hsnCode: hsn,
-            on: now,
-          });
-          rateByHsn.set(hsn, rate.cgstRateBp + rate.sgstRateBp);
-        } catch {
-          // No rule for this HSN. Left absent so the form can say the tax is
-          // unknown; guessing a rate here would show a total that is wrong in
-          // the direction nobody checks.
-        }
-      }
-    }
+    // The rate in force today for every product, resolved by the SAME
+    // function the order form's purchase side and the invoice use
+    // (`productTaxRateMap`): per-HSN rule where one exists, the tenant's
+    // configured default otherwise — including for a product that has no
+    // HSN at all, since the catalogue stopped demanding one. This query used
+    // to carry its own copy that stopped at the HSN rule and returned null
+    // for everything else, so a board with no HSN showed "no GST rule" here
+    // while the invoice would have taxed it at the default: the form was
+    // under-quoting exactly the orders nobody would check. One resolver.
+    const rateByProduct = await productTaxRateMap(ctx.tx);
 
     const reservedBy = new Map<string, number>();
     for (const hold of reservations) {
@@ -572,13 +558,9 @@ export const sellableStock: QueryDefinition<
           reservedUnits: reserved,
           availableUnits: balance.qtyUnits - reserved,
           agreedPricePaise: priceBy.get(balance.productId) ?? null,
-          // A product with no HSN has no rate to look up -- optional since the
-          // catalogue stopped demanding one -- and `null` here already means
-          // "not known", which is exactly what it is.
-          taxRateBp:
-            balance.product.hsnCode == null
-              ? null
-              : (rateByHsn.get(balance.product.hsnCode) ?? null),
+          // Null only when the tenant has neither a rule for the HSN nor a
+          // configured default — genuinely not known, never "no HSN".
+          taxRateBp: rateByProduct.get(balance.productId) ?? null,
         };
       })
       .sort(

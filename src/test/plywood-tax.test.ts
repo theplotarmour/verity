@@ -1,4 +1,4 @@
-import { TRADING_CAPABILITY } from "@/server/capabilities/trading";
+import { TRADING_CAPABILITY, sellableStock } from "@/server/capabilities/trading";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -200,11 +200,11 @@ describeDb("plywood tax (slice 6)", () => {
   });
 
   /** A board with stock already standing in the godown. */
-  async function boardInStock(qtyUnits: number, hsnCode = "44121000"): Promise<string> {
+  async function boardInStock(qtyUnits: number, hsnCode: string | undefined = "44121000"): Promise<string> {
     const product = await executeCommand(owner, createProduct, {
       brandId,
       name: `Board ${randomUUID().slice(0, 8)}`,
-      hsnCode,
+      ...(hsnCode ? { hsnCode } : {}),
       thicknessTenthMm: 180,
       widthTenth: 24400,
       heightTenth: 12200,
@@ -282,6 +282,19 @@ describeDb("plywood tax (slice 6)", () => {
       );
       expect(chapter.hsnMatched).toBe("4412");
       expect(chapter.cgstRateBp).toBe(900);
+    });
+
+    it("quotes the tenant default on the sales form for a board with no HSN, never 'unknown'", async () => {
+      // 2026-09-15: `sellableStock` carried its own rate lookup that stopped
+      // at the per-HSN rule, so a board with no HSN (optional since the
+      // catalogue stopped demanding one) showed "no GST rule" on the order
+      // form while the invoice would have taxed it at the configured default.
+      // One resolver now — the form must quote what the invoice will bill.
+      const noHsn = await boardInStock(5, undefined);
+      const rows = await executeQuery(owner, sellableStock, {});
+      const row = rows.find((r) => r.productId === noHsn);
+      expect(row).toBeDefined();
+      expect(row!.taxRateBp).toBe(1800);
     });
 
     it("refuses rather than returning zero when no rule is in force", async () => {
