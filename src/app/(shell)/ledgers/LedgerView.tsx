@@ -135,37 +135,49 @@ export function LedgerView({
   const router = useRouter();
   const selectedAny = Boolean(selectedValue);
 
+  // The picker sits above BOTH views. Reported 2026-09-15: with nothing
+  // outstanding, the overview was empty and the only way into a ledger was
+  // a row on it — so a settled business had no ledger you could open.
+  const chooser = (
+    <div className="mb-6">
+      <Panel title="Choose a business">
+        <div className="max-w-[480px]">
+          <Field label="Customer or supplier" htmlFor="ledger-party">
+            <Combobox
+              id="ledger-party"
+              value={selectedValue ?? ""}
+              placeholder="Search customers and suppliers"
+              onChange={(value) => {
+                const [kind, id] = value.split(":");
+                router.push(id ? `/ledgers?${kind}=${id}` : "/ledgers");
+              }}
+              options={parties}
+            />
+          </Field>
+        </div>
+        <p className="mb-0 mt-3 text-[12px] text-text-tertiary">
+          One business at a time. A firm we both buy from and sell to is listed
+          once and opens as one ledger, both sides together.
+        </p>
+      </Panel>
+    </div>
+  );
+
   // The overview is the default view. Reported: choosing a party first meant
   // the page said nothing at all until you already knew whose name you wanted,
   // which is not what a "who owes what" screen is for.
   if (!selectedAny) {
-    return <OwedOverview balances={balances} />;
+    return (
+      <>
+        {chooser}
+        <OwedOverview balances={balances} />
+      </>
+    );
   }
 
   return (
     <>
-      <div className="mb-6">
-        <Panel title="Choose a business">
-          <div className="max-w-[480px]">
-            <Field label="Customer or supplier" htmlFor="ledger-party">
-              <Combobox
-                id="ledger-party"
-                value={selectedValue ?? ""}
-                placeholder="Search customers and suppliers"
-                onChange={(value) => {
-                  const [kind, id] = value.split(":");
-                  router.push(id ? `/ledgers?${kind}=${id}` : "/ledgers");
-                }}
-                options={parties}
-              />
-            </Field>
-          </div>
-          <p className="mb-0 mt-3 text-[12px] text-text-tertiary">
-            One business at a time. A firm we both buy from and sell to is listed once and
-            opens as one ledger, both sides together.
-          </p>
-        </Panel>
-      </div>
+      {chooser}
 
       {!ledger ? (
         <Panel flush>
@@ -180,7 +192,11 @@ export function LedgerView({
           <div className="mb-6">
             <StatRow cols={3}>
               <Stat
-                label={ledger.balancePaise >= 0 ? "They need to send us" : "We need to send them"}
+                label={
+                  ledger.balancePaise >= 0
+                    ? "They need to send us"
+                    : "We need to send them"
+                }
                 value={rupees(Math.abs(ledger.balancePaise))}
                 hint={
                   ledger.balancePaise === 0
@@ -194,7 +210,13 @@ export function LedgerView({
               <Stat
                 label="Business"
                 value={selectedName ?? "—"}
-                hint={bothSides ? "Customer & supplier" : isSupplier ? "Supplier" : "Customer"}
+                hint={
+                  bothSides
+                    ? "Customer & supplier"
+                    : isSupplier
+                      ? "Supplier"
+                      : "Customer"
+                }
               />
             </StatRow>
           </div>
@@ -216,8 +238,16 @@ export function LedgerView({
                     {[
                       "Date",
                       "Particulars",
-                      bothSides ? "Owed to us · paid by us" : isSupplier ? "We paid" : "They owe",
-                      bothSides ? "Owed to them · paid by them" : isSupplier ? "We owe" : "They paid",
+                      bothSides
+                        ? "Owed to us · paid by us"
+                        : isSupplier
+                          ? "We paid"
+                          : "They owe",
+                      bothSides
+                        ? "Owed to them · paid by them"
+                        : isSupplier
+                          ? "We owe"
+                          : "They paid",
                       "Balance",
                     ].map((heading, index) => (
                       <th
@@ -234,7 +264,10 @@ export function LedgerView({
                 </thead>
                 <tbody>
                   {ledger.entries.map((entry) => (
-                    <tr key={entry.id} className="transition-colors hover:bg-accent-subtle/40">
+                    <tr
+                      key={entry.id}
+                      className="transition-colors hover:bg-accent-subtle/40"
+                    >
                       <td className="tabular border-b border-line px-3 py-2 text-[13px] text-text-secondary">
                         {shortDate(entry.occurredAt)}
                       </td>
@@ -242,7 +275,11 @@ export function LedgerView({
                         {entry.narration ?? "—"}
                         {(entry.pending || bothSides) && (
                           <span className="ml-2 text-[11px] uppercase tracking-wide text-text-tertiary">
-                            {bothSides ? (entry.side === "customer" ? "sale" : "purchase") : ""}
+                            {bothSides
+                              ? entry.side === "customer"
+                                ? "sale"
+                                : "purchase"
+                              : ""}
                             {bothSides && entry.pending ? " · " : ""}
                             {entry.pending ? "not yet billed" : ""}
                           </span>
@@ -293,7 +330,6 @@ export function LedgerView({
     </>
   );
 }
-
 
 /**
  * Everyone the business trades with, and which way the money points.
@@ -362,8 +398,10 @@ export function netAcrossBusinesses(balances: Balance[]): NettedLine[] {
       ...carrier,
       netPaise: combined,
       nettedFrom: {
-        theyOweUsPaise: Math.max(0, net(customerSide)) + Math.max(0, net(supplierSide)),
-        weOweThemPaise: Math.max(0, -net(customerSide)) + Math.max(0, -net(supplierSide)),
+        theyOweUsPaise:
+          Math.max(0, net(customerSide)) + Math.max(0, net(supplierSide)),
+        weOweThemPaise:
+          Math.max(0, -net(customerSide)) + Math.max(0, -net(supplierSide)),
       },
     });
   }
@@ -542,7 +580,8 @@ function SettleModal({
               : "Settles it in full"}
           </span>
           <ModalCancel onClose={onClose} disabled={pending} />
-          <CommandButton commands={"verity.trading.record_party_payment"}
+          <CommandButton
+            commands={"verity.trading.record_party_payment"}
             variant="primary"
             disabled={pending || !valid}
             onClick={() =>
@@ -689,7 +728,8 @@ function OwedTable({
                         {rupees(amount)}
                       </td>
                       <td className="whitespace-nowrap border-b border-line px-3 py-2.5 text-right">
-                        <CommandButton commands={"verity.trading.record_party_payment"}
+                        <CommandButton
+                          commands={"verity.trading.record_party_payment"}
                           size="sm"
                           disabled={pending}
                           onClick={() => onSettle(row)}
