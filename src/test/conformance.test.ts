@@ -181,10 +181,15 @@ describe("conformance: capability contracts (Phase E)", () => {
     // and payments need no other capability, the same reasoning `dinein`
     // above already gives for depending on nothing.
     trading: [],
+    // Tasks 72/73/77/78, built 2026-09-04 under explicit product-owner
+    // override ("build ahead of demand"), MVP scope. Each is a standalone
+    // vertical slice depending on no other capability (checked: no
+    // cross-capability import from any of the four) — this list was
+    // simply never updated when they shipped.
     accounting: [],
+    inventory: [],
     billing: [],
     hr: [],
-    inventory: [],
   };
 
   const capabilityDirs = readdirSync(join(ROOT, "src/server/capabilities")).filter((entry) =>
@@ -439,6 +444,13 @@ describeDb("conformance: database enforcement", () => {
       // what a balance is computed from (P3), and an invoice is a legal document
       // whose number, tax and totals are fixed once raised — a correction is a
       // credit note, which is a new document rather than an edit to an old one.
+      // accounting's journal_entry/journal_line, billing's billing_invoice/
+      // billing_meter_reading, hr's hr_leave_decision, and inventory's
+      // inventory_stock_movement (Tasks 72/73/77/78, built 2026-09-04) join
+      // for the same reason as the plywood/trading ledger tables above —
+      // each is a financial or historical fact, not a mutable record. This
+      // list simply was never rechecked against them until now. Sorted to
+      // match `guarded`'s own `.sort()`.
       expect(guarded).toEqual([
         "activity",
         "billing_invoice",
@@ -449,11 +461,11 @@ describeDb("conformance: database enforcement", () => {
         "inventory_stock_movement",
         "journal_entry",
         "journal_line",
-        "trading_invoice",
-        "trading_ledger_entry",
         "security_audit_event",
         "stock_ledger_entry",
-      ].sort());
+        "trading_invoice",
+        "trading_ledger_entry",
+      ]);
     } finally {
       await admin.$disconnect();
     }

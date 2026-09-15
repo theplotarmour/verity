@@ -57,6 +57,9 @@ tmp_backup_verity/
 # Local environment notes (secrets; never shared)
 .claude/env.txt
 
+# PA-OMS real login credentials (real people's passwords; never committed)
+pacreds.txt
+
 # graphify: generated outputs and machine-specific scan state.
 # The graph is reproducible from the corpus; these embed absolute local paths.
 graphify-out/graph.json

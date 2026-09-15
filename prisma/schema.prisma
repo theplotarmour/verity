@@ -145,6 +145,21 @@ model Tenant {
   inventoryItems          InventoryItem[]
   inventoryStockBalances  InventoryStockBalance[]
   inventoryStockMovements InventoryStockMovement[]
+  inventoryWastageRecords InventoryWastageRecord[]
+
+  // Capability: recipe (Colonel Kebabz Phase 1). Back-relations only.
+  recipes           Recipe[]
+  recipeIngredients RecipeIngredient[]
+
+  // Capability: CRM (Colonel Kebabz Phase 2). Back-relations only.
+  customers          Customer[]
+  loyaltyPointEntries LoyaltyPointEntry[]
+  coupons            Coupon[]
+  complaints         Complaint[]
+  attendanceRecords  AttendanceRecord[]
+  shifts             Shift[]
+  expenses           Expense[]
+  cashReconciliations DailyCashReconciliation[]
 
   // Capability: HR (Task 78). Back-relations only, as above.
   hrDepartments       HrDepartment[]
@@ -161,6 +176,23 @@ model Tenant {
   plywoodProductDetails PlywoodProductDetail[]
   plywoodShades         PlywoodShade[]
   plywoodTextures       PlywoodTexture[]
+
+  // Capability: outreach (Task 105). Back-relations only, as above.
+  outreachTeams                 OutreachTeam[]
+  outreachTeamMemberships       OutreachTeamMembership[]
+  outreachLeads                 OutreachLead[]
+  outreachActivities            OutreachActivity[]
+  outreachContacts               OutreachContact[]
+  outreachResearchEntries        OutreachResearchEntry[]
+  outreachTasks                  OutreachTask[]
+  outreachMeetings               OutreachMeeting[]
+  outreachCheckInReviews         OutreachCheckInReview[]
+  outreachCoachingNotes          OutreachCoachingNote[]
+  outreachTargets               OutreachTarget[]
+  outreachCheckIns              OutreachCheckIn[]
+  outreachWeeklyReports         OutreachWeeklyReport[]
+  outreachTeamWeeklyAssessments OutreachTeamWeeklyAssessment[]
+  outreachDirections            OutreachDirection[]
 
   @@map("tenant")
 }
@@ -1142,6 +1174,17 @@ model Location {
   inventoryStockBalances  InventoryStockBalance[]
   inventoryStockMovements InventoryStockMovement[]
 
+  // Capability: dinein (Colonel Kebabz multi-outlet). Back-relations only.
+  diningZones  DiningZone[]
+  diningTables DiningTable[]
+  diningOrders DiningOrder[]
+  bills        Bill[]
+  customers    Customer[]
+  complaints   Complaint[]
+  shifts       Shift[]
+  expenses     Expense[]
+  cashReconciliations DailyCashReconciliation[]
+
   @@unique([tenantId, id], name: "location_tenant_scoped_id")
   @@index([tenantId, organizationId])
   @@map("location")
@@ -1864,6 +1907,7 @@ model MenuItem {
   category MenuCategory      @relation(fields: [tenantId, categoryId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
   variants MenuItemVariant[]
   lines    OrderLine[]
+  recipe   Recipe?
 
   @@unique([tenantId, id], name: "menu_item_tenant_scoped_id")
   @@index([tenantId, categoryId, sortOrder])
@@ -1891,9 +1935,14 @@ model MenuItemVariant {
 }
 
 /// A part of the floor — Ground, Mezzanine, Terrace.
+///
+/// Scoped to a Location (Task: Colonel Kebabz multi-outlet). A zone belongs to
+/// exactly one outlet; a chain with three outlets has three "Ground Floor"
+/// zones, not one shared across sites.
 model DiningZone {
   id           String   @id @default(uuid()) @db.Uuid
   tenantId     String   @map("tenant_id") @db.Uuid
+  locationId   String   @map("location_id") @db.Uuid
   name         String
   floorLabel   String?  @map("floor_label")
   sortOrder    Int      @default(0) @map("sort_order")
@@ -1902,11 +1951,13 @@ model DiningZone {
   version      Int      @default(1)
   customFields Json     @default("{}") @map("custom_fields")
 
-  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  tables DiningTable[]
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location      @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "dining_zone_location_fkey")
+  tables   DiningTable[]
 
-  @@unique([tenantId, name])
+  @@unique([tenantId, locationId, name])
   @@unique([tenantId, id], name: "dining_zone_tenant_scoped_id")
+  @@index([tenantId, locationId])
   @@map("dining_zone")
 }
 
@@ -1920,6 +1971,9 @@ model DiningTable {
   id           String   @id @default(uuid()) @db.Uuid
   tenantId     String   @map("tenant_id") @db.Uuid
   zoneId       String   @map("zone_id") @db.Uuid
+  /// Denormalized from the zone at creation, so floor/queue queries filter by
+  /// location without a join. A table never moves outlets, so this never drifts.
+  locationId   String   @map("location_id") @db.Uuid
   label        String
   seats        Int      @default(2)
   shape        String?
@@ -1933,13 +1987,15 @@ model DiningTable {
   version      Int      @default(1)
   customFields Json     @default("{}") @map("custom_fields")
 
-  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  zone   DiningZone    @relation(fields: [tenantId, zoneId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  orders DiningOrder[]
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  zone     DiningZone    @relation(fields: [tenantId, zoneId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  location Location      @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "dining_table_location_fkey")
+  orders   DiningOrder[]
 
-  @@unique([tenantId, label])
+  @@unique([tenantId, locationId, label])
   @@unique([tenantId, id], name: "dining_table_tenant_scoped_id")
   @@index([tenantId, state])
+  @@index([tenantId, locationId])
   @@map("dining_table")
 }
 
@@ -1952,6 +2008,8 @@ model DiningOrder {
   id            String    @id @default(uuid()) @db.Uuid
   tenantId      String    @map("tenant_id") @db.Uuid
   tableId       String    @map("table_id") @db.Uuid
+  /// Denormalized from the table at creation. An order never moves outlets.
+  locationId    String    @map("location_id") @db.Uuid
   /// Resolved from the session, never from a payload (PLA-TEN-006).
   takenByUserId String    @map("taken_by_user_id") @db.Uuid
   covers        Int       @default(1)
@@ -1968,14 +2026,16 @@ model DiningOrder {
   version       Int       @default(1)
   customFields  Json      @default("{}") @map("custom_fields")
 
-  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  table  DiningTable @relation(fields: [tenantId, tableId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
-  lines  OrderLine[]
-  bill   Bill?
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  table    DiningTable @relation(fields: [tenantId, tableId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  location Location    @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "dining_order_location_fkey")
+  lines    OrderLine[]
+  bill     Bill?
 
   @@unique([tenantId, id], name: "dining_order_tenant_scoped_id")
   @@index([tenantId, state])
   @@index([tenantId, tableId, state])
+  @@index([tenantId, locationId])
   @@map("dining_order")
 }
 
@@ -2023,6 +2083,8 @@ model Bill {
   id                String    @id @default(uuid()) @db.Uuid
   tenantId          String    @map("tenant_id") @db.Uuid
   orderId           String    @unique @map("order_id") @db.Uuid
+  /// Denormalized from the order at generation. A bill never moves outlets.
+  locationId        String    @map("location_id") @db.Uuid
   subtotalMinor     Int       @map("subtotal_minor")
   discountMinor     Int       @default(0) @map("discount_minor")
   /// The tax that applied, in columns rather than a JSON blob.
@@ -2053,6 +2115,7 @@ model Bill {
 
   tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   order    DiningOrder @relation(fields: [tenantId, orderId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  location Location    @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction, map: "bill_location_fkey")
   payments Payment[]
 
   // One bill per order in v1. The pair is unique as well as the id, because the
@@ -2060,6 +2123,7 @@ model Bill {
   // defining side of a one-to-one to be unique on exactly those columns.
   @@unique([tenantId, orderId], name: "bill_tenant_scoped_order")
   @@unique([tenantId, id], name: "bill_tenant_scoped_id")
+  @@index([tenantId, locationId])
   @@index([tenantId, state])
   @@map("bill")
 }
@@ -2199,29 +2263,29 @@ model TradingProduct {
 /// reason money is stored in paise — 18.0 mm and 8 ft x 4 ft are exact facts
 /// and a float would make them approximately exact.
 model PlywoodProductDetail {
-  productId        String @id @map("product_id") @db.Uuid
-  tenantId         String @map("tenant_id") @db.Uuid
+  productId        String  @id @map("product_id") @db.Uuid
+  tenantId         String  @map("tenant_id") @db.Uuid
   /// Tenths of a millimetre. 180 is 18.0 mm. Not basis points: a thickness is
   /// not a rate, and the two units are kept apart deliberately.
   /// Nullable: a SERVICE product (sawing, estimating) and most hardware items
   /// have no sheet dimensions at all. `plywood_product_detail_dimensions_positive`
   /// allows NULL but still refuses zero or negative when a value is given.
-  thicknessTenthMm Int?   @map("thickness_tenth_mm")
+  thicknessTenthMm Int?    @map("thickness_tenth_mm")
   /// BOARD, PLYWOOD, LAMINATE, LOUVRE or OTHER. What the trade calls this
   /// thing, and — because each family is quoted in its own unit — what decides
   /// how its size is read. A plain string, validated at the command layer
   /// (`ProductCategory` in index.ts) and by a CHECK constraint, consistent with
   /// every other closed set in this file.
-  category         String @default("OTHER")
+  category         String  @default("OTHER")
   /// MM, FT or IN. The unit `widthTenth` and `heightTenth` are counted in.
   /// Stored rather than derived from `category`, because it is a fact about
   /// what was recorded — boards entered before the trade's own units were
   /// modelled hold genuine millimetres, and rewriting them would be a lie.
-  sizeUnit         String @default("MM") @map("size_unit")
+  sizeUnit         String  @default("MM") @map("size_unit")
   /// Tenths of `sizeUnit`. 80 is 8.0 ft; 24400 is 2440.0 mm. Tenths for the
   /// same reason thickness is: 8 ft is an exact fact and is not 2438.4 mm.
-  widthTenth       Int?   @map("width_tenth")
-  heightTenth      Int?   @map("height_tenth")
+  widthTenth       Int?    @map("width_tenth")
+  heightTenth      Int?    @map("height_tenth")
   /// BWR, MR, Marine. A free string: grades are the client's vocabulary and an
   /// enum here would need a platform migration the first time a supplier
   /// invents one.
@@ -2230,7 +2294,7 @@ model PlywoodProductDetail {
   /// behaves in water. A decorative laminate has no grade at all, and the
   /// column was forcing the catalogue to invent one for every laminate row.
   grade            String?
-  sheetWeightGrams Int?   @map("sheet_weight_grams")
+  sheetWeightGrams Int?    @map("sheet_weight_grams")
   /// The shade and texture this variant is. Both null on an ordinary product
   /// and on the template a variant was generated from; both set on a
   /// generated variant. Nullable rather than a separate table per variant
@@ -2579,27 +2643,27 @@ model TradingPurchaseOrder {
 /// a partial receipt turns on, and what is still owed on a given order must be
 /// answerable without loading every purchase order.
 model TradingPurchaseOrderLine {
-  id                  String @id @default(uuid()) @db.Uuid
-  tenantId            String @map("tenant_id") @db.Uuid
-  purchaseOrderId     String @map("purchase_order_id") @db.Uuid
-  productId           String @map("product_id") @db.Uuid
+  id                  String  @id @default(uuid()) @db.Uuid
+  tenantId            String  @map("tenant_id") @db.Uuid
+  purchaseOrderId     String  @map("purchase_order_id") @db.Uuid
+  productId           String  @map("product_id") @db.Uuid
   /// Snapshots. A catalogue edit must never rewrite a placed order.
-  productNameSnapshot String @map("product_name_snapshot")
+  productNameSnapshot String  @map("product_name_snapshot")
   hsnCodeSnapshot     String? @map("hsn_code_snapshot")
-  qtyOrdered          Int    @map("qty_ordered")
-  qtyReceived         Int    @default(0) @map("qty_received")
+  qtyOrdered          Int     @map("qty_ordered")
+  qtyReceived         Int     @default(0) @map("qty_received")
   /// NET of any discount — what this business actually agreed to pay per unit.
   /// Everything downstream (stock valuation, the payable, the purchase
   /// register) reads this one field, so a discount cannot be applied twice or
   /// forgotten by a reader that predates it.
-  unitCostPaise       Int    @map("unit_cost_paise")
+  unitCostPaise       Int     @map("unit_cost_paise")
   /// The pre-discount figure, kept only so the order can show what was struck
   /// off. Null when nothing was. Task 71 item 9.
-  listUnitCostPaise   Int?   @map("list_unit_cost_paise")
+  listUnitCostPaise   Int?    @map("list_unit_cost_paise")
   /// Basis points off the list price. 1250 is 12.5%. Stored as the rate that
   /// was agreed, alongside the money it produced, because recomputing money
   /// from a rate at read time lets a later edit restate a placed order.
-  discountBps         Int    @default(0) @map("discount_bps")
+  discountBps         Int     @default(0) @map("discount_bps")
 
   tenant        Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   purchaseOrder TradingPurchaseOrder      @relation(fields: [tenantId, purchaseOrderId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
@@ -2657,19 +2721,19 @@ model TradingSalesOrder {
 
 /// One board on a sales order.
 model TradingSalesOrderLine {
-  id                  String @id @default(uuid()) @db.Uuid
-  tenantId            String @map("tenant_id") @db.Uuid
-  salesOrderId        String @map("sales_order_id") @db.Uuid
-  productId           String @map("product_id") @db.Uuid
-  productNameSnapshot String @map("product_name_snapshot")
+  id                  String  @id @default(uuid()) @db.Uuid
+  tenantId            String  @map("tenant_id") @db.Uuid
+  salesOrderId        String  @map("sales_order_id") @db.Uuid
+  productId           String  @map("product_id") @db.Uuid
+  productNameSnapshot String  @map("product_name_snapshot")
   hsnCodeSnapshot     String? @map("hsn_code_snapshot")
-  qtyOrdered          Int    @map("qty_ordered")
-  qtyShipped          Int    @default(0) @map("qty_shipped")
+  qtyOrdered          Int     @map("qty_ordered")
+  qtyShipped          Int     @default(0) @map("qty_shipped")
   /// NET of any discount. See the note on the purchase line: one field carries
   /// the money, so no reader can miss the discount.
-  unitPricePaise      Int    @map("unit_price_paise")
-  listUnitPricePaise  Int?   @map("list_unit_price_paise")
-  discountBps         Int    @default(0) @map("discount_bps")
+  unitPricePaise      Int     @map("unit_price_paise")
+  listUnitPricePaise  Int?    @map("list_unit_price_paise")
+  discountBps         Int     @default(0) @map("discount_bps")
 
   tenant     Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   salesOrder TradingSalesOrder       @relation(fields: [tenantId, salesOrderId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
@@ -3079,15 +3143,15 @@ model TradingInvoice {
 
 /// One line on an invoice, snapshotted whole.
 model TradingInvoiceLine {
-  id                  String @id @default(uuid()) @db.Uuid
-  tenantId            String @map("tenant_id") @db.Uuid
-  invoiceId           String @map("invoice_id") @db.Uuid
-  productId           String @map("product_id") @db.Uuid
-  productNameSnapshot String @map("product_name_snapshot")
+  id                  String  @id @default(uuid()) @db.Uuid
+  tenantId            String  @map("tenant_id") @db.Uuid
+  invoiceId           String  @map("invoice_id") @db.Uuid
+  productId           String  @map("product_id") @db.Uuid
+  productNameSnapshot String  @map("product_name_snapshot")
   hsnCodeSnapshot     String? @map("hsn_code_snapshot")
-  qtyUnits            Int    @map("qty_units")
-  unitPricePaise      Int    @map("unit_price_paise")
-  lineTotalPaise      Int    @map("line_total_paise")
+  qtyUnits            Int     @map("qty_units")
+  unitPricePaise      Int     @map("unit_price_paise")
+  lineTotalPaise      Int     @map("line_total_paise")
 
   tenant  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   invoice TradingInvoice @relation(fields: [tenantId, invoiceId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
@@ -3558,16 +3622,25 @@ model InventoryItem {
   name         String
   unitLabel    String   @default("units") @map("unit_label")
   reorderLevel Int      @default(0) @map("reorder_level")
+  /// Moving-average unit cost in paise, updated only by a Receipt movement
+  /// that supplies `unitCostPaise` (`recordStockMovement`). Null until the
+  /// first costed receipt. Extends Task 73's original quantity-only scope —
+  /// decision 2026-09-10 (Colonel Kebabz phase plan): a recipe needs one
+  /// ingredient ledger for both quantity and cost, so procurement (GRN) and
+  /// consumption (recipe) post to the same InventoryItem rather than forking
+  /// cost into `trading`'s separate ledger.
+  avgUnitCostPaise Int?  @map("avg_unit_cost_paise")
   active       Boolean  @default(true)
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
   version      Int      @default(1)
   customFields Json     @default("{}") @map("custom_fields")
 
-  tenant    Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  itemGroup InventoryItemGroup?      @relation(fields: [itemGroupId], references: [id], onDelete: SetNull)
-  balances  InventoryStockBalance[]
-  movements InventoryStockMovement[]
+  tenant            Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  itemGroup         InventoryItemGroup?      @relation(fields: [itemGroupId], references: [id], onDelete: SetNull)
+  balances          InventoryStockBalance[]
+  movements         InventoryStockMovement[]
+  recipeIngredients RecipeIngredient[]
 
   @@unique([tenantId, sku])
   @@unique([tenantId, id], name: "inventory_item_tenant_scoped_id")
@@ -3610,17 +3683,365 @@ model InventoryStockMovement {
   /// would make a return-of-issued-goods a special case instead of a normal
   /// positive Receipt-shaped movement.
   qty        Int
+  /// Unit cost in paise for a Receipt movement — the value that folds into
+  /// `InventoryItem.avgUnitCostPaise`'s moving average. Null on non-Receipt
+  /// kinds and on a Receipt with no known cost (e.g. a manual stock-count
+  /// correction). See `InventoryItem.avgUnitCostPaise` for why this field
+  /// exists at all.
+  unitCostPaise Int?  @map("unit_cost_paise")
   reference  String?
   movedById  String   @map("moved_by_id") @db.Uuid
   movedAt    DateTime @default(now()) @map("moved_at")
 
-  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  item     InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  location Location      @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  tenant        Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  item          InventoryItem           @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  location      Location                @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  wastageRecord InventoryWastageRecord?
 
   @@index([tenantId, itemId])
   @@index([tenantId, locationId, movedAt])
   @@map("inventory_stock_movement")
+}
+
+/// Wastage detail for one Adjustment movement (PRD §20). Item, quantity,
+/// outlet, staff, and date/time already live on the InventoryStockMovement
+/// this row attaches to (kind=Adjustment, negative qty) — this table adds
+/// only what's genuinely new: reason, a value snapshot, notes, and an
+/// optional Evidence photo. `valuePaise` is a SNAPSHOT (qty x the item's
+/// avgUnitCostPaise at recording time), never re-derived later — a wastage
+/// report a year on should show what it cost then, not what the ingredient
+/// costs now. Approval-if-required (the PRD's own phrase) is not built:
+/// no threshold has been decided yet — see phase-plan's open decisions.
+model InventoryWastageRecord {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  movementId String   @unique @map("movement_id") @db.Uuid
+  /// Closed set owned by the capability (`WASTAGE_REASONS`) — PRD §20's own
+  /// list, same reasoning as MovementKind above.
+  reason     String
+  valuePaise Int      @map("value_paise")
+  notes      String?
+  evidenceId String?  @map("evidence_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  movement InventoryStockMovement @relation(fields: [movementId], references: [id], onDelete: Cascade)
+
+  @@map("inventory_wastage_record")
+}
+
+// ===========================================================================
+// CAPABILITY: Recipe (Colonel Kebabz Phase 1) — PRD §14-16: Recipe
+// Management, Recipe BOM, Food Cost.
+//
+// One MenuItem has at most one Recipe (BOM), which lists InventoryItem
+// ingredients and quantities. This is the load-bearing abstraction the
+// phase plan names: MenuItem (what's sold) -> Recipe/BOM (what's consumed)
+// -> InventoryItem (what's stocked) -> InventoryStockMovement (the ledger).
+// `dinein.settle_bill` calls into this capability to post the theoretical
+// consumption for each served line once a bill settles (order completed).
+// ===========================================================================
+
+/// A menu item's Bill of Materials. 1:1 with MenuItem — a variant-specific
+/// recipe is out of this slice's scope (PRD gives no per-variant example).
+model Recipe {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  menuItemId String   @map("menu_item_id") @db.Uuid
+  /// Portions this BOM produces in one batch — ingredient quantities scale
+  /// by (order qty / yieldQty). Almost always 1 (one recipe = one portion).
+  yieldQty   Int      @default(1) @map("yield_qty")
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  version    Int      @default(1)
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  menuItem    MenuItem           @relation(fields: [tenantId, menuItemId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  ingredients RecipeIngredient[]
+
+  @@unique([tenantId, menuItemId])
+  @@unique([tenantId, id], name: "recipe_tenant_scoped_id")
+  @@map("recipe")
+}
+
+/// One BOM line — an ingredient quantity per Recipe.
+model RecipeIngredient {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  recipeId        String   @map("recipe_id") @db.Uuid
+  inventoryItemId String   @map("inventory_item_id") @db.Uuid
+  /// Decimal, not Int — ingredient quantities are fractional (8g spices,
+  /// 12ml oil per the PRD's own example), unlike InventoryStockMovement's
+  /// whole-unit ledger.
+  qty             Decimal  @db.Decimal(12, 3)
+  unitLabel       String   @map("unit_label")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  version         Int      @default(1)
+
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recipe        Recipe        @relation(fields: [tenantId, recipeId], references: [tenantId, id], onDelete: Cascade, onUpdate: NoAction)
+  inventoryItem InventoryItem @relation(fields: [tenantId, inventoryItemId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, recipeId, inventoryItemId])
+  @@unique([tenantId, id], name: "recipe_ingredient_tenant_scoped_id")
+  @@map("recipe_ingredient")
+}
+
+// ===========================================================================
+// CAPABILITY: CRM (Colonel Kebabz Phase 2, lean V1) — PRD §28-30: Customer
+// CRM, Customer 360, Segmentation.
+//
+// A walk-in diner is not a Party (ADR-001, ADR-007) — Customer is a new,
+// tenant-scoped, capability-private identity concept matched by phone
+// number, never the platform's Party. Spend/visit/AOV/last-order are
+// deliberately NOT columns here — computed at query time from
+// DiningOrder/Bill joined on phone, so there is one ledger for that data,
+// not a cached copy that can drift. Segmentation (VIP/Frequent/At
+// Risk/...) is query filters over those same derived numbers, not a stored
+// segment table. Lean V1 scope decision 2026-09-10: no loyalty, coupons,
+// campaigns, reviews, or complaints in this capability — each is its own
+// later slice.
+// ===========================================================================
+
+model Customer {
+  id                  String    @id @default(uuid()) @db.Uuid
+  tenantId            String    @map("tenant_id") @db.Uuid
+  phone               String
+  name                String?
+  email               String?
+  birthday            DateTime? @db.Date
+  marketingConsent    Boolean   @default(false) @map("marketing_consent")
+  preferredLocationId String?   @map("preferred_location_id") @db.Uuid
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  version             Int       @default(1)
+
+  tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  preferredLocation Location?           @relation(fields: [tenantId, preferredLocationId], references: [tenantId, id], onDelete: SetNull, onUpdate: NoAction)
+  loyaltyEntries    LoyaltyPointEntry[]
+  complaints        Complaint[]
+
+  @@unique([tenantId, phone])
+  @@map("customer")
+}
+
+/// Append-only points ledger (PRD §31, lean V1: points only — no tiers,
+/// birthday/anniversary automation, or visit rewards, per the 2026-09-10
+/// scope correction). Positive = earned, negative = redeemed. Balance is
+/// SUM(points), never a stored running total — same ledger reasoning as
+/// InventoryStockMovement.
+model LoyaltyPointEntry {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  points     Int
+  /// Closed set owned by the capability: "earn" | "redeem" | "adjustment".
+  reason     String
+  billId     String?  @map("bill_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, customerId])
+  @@map("loyalty_point_entry")
+}
+
+/// PRD §32, lean V1: percent/flat discount codes only — no Buy-X-Get-Y,
+/// item/category-scoped, first-order, returning-customer, outlet-specific,
+/// or time-specific offer types (all deferred per the 2026-09-10 scope
+/// correction). `value` is basis points for Percent, paise for Flat — same
+/// integer-money convention as everywhere else in this schema.
+model Coupon {
+  id                 String    @id @default(uuid()) @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  code               String
+  /// Closed set owned by the capability: "Percent" | "Flat".
+  discountType       String    @map("discount_type")
+  value              Int
+  minOrderValueMinor Int?      @map("min_order_value_minor")
+  usageLimit         Int?      @map("usage_limit")
+  usedCount          Int       @default(0) @map("used_count")
+  active             Boolean   @default(true)
+  expiresAt          DateTime? @map("expires_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  version            Int       @default(1)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, code])
+  @@map("coupon")
+}
+
+/// PRD §36-37: Complaint Management + Service Recovery, lean V1. `status`
+/// is a plain closed-set string (New|Assigned|InProgress|AwaitingCustomer|
+/// Resolved|Closed) validated in code, NOT wired into the platform's full
+/// StateDefinition/transition machinery — a complaint ticket doesn't need
+/// SLA clocks or guarded transitions for this cycle; deliberately lighter
+/// than dinein's order/table state machine. Service recovery
+/// (compensation) lives on the same row rather than a separate entity —
+/// PRD §37 frames it as "how this complaint was resolved," not an
+/// independent workflow.
+model Complaint {
+  id                String    @id @default(uuid()) @db.Uuid
+  tenantId          String    @map("tenant_id") @db.Uuid
+  locationId        String    @map("location_id") @db.Uuid
+  customerId        String?   @map("customer_id") @db.Uuid
+  orderId           String?   @map("order_id") @db.Uuid
+  category          String
+  /// Closed set owned by the capability: "Low" | "Medium" | "High" | "Critical".
+  severity          String
+  description       String
+  assignedToUserId  String?   @map("assigned_to_user_id") @db.Uuid
+  status            String    @default("New")
+  resolution        String?
+  /// Closed set: "Coupon" | "Refund" | "Replacement" | "Complimentary" |
+  /// "LoyaltyPoints" | null (no compensation issued).
+  compensationType  String?   @map("compensation_type")
+  /// Paise for Coupon/Refund/Complimentary, point count for LoyaltyPoints.
+  compensationValue Int?      @map("compensation_value")
+  closedAt          DateTime? @map("closed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  version           Int       @default(1)
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location  @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([tenantId, locationId])
+  @@map("complaint")
+}
+
+// ===========================================================================
+// CAPABILITY: Finance (Colonel Kebabz Phase 4, lean V1) — PRD §44-46, 48-49:
+// Expense Management, Cash Management, Payment Management (already covered
+// by dinein.salesSummary's own byMethod breakdown — zero new schema for
+// §46), Finance Dashboard, Outlet P&L.
+//
+// §47 (Delivery Platform Reconciliation) is NOT built — blocked on a real
+// Zomato/Swiggy integration decision (external credentials, API contract),
+// same posture as every other external-dependency item this project flags.
+// ===========================================================================
+
+/// PRD §44. `category`/`paymentMethod` are closed sets owned by the
+/// capability (EXPENSE_CATEGORIES / the payment-method vocabulary
+/// dinein.recordPayment already uses). Binary approve/reject, not a chain
+/// — same lean posture as coupon/wastage this session; `approval`'s
+/// multi-step chain is reusable later if a real threshold is decided.
+model Expense {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  locationId   String    @map("location_id") @db.Uuid
+  category     String
+  vendor       String?
+  amountMinor  Int       @map("amount_minor")
+  paymentMethod String   @map("payment_method")
+  expenseDate  DateTime  @map("expense_date") @db.Date
+  receiptEvidenceId String? @map("receipt_evidence_id") @db.Uuid
+  status       String    @default("Pending")
+  recordedById String    @map("recorded_by_id") @db.Uuid
+  approvedById String?   @map("approved_by_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  version      Int       @default(1)
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([tenantId, locationId, expenseDate])
+  @@map("expense")
+}
+
+/// PRD §45: Opening Cash + Cash Sales - Cash Expenses - Withdrawals =
+/// Expected Cash, compared with actual. `openingCashMinor`/
+/// `cashWithdrawnMinor`/`actualCashMinor` are the only genuinely NEW inputs
+/// — cash sales and cash expenses are derived at query time from existing
+/// Bill/Payment and Expense data, never duplicated here.
+model DailyCashReconciliation {
+  id                String   @id @default(uuid()) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  locationId        String   @map("location_id") @db.Uuid
+  date              DateTime @db.Date
+  openingCashMinor  Int      @map("opening_cash_minor")
+  cashWithdrawnMinor Int     @default(0) @map("cash_withdrawn_minor")
+  actualCashMinor   Int?     @map("actual_cash_minor")
+  varianceNote      String?  @map("variance_note")
+  recordedById      String   @map("recorded_by_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  version           Int      @default(1)
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([tenantId, locationId, date])
+  @@map("daily_cash_reconciliation")
+}
+
+// ===========================================================================
+// CAPABILITY: Attendance (Colonel Kebabz Phase 3, lean V1) — PRD §39-40, 42:
+// Attendance, Shift Management, Payroll Inputs.
+//
+// A sibling to `hr`, not a fork of it — Task 78's own header comment
+// explicitly scopes `hr` to "people operations before payroll" and excludes
+// attendance/shifts/payroll. Payroll inputs (§42) are derived at query time
+// from AttendanceRecord (days worked, hours, late/absent/leave counts) —
+// never a stored payroll entity; Verity supplies payroll-READY data, not a
+// payroll engine, per the PRD's own framing. Lean V1 drops: overtime as a
+// distinct tracked figure, late deductions, incentives, advances, and
+// shift-gap detection (needs a shift-template concept nothing asks for
+// yet) — all per the 2026-09-10 scope correction.
+// ===========================================================================
+
+/// One row per employee per day. `status` is a closed set owned by the
+/// capability (`ATTENDANCE_STATUSES`). Upserted by (tenantId, employeeId,
+/// date) — a second check-in the same day corrects the same row, it does
+/// not create a duplicate attendance fact for that day.
+model AttendanceRecord {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
+  employeeId String    @map("employee_id") @db.Uuid
+  date       DateTime  @db.Date
+  status     String
+  checkInAt  DateTime? @map("check_in_at")
+  checkOutAt DateTime? @map("check_out_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  version    Int       @default(1)
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee HrEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, employeeId, date])
+  @@map("attendance_record")
+}
+
+/// A shift assignment — free-text `label` (Morning/Evening/Night are the
+/// client's own vocabulary, not a platform enum) with plain HH:MM start/end.
+model Shift {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  locationId String   @map("location_id") @db.Uuid
+  employeeId String   @map("employee_id") @db.Uuid
+  date       DateTime @db.Date
+  label      String
+  startTime  String   @map("start_time")
+  endTime    String   @map("end_time")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  version    Int      @default(1)
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location Location   @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  employee HrEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, locationId, date])
+  @@map("shift")
 }
 
 // ===========================================================================
@@ -3670,10 +4091,12 @@ model HrEmployee {
   version       Int       @default(1)
   customFields  Json      @default("{}") @map("custom_fields")
 
-  tenant     Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  party      Party                @relation(fields: [partyId], references: [id], onDelete: Restrict)
-  department HrDepartment?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  leaveApps  HrLeaveApplication[]
+  tenant            Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  party             Party                @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  department        HrDepartment?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  leaveApps         HrLeaveApplication[]
+  attendanceRecords AttendanceRecord[]
+  shifts            Shift[]
 
   @@unique([tenantId, partyId])
   @@map("hr_employee")
@@ -3871,4 +4294,524 @@ model RequestQuota {
   @@id([keyHash, kind])
   @@index([resetsAt], map: "request_quota_expiry")
   @@map("request_quota")
+}
+
+// ===========================================================================
+// CAPABILITY: OUTREACH — `verity.capability.outreach` (Task 105, P0 scope)
+//
+// Authority: `taskplans/105_pa_oms_outreach_capability.md`, grounded in
+// `clients/pa-oms/PlotArmour_Outreach_Team_Management_System_Master_Context.md`
+// (build brief) and `clients/pa-oms/handbook-outreach.html` (operating
+// constitution — the higher-ranked authority for exact field/state values,
+// per the handbook's own Ch. 00 source-of-truth hierarchy).
+//
+// PlotArmour Studio's own internal client-acquisition operating system —
+// NOT a generalized CRM primitive, and NOT the same domain as
+// `verity.capability.crm` (Colonel Kebabz's restaurant-guest 360, phone-
+// matched, no employee hierarchy). Runs on its own new tenant.
+//
+// `OutreachTeam` is capability-private (ADR-005 reserves `Organization` for
+// a tenant's own nested business-unit hierarchy; this is a lead-gen pod,
+// same category as `HrDepartment`). No member-count cap in code — the
+// Internship Agreement's "4-5 Junior Outreach Officers" is organizational
+// guidance, not a technical maximum (Team 1 runs 7 live).
+//
+// `OutreachLead`'s `state` column is a platform state-machine key
+// (`verity.outreach.lead`, seeded in this capability's own migration) per
+// handbook Ch. 22's 13 linear stages + 5 terminal/negative statuses.
+// Reactivating a terminal lead never reopens it (INV-002) — it spawns a new
+// `OutreachLead` row via `reactivatedFromLeadId`, preserving handbook Ch. 02's
+// 90-day-window origination-credit rule.
+//
+// Three named attribution roles (handbook Ch. 02), not one flat "owner":
+// `leadOriginatorId` (immutable once set), `opportunityOwnerId`
+// (reassignable — 14-day-no-activity makes it eligible), `closerId` (set
+// only at Closed Won). All three are bare Party-id columns with no Prisma
+// relation object and no DB foreign key, matching `HrLeaveDecision
+// .decidedById`'s existing precedent for "the person who did X" fields.
+//
+// NOT built in this pass (P0 only, taskplan's own Scope section): lead
+// quality scoring, duplicate detection, vertical/channel intelligence,
+// experiments, AI assistance, email integration, a standalone compensation-
+// view UI, promotion support, onboarding-flow UI.
+// ===========================================================================
+
+/// Capability-private outreach pod. `leaderId` is the Senior Outreach
+/// Officer (bare Party id, no relation object — see module note above).
+model OutreachTeam {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name       String
+  leaderId   String   @map("leader_id") @db.Uuid
+  coLeaderId String?  @map("co_leader_id") @db.Uuid
+  active     Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  tenant            Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships       OutreachTeamMembership[]
+  leads             OutreachLead[]
+  weeklyAssessments OutreachTeamWeeklyAssessment[]
+
+  @@unique([tenantId, name])
+  @@map("outreach_team")
+}
+
+/// Junior Outreach Officer roster for a team. No maximum size enforced —
+/// see module note above.
+model OutreachTeamMembership {
+  id       String   @id @default(uuid()) @db.Uuid
+  tenantId String   @map("tenant_id") @db.Uuid
+  teamId   String   @map("team_id") @db.Uuid
+  partyId  String   @map("party_id") @db.Uuid
+  active   Boolean  @default(true)
+  joinedAt DateTime @default(now()) @map("joined_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  team   OutreachTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, teamId, partyId])
+  @@map("outreach_team_membership")
+}
+
+/// A prospect company record. `state` is a `verity.outreach.lead` state-
+/// machine key (ADR-009 `StateCategory` binding lives in `state_definition`,
+/// seeded by this capability's migration) — never branch business logic on
+/// the raw key, only on its category.
+model OutreachLead {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  teamId   String @map("team_id") @db.Uuid
+
+  companyName String  @map("company_name")
+  website     String?
+  industry    String?
+  /// Closed set owned by the capability: Agency | Verity | Both | Undetermined.
+  track       String  @default("Undetermined")
+  whyRelevant String? @map("why_relevant")
+
+  /// The real prospect-research sheet's own columns (2026-09-13), added so
+  /// nothing from the actual workbook is lost by moving to Verity: city/
+  /// country, what the business does, the specific service opportunity
+  /// (distinct from `whyRelevant`'s timing/trigger reasoning), the outreach
+  /// angle to open with, and a 1-10 fit score.
+  location         String?
+  whatTheyDo       String? @map("what_they_do")
+  potentialNeed    String? @map("potential_need")
+  salesHypothesis  String? @map("sales_hypothesis")
+  /// 1-10, matches the sheet's "Score" column.
+  qualityScore     Int?    @map("quality_score")
+
+  contactName        String? @map("contact_name")
+  contactDesignation String? @map("contact_designation")
+  contactEmail       String? @map("contact_email")
+  contactPhone       String? @map("contact_phone")
+  linkedinUrl        String? @map("linkedin_url")
+
+  /// `verity.outreach.lead` state-machine key.
+  state String @default("research")
+
+  /// Handbook Ch. 02's three attribution roles. Bare Party ids, no relation
+  /// object or DB FK — see module note above.
+  leadOriginatorId   String  @map("lead_originator_id") @db.Uuid
+  opportunityOwnerId String  @map("opportunity_owner_id") @db.Uuid
+  closerId           String? @map("closer_id") @db.Uuid
+
+  /// Drives the 14-day reassignment-eligibility rule (handbook Ch. 02) —
+  /// updated whenever an `OutreachActivity` is logged against this lead.
+  lastActivityAt DateTime? @map("last_activity_at")
+  nextActionNote String?   @map("next_action_note")
+  nextActionAt   DateTime? @map("next_action_at")
+
+  /// Closed set owned by the capability (handbook Ch. 20's 9-value
+  /// taxonomy): NoFit | NoBudget | NoTiming | NotInterested | WrongPerson |
+  /// RevisitLater | LostToCompetitor | LostOnPrice | LostOnScopeTrust.
+  /// Only meaningful once `state` is one of the 5 terminal/negative states.
+  rejectionReason String? @map("rejection_reason")
+
+  /// Handbook Ch. 02's closing edge cases: converts only once CUMULATIVE
+  /// receipts clear the threshold, never on the first partial payment.
+  advanceThresholdMinor Int? @map("advance_threshold_minor")
+  advanceReceivedMinor  Int  @default(0) @map("advance_received_minor")
+  closedAt              DateTime? @map("closed_at")
+
+  /// INV-002: a terminal lead is never reopened. Reactivating it (handbook
+  /// Ch. 02's 90-day origination-credit window) spawns a new row instead.
+  reactivatedFromLeadId String? @map("reactivated_from_lead_id") @db.Uuid
+
+  /// Escalation (2026-09-13 hierarchical-architecture doc §38-39: typed,
+  /// Junior -> Senior -> Core, not straight to Core). Flagged by whoever
+  /// owns the lead when it needs a Team Leader's (or, unresolved, Founders'
+  /// Office's) attention — not a state, since escalation can happen from
+  /// any active stage without otherwise changing the pipeline.
+  escalated         Boolean   @default(false)
+  escalationNote    String?   @map("escalation_note")
+  /// Closed set: Commercial | Technical | ClientIssue | Attribution | TeamIssue | Other.
+  escalationType    String?   @map("escalation_type")
+  /// Closed set: Normal | High | Critical.
+  escalationUrgency String?   @map("escalation_urgency")
+  escalatedById     String?   @map("escalated_by_id") @db.Uuid
+  escalatedAt       DateTime? @map("escalated_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  team       OutreachTeam       @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  activities OutreachActivity[]
+  contacts   OutreachContact[]
+  research   OutreachResearchEntry[]
+  tasks      OutreachTask[]
+  meetings   OutreachMeeting[]
+  coachingNotes OutreachCoachingNote[]
+
+  @@index([tenantId, teamId, state])
+  @@index([tenantId, opportunityOwnerId])
+  @@index([tenantId, nextActionAt])
+  @@map("outreach_lead")
+}
+
+/// APPEND-ONLY outreach/activity log — the timeline (master-context spec
+/// §31-33). One row per meaningful contact, response, or milestone.
+model OutreachActivity {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  leadId        String   @map("lead_id") @db.Uuid
+  actorPartyId  String   @map("actor_party_id") @db.Uuid
+  /// Closed set: LinkedIn | Email | WhatsApp | Call | Referral | Meeting | Other.
+  channel       String
+  /// Closed set: FirstOutreach | FollowUp | Response | MeetingBooked |
+  /// MeetingCompleted | ProposalSent | Other.
+  activityType  String   @map("activity_type")
+  message       String?
+  response      String?
+  occurredAt    DateTime @default(now()) @map("occurred_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   OutreachLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, leadId, occurredAt])
+  @@map("outreach_activity")
+}
+
+/// A named contact person at a prospect company (Task 106 Phase 3, spec
+/// §24-25). Separate from `OutreachLead` (the company) and NOT a `Party` —
+/// same ADR-001 reasoning as `OutreachLead` itself: a prospect's contact
+/// person is not a platform identity until/unless they become one (e.g. a
+/// client user after conversion). One lead may have multiple contacts.
+model OutreachContact {
+  id       String  @id @default(uuid()) @db.Uuid
+  tenantId String  @map("tenant_id") @db.Uuid
+  leadId   String  @map("lead_id") @db.Uuid
+
+  fullName    String  @map("full_name")
+  designation String?
+  department  String?
+  email       String?
+  phone       String?
+  linkedinUrl String? @map("linkedin_url")
+
+  /// Closed set: DecisionMaker | Influencer | Champion | Gatekeeper | Unknown.
+  classification String  @default("Unknown")
+  notes          String?
+
+  lastContactedAt   DateTime? @map("last_contacted_at")
+  createdByPartyId  String    @map("created_by_party_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   OutreachLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, leadId])
+  @@map("outreach_contact")
+}
+
+/// APPEND-ONLY research timeline entry (Task 106 Phase 4, spec §26-29). A
+/// note, a URL, or a reference to an uploaded `StoredFile` — never all
+/// three; the platform's file-authorization pattern derives access from
+/// `StoredFile.entityKey`/`entityId` (set to this lead), not a duplicated
+/// permission on the file itself.
+model OutreachResearchEntry {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  leadId   String @map("lead_id") @db.Uuid
+
+  /// Closed set: Note | Url | Pdf | Docx | Spreadsheet | Presentation |
+  /// Image | Screenshot | Other.
+  type      String
+  title     String
+  content   String?
+  sourceUrl String? @map("source_url")
+  /// Set only when `type` references an uploaded file. No DB-level FK to
+  /// `stored_file` (cross-schema-role platform table, same reasoning as
+  /// `OutreachActivity`'s bare Party ids) — resolved by id at read time.
+  fileId    String? @map("file_id") @db.Uuid
+
+  createdByPartyId String   @map("created_by_party_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   OutreachLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, leadId, createdAt])
+  @@map("outreach_research_entry")
+}
+
+/// A work item (Task 106 Phase 5, spec §53-55). Capability-private — not a
+/// platform primitive (none exists: grepped the schema, no `model.*Task`
+/// before this). May stand alone or reference a prospect.
+model OutreachTask {
+  id       String  @id @default(uuid()) @db.Uuid
+  tenantId String  @map("tenant_id") @db.Uuid
+  teamId   String  @map("team_id") @db.Uuid
+  leadId   String? @map("lead_id") @db.Uuid
+
+  title       String
+  description String?
+  /// Closed set: Low | Medium | High | Urgent.
+  priority String    @default("Medium")
+  dueAt    DateTime? @map("due_at")
+
+  /// Closed set: Todo | InProgress | Blocked | Done | Cancelled.
+  status String @default("Todo")
+  /// Closed set: TeamLeaderAssigned | SelfCreated | SystemGenerated (spec
+  /// §54) — lets management see initiative separately from assigned load.
+  origin String
+
+  assignedToPartyId String  @map("assigned_to_party_id") @db.Uuid
+  assignedByPartyId String  @map("assigned_by_party_id") @db.Uuid
+
+  completedAt DateTime? @map("completed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   OutreachLead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, teamId, status])
+  @@index([tenantId, assignedToPartyId, status])
+  @@map("outreach_task")
+}
+
+/// A scheduled or completed meeting against a prospect (spec §62).
+model OutreachMeeting {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  leadId   String @map("lead_id") @db.Uuid
+
+  organizerPartyId String   @map("organizer_party_id") @db.Uuid
+  scheduledAt      DateTime @map("scheduled_at")
+  purpose          String?
+  locationOrUrl    String?  @map("location_or_url")
+  prepNotes        String?  @map("prep_notes")
+  outcomeNotes     String?  @map("outcome_notes")
+
+  /// Closed set: Scheduled | Completed | Cancelled | NoShow.
+  status String @default("Scheduled")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   OutreachLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, leadId, scheduledAt])
+  @@index([tenantId, organizerPartyId, scheduledAt])
+  @@map("outreach_meeting")
+}
+
+/// Flat target row — company/team/individual x daily/weekly (master-context
+/// spec §11-12). Progress is always computed live from `OutreachActivity`/
+/// `OutreachLead` counts, never hand-typed (Task 93's `onboardingChecklist`
+/// precedent) and never stored on this row.
+model OutreachTarget {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+
+  /// Closed set: Company | Team | Individual.
+  scope   String
+  teamId  String? @map("team_id") @db.Uuid
+  partyId String? @map("party_id") @db.Uuid
+
+  /// Closed set: Daily | Weekly.
+  period String
+  /// Closed set: QualifiedProspects | Outreach | FollowUps | Responses |
+  /// Meetings | Proposals | Closed.
+  metric      String
+  targetValue Int    @map("target_value")
+
+  periodStart DateTime @map("period_start") @db.Date
+  periodEnd   DateTime @map("period_end") @db.Date
+
+  /// Task 106 Phase 3 (spec §72-73's audit-trail gap): setting a new target
+  /// for the same scope/team/party/period/metric/periodStart supersedes the
+  /// prior one (`active` flips false) rather than silently rewriting it —
+  /// old rows stay queryable, the field-level diff goes through the
+  /// platform's existing `recordActivity` audit log (no parallel history
+  /// table). `changeReason` is optional context on the NEW row, not the old.
+  active       Boolean @default(true)
+  changeReason String? @map("change_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, scope, teamId, partyId, periodStart])
+  @@map("outreach_target")
+}
+
+/// Junior's daily check-in (master-context spec §20-23). Numeric activity
+/// is NEVER stored here — it is queried live from `OutreachActivity`/
+/// `OutreachLead` at read time (spec §21's own automatic-vs-manual rule).
+/// This row holds only what a person must type by hand.
+model OutreachCheckIn {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  partyId       String   @map("party_id") @db.Uuid
+  checkInDate   DateTime @map("check_in_date") @db.Date
+  summary       String
+  bestLeadId    String?  @map("best_lead_id") @db.Uuid
+  learning      String?
+  blocker       String?
+  tomorrowPlan  String?  @map("tomorrow_plan")
+  submittedAt   DateTime @default(now()) @map("submitted_at")
+
+  /// Task 106 Phase 5 (spec §64-71): the two questions the original 5-field
+  /// shape didn't ask. `mostImportantDevelopment` is distinct from
+  /// `summary` (what happened, in full, vs. the one thing that mattered);
+  /// `needsAttention` is what the Junior is explicitly flagging up.
+  mostImportantDevelopment String? @map("most_important_development")
+  needsAttention           String? @map("needs_attention")
+
+  tenant Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  reviews OutreachCheckInReview[]
+
+  @@unique([tenantId, partyId, checkInDate])
+  @@map("outreach_check_in")
+}
+
+/// APPEND-ONLY review of a daily check-in (spec §68's Submitted → Reviewed
+/// → NeedsClarification workflow). A separate row, never an UPDATE to
+/// `OutreachCheckIn` — that table has a hard append-only trigger (see its
+/// migration), matching handbook Ch. 02's "never rewrite the Junior's own
+/// text" rule literally rather than trusting application code to honor it.
+/// "Current" review status is the latest row for a given `checkInId`.
+model OutreachCheckInReview {
+  id                String   @id @default(uuid()) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  checkInId         String   @map("check_in_id") @db.Uuid
+  reviewedByPartyId String   @map("reviewed_by_party_id") @db.Uuid
+  /// Closed set: Reviewed | NeedsClarification (never "Submitted" — that's
+  /// the check-in's own implicit starting state, not a review outcome).
+  reviewStatus   String   @map("review_status")
+  leaderFeedback String?  @map("leader_feedback")
+  reviewedAt     DateTime @default(now()) @map("reviewed_at")
+
+  tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  checkIn OutreachCheckIn @relation(fields: [checkInId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, checkInId, reviewedAt])
+  @@map("outreach_check_in_review")
+}
+
+/// APPEND-ONLY coaching note (Task 106 Phase 6, spec §79). Feedback is
+/// never edited after the fact — a correction is a new note, same
+/// reasoning as every other append-only table here. `visibility` splits
+/// what the Junior themselves may read from Leader-only management notes.
+model OutreachCoachingNote {
+  id             String @id @default(uuid()) @db.Uuid
+  tenantId       String @map("tenant_id") @db.Uuid
+  teamId         String @map("team_id") @db.Uuid
+  leadId         String? @map("lead_id") @db.Uuid
+  aboutPartyId   String @map("about_party_id") @db.Uuid
+  authorPartyId  String @map("author_party_id") @db.Uuid
+  content        String
+  /// Closed set: JuniorVisible | LeaderPrivate.
+  visibility     String @default("JuniorVisible")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   OutreachLead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, teamId, aboutPartyId, createdAt])
+  @@map("outreach_coaching_note")
+}
+
+/// Junior's weekly reflection (master-context spec §24). Aggregation is a
+/// live query, same discipline as the daily check-in above.
+model OutreachWeeklyReport {
+  id                    String   @id @default(uuid()) @db.Uuid
+  tenantId              String   @map("tenant_id") @db.Uuid
+  partyId               String   @map("party_id") @db.Uuid
+  weekStart             DateTime @map("week_start") @db.Date
+  whatWorked            String?  @map("what_worked")
+  whatDidntWork         String?  @map("what_didnt_work")
+  strongestOpportunityId String? @map("strongest_opportunity_id") @db.Uuid
+  biggestLearning       String?  @map("biggest_learning")
+  nextWeekChange        String?  @map("next_week_change")
+  nextWeekTargetValue   Int?     @map("next_week_target_value")
+  submittedAt           DateTime @default(now()) @map("submitted_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, partyId, weekStart])
+  @@map("outreach_weekly_report")
+}
+
+/// Senior's weekly team roll-up + written assessment (master-context spec
+/// §25) — submitted to Company Core. Member/pipeline numbers are live
+/// queries; only the assessment text and the roll-up's identity is stored.
+model OutreachTeamWeeklyAssessment {
+  id                    String   @id @default(uuid()) @db.Uuid
+  tenantId              String   @map("tenant_id") @db.Uuid
+  teamId                String   @map("team_id") @db.Uuid
+  weekStart             DateTime @map("week_start") @db.Date
+  strongestPerformerId  String?  @map("strongest_performer_id") @db.Uuid
+  strongestProspectId   String?  @map("strongest_prospect_id") @db.Uuid
+  strongestVertical     String?  @map("strongest_vertical")
+  biggestProblem        String?  @map("biggest_problem")
+  biggestLearning       String?  @map("biggest_learning")
+  nextWeekPriority      String?  @map("next_week_priority")
+  submittedAt           DateTime @default(now()) @map("submitted_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  team   OutreachTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, teamId, weekStart])
+  @@map("outreach_team_weekly_assessment")
+}
+
+/// Company-wide direction (master-context spec §10-11) — a dated text/target
+/// record a Founder posts, cascading to team/individual targets. Narrower
+/// than `WorkflowDefinition`, closer to `NotificationTemplate`'s shape.
+/// APPEND-ONLY: a new direction supersedes the old one; it never edits it
+/// (ADR-009 — a wrong fact is corrected by a new fact, not an edit).
+model OutreachDirection {
+  id                       String   @id @default(uuid()) @db.Uuid
+  tenantId                 String   @map("tenant_id") @db.Uuid
+  weekLabel                String   @map("week_label")
+  priorityVertical         String?  @map("priority_vertical")
+  /// Closed set: Agency | Verity | Both | Undetermined — same as OutreachLead.track.
+  primaryTrack             String   @default("Undetermined") @map("primary_track")
+  companyProspectingTarget Int?     @map("company_prospecting_target")
+  strategicNote            String?  @map("strategic_note")
+  /// Closed set: Active | Closed.
+  status                   String   @default("Active")
+  postedById               String   @map("posted_by_id") @db.Uuid
+  postedAt                 DateTime @default(now()) @map("posted_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, postedAt])
+  @@map("outreach_direction")
 }

@@ -84,9 +84,22 @@ export function ShellChrome({
     setPendingHref(null);
   }, [pathname]);
 
+  // Every registered href, flattened once — needed so a sub-route (e.g.
+  // `/outreach/workspace`) highlights only its own, most specific nav entry,
+  // not every ancestor prefix it also happens to start with (`/outreach`).
+  // Surfaced by Task 105's outreach capability, which is the first one to
+  // register sibling nav items sharing a path prefix — a real bug, not
+  // outreach-specific, so fixed here rather than by avoiding the prefix.
+  const allHrefs = areas.flatMap((a) => a.items.map((i) => i.href));
+
   const isCurrent = (href: string) => {
     if (pendingHref) return pendingHref === href;
-    return href === "/" ? pathname === "/" : pathname.startsWith(href);
+    if (href === "/") return pathname === "/";
+    if (!pathname.startsWith(href)) return false;
+    const bestMatch = allHrefs
+      .filter((h) => h !== "/" && pathname.startsWith(h))
+      .sort((a, b) => b.length - a.length)[0];
+    return href === bestMatch;
   };
 
   /**

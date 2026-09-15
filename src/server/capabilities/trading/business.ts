@@ -304,6 +304,9 @@ export const onboardingChecklist: QueryDefinition<
       suppliers,
       customers,
       orders,
+      supplierPrices,
+      customerPrices,
+      salesOrders,
     ] = await Promise.all([
       ctx.tx.tradingBusinessProfile.findFirst({ select: { id: true } }),
       ctx.tx.tradingGstRegistration.findFirst({
@@ -319,7 +322,14 @@ export const onboardingChecklist: QueryDefinition<
       ctx.tx.tradingSupplier.count({ where: { active: true } }),
       ctx.tx.tradingCustomer.count({ where: { active: true } }),
       ctx.tx.tradingPurchaseOrder.count(),
+      ctx.tx.tradingSupplierPrice.count(),
+      ctx.tx.tradingCustomerPrice.count(),
+      ctx.tx.tradingSalesOrder.count(),
     ]);
+    // Either side agreeing a price counts — a client may start from
+    // supplier cost, customer rate, or both, and there is no order between
+    // them the checklist should impose.
+    const prices = supplierPrices + customerPrices;
 
     const steps = [
       {
@@ -382,8 +392,18 @@ export const onboardingChecklist: QueryDefinition<
         blockedBy: products === 0 ? "Catalogue" : null,
       },
       {
+        key: "pricing",
+        label: "Agreed prices",
+        description:
+          "What a supplier charges you, or what a customer pays — set at least one before the first order.",
+        href: "/prices",
+        done: prices > 0,
+        blockedBy:
+          suppliers === 0 && customers === 0 ? "Suppliers or customers" : null,
+      },
+      {
         key: "first_order",
-        label: "Ready to trade",
+        label: "First purchase",
         description:
           "Raise your first purchase order and receive the stock against it.",
         href: "/purchases",
@@ -396,6 +416,19 @@ export const onboardingChecklist: QueryDefinition<
               : products === 0
                 ? "Catalogue"
                 : null,
+      },
+      {
+        key: "first_sale",
+        label: "First sale",
+        description: "Raise your first sales order and dispatch against it.",
+        href: "/sales",
+        done: salesOrders > 0,
+        blockedBy:
+          customers === 0
+            ? "Customers"
+            : orders === 0
+              ? "First purchase"
+              : null,
       },
     ];
 

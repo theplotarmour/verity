@@ -604,6 +604,32 @@ const CATEGORY_PRESENTATION: Record<string, { label: string; color: string }> = 
   Cancelled: { label: "Cancelled", color: "bg-[var(--color-state-cancelled)]" },
 };
 
+/**
+ * A derived health signal (Task 106, spec §21) — distinct from `StateBadge`,
+ * which owns the six `StateCategory` values and must not gain a second use.
+ * Health is orthogonal to category: two `Active` leads can be `Hot` and
+ * `AtRisk` respectively. Semantic colour (danger/warning/success) here is
+ * deliberately independent of the accent (ADR-011/012) — health is meaning,
+ * not theme.
+ */
+const HEALTH_PRESENTATION: Record<string, { label: string; color: string }> = {
+  Hot: { label: "Hot", color: "bg-[var(--color-success)]" },
+  Healthy: { label: "Healthy", color: "bg-[var(--color-state-active)]" },
+  AtRisk: { label: "At risk", color: "bg-[var(--color-warning)]" },
+  Stale: { label: "Stale", color: "bg-[var(--color-danger)]" },
+  Closed: { label: "Closed", color: "bg-[var(--color-text-tertiary)]" },
+};
+
+export function HealthBadge({ health }: { health: string }) {
+  const preset = HEALTH_PRESENTATION[health] ?? { label: health, color: "bg-[var(--color-text-tertiary)]" };
+  return (
+    <span className="inline-flex items-center gap-2 whitespace-nowrap text-[13px] text-text">
+      <span aria-hidden="true" className={cx("size-[7px] shrink-0 rounded-full", preset.color)} />
+      {preset.label}
+    </span>
+  );
+}
+
 export function StateBadge({ category, label }: { category: string; label?: string }) {
   const preset = CATEGORY_PRESENTATION[category] ?? {
     label: category,

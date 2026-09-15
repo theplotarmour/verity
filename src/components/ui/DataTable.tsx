@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { EmptyState, StateBadge, Surface } from "./primitives";
+import { EmptyState, HealthBadge, StateBadge, Surface } from "./primitives";
 import { Icon } from "./icons";
 
 /**
@@ -73,7 +73,7 @@ export function pageNumbers(current: number, total: number): Array<number | null
   return out;
 }
 
-export type ColumnVariant = "text" | "link" | "state";
+export type ColumnVariant = "text" | "link" | "state" | "health";
 
 export type Column = {
   key: string;
@@ -117,6 +117,8 @@ export function Cell({
       </Link>
     ) : column.variant === "state" ? (
       <StateBadge category={String(row[column.categoryKey ?? "category"] ?? "Draft")} label={value} />
+    ) : column.variant === "health" ? (
+      <HealthBadge health={value} />
     ) : (
       // The identity column keeps full-strength ink; everything else steps back
       // so the first column reads as the row's subject rather than as data.

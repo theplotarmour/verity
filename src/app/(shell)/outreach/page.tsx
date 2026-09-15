@@ -1,0 +1,513 @@
+import Link from "next/link";
+import { requireActor } from "@/server/platform/auth";
+import { withTenant } from "@/server/platform/tenancy";
+import { hasPermission } from "@/server/platform/authorization";
+import { installCapabilities } from "@/server/capabilities/registry";
+import { ENTITY_DIRECTION, ENTITY_LEAD, assertTeamScopeAllowed, deriveLeadHealth } from "@/server/capabilities/outreach";
+import { ForbiddenError } from "@/server/platform/authorization";
+import { DataTable } from "@/components/ui/DataTable";
+import {
+  Badge,
+  EmptyState,
+  PageHeader,
+  Panel,
+  PermissionDenied,
+  Row,
+  RowList,
+  Stat,
+  StatRow,
+} from "@/components/ui/primitives";
+import { NewLeadForm } from "./NewLeadForm";
+import { DirectionForm } from "./DirectionForm";
+import { ResolveEscalationButton } from "./ResolveEscalationButton";
+import { Donut, Legend } from "@/components/ui/charts";
+
+export const dynamic = "force-dynamic";
+
+const TERMINAL_STATES = ["not_a_fit", "unresponsive", "lost", "deferred", "disqualified"];
+
+type LeadRow = Record<string, unknown> & {
+  id: string;
+  companyName: string;
+  team: string;
+  owner: string;
+  track: string;
+  state: string;
+  category: string;
+  health: string;
+};
+
+/**
+ * PA-OMS overview — one shared lead/activity/pipeline database, one screen
+ * (master-context spec §3, §100). Team- and role-specific workspaces (Junior
+ * "My Workspace", Senior "Team Command") are a later slice; this is the
+ * Company-Core-shaped read that proves the data end to end first.
+ */
+export default async function OutreachPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ team?: string; state?: string }>;
+}) {
+  installCapabilities();
+  const actor = await requireActor();
+  const filters = await searchParams;
+
+  const data = await withTenant(actor.tenantId, async (tx) => {
+    if (!(await hasPermission(tx, actor.roleId, "Read", ENTITY_LEAD))) return null;
+
+    // Phase 3 fix (taskplan 105): a Senior may only view a `?team=` scope
+    // they actually lead — see `assertTeamScopeAllowed`'s own doc comment
+    // for why this is structural (leader-of-record), not a role-name check.
+    try {
+      await assertTeamScopeAllowed(tx, actor.userId, filters.team);
+    } catch (error) {
+      if (error instanceof ForbiddenError) return "forbidden" as const;
+      throw error;
+    }
+
+    const [teams, leads, states, canCreate, canPostDirection, currentDirection, directionHistory] = await Promise.all([
+      tx.outreachTeam.findMany({
+        where: { active: true },
+        include: { _count: { select: { memberships: true } }, memberships: { where: { active: true } } },
+        orderBy: { name: "asc" },
+      }),
+      tx.outreachLead.findMany({
+        where: {
+          ...(filters.team ? { teamId: filters.team } : {}),
+          ...(filters.state ? { state: filters.state } : {}),
+        },
+        orderBy: { updatedAt: "desc" },
+        take: 200,
+      }),
+      tx.stateDefinition.findMany({ where: { entityKey: ENTITY_LEAD }, orderBy: { key: "asc" } }),
+      hasPermission(tx, actor.roleId, "Create", ENTITY_LEAD),
+      hasPermission(tx, actor.roleId, "Create", ENTITY_DIRECTION),
+      tx.outreachDirection.findFirst({ where: { status: "Active" }, orderBy: { postedAt: "desc" } }),
+      tx.outreachDirection.findMany({ orderBy: { postedAt: "desc" }, take: 20 }),
+    ]);
+
+    // Attention/exceptions (master-context spec §9) and Company Direction
+    // (spec §10) are company-wide reads — only meaningful, and only shown,
+    // when nobody's narrowed the view to one team. `canPostDirection`
+    // (Founder-only, per the permission grant) doubles as this screen's
+    // signal for "this is the Company Core view," same idea as
+    // `assertTeamScopeAllowed`'s structural-not-role-name approach.
+    let exceptions: Array<{ kind: string; message: string }> = [];
+    if (!filters.team && canPostDirection) {
+      const dayStart = new Date();
+      dayStart.setUTCHours(0, 0, 0, 0);
+      const [overdueCount, noNextActionCount, checkIns] = await Promise.all([
+        tx.outreachLead.count({
+          where: { state: { notIn: [...TERMINAL_STATES, "closed_won"] }, nextActionAt: { lt: new Date() } },
+        }),
+        tx.outreachLead.count({
+          where: { state: { notIn: [...TERMINAL_STATES, "closed_won"] }, nextActionAt: null },
+        }),
+        tx.outreachCheckIn.findMany({ where: { checkInDate: { gte: dayStart } } }),
+      ]);
+      if (overdueCount > 0) exceptions.push({ kind: "follow_up_overdue", message: `${overdueCount} follow-up${overdueCount === 1 ? "" : "s"} overdue.` });
+      if (noNextActionCount > 0)
+        exceptions.push({ kind: "no_next_action", message: `${noNextActionCount} active lead${noNextActionCount === 1 ? "" : "s"} with no next action set.` });
+      const checkedIn = new Set(checkIns.map((c) => c.partyId));
+      for (const team of teams) {
+        const memberIds = team.memberships.map((m) => m.partyId);
+        const missing = memberIds.filter((id) => !checkedIn.has(id));
+        if (missing.length > 0)
+          exceptions.push({ kind: "missing_check_in", message: `${team.name}: ${missing.length} of ${memberIds.length} haven't checked in today.` });
+      }
+    }
+
+    // Team-to-team comparison (master-context spec §8's own table shape) —
+    // Founder-only, company-wide, so it needs every lead/activity, not just
+    // the current `?team=` filter's slice.
+    let teamComparison: Array<{
+      id: string;
+      name: string;
+      members: number;
+      leads: number;
+      outreach: number;
+      followUps: number;
+      responses: number;
+      meetings: number;
+      proposals: number;
+      pipeline: number;
+      closed: number;
+    }> = [];
+    if (!filters.team && canPostDirection) {
+      const teamIds = teams.map((t) => t.id);
+      const [allLeads, allActivities] = await Promise.all([
+        tx.outreachLead.findMany(),
+        teamIds.length
+          ? tx.outreachActivity.findMany({ where: { lead: { teamId: { in: teamIds } } }, include: { lead: true } })
+          : Promise.resolve([]),
+      ]);
+      teamComparison = teams.map((t) => {
+        const tLeads = allLeads.filter((l) => l.teamId === t.id);
+        const tActs = allActivities.filter((a) => a.lead.teamId === t.id);
+        return {
+          id: t.id,
+          name: t.name,
+          members: t.memberships.length,
+          leads: tLeads.length,
+          outreach: tActs.filter((a) => a.activityType === "FirstOutreach").length,
+          followUps: tActs.filter((a) => a.activityType === "FollowUp").length,
+          responses: tActs.filter((a) => a.activityType === "Response").length,
+          meetings: tActs.filter((a) => a.activityType === "MeetingBooked" || a.activityType === "MeetingCompleted").length,
+          proposals: tActs.filter((a) => a.activityType === "ProposalSent").length,
+          pipeline: tLeads.filter((l) => !TERMINAL_STATES.includes(l.state) && l.state !== "closed_won").length,
+          closed: tLeads.filter((l) => l.state === "closed_won").length,
+        };
+      });
+    }
+
+    const category = new Map(states.map((s) => [s.key, s.category]));
+    const teamName = new Map(teams.map((t) => [t.id, t.name]));
+
+    // Every team member plus every team's leader — either can be an
+    // Opportunity Owner (master-context §16: Senior "help move opportunities
+    // forward" too), and every current lead owner even if now inactive.
+    const memberPartyIds = teams.flatMap((t) => [
+      t.leaderId,
+      ...(t.coLeaderId ? [t.coLeaderId] : []),
+      ...t.memberships.map((m) => m.partyId),
+    ]);
+    const ownerIds = [...new Set([...memberPartyIds, ...leads.map((l) => l.opportunityOwnerId)])];
+    const owners = ownerIds.length ? await tx.party.findMany({ where: { id: { in: ownerIds } } }) : [];
+    const ownerName = new Map(owners.map((p) => [p.id, p.displayName]));
+
+    const members = teams.flatMap((t) => [
+      { id: t.leaderId, name: ownerName.get(t.leaderId) ?? "Unknown", teamId: t.id },
+      ...(t.coLeaderId ? [{ id: t.coLeaderId, name: ownerName.get(t.coLeaderId) ?? "Unknown", teamId: t.id }] : []),
+      ...t.memberships.map((m) => ({ id: m.partyId, name: ownerName.get(m.partyId) ?? "Unknown", teamId: t.id })),
+    ]);
+
+    const rows: LeadRow[] = leads.map((l) => ({
+      id: l.id,
+      companyName: l.companyName,
+      team: teamName.get(l.teamId) ?? "—",
+      owner: ownerName.get(l.opportunityOwnerId) ?? "—",
+      track: l.track,
+      state: l.state.replace(/_/g, " "),
+      category: category.get(l.state) ?? "Draft",
+      health: deriveLeadHealth({
+        category: category.get(l.state) ?? "Draft",
+        lastActivityAt: l.lastActivityAt,
+        nextActionAt: l.nextActionAt,
+        createdAt: l.createdAt,
+      }),
+    }));
+
+    const funnel = states
+      .filter((s) => !TERMINAL_STATES.includes(s.key) && s.key !== "closed_won")
+      .map((s) => ({
+        key: s.key,
+        label: s.key.replace(/_/g, " "),
+        count: leads.filter((l) => l.state === s.key).length,
+      }));
+
+    // Pipeline distribution by ADR-009 category (Draft/Pending/Active/Blocked/
+    // Completed/Cancelled), same tonal-accent-ladder-not-semantic-color choice
+    // as the platform overview's asset-state donut — a distribution, not a
+    // single record's status.
+    const countByCategory = (cat: string) => leads.filter((l) => category.get(l.state) === cat).length;
+    const pipelineSegments = [
+      { label: "Active", value: countByCategory("Active"), color: "var(--accent-500)" },
+      { label: "Pending", value: countByCategory("Pending"), color: "var(--accent-400)" },
+      { label: "Blocked", value: countByCategory("Blocked"), color: "var(--accent-300)" },
+      { label: "Completed", value: countByCategory("Completed"), color: "var(--accent-200)" },
+      { label: "Cancelled", value: countByCategory("Cancelled"), color: "var(--color-text-tertiary)" },
+    ].filter((s) => s.value > 0);
+
+    // Founder Escalation Queue (spec §57) — company-wide, Founder-only.
+    const escalated = canPostDirection
+      ? await tx.outreachLead.findMany({ where: { escalated: true }, orderBy: { escalatedAt: "desc" } })
+      : [];
+    const escalatedByIds = [...new Set(escalated.map((l) => l.escalatedById).filter((x): x is string => Boolean(x)))];
+    const escalators = escalatedByIds.length ? await tx.party.findMany({ where: { id: { in: escalatedByIds } } }) : [];
+    const escalatorName = new Map(escalators.map((p) => [p.id, p.displayName]));
+    const escalations = escalated.map((l) => ({
+      id: l.id,
+      companyName: l.companyName,
+      note: l.escalationNote,
+      by: l.escalatedById ? escalatorName.get(l.escalatedById) ?? "—" : "—",
+    }));
+
+    return {
+      teams: teams.map((t) => ({ id: t.id, name: t.name, members: t._count.memberships })),
+      members,
+      rows,
+      funnel,
+      pipelineSegments,
+      totalLeads: leads.length,
+      activeLeads: leads.filter((l) => !TERMINAL_STATES.includes(l.state) && l.state !== "closed_won").length,
+      closedWon: leads.filter((l) => l.state === "closed_won").length,
+      overdue: leads.filter(
+        (l) => l.nextActionAt != null && l.nextActionAt < new Date() && !TERMINAL_STATES.includes(l.state) && l.state !== "closed_won",
+      ).length,
+      canCreate,
+      canPostDirection,
+      currentDirection,
+      directionHistory: !filters.team && canPostDirection ? directionHistory : [],
+      exceptions,
+      teamComparison,
+      escalations,
+    };
+  });
+
+  if (!data) return <PermissionDenied what="reading the outreach pipeline" />;
+  if (data === "forbidden") return <PermissionDenied what="viewing another team's pipeline" />;
+
+  return (
+    <>
+      <PageHeader
+        title="Outreach"
+        description="PlotArmour's client-acquisition pipeline — one lead database, one activity history, one pipeline. Company Core view."
+      />
+
+      {/* Operations Room framing (spec §105): the company's own direction is
+          the first thing on the screen, drawn as a directive banner — not a
+          panel among panels — because everything below exists to execute
+          against it. Accent-tinted per ADR-011/012's existing token, never a
+          new color. */}
+      {data.canPostDirection && (
+        <div
+          className={
+            data.currentDirection
+              ? "mb-6 rounded-xl border border-accent-line bg-accent-subtle px-6 py-5"
+              : "mb-6 rounded-xl border border-line bg-surface px-6 py-5"
+          }
+        >
+          {data.currentDirection ? (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="m-0 text-[11px] uppercase tracking-wide text-text-tertiary">
+                    Current direction · {data.currentDirection.weekLabel}
+                  </p>
+                  <p className="m-0 mt-1 text-[18px] font-light text-text">
+                    {data.currentDirection.priorityVertical ?? "No priority vertical set"}
+                  </p>
+                </div>
+                <Badge tone="accent">{data.currentDirection.primaryTrack}</Badge>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1">
+                {data.currentDirection.companyProspectingTarget != null && (
+                  <span className="text-[13px] text-text-secondary">
+                    Target: <b className="text-text">{data.currentDirection.companyProspectingTarget}</b> qualified businesses
+                  </span>
+                )}
+                {data.currentDirection.strategicNote && (
+                  <span className="text-[13px] text-text-tertiary">{data.currentDirection.strategicNote}</span>
+                )}
+              </div>
+              <div className="mt-4">
+                <DirectionForm />
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="m-0 text-[15px] text-text">No direction posted for this week.</p>
+              <p className="m-0 mt-1 text-[13px] text-text-tertiary">
+                Post this week's priority — it's the first thing every team sees.
+              </p>
+              <div className="mt-4">
+                <DirectionForm />
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {data.directionHistory.length > 1 && (
+        <div className="mb-6">
+          <Panel title="Direction history" flush>
+            <RowList>
+              {data.directionHistory.map((d) => (
+                <Row key={d.id}>
+                  <span className="flex flex-col gap-0.5">
+                    <span className="text-[14px] text-text">{d.weekLabel}</span>
+                    <span className="text-[12px] text-text-secondary">
+                      {d.priorityVertical ?? "No priority vertical set"}
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <Badge>{d.primaryTrack}</Badge>
+                    <Badge tone={d.status === "Active" ? "accent" : undefined}>{d.status}</Badge>
+                  </span>
+                </Row>
+              ))}
+            </RowList>
+          </Panel>
+        </div>
+      )}
+
+      <StatRow cols={4} className="mb-6">
+        <Stat label="Teams" value={data.teams.length} />
+        <Stat label="Active leads" value={data.activeLeads} />
+        <Stat label="Closed Won" value={data.closedWon} />
+        <Stat label="Follow-ups overdue" value={data.overdue} />
+      </StatRow>
+
+      {data.canPostDirection && (
+        <div className="mb-6">
+          <Panel title="Needs attention" flush>
+            {data.exceptions.length === 0 ? (
+              <EmptyState title="Nothing waiting" description="No exceptions right now — records appear here as they occur." compact />
+            ) : (
+              <div className="flex flex-col divide-y divide-line px-6">
+                {data.exceptions.map((e, i) => (
+                  <div key={i} className="flex items-center gap-3 py-3">
+                    <Badge>{e.kind.replace(/_/g, " ")}</Badge>
+                    <span className="text-[13px] text-text">{e.message}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+        </div>
+      )}
+
+      {data.escalations.length > 0 && (
+        <div className="mb-6 rounded-xl border border-danger/25 bg-danger-subtle">
+          <Panel title="Founder escalation queue" flush className="border-none bg-transparent">
+            <RowList>
+              {data.escalations.map((e) => (
+                <Row key={e.id}>
+                  <span className="flex flex-col gap-0.5">
+                    <Link href={`/outreach/${e.id}`} className="text-[14px] text-text no-underline hover:text-accent-ink">
+                      {e.companyName}
+                    </Link>
+                    {e.note && <span className="text-[12px] text-text-secondary">{e.note}</span>}
+                    <span className="text-[11px] text-text-tertiary">Flagged by {e.by}</span>
+                  </span>
+                  <ResolveEscalationButton leadId={e.id} />
+                </Row>
+              ))}
+            </RowList>
+          </Panel>
+        </div>
+      )}
+
+      {data.teamComparison.length > 0 && (
+        <div className="mb-6">
+          <Panel title="Team performance" flush>
+            <div className="overflow-x-auto px-6">
+              <table className="w-full min-w-[720px] border-collapse text-[13px]">
+                <thead>
+                  <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-text-tertiary">
+                    <th className="py-2 font-medium">Team</th>
+                    <th className="py-2 text-right font-medium">Members</th>
+                    <th className="py-2 text-right font-medium">Leads</th>
+                    <th className="py-2 text-right font-medium">Outreach</th>
+                    <th className="py-2 text-right font-medium">Follow-ups</th>
+                    <th className="py-2 text-right font-medium">Responses</th>
+                    <th className="py-2 text-right font-medium">Meetings</th>
+                    <th className="py-2 text-right font-medium">Proposals</th>
+                    <th className="py-2 text-right font-medium">Pipeline</th>
+                    <th className="py-2 text-right font-medium">Closed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.teamComparison.map((t) => (
+                    <tr key={t.id} className="border-b border-line last:border-none">
+                      <td className="py-2.5 text-text">
+                        <Link href={`/outreach?team=${t.id}`} className="text-text no-underline hover:text-accent-ink">
+                          {t.name}
+                        </Link>
+                      </td>
+                      <td className="tabular py-2.5 text-right text-text-secondary">{t.members}</td>
+                      <td className="tabular py-2.5 text-right text-text-secondary">{t.leads}</td>
+                      <td className="tabular py-2.5 text-right text-text-secondary">{t.outreach}</td>
+                      <td className="tabular py-2.5 text-right text-text-secondary">{t.followUps}</td>
+                      <td className="tabular py-2.5 text-right text-text-secondary">{t.responses}</td>
+                      <td className="tabular py-2.5 text-right text-text-secondary">{t.meetings}</td>
+                      <td className="tabular py-2.5 text-right text-text-secondary">{t.proposals}</td>
+                      <td className="tabular py-2.5 text-right text-text-secondary">{t.pipeline}</td>
+                      <td className="tabular py-2.5 text-right font-medium text-text">{t.closed}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+        </div>
+      )}
+
+      <div className="mb-6 grid gap-6 lg:grid-cols-3">
+        <Panel title="Teams" flush>
+          <div className="flex flex-col divide-y divide-line px-6">
+            {data.teams.map((t) => (
+              <Link
+                key={t.id}
+                href={`/outreach?team=${t.id}`}
+                className="flex items-center justify-between py-3 text-text no-underline hover:text-accent-ink"
+              >
+                <span className="text-[14px]">{t.name}</span>
+                <span className="text-[12px] text-text-tertiary">{t.members} members</span>
+              </Link>
+            ))}
+            {filters.team && (
+              <Link href="/outreach" className="py-3 text-[12px] text-text-tertiary no-underline hover:text-accent-ink">
+                Clear team filter
+              </Link>
+            )}
+          </div>
+        </Panel>
+
+        <Panel title="Pipeline">
+          {data.pipelineSegments.length > 0 ? (
+            <div className="flex items-center gap-5">
+              <div className="min-w-0 flex-1">
+                <Legend segments={data.pipelineSegments} />
+              </div>
+              <Donut
+                segments={data.pipelineSegments}
+                centreValue={data.totalLeads}
+                centreLabel="Total leads"
+                size={130}
+                thickness={9}
+              />
+            </div>
+          ) : (
+            <p className="py-6 text-center text-[13px] text-text-tertiary">No leads in the pipeline yet.</p>
+          )}
+        </Panel>
+
+        <Panel title="Funnel" flush>
+          <div className="flex flex-col divide-y divide-line px-6">
+            {data.funnel.map((f) => (
+              <Link
+                key={f.key}
+                href={`/outreach?state=${f.key}${filters.team ? `&team=${filters.team}` : ""}`}
+                className="flex items-center justify-between py-2.5 text-text no-underline hover:text-accent-ink"
+              >
+                <span className="text-[13px] capitalize">{f.label}</span>
+                <span className="tabular text-[13px] text-text-secondary">{f.count}</span>
+              </Link>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      {data.canCreate && (
+        <NewLeadForm teams={data.teams} members={data.members} defaultTeamId={filters.team} />
+      )}
+
+      <div className="mt-6">
+        <DataTable
+          caption={filters.state ? `Leads — ${filters.state.replace(/_/g, " ")}` : "Leads"}
+          rows={data.rows}
+          columns={[
+            { key: "companyName", header: "Company", variant: "link", href: "/outreach/{id}", subKey: "track" },
+            { key: "team", header: "Team" },
+            { key: "owner", header: "Owner" },
+            { key: "state", header: "Stage", variant: "state", categoryKey: "category" },
+            { key: "health", header: "Health", variant: "health" },
+          ]}
+          emptyTitle="No leads yet"
+          emptyDescription="A lead is a researched prospect company with a stated reason it's relevant. None exists in this scope yet."
+        />
+      </div>
+    </>
+  );
+}

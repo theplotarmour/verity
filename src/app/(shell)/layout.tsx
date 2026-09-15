@@ -224,6 +224,11 @@ export default async function ShellLayout({
         ...(canAudit && !contributedHrefs.has("/audit")
           ? [{ href: "/audit", label: "Audit", icon: "audit" as const }]
           : []),
+        // Every authenticated actor, every role, every tenant — your own
+        // identity and password are not a permission a role can lack.
+        ...(!contributedHrefs.has("/account")
+          ? [{ href: "/account", label: "Account", icon: "people" as const }]
+          : []),
       ],
     },
   ].filter((area) => area.items.length > 0);

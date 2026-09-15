@@ -5,11 +5,20 @@ import { registerEvidenceCapability } from "./evidence";
 import { registerSchedulingCapability } from "./scheduling";
 import { registerApprovalCapability } from "./approval";
 import { registerDineinCapability } from "./dinein";
+import { registerTradingCapability } from "./trading";
 import { registerPlywoodCapability } from "./plywood";
 import { registerAccountingCapability } from "./accounting";
 import { registerInventoryCapability } from "./inventory";
 import { registerHrCapability } from "./hr";
 import { registerBillingCapability } from "./billing";
+import { registerRecipeCapability } from "./recipe";
+import { registerCrmCapability } from "./crm";
+import { registerLoyaltyCapability } from "./loyalty";
+import { registerCouponCapability } from "./coupon";
+import { registerComplaintCapability } from "./complaint";
+import { registerAttendanceCapability } from "./attendance";
+import { registerFinanceCapability } from "./finance";
+import { registerOutreachCapability } from "./outreach";
 import { installStorage } from "@/server/storage";
 
 /**
@@ -37,6 +46,7 @@ export function installCapabilities(): void {
   registerSchedulingCapability();
   registerApprovalCapability();
   registerDineinCapability();
+  registerTradingCapability();
   registerPlywoodCapability();
   // Task 84 Phase 4, built ahead of demand under explicit product-owner
   // override 2026-09-04 — see taskplans/96_pending_roadmap_phases.md.
@@ -44,4 +54,12 @@ export function installCapabilities(): void {
   registerInventoryCapability();
   registerHrCapability();
   registerBillingCapability();
+  registerRecipeCapability();
+  registerCrmCapability();
+  registerLoyaltyCapability();
+  registerCouponCapability();
+  registerComplaintCapability();
+  registerAttendanceCapability();
+  registerFinanceCapability();
+  registerOutreachCapability();
 }

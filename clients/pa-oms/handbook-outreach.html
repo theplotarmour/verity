@@ -1,0 +1,1518 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Client Acquisition Handbook — PlotArmour Studio</title>
+<meta name="description" content="PlotArmour Studio's operating constitution for Sales & Outreach Interns — research, outreach, qualification, closing and conduct.">
+<link rel="icon" href="/logo-mark.png">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800;900&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root{
+  --bg:#0A0A0A;
+  --panel:#111111;
+  --panel2:#1A1A1A;
+  --line:#2A2A2A;
+  --line2:#3A3A3A;
+  --grey:#7A7A7A;
+  --grey2:#9A9A9A;
+  --fg2:#E5E5E5;
+  --fg:#FAFAFA;
+  --research:#2563EB;
+  --engineering:#22C55E;
+  --ai:#A855F7;
+  --experiments:#F97316;
+  --journal:#E11D48;
+  --operations:#FACC15;
+  --navw:264px;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+html{scroll-behavior:smooth;}
+html,body{background:var(--bg); color:var(--fg2); font-family:'Inter',Arial,sans-serif; font-size:16px; line-height:1.7; overflow-x:hidden;}
+::selection{background:var(--fg); color:var(--bg);}
+
+.progress{position:fixed; top:0; left:0; height:3px; background:var(--fg); width:0%; z-index:200; transition:width .08s linear;}
+
+.navtoggle{
+  position:fixed; top:16px; left:16px; z-index:210; width:42px; height:42px;
+  background:var(--panel); border:1px solid var(--line2); display:none;
+  align-items:center; justify-content:center; cursor:pointer;
+}
+.navtoggle span, .navtoggle span::before, .navtoggle span::after{
+  content:""; display:block; width:18px; height:2px; background:var(--fg); position:relative;
+}
+.navtoggle span::before{position:absolute; top:-6px;}
+.navtoggle span::after{position:absolute; top:6px;}
+
+.navrail{
+  position:fixed; top:0; left:0; bottom:0; width:var(--navw);
+  border-right:1px solid var(--line); background:var(--bg);
+  overflow-y:auto; z-index:150; padding:28px 0 28px;
+}
+.navrail::-webkit-scrollbar{width:6px;}
+.navrail::-webkit-scrollbar-thumb{background:var(--line2);}
+.navbrand{display:flex; align-items:center; gap:10px; padding:0 22px 22px; border-bottom:1px solid var(--line); margin-bottom:6px;}
+.navbrand img{width:28px; height:28px; mix-blend-mode:screen;}
+.navbrand .t{font-family:'Inter Tight',sans-serif; font-weight:800; font-size:14px; color:var(--fg); letter-spacing:-0.01em; line-height:1.15;}
+.navbrand .t small{display:block; font-family:'JetBrains Mono',monospace; font-weight:500; font-size:8.5px; letter-spacing:.14em; color:var(--grey); text-transform:uppercase; margin-top:3px;}
+
+.navlist{list-style:none;}
+.navbook{padding:16px 22px 6px; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.16em; color:var(--grey); text-transform:uppercase; border-top:1px solid var(--line); margin-top:8px;}
+.navbook:first-child{border-top:none; margin-top:0;}
+.navlist a{
+  display:flex; align-items:baseline; gap:10px; padding:7px 22px;
+  font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.04em; color:var(--grey);
+  text-decoration:none; border-left:2px solid transparent; transition:color .2s, border-color .2s, background .2s;
+}
+.navlist a .num{color:var(--grey2); flex-shrink:0; font-weight:600;}
+.navlist a:hover{color:var(--fg2); background:var(--panel);}
+.navlist a.active{color:var(--fg); border-left-color:var(--accent,var(--fg)); background:var(--panel);}
+.navlist a.active .num{color:var(--accent,var(--fg));}
+
+.wrap{margin-left:var(--navw); min-height:100vh;}
+.container{max-width:740px; margin:0 auto; padding:0 32px;}
+
+.hero{
+  min-height:100vh; display:flex; flex-direction:column; justify-content:center;
+  padding:120px 32px 80px; max-width:900px; margin:0 auto; position:relative;
+}
+.corner{position:absolute; width:14px; height:14px; border:1px solid var(--line2); opacity:.8;}
+.corner.tl{top:28px; left:28px; border-right:none; border-bottom:none;}
+.corner.tr{top:28px; right:28px; border-left:none; border-bottom:none;}
+.hero .eyebrow{
+  font-family:'JetBrains Mono',monospace; text-transform:uppercase; letter-spacing:.18em; font-size:11px;
+  color:var(--grey2); display:flex; align-items:center; gap:10px; margin-bottom:40px;
+}
+.hero .eyebrow::before{content:""; width:7px; height:7px; background:var(--fg); flex-shrink:0;}
+.heroimg{width:88px; height:88px; margin-bottom:28px; mix-blend-mode:screen;}
+.herotitle{
+  font-family:'Inter Tight',sans-serif; font-weight:900; letter-spacing:-0.02em; color:var(--fg);
+  font-size:clamp(40px,7vw,84px); line-height:1.0; margin-bottom:22px;
+}
+.herodeck{font-family:'Inter',sans-serif; font-size:clamp(15px,1.6vw,19px); color:var(--fg2); font-weight:400; max-width:620px; margin-bottom:44px;}
+.herostats{display:grid; grid-template-columns:repeat(3,auto); gap:48px; border-top:1px solid var(--line); padding-top:24px; margin-bottom:36px;}
+.herostats .mini{font-family:'JetBrains Mono',monospace; font-size:9.5px; text-transform:uppercase; letter-spacing:.12em; color:var(--grey);}
+.herostats .val{font-family:'JetBrains Mono',monospace; color:var(--fg2); font-size:15px; margin-top:5px;}
+.herostats .val.green{color:var(--engineering);}
+.scrollcue{font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--grey); display:flex; align-items:center; gap:8px;}
+.scrollcue .arrow{animation:bob 1.8s ease-in-out infinite;}
+@keyframes bob{0%,100%{transform:translateY(0);}50%{transform:translateY(6px);}}
+
+.hero .eyebrow, .heroimg, .herotitle, .herodeck, .herostats, .scrollcue{
+  opacity:0; transform:translateY(18px); animation:heroin .8s ease forwards;
+}
+.heroimg{animation-delay:.05s;}
+.herotitle{animation-delay:.15s;}
+.herodeck{animation-delay:.28s;}
+.herostats{animation-delay:.4s;}
+.scrollcue{animation-delay:.52s;}
+@keyframes heroin{to{opacity:1; transform:none;}}
+
+.reveal{opacity:0; transform:translateY(26px); transition:opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1);}
+.reveal.visible{opacity:1; transform:none;}
+
+.chapter{padding:96px 0; border-bottom:1px solid var(--line); scroll-margin-top:24px;}
+.chapter:last-of-type{border-bottom:none;}
+.chaphead{margin-bottom:8px;}
+.chapno{font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--accent,var(--fg)); letter-spacing:.15em;}
+.chaplabel{font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--grey); margin-top:4px;}
+h2.chtitle{font-family:'Inter Tight',sans-serif; font-weight:800; font-size:clamp(28px,4vw,40px); letter-spacing:-0.02em; color:var(--fg); margin:10px 0 18px; line-height:1.08;}
+p.deck{font-family:'Inter',sans-serif; font-size:17px; color:var(--fg2); margin-bottom:20px; max-width:600px;}
+
+h3.section{font-family:'Inter Tight',sans-serif; font-weight:700; font-size:20px; color:var(--fg); margin:40px 0 16px; letter-spacing:-0.01em; display:flex; align-items:center; gap:10px;}
+h3.section::before{content:""; width:3px; height:16px; background:var(--accent,var(--fg));}
+h4.sub{font-family:'Inter Tight',sans-serif; font-weight:600; font-size:14px; color:var(--fg2); margin:18px 0 8px; text-transform:uppercase; letter-spacing:.04em;}
+p{color:var(--grey2); margin-bottom:14px; font-size:15.5px;}
+p b, li b{color:var(--fg2); font-weight:600;}
+ul,ol{margin:0 0 14px 20px; color:var(--grey2);}
+li{margin-bottom:6px; font-size:15.2px;}
+
+.box{border:1px solid var(--line); background:var(--panel); padding:22px; border-radius:2px;}
+.box .tag{font-family:'JetBrains Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.12em; color:var(--accent,var(--grey2)); margin-bottom:10px; display:block;}
+.box p{margin:0; font-size:14.5px;}
+.principle{border-left:3px solid var(--accent,var(--fg)); background:var(--panel); padding:24px 26px;}
+.principle .big{font-family:'Inter Tight',sans-serif; font-weight:700; font-size:19px; color:var(--fg); letter-spacing:-0.01em; line-height:1.4;}
+.rule{border:1px solid var(--fg); padding:20px 24px; background:var(--panel2);}
+.rule .tag{color:var(--fg);}
+.warning{border:1px solid var(--experiments); background:#1a1006; padding:20px 24px;}
+.warning .tag{color:var(--experiments);}
+.definition{border-left:2px solid var(--research); padding-left:20px; margin:20px 0;}
+.definition .term{font-family:'JetBrains Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--research); margin-bottom:6px; display:block;}
+.quote-manifesto{font-family:'Inter Tight',sans-serif; font-weight:600; font-size:19px; color:var(--fg); border-left:2px solid var(--line2); padding-left:22px; margin:16px 0; line-height:1.5;}
+
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:20px 0;}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin:20px 0;}
+.tag{font-family:'JetBrains Mono',monospace;}
+
+.badgood{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin:20px 0;}
+.badgood .cell{border:1px solid var(--line); padding:20px; background:var(--panel);}
+.badgood .cell.bad{border-top:3px solid var(--journal);}
+.badgood .cell.good{border-top:3px solid var(--engineering);}
+.badgood .celltag{font-family:'JetBrains Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.1em; margin-bottom:10px; display:block;}
+.badgood .cell.bad .celltag{color:var(--journal);}
+.badgood .cell.good .celltag{color:var(--engineering);}
+.badgood p{font-size:14px; margin:0;}
+.badgood i{color:var(--grey);}
+
+.process{display:flex; flex-direction:column; margin:20px 0;}
+.pstep{display:flex; gap:18px; align-items:flex-start; padding:14px 0; border-bottom:1px solid var(--line);}
+.pstep:last-child{border-bottom:none;}
+.pstep .n{font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--accent,var(--fg)); width:34px; flex-shrink:0; padding-top:2px;}
+.pstep .t{font-size:14.8px; color:var(--grey2);}
+.pstep .t b{color:var(--fg2);}
+
+.funnel{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:20px 0; font-family:'JetBrains Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em;}
+.funnel .f{border:1px solid var(--line2); padding:9px 13px; color:var(--fg2); background:var(--panel);}
+.funnel .arrow{color:var(--grey);}
+
+.dtree{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:20px 0;}
+.dtree .branch{border:1px solid var(--line); background:var(--panel); padding:20px;}
+.dtree .branch .h{font-family:'JetBrains Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.1em; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--line);}
+.dtree .branch.a .h{color:var(--research);}
+.dtree .branch.b .h{color:var(--engineering);}
+.dtree .branch ul{margin-left:16px;}
+.dtree .branch li{font-size:13.6px;}
+
+.tablewrap{overflow-x:auto; margin:20px 0;}
+table.commercial{width:100%; border-collapse:collapse; font-size:14px; min-width:480px;}
+table.commercial th{font-family:'JetBrains Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--grey2); text-align:left; padding:10px 12px; border-bottom:1px solid var(--line2); background:var(--panel2);}
+table.commercial td{padding:11px 12px; border-bottom:1px solid var(--line); color:var(--fg2);}
+table.commercial td.num{font-family:'JetBrains Mono',monospace; text-align:right; color:var(--operations); white-space:nowrap;}
+table.commercial td.center, table.commercial th.center{text-align:center; font-family:'JetBrains Mono',monospace;}
+table.commercial tr:last-child td{border-bottom:none;}
+.internalref{display:inline-block; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.1em; color:var(--bg); background:var(--operations); padding:4px 10px; text-transform:uppercase; margin-bottom:16px;}
+
+.checklist{margin:20px 0;}
+.citem{display:flex; gap:12px; align-items:flex-start; padding:9px 0; border-bottom:1px solid var(--line); font-size:14.5px; color:var(--fg2);}
+.citem::before{content:""; width:9px; height:9px; border:1px solid var(--grey2); flex-shrink:0; margin-top:4px;}
+.citem:last-child{border-bottom:none;}
+
+.bignum{font-family:'JetBrains Mono',monospace; font-size:40px; font-weight:700; color:var(--accent,var(--fg)); margin:6px 0;}
+
+.stateflow{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:20px 0; font-family:'JetBrains Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.05em;}
+.stateflow .s{border:1px solid var(--line2); padding:8px 12px; color:var(--fg2); background:var(--panel);}
+.stateflow .s.win{border-color:var(--engineering); color:var(--engineering);}
+.stateflow .arrow{color:var(--grey); font-size:11px;}
+.stateflow.terminal .s{border-color:var(--journal); color:var(--journal); background:transparent;}
+
+.objcard{border:1px solid var(--line); background:var(--panel); padding:18px 20px; margin-bottom:10px;}
+.objcard .q{font-family:'Inter Tight',sans-serif; font-weight:700; font-size:15px; color:var(--fg); margin-bottom:8px;}
+.objcard .a{font-size:14px; color:var(--grey2); margin:0;}
+.objcard .a b{color:var(--fg2);}
+
+.fieldcard{border:1px solid var(--line); background:var(--panel); padding:18px 20px;}
+.fieldcard .fl{display:flex; justify-content:space-between; gap:12px; padding:5px 0; border-bottom:1px dashed var(--line); font-size:13px;}
+.fieldcard .fl:last-child{border-bottom:none;}
+.fieldcard .fl span:first-child{font-family:'JetBrains Mono',monospace; text-transform:uppercase; letter-spacing:.06em; color:var(--grey); font-size:10.5px;}
+.fieldcard .fl span:last-child{color:var(--fg2); text-align:right;}
+
+.manifesto{background:var(--bg); padding:120px 32px; text-align:center;}
+.manifesto .label{font-family:'JetBrains Mono',monospace; text-transform:uppercase; letter-spacing:.18em; font-size:11px; color:var(--grey2); margin-bottom:48px;}
+.manifesto .lines{max-width:640px; margin:0 auto; text-align:left;}
+.manifesto .quote-manifesto{font-size:clamp(18px,2.4vw,24px); margin-bottom:20px;}
+.manifesto .rule{display:inline-block; text-align:left; max-width:520px; margin-top:48px;}
+
+.sitefooter{border-top:1px solid var(--line); padding:40px 32px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;
+  font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.08em; color:var(--grey); text-transform:uppercase;}
+
+.totop{
+  position:fixed; right:24px; top:24px; width:44px; height:44px; border:1px solid var(--line2); background:var(--panel);
+  display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:120; opacity:0; pointer-events:none;
+  transition:opacity .3s, transform .2s; color:var(--fg2);
+}
+.totop.show{opacity:1; pointer-events:auto;}
+.totop:hover{border-color:var(--fg2); transform:translateY(-4px);}
+
+@media (max-width:960px){
+  :root{--navw:0px;}
+  .navrail{transform:translateX(-100%); transition:transform .3s ease; width:280px; box-shadow:0 0 40px rgba(0,0,0,.6);}
+  .navrail.open{transform:translateX(0);}
+  .navtoggle{display:flex;}
+  .wrap{margin-left:0;}
+  .hero{padding:100px 22px 60px;}
+}
+@media (max-width:640px){
+  .grid2,.grid3,.badgood,.dtree{grid-template-columns:1fr;}
+  .herostats{gap:28px;}
+  .container{padding:0 20px;}
+  .chapter{padding:64px 0;}
+}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;
+    scroll-behavior:auto !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+
+<button class="navtoggle" id="navtoggle" aria-label="Toggle chapter navigation" aria-expanded="false" aria-controls="navrail"><span></span></button>
+
+<nav class="navrail" id="navrail" data-lenis-prevent>
+  <div class="navbrand">
+    <img src="/logo-mark.png" alt="">
+    <div class="t">PLOTARMOUR<small>Client Acquisition Handbook</small></div>
+  </div>
+  <ul class="navlist" id="navlist">
+    <li><a href="#hero" class="navlink" data-target="hero"><span class="num">—</span> Cover</a></li>
+
+    <li class="navbook">Book I — Identity</li>
+    <li><a href="#ch00" class="navlink" data-target="ch00" style="--accent:var(--research)"><span class="num">00</span> How to use</a></li>
+    <li><a href="#ch01" class="navlink" data-target="ch01" style="--accent:var(--engineering)"><span class="num">01</span> Mission</a></li>
+    <li><a href="#ch02" class="navlink" data-target="ch02" style="--accent:var(--journal)"><span class="num">02</span> Closed client &amp; attribution</a></li>
+
+    <li class="navbook">Book II — Market intelligence</li>
+    <li><a href="#ch03" class="navlink" data-target="ch03" style="--accent:var(--research)"><span class="num">03</span> Agency</a></li>
+    <li><a href="#ch04" class="navlink" data-target="ch04" style="--accent:var(--operations)"><span class="num">04</span> Agency pricing</a></li>
+    <li><a href="#ch05" class="navlink" data-target="ch05" style="--accent:var(--engineering)"><span class="num">05</span> Verity</a></li>
+    <li><a href="#ch06" class="navlink" data-target="ch06" style="--accent:var(--operations)"><span class="num">06</span> Verity pricing &amp; workflows</a></li>
+    <li><a href="#ch07" class="navlink" data-target="ch07" style="--accent:var(--ai)"><span class="num">07</span> Prospecting &amp; ICP</a></li>
+    <li><a href="#ch08" class="navlink" data-target="ch08" style="--accent:var(--journal)"><span class="num">08</span> Qualification</a></li>
+    <li><a href="#ch09" class="navlink" data-target="ch09" style="--accent:var(--experiments)"><span class="num">09</span> Buying signals &amp; research card</a></li>
+    <li><a href="#ch10" class="navlink" data-target="ch10" style="--accent:var(--journal)"><span class="num">10</span> Lead scoring</a></li>
+    <li><a href="#ch11" class="navlink" data-target="ch11" style="--accent:var(--research)"><span class="num">11</span> Agency vs Verity</a></li>
+    <li><a href="#ch12" class="navlink" data-target="ch12" style="--accent:var(--ai)"><span class="num">12</span> Commercial thinking</a></li>
+
+    <li class="navbook">Book III — Outreach</li>
+    <li><a href="#ch13" class="navlink" data-target="ch13" style="--accent:var(--research)"><span class="num">13</span> Funnel &amp; outreach</a></li>
+    <li><a href="#ch14" class="navlink" data-target="ch14" style="--accent:var(--ai)"><span class="num">14</span> Channel playbooks</a></li>
+    <li><a href="#ch15" class="navlink" data-target="ch15" style="--accent:var(--engineering)"><span class="num">15</span> Follow-up &amp; discovery</a></li>
+    <li><a href="#ch16" class="navlink" data-target="ch16" style="--accent:var(--journal)"><span class="num">16</span> Objection handling</a></li>
+    <li><a href="#ch17" class="navlink" data-target="ch17" style="--accent:var(--experiments)"><span class="num">17</span> Competitor positioning</a></li>
+
+    <li class="navbook">Book IV — Sales &amp; closing</li>
+    <li><a href="#ch18" class="navlink" data-target="ch18" style="--accent:var(--research)"><span class="num">18</span> Proposal &amp; RACI</a></li>
+    <li><a href="#ch19" class="navlink" data-target="ch19" style="--accent:var(--engineering)"><span class="num">19</span> Closing doctrine</a></li>
+    <li><a href="#ch20" class="navlink" data-target="ch20" style="--accent:var(--journal)"><span class="num">20</span> Disqualification</a></li>
+    <li><a href="#ch21" class="navlink" data-target="ch21" style="--accent:var(--journal)"><span class="num">21</span> Handoff &amp; escalation</a></li>
+
+    <li class="navbook">Book V — Operations</li>
+    <li><a href="#ch22" class="navlink" data-target="ch22" style="--accent:var(--operations)"><span class="num">22</span> CRM &amp; pipeline</a></li>
+    <li><a href="#ch23" class="navlink" data-target="ch23" style="--accent:var(--journal)"><span class="num">23</span> Confidentiality &amp; AI</a></li>
+    <li><a href="#ch24" class="navlink" data-target="ch24" style="--accent:var(--research)"><span class="num">24</span> Performance &amp; KPIs</a></li>
+
+    <li class="navbook">Book VI — Constitution</li>
+    <li><a href="#ch25" class="navlink" data-target="ch25" style="--accent:var(--fg)"><span class="num">25</span> Field rules</a></li>
+    <li><a href="#ch26" class="navlink" data-target="ch26" style="--accent:var(--operations)"><span class="num">26</span> Quick reference</a></li>
+    <li><a href="#ch27" class="navlink" data-target="ch27" style="--accent:var(--fg)"><span class="num">27</span> The standard</a></li>
+  </ul>
+</nav>
+
+<div class="wrap">
+
+  <section class="hero" id="hero">
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="eyebrow">Brand identity system / venture building engine</div>
+    <img class="heroimg" src="/logo-mark.png" alt="PlotArmour Studio">
+    <h1 class="herotitle">Client Acquisition<br>Handbook</h1>
+    <p class="herodeck">PlotArmour's operating constitution for Sales & Outreach Interns. How we research, approach, qualify, sell and close business — who owns what, and the standards expected while doing it. It does not replace the Internship Agreement; where contractual matters, including compensation, are concerned, the Agreement controls.</p>
+    <div class="herostats">
+      <div><div class="mini">Est.</div><div class="val">2025</div></div>
+      <div><div class="mini">HQ.</div><div class="val">India</div></div>
+      <div><div class="mini">Status.</div><div class="val green">Building</div></div>
+    </div>
+    <div class="scrollcue">Scroll to begin <span class="arrow">↓</span></div>
+  </section>
+
+  <div class="container">
+
+    <section class="chapter" id="ch00">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--research)">CH. 00 · BOOK I</div><div class="chaplabel">How to use this book</div></div>
+        <h2 class="chtitle">How to use<br>this book</h2>
+        <p class="deck">This is not a generic HR handbook. It is PlotArmour's client-acquisition operating system — how we discover commercial opportunities, not just how interns sell. It takes you from a completely new intern to an effective business-development operator, and it tells you exactly who does what and who owns what.</p>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--research)">This book answers</h3>
+      <div class="grid2 reveal">
+        <ul>
+          <li>What is PlotArmour, Agency and Verity?</li>
+          <li>Who are our customers, and what problems do we solve?</li>
+          <li>How do I recognize and research a good prospect?</li>
+          <li>How do I decide Agency, Verity, or both?</li>
+          <li>How do I approach someone and start a useful conversation?</li>
+          <li>How do I qualify, score and record a lead?</li>
+          <li>How do I handle an objection, and how do I actually close?</li>
+        </ul>
+        <ul>
+          <li>How does attribution and ownership work — in every edge case?</li>
+          <li>When is a client actually considered closed, and what happens on a partial or reversed payment?</li>
+          <li>When do I involve a Senior or the Founders' Office?</li>
+          <li>What must remain confidential, and how do I use AI?</li>
+          <li>What does good performance look like, measured how?</li>
+        </ul>
+      </div>
+
+      <div class="rule reveal">
+        <span class="tag">THE POINT OF THIS BOOK</span>
+        <p style="margin:8px 0 0; color:var(--fg2); font-size:15px;">This handbook teaches you <b>how to think</b> — not merely scripts to repeat. A script fails the moment a real conversation goes off-plan. Judgment does not. Where judgment needs scaffolding — lead status, escalation — this book gives you the exact structure so two interns never have to guess differently.</p>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--research)">Source-of-truth hierarchy</h3>
+      <div class="process reveal">
+        <div class="pstep"><div class="n">01</div><div class="t"><b>Internship Agreement</b> — controls all contractual matters. Where this handbook and the Agreement differ, the Agreement wins.</div></div>
+        <div class="pstep"><div class="n">02</div><div class="t"><b>Approved commercial information</b> — the PlotArmour product context and internal pricing workbook, translated here into usable sales knowledge.</div></div>
+        <div class="pstep"><div class="n">03</div><div class="t"><b>This handbook</b> — operating principles: prospecting, outreach, qualification, closing, CRM, reporting, escalation, conduct.</div></div>
+        <div class="pstep"><div class="n">04</div><div class="t"><b>Internal leadership instructions</b> — authorized PlotArmour leadership may issue updates or new process on top of this book. The Founders' Office holds final say on any compensation, attribution or scope scenario this book does not explicitly cover.</div></div>
+      </div>
+
+      <div class="warning reveal">
+        <span class="tag">NOT A CONTRACT</span>
+        <p style="margin:8px 0 0; color:var(--fg2); font-size:14.5px;">This handbook explains operational standards, not employment terms. It does not create guaranteed earnings, employment benefits, fixed hours, termination conditions, or legal obligations beyond what the Internship Agreement states. Every percentage, threshold and rule below is the operating default — the Founders' Office may adjust it, and where it does, the update supersedes this text.</p>
+      </div>
+    </section>
+
+    <section class="chapter" id="ch01">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--engineering)">CH. 01</div><div class="chaplabel">Mission &amp; mindset</div></div>
+        <h2 class="chtitle">The PlotArmour<br>mission</h2>
+      </div>
+
+      <div class="principle reveal" style="--accent:var(--engineering);">
+        <div class="big">Design, engineer and launch category-defining companies through research, systems thinking and world-class execution.</div>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--engineering)">The mindset you're joining</h3>
+      <p class="reveal">PlotArmour has two commercial tracks you will represent every day: <b>Agency</b>, which builds digital systems for businesses, and <b>Verity</b>, which builds operating infrastructure for businesses. Both exist for one reason.</p>
+
+      <div class="quote-manifesto reveal">We don't sell technology. We solve business problems with technology.</div>
+
+      <p class="reveal">Your job is not to find people to sell something to. Your job is to find businesses with problems worth solving, and to start a conversation that makes that visible to both sides. Put another way: this is not <i>"how interns sell PlotArmour"</i> — it is <i>"how PlotArmour discovers commercial opportunities."</i> You are the discovery layer.</p>
+
+      <h3 class="section reveal" style="--accent:var(--engineering)">The intern's mental model</h3>
+      <p class="reveal">Think like a <b>Researcher + Business Analyst + Communicator + Opportunity Finder</b> — not simply a salesperson sending messages. Notice changes, inefficiencies, growth, customer friction, operational complexity and digital gaps everywhere you look.</p>
+
+      <div class="grid3 reveal">
+        <div class="box"><span class="tag" style="color:var(--research)">RESEARCH</span><p>Understand the business before you ever write a message.</p></div>
+        <div class="box"><span class="tag" style="color:var(--ai)">JUDGEMENT</span><p>Diagnose the real problem before naming a solution.</p></div>
+        <div class="box"><span class="tag" style="color:var(--operations)">DISCIPLINE</span><p>Record everything. Escalate what you don't know.</p></div>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--engineering)">This internship is for</h3>
+      <div class="grid2 reveal">
+        <ul>
+          <li>Training and skill development</li>
+          <li>Practical commercial experience</li>
+          <li>Learning business development and prospect research</li>
+        </ul>
+        <ul>
+          <li>Learning client acquisition end-to-end</li>
+          <li>Learning to identify business problems</li>
+          <li>Learning to connect problems to technology solutions</li>
+        </ul>
+      </div>
+      <p class="reveal">It does <b>not</b> constitute employment. There is no guaranteed job offer. Compensation includes a conditional monthly stipend plus uncapped performance bonuses, per the Internship Agreement.</p>
+    </section>
+
+    <section class="chapter" id="ch02">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--journal)">CH. 02</div><div class="chaplabel">Closed client &amp; attribution constitution</div></div>
+        <h2 class="chtitle">What counts as<br>a closed client</h2>
+        <p class="deck">This is one of the most important definitions in this entire book.</p>
+      </div>
+
+      <div class="rule reveal">
+        <span class="tag">DEFINITION — CLOSED CLIENT</span>
+        <p style="margin:8px 0 0; font-size:16px; color:var(--fg);">A lead is a successful conversion only after it becomes a paying client and PlotArmour <b>receives the advance payment threshold specified in your Internship Agreement</b> for the applicable project.</p>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--journal)">What does NOT count</h3>
+      <div class="grid2 reveal">
+        <ul>
+          <li>Lead generation</li>
+          <li>Prospect identification</li>
+          <li>A positive response</li>
+          <li>Conversation, meeting, discovery call</li>
+        </ul>
+        <ul>
+          <li>Proposal or quotation</li>
+          <li>Negotiation, verbal confirmation</li>
+          <li>"Yes, we want to do it"</li>
+          <li>Intent to proceed</li>
+        </ul>
+      </div>
+      <p class="reveal">Repeat this distinction to yourself every time a deal looks close. Excitement is not revenue. Only the qualifying advance payment turns a lead into a successful conversion — check your Agreement for how that translates into pay.</p>
+
+      <h3 class="section reveal" style="--accent:var(--journal)">Closing edge cases</h3>
+      <div class="tablewrap reveal">
+        <table class="commercial">
+          <tr><th>Situation</th><th>Ruling</th></tr>
+          <tr><td>Advance received below the qualifying threshold</td><td>Does not trigger a successful conversion. Client stays in Proposal / Negotiation until the threshold in the Agreement is met.</td></tr>
+          <tr><td>Milestone project (e.g. staged payments against a larger contract)</td><td>Converts as soon as cumulative payments received clear the qualifying threshold — not on the first milestone alone unless that milestone itself clears it.</td></tr>
+          <tr><td>Payment reversed, bounced or charged back below the threshold</td><td>Conversion status reverts to Negotiation. Any pay already counted on that conversion is treated per the Agreement.</td></tr>
+          <tr><td>Payment attempted but fails outright</td><td>Client remains in Proposal / Negotiation — never a successful conversion.</td></tr>
+          <tr><td>Client pays past the threshold, then later cancels</td><td>The conversion already earned stays earned. It is not retroactively removed.</td></tr>
+          <tr><td>Payment arrives from a different entity than the one negotiated</td><td>Valid if traceable to the same commercial relationship and decision-maker. Founders' Office confirms before the conversion is counted.</td></tr>
+          <tr><td>Client pays after the closing intern has left PlotArmour</td><td>The conversion still counts, provided the opportunity was attributed and documented in the CRM before departure. See your Agreement for how it's paid.</td></tr>
+        </table>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--journal)">Attribution — the roles</h3>
+      <p class="reveal">Attribution is based on PlotArmour's official internal process — lead tracking, CRM records, outreach records, communication history, timestamps and documented activity. <b>PlotArmour's determination is final for compensation.</b> Three roles exist on any opportunity, and one person can hold more than one:</p>
+      <div class="grid2 reveal">
+        <div class="box"><span class="tag" style="color:var(--research)">LEAD ORIGINATOR</span><p>The person who first creates a valid, documented prospect record for this company.</p></div>
+        <div class="box"><span class="tag" style="color:var(--engineering)">OPPORTUNITY OWNER</span><p>The person actively progressing the opportunity right now.</p></div>
+        <div class="box"><span class="tag" style="color:var(--operations)">CLOSER</span><p>The person who directly participates in getting the qualifying advance payment received — this is who the conversion is credited to.</p></div>
+      </div>
+
+      <h4 class="sub reveal">Attribution edge cases</h4>
+      <div class="checklist reveal">
+        <div class="citem"><b>Ownership duration.</b> An Owner keeps the opportunity as long as there is a logged activity — contact attempt, note, or status change — at least once every 14 days. No activity for 14+ days makes it eligible for reassignment by the Senior.</div>
+        <div class="citem"><b>Duplicate leads.</b> The earliest verified CRM timestamp wins origination credit. The later record is merged into it, never deleted.</div>
+        <div class="citem"><b>Pre-existing PlotArmour relationship.</b> Re-discovering an existing client or prospect already in the CRM does not create a new origination credit. It stays with the existing owner.</div>
+        <div class="citem"><b>Inbound leads.</b> Attributed to whoever is on inbound rotation and first responds and qualifies it, per the rotation the Founders' Office sets.</div>
+        <div class="citem"><b>Founder-generated leads.</b> Origination credit sits with the Founders' Office. If handed to an intern to run end to end, that intern gets standard conversion credit as Closer, with no separate origination credit.</div>
+        <div class="citem"><b>Transferred leads.</b> A Senior-approved reassignment gives the new person Owner status going forward. Origination credit stays with whoever discovered it, if it was recorded before the transfer.</div>
+        <div class="citem"><b>Reactivated (dead) leads.</b> Whoever reactivates a lead with a genuinely new trigger becomes the new Owner. Original origination credit is preserved only if reactivation happens within 90 days of the last logged activity.</div>
+        <div class="citem"><b>Cross-team leads.</b> The originating Senior's team keeps it by default. The Founders' Office may reassign for capacity reasons; the two Seniors involved resolve first, escalating only if they can't agree.</div>
+        <div class="citem"><b>Former-intern leads.</b> See the closing edge-case table above — attribution survives departure if the record was documented while the person was active. Payout treatment is per the Agreement.</div>
+      </div>
+
+      <h4 class="sub reveal">If multiple people touch the same prospect right now</h4>
+      <div class="checklist reveal">
+        <div class="citem">Do not fight over ownership.</div>
+        <div class="citem">Do not manipulate records, delete another person's activity, or hide previous outreach.</div>
+        <div class="citem">Do not create duplicate records intentionally.</div>
+        <div class="citem">Escalate the conflict and document the overlap.</div>
+        <div class="citem">Allow PlotArmour to determine attribution using the roles and edge cases above.</div>
+      </div>
+
+      <div class="definition reveal">
+        <span class="term">FIELD RULE</span>
+        <p style="margin:0; color:var(--fg); font-size:16px; font-weight:600;">If it isn't recorded, it didn't happen.</p>
+      </div>
+      <p class="reveal">Every prospect record should let a Senior Officer or Founder open it and immediately understand who the prospect is, why they were contacted, what problem was identified, what has happened, and what happens next. See <b>Ch. 22 — CRM &amp; pipeline</b> for the exact field list and status states.</p>
+    </section>
+
+    <section class="chapter" id="ch03">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--research)">CH. 03 · BOOK II</div><div class="chaplabel">PlotArmour Agency</div></div>
+        <h2 class="chtitle">PlotArmour<br>Agency</h2>
+      </div>
+
+      <div class="principle reveal" style="--accent:var(--research);">
+        <div class="big">Creating online systems for businesses.</div>
+      </div>
+      <p class="reveal">Do not reduce PlotArmour to "we make websites." The Agency is a digital systems and technology partner. A business might need a website, web application, mobile app, e-commerce system, marketplace, booking platform, order system, customer portal, CRM, dashboard, inventory system, workforce system, automation, integrations, AI functionality, an internal tool, or a complete digital customer experience. <b>Your job is to discover which business problem exists.</b></p>
+
+      <h3 class="section reveal" style="--accent:var(--research)">Agency service categories</h3>
+      <div class="grid3 reveal">
+        <div>
+          <h4 class="sub" style="color:var(--research);">Design</h4>
+          <ul><li>Product design, UI/UX</li><li>Mobile app UI/UX</li><li>Social &amp; campaign creative</li><li>Pitch decks, presentations</li><li>Product mockups &amp; renders</li><li>Packaging &amp; brand identity</li></ul>
+          <h4 class="sub" style="color:var(--research);">Technology</h4>
+          <ul><li>Business &amp; cinematic websites</li><li>Web apps, MVPs, SaaS</li><li>Shopify / headless e-commerce</li><li>React/Next.js frontend</li><li>Backend/API, dashboards, CRM</li><li>Integrations &amp; automation</li></ul>
+        </div>
+        <div>
+          <h4 class="sub" style="color:var(--engineering);">Growth</h4>
+          <ul><li>Go-to-market strategy</li><li>Social media management</li><li>Content production</li><li>LinkedIn founder content</li><li>Paid advertising, launches</li><li>SEO foundations, retainers</li></ul>
+          <h4 class="sub" style="color:var(--engineering);">Content</h4>
+          <ul><li>Short-form video, reels</li><li>Product videos, brand films</li><li>Motion graphics</li><li>Cinematic / game trailers</li></ul>
+        </div>
+        <div>
+          <h4 class="sub" style="color:var(--ai);">Interactive &amp; AI</h4>
+          <ul><li>Game prototypes &amp; dev</li><li>Game design docs, art/assets</li><li>AI MVPs, prototypes</li><li>AI automation &amp; AI-enabled creative</li></ul>
+          <h4 class="sub" style="color:var(--ai);">Startup &amp; Strategy</h4>
+          <ul><li>Startup brand + digital foundation</li><li>Launch campaigns, socials</li><li>Brand &amp; digital experience audits</li><li>Product discovery &amp; digital strategy</li></ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="chapter" id="ch04">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--operations)">CH. 04</div><div class="chaplabel">Agency commercial map</div></div>
+        <h2 class="chtitle">Agency packages &amp;<br>internal pricing</h2>
+        <span class="internalref">Internal reference — not public pricing</span>
+      </div>
+
+      <div class="warning reveal">
+        <span class="tag">REFERENCE ≠ QUOTE</span>
+        <p style="margin:8px 0 0; font-size:14.5px; color:var(--fg2);">Every number below is a <b>training reference price</b>, built for internal qualification and conversation-planning. Never quote a number to a prospect externally unless a Senior or the Founders' Office has explicitly authorized it for that specific deal.</p>
+      </div>
+
+      <div class="tablewrap reveal">
+        <table class="commercial">
+          <tr><th>Package</th><th>What it covers</th><th>Reference</th></tr>
+          <tr><td><b>Starter Presence</b></td><td>Brand identity + mini brand system + one-page landing page design.</td><td class="num">₹35,000</td></tr>
+          <tr><td><b>Brand Launch</b></td><td>Complete brand identity + guidelines + landing page + launch creatives.</td><td class="num">₹65,000</td></tr>
+          <tr><td><b>Rapid Brand Lab</b></td><td>Creative direction + brand universe + AI assets + product visuals + landing page.</td><td class="num">₹50,000</td></tr>
+          <tr><td><b>Digital Launch</b></td><td>Brand refresh + premium website + analytics + SEO basics + launch creatives.</td><td class="num">₹60,000</td></tr>
+          <tr><td><b>Startup Launch</b></td><td>Brand identity + website + pitch deck + launch campaign + social starter kit.</td><td class="num">₹95,000</td></tr>
+          <tr><td><b>Product MVP</b></td><td>UX + frontend + backend + database + authentication + deployment + core MVP.</td><td class="num">₹80,000</td></tr>
+          <tr><td><b>Growth Partner</b></td><td>Content + social management + LinkedIn + campaign creatives + monthly reporting.</td><td class="num">₹30,000/mo</td></tr>
+          <tr><td><b>Studio Partner</b></td><td>Integrated branding + design + technology + growth engagement.</td><td class="num">Custom</td></tr>
+        </table>
+      </div>
+
+      <h4 class="sub reveal">Standalone service reference</h4>
+      <div class="tablewrap reveal">
+        <table class="commercial">
+          <tr><th>Service</th><th>Reference</th></tr>
+          <tr><td>Business Website</td><td class="num">₹40,000</td></tr>
+          <tr><td>Premium / Cinematic Website</td><td class="num">₹50,000</td></tr>
+          <tr><td>Web App / MVP</td><td class="num">₹90,000</td></tr>
+          <tr><td>SaaS / Product Build</td><td class="num">₹1,75,000+</td></tr>
+          <tr><td>Shopify Store</td><td class="num">₹40,000</td></tr>
+          <tr><td>Headless / Custom E-commerce</td><td class="num">₹1,25,000+</td></tr>
+          <tr><td>React / Next.js Frontend</td><td class="num">₹60,000</td></tr>
+          <tr><td>Backend / API Development</td><td class="num">₹75,000</td></tr>
+          <tr><td>Website / Product Retainer</td><td class="num">₹12,000/mo</td></tr>
+        </table>
+      </div>
+
+      <div class="warning reveal">
+        <span class="tag">DISCIPLINE</span>
+        <p style="margin:8px 0 0; font-size:14px; color:var(--fg2);">Interns must not invent discounts, promise fixed final pricing, change package scope, guarantee timelines or functionality, negotiate unauthorized terms, or commit PlotArmour contractually. Packages are <b>solution frameworks and conversation starters — not automatic proposals.</b> When needed, say: <i>"I'll confirm the exact scope and commercial terms internally."</i></p>
+      </div>
+    </section>
+
+    <section class="chapter" id="ch05">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--engineering)">CH. 05</div><div class="chaplabel">Verity</div></div>
+        <h2 class="chtitle">Verity</h2>
+        <p class="deck">A separate PlotArmour venture. Do not merge it with Agency.</p>
+      </div>
+
+      <div class="principle reveal" style="--accent:var(--engineering);">
+        <div class="big">Configurable business operating infrastructure for businesses with recurring, interconnected workflows.</div>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--engineering)">The problem it solves</h3>
+      <p class="reveal">Many businesses run on combinations of spreadsheets, WhatsApp, paper processes, disconnected applications, manual approvals, isolated databases, separate accounting tools and fragmented reporting. As they grow, this produces duplication, delays, errors, poor visibility, manual coordination, difficult reporting and operational bottlenecks. Verity brings the relevant workflows into one connected operating environment.</p>
+
+      <h3 class="section reveal" style="--accent:var(--engineering)">Verity module map</h3>
+      <div class="grid3 reveal">
+        <ul>
+          <li><b>Core</b> — org &amp; admin, dashboard, workspaces</li>
+          <li><b>CRM</b> — customers, leads, enquiries, quotations</li>
+          <li><b>Sales</b> — orders, invoicing, receivables</li>
+          <li><b>Procurement</b> — vendors, purchase orders</li>
+          <li><b>Inventory</b> — SKU master, stock, warehousing, reorder</li>
+        </ul>
+        <ul>
+          <li><b>Production</b> — BOM, planning, shop-floor, consumption</li>
+          <li><b>Quality</b> — QC templates, inspection, CAPA</li>
+          <li><b>Projects &amp; Services</b> — jobs, timesheets, work logs</li>
+          <li><b>Workforce</b> — directory, attendance, leave</li>
+          <li><b>Finance</b> — expenses, payments, collections, accounting</li>
+        </ul>
+        <ul>
+          <li><b>Documents</b> — document management</li>
+          <li><b>Workflow</b> — approvals, engine, business processes</li>
+          <li><b>Analytics</b> — reports, MIS, management dashboards</li>
+          <li><b>Automation</b> — notifications, alerts, business rules</li>
+          <li><b>AI &amp; Platform</b> — AI assistant, document/data intelligence, PWA, offline, API, integrations, audit, security</li>
+        </ul>
+      </div>
+
+      <div class="warning reveal">
+        <span class="tag">SELLING VERITY WRONG</span>
+        <p style="margin:8px 0 0; font-size:14.5px; color:var(--fg2);">Don't ask <i>"Do you need CRM, inventory, production, procurement and analytics?"</i> — that's feature-selling and turns you into an ERP checklist salesperson. Ask <i>"How does an order move from customer enquiry to delivery today?"</i> — then find where the information breaks. See the workflow maps in <b>Ch. 06</b>.</p>
+      </div>
+    </section>
+
+    <section class="chapter" id="ch06">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--operations)">CH. 06</div><div class="chaplabel">Verity commercial map &amp; workflow diagnosis</div></div>
+        <h2 class="chtitle">Verity tiers,<br>workflows &amp; customization</h2>
+        <span class="internalref">Internal reference — not public pricing</span>
+      </div>
+
+      <div class="tablewrap reveal">
+        <table class="commercial">
+          <tr><th>Tier</th><th>Best fit</th><th>Setup</th><th>Monthly</th></tr>
+          <tr><td><b>Verity Core</b></td><td>Service / professional MSMEs</td><td class="num">₹40,000+</td><td class="num">₹2,000</td></tr>
+          <tr><td><b>Verity Trade</b></td><td>Distributors, dealers, trading</td><td class="num">₹50,000+</td><td class="num">₹3,000</td></tr>
+          <tr><td><b>Verity Services</b></td><td>Consulting, agencies, engineering, legal/accounting, field services</td><td class="num">₹75,000+</td><td class="num">₹5,000</td></tr>
+          <tr><td><b>Verity Production</b></td><td>Small / mid manufacturers</td><td class="num">₹90,000+</td><td class="num">₹8,000</td></tr>
+          <tr><td><b>Verity Mfg Plus</b></td><td>More complex factories</td><td class="num">₹1,25,000+</td><td class="num">₹10,000</td></tr>
+          <tr><td><b>Verity Enterprise</b></td><td>Custom / multi-function enterprise</td><td class="num">₹1,50,000+</td><td class="num">₹12,000+</td></tr>
+          <tr><td><b>Verity Dedicated</b></td><td>Deep adaptation required</td><td class="num">₹1,80,000</td><td class="num">₹15,000</td></tr>
+        </table>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--operations)">Industry workflow maps</h3>
+      <p class="reveal">The fastest way to find a Verity opportunity is to trace one of these flows in a real conversation and ask where it breaks down today.</p>
+      <h4 class="sub reveal">Manufacturer</h4>
+      <div class="funnel reveal">
+        <div class="f">LEAD</div><div class="arrow">→</div><div class="f">QUOTE</div><div class="arrow">→</div><div class="f">ORDER</div><div class="arrow">→</div><div class="f">BOM</div><div class="arrow">→</div><div class="f">PROCUREMENT</div><div class="arrow">→</div><div class="f">PRODUCTION</div><div class="arrow">→</div><div class="f">QC</div><div class="arrow">→</div><div class="f">INVENTORY</div><div class="arrow">→</div><div class="f">DISPATCH</div><div class="arrow">→</div><div class="f">INVOICE</div><div class="arrow">→</div><div class="f" style="color:var(--operations); border-color:var(--operations);">COLLECTION</div>
+      </div>
+      <h4 class="sub reveal">Distributor</h4>
+      <div class="funnel reveal">
+        <div class="f">LEAD</div><div class="arrow">→</div><div class="f">QUOTE</div><div class="arrow">→</div><div class="f">ORDER</div><div class="arrow">→</div><div class="f">PURCHASE</div><div class="arrow">→</div><div class="f">INVENTORY</div><div class="arrow">→</div><div class="f">DISPATCH</div><div class="arrow">→</div><div class="f">INVOICE</div><div class="arrow">→</div><div class="f" style="color:var(--operations); border-color:var(--operations);">COLLECTION</div>
+      </div>
+      <h4 class="sub reveal">Service business</h4>
+      <div class="funnel reveal">
+        <div class="f">LEAD</div><div class="arrow">→</div><div class="f">PROPOSAL</div><div class="arrow">→</div><div class="f">CLIENT</div><div class="arrow">→</div><div class="f">PROJECT</div><div class="arrow">→</div><div class="f">TEAM</div><div class="arrow">→</div><div class="f">TIMESHEET</div><div class="arrow">→</div><div class="f">INVOICE</div><div class="arrow">→</div><div class="f" style="color:var(--operations); border-color:var(--operations);">COLLECTION</div>
+      </div>
+      <p class="reveal">Ask a prospect to walk you through their version of the relevant flow. The step where they hesitate, say "we do that manually," or mention a spreadsheet is your opportunity.</p>
+
+      <h3 class="section reveal" style="--accent:var(--operations)">Customization areas</h3>
+      <div class="grid2 reveal">
+        <ul>
+          <li>Custom fields, forms, workflows, approvals</li>
+          <li>Reports, dashboards, PDF/document templates</li>
+          <li>APIs, accounting/ERP integrations</li>
+        </ul>
+        <ul>
+          <li>WhatsApp/SMS integrations, PWA/offline workflows</li>
+          <li>AI features, data migration, custom modules</li>
+          <li>Client portals, mobile workflows, analytics/BI, priority SLA</li>
+        </ul>
+      </div>
+
+      <div class="rule reveal">
+        <span class="tag">REMEMBER</span>
+        <p style="margin:8px 0 0; font-size:14.5px; color:var(--fg2);">Verity is configurable, not necessarily one-size-fits-all. Never promise a customization without internal confirmation.</p>
+      </div>
+    </section>
+
+    <section class="chapter" id="ch07">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--ai)">CH. 07</div><div class="chaplabel">Prospecting universe &amp; ICP</div></div>
+        <h2 class="chtitle">The prospecting<br>universe</h2>
+        <p class="deck">This is Verity and Agency's addressable market — and much of it overlaps. Use it as a starting map, not a script. Combine it with the research methodology below before you write a single message.</p>
+      </div>
+
+      <div class="grid3 reveal" style="font-size:14px;">
+        <div>
+          <h4 class="sub" style="color:var(--research);">Retail &amp; Commerce</h4>
+          <p>Retail stores, supermarkets, grocery &amp; convenience stores, department stores, fashion &amp; boutiques, footwear, jewellery, electronics, furniture, home decor, beauty, sports, books, gifts, pet, hardware, auto parts.</p>
+          <h4 class="sub" style="color:var(--research);">Food &amp; Hospitality</h4>
+          <p>Restaurants, cafés, bakeries, cloud kitchens, fast food, catering, bars, hotels, resorts, hostels, guest houses, travel agencies, tour operators, event venues.</p>
+        </div>
+        <div>
+          <h4 class="sub" style="color:var(--engineering);">Professional Services</h4>
+          <p>Law, accounting/CA, consulting, marketing/ad/PR/design agencies, architecture, interior design, real estate, recruitment, insurance, financial advisors, IT services.</p>
+          <h4 class="sub" style="color:var(--engineering);">Healthcare</h4>
+          <p>Hospitals, clinics (dental, dermatology, physio), diagnostic labs, pharmacies, optical stores, veterinary, mental wellness, medical distributors.</p>
+          <h4 class="sub" style="color:var(--engineering);">Education</h4>
+          <p>Schools, colleges, universities, coaching &amp; test-prep, EdTech, language institutes, skill training, music/dance academies, vocational centres.</p>
+        </div>
+        <div>
+          <h4 class="sub" style="color:var(--ai);">Real Estate &amp; Construction</h4>
+          <p>Developers, property dealers/management, construction, contractors, architects, interior firms, home builders, facility management, building material suppliers.</p>
+          <h4 class="sub" style="color:var(--ai);">Manufacturing &amp; B2B</h4>
+          <p>Manufacturers (textile, garment, furniture, chemical, pharma, food), packaging, importers/exporters, wholesalers, distributors, industrial suppliers.</p>
+          <h4 class="sub" style="color:var(--ai);">Personal Services &amp; Digital</h4>
+          <p>Salons, spas, gyms, yoga studios, wedding planners, photographers, car rental/wash, auto repair, cleaning/laundry, printing, tailors — plus SaaS, software agencies, startups, e-commerce, marketplaces, app/web dev, cybersecurity, data/AI companies, gaming and content/creator businesses.</p>
+        </div>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--ai)">Where to look</h3>
+      <div class="grid2 reveal">
+        <ul>
+          <li>Company website and "About" page</li>
+          <li>LinkedIn — company page and founder/decision-maker profile</li>
+          <li>Instagram and other public social presence</li>
+          <li>Google Maps listing and reviews</li>
+          <li>Job postings — what are they hiring for right now?</li>
+        </ul>
+        <ul>
+          <li>Press releases, funding announcements, local news</li>
+          <li>Product launches and new locations</li>
+          <li>Customer reviews — recurring complaints are signal</li>
+          <li>Visible technology stack, website performance, checkout experience</li>
+          <li>Public filings, where relevant and legitimately accessible</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="chapter" id="ch08">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--journal)">CH. 08</div><div class="chaplabel">Qualification doctrine</div></div>
+        <h2 class="chtitle">Market ≠ prospect</h2>
+      </div>
+
+      <div class="principle reveal" style="--accent:var(--journal);">
+        <div class="big">Target market ≠ qualified prospect.</div>
+      </div>
+      <p class="reveal">A restaurant belongs to our target market. But a random restaurant with no identifiable need, no relevant trigger and no reason to act may not be a strong prospect. A stronger prospect is one <b>opening multiple locations, launching online ordering, struggling with fragmented channels, or growing fast enough to need centralized operations.</b></p>
+
+      <div class="badgood reveal">
+        <div class="cell bad"><span class="celltag">GOAL — WRONG</span><p>"Find businesses."</p></div>
+        <div class="cell good"><span class="celltag">GOAL — RIGHT</span><p>"Find businesses with a reason to talk to us."</p></div>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--journal)">The five-part qualification test</h3>
+      <div class="grid3 reveal">
+        <div class="box"><span class="tag" style="color:var(--journal)">01 · PROBLEM</span><p>What is broken, inefficient, outdated, manual, or limiting growth?</p></div>
+        <div class="box"><span class="tag" style="color:var(--journal)">02 · TRIGGER</span><p>Why might the business act now?</p></div>
+        <div class="box"><span class="tag" style="color:var(--journal)">03 · FIT</span><p>Does Agency, Verity, or both have a relevant solution?</p></div>
+      </div>
+      <div class="grid2 reveal">
+        <div class="box"><span class="tag" style="color:var(--journal)">04 · AUTHORITY</span><p>Who makes or influences the decision?</p></div>
+        <div class="box"><span class="tag" style="color:var(--journal)">05 · TIMING</span><p>Is there a realistic opportunity to act?</p></div>
+      </div>
+      <p class="reveal">A good prospect has <b>Problem + Trigger + Fit + Authority + Timing</b> — not just one of them. Turn this into a number using <b>Ch. 10 — Lead scoring.</b></p>
+    </section>
+
+    <section class="chapter" id="ch09">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--experiments)">CH. 09</div><div class="chaplabel">Buying signals &amp; research card</div></div>
+        <h2 class="chtitle">Buying signals</h2>
+        <div class="quote-manifesto">Timing creates relevance.</div>
+      </div>
+
+      <div class="grid2 reveal">
+        <div>
+          <h4 class="sub" style="color:var(--experiments);">Growth signals</h4>
+          <ul>
+            <li>Expansion, new locations, new products/services</li>
+            <li>Hiring, funding, acquisition</li>
+            <li>Leadership change, new market, partnership</li>
+            <li>Rebrand, operational expansion, new distribution</li>
+            <li>E-commerce launch, customer growth, new business units</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="sub" style="color:var(--experiments);">Pain signals</h4>
+          <ul>
+            <li>Manual workflows, spreadsheet-heavy operations</li>
+            <li>Outdated digital systems, fragmented software</li>
+            <li>Poor customer experience, customer complaints</li>
+            <li>Scaling problems</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--experiments)">Why this company, why now, why us?</h3>
+      <p class="reveal">Before outreach, you should be able to answer three questions. If you cannot, the prospect is not researched enough yet.</p>
+      <div class="grid3 reveal">
+        <div class="box"><span class="tag" style="color:var(--experiments)">WHY THIS COMPANY?</span><p>What specific evidence makes it relevant?</p></div>
+        <div class="box"><span class="tag" style="color:var(--experiments)">WHY NOW?</span><p>What trigger or change makes this worth discussing?</p></div>
+        <div class="box"><span class="tag" style="color:var(--experiments)">WHY US?</span><p>Why would PlotArmour be relevant to this situation?</p></div>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--experiments)">Research before outreach</h3>
+      <div class="process reveal">
+        <div class="pstep"><div class="n">01</div><div class="t">What the company does.</div></div>
+        <div class="pstep"><div class="n">02</div><div class="t">How it appears to make money, and who its customers are.</div></div>
+        <div class="pstep"><div class="n">03</div><div class="t">What has changed recently.</div></div>
+        <div class="pstep"><div class="n">04</div><div class="t">What operational or digital problem might exist, and which PlotArmour solution could be relevant.</div></div>
+        <div class="pstep"><div class="n">05</div><div class="t">Who likely owns the problem, and why this conversation might matter now.</div></div>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--experiments)">The Prospect Research Card</h3>
+      <p class="reveal">Every researched prospect becomes one of these before outreach is written. This is what your CRM record should capture in full.</p>
+      <div class="fieldcard reveal">
+        <div class="fl"><span>Company</span><span>—</span></div>
+        <div class="fl"><span>Industry / Location</span><span>—</span></div>
+        <div class="fl"><span>Website</span><span>—</span></div>
+        <div class="fl"><span>Decision maker / Role</span><span>—</span></div>
+        <div class="fl"><span>Contact channel</span><span>—</span></div>
+        <div class="fl"><span>Business model / Customer type</span><span>—</span></div>
+        <div class="fl"><span>Size estimate</span><span>—</span></div>
+        <div class="fl"><span>Observation</span><span>—</span></div>
+        <div class="fl"><span>Problem hypothesis</span><span>—</span></div>
+        <div class="fl"><span>Trigger</span><span>—</span></div>
+        <div class="fl"><span>Buying signal</span><span>—</span></div>
+        <div class="fl"><span>Agency fit / Verity fit</span><span>—</span></div>
+        <div class="fl"><span>Why now / Why us</span><span>—</span></div>
+        <div class="fl"><span>Opportunity score</span><span>—</span></div>
+        <div class="fl"><span>Next action</span><span>—</span></div>
+      </div>
+    </section>
+
+    <section class="chapter" id="ch10">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--journal)">CH. 10</div><div class="chaplabel">Lead scoring</div></div>
+        <h2 class="chtitle">Deciding which<br>5 of 30 to contact first</h2>
+        <p class="deck">"Use your judgment" isn't enough scaffolding for a new intern staring at thirty researched companies. Score them.</p>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--journal)">The Opportunity Score</h3>
+      <p class="reveal">Score every qualified prospect 0, 1 or 2 on each of the five qualification dimensions from Ch. 08.</p>
+      <div class="tablewrap reveal">
+        <table class="commercial">
+          <tr><th>Dimension</th><th class="center">0</th><th class="center">1</th><th class="center">2</th></tr>
+          <tr><td>Problem</td><td class="center">None</td><td class="center">Possible</td><td class="center">Evident</td></tr>
+          <tr><td>Trigger</td><td class="center">None</td><td class="center">Weak</td><td class="center">Strong</td></tr>
+          <tr><td>Fit</td><td class="center">Weak</td><td class="center">Moderate</td><td class="center">Strong</td></tr>
+          <tr><td>Authority</td><td class="center">Unknown</td><td class="center">Influencer</td><td class="center">Decision-maker</td></tr>
+          <tr><td>Timing</td><td class="center">Unknown</td><td class="center">Later</td><td class="center">Active</td></tr>
+        </table>
+      </div>
+      <p class="reveal">Maximum score: <b>10.</b></p>
+      <div class="grid3 reveal">
+        <div class="box" style="border-top:3px solid var(--engineering);"><span class="tag" style="color:var(--engineering)">8–10 · PRIORITY A</span><p>Contact this week.</p></div>
+        <div class="box" style="border-top:3px solid var(--operations);"><span class="tag" style="color:var(--operations)">5–7 · PRIORITY B</span><p>Contact once your A list is worked.</p></div>
+        <div class="box" style="border-top:3px solid var(--journal);"><span class="tag" style="color:var(--journal)">0–4 · RESEARCH MORE</span><p>Not yet ready — dig deeper or deprioritize.</p></div>
+      </div>
+    </section>
+
+    <section class="chapter" id="ch11">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--research)">CH. 11</div><div class="chaplabel">Agency vs Verity</div></div>
+        <h2 class="chtitle">Agency vs. Verity<br>decision tree</h2>
+      </div>
+
+      <div class="dtree reveal">
+        <div class="branch a">
+          <div class="h" style="color:var(--research)">THINK AGENCY WHEN</div>
+          <ul>
+            <li>Needs a website or new digital presence</li>
+            <li>Needs an app, e-commerce, or a marketplace</li>
+            <li>Wants a custom digital product</li>
+            <li>Needs a customer-facing system or dashboard</li>
+            <li>Needs automation/integration</li>
+            <li>Needs a digital launch, branding + technology, product design</li>
+            <li>Needs a growth/content system</li>
+          </ul>
+        </div>
+        <div class="branch b">
+          <div class="h" style="color:var(--engineering)">THINK VERITY WHEN</div>
+          <ul>
+            <li>Sales workflows are fragmented</li>
+            <li>Customer records are scattered</li>
+            <li>Inventory is difficult to manage</li>
+            <li>Purchasing is manual, production hard to track</li>
+            <li>Approvals are slow, reporting is difficult</li>
+            <li>Multiple teams live in spreadsheets</li>
+            <li>The company needs a central operating system</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="rule reveal">
+        <span class="tag">THINK BOTH WHEN</span>
+        <p style="margin:8px 0 0; font-size:14.5px; color:var(--fg2);">A business needs a new digital customer experience AND an internal operating system. Do not artificially restrict the opportunity to whichever service was discussed first.</p>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--research)">One prospect, multiple opportunities</h3>
+      <p class="reveal">A manufacturer says "we need a new website." During discovery you learn inventory is tracked in Excel, purchase orders are manual, production is on paper, and management has no real-time dashboard. That single prospect now contains <b>an Agency website opportunity and a Verity operational opportunity.</b> Do not ignore the second one because the conversation started with the first.</p>
+      <div class="funnel reveal">
+        <div class="f">DOCUMENT</div><div class="arrow">→</div><div class="f">RECOGNIZE</div><div class="arrow">→</div><div class="f">EXPLORE</div><div class="arrow">→</div><div class="f">ESCALATE</div>
+      </div>
+    </section>
+
+    <section class="chapter" id="ch12">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--ai)">CH. 12</div><div class="chaplabel">Commercial thinking</div></div>
+        <h2 class="chtitle">The commercial<br>thinking model</h2>
+        <p class="deck">Move from company to conversation through the problem — never straight to a pitch.</p>
+      </div>
+
+      <div class="badgood reveal">
+        <div class="cell bad"><span class="celltag">WEAK THINKING</span><p>"Manufacturer → Verity."<br><br>"Restaurant → website."</p></div>
+        <div class="cell good"><span class="celltag">BETTER THINKING</span><p>"Manufacturer → inventory/production/approval complexity → operational visibility problem → Verity may fit → discovery conversation."<br><br>"Restaurant expanding to multiple locations → fragmented digital ordering → potential digital-system opportunity → Agency discovery."</p></div>
+      </div>
+
+      <div class="funnel reveal" style="justify-content:center;">
+        <div class="f">COMPANY</div><div class="arrow">→</div><div class="f">PROBLEM</div><div class="arrow">→</div><div class="f">OPPORTUNITY</div><div class="arrow">→</div><div class="f">SOLUTION</div><div class="arrow">→</div><div class="f">CONVERSATION</div>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--ai)">Customer psychology</h3>
+      <p class="reveal">Businesses rarely buy technology because technology exists. They buy because they want more revenue, less manual work, better customer experience, faster operations, better visibility, fewer errors, easier scaling, stronger brand perception, better reporting, centralized information, automation, or new digital capability.</p>
+      <div class="definition reveal">
+        <span class="term">TAKEAWAY</span>
+        <p style="margin:0; font-size:15px; color:var(--fg2);">Speak in terms of <b>business outcomes</b>, not technical vocabulary alone.</p>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--ai)">Diagnose before prescribing</h3>
+      <p class="reveal">Never open with "you need Verity" or "you need a website" before understanding the situation.</p>
+      <div class="funnel reveal" style="justify-content:center;">
+        <div class="f">UNDERSTAND</div><div class="arrow">→</div><div class="f">DIAGNOSE</div><div class="arrow">→</div><div class="f">MATCH</div><div class="arrow">→</div><div class="f">ESCALATE</div><div class="arrow">→</div><div class="f">PROPOSE</div>
+      </div>
+    </section>
+
+    <section class="chapter" id="ch13">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--research)">CH. 13 · BOOK III</div><div class="chaplabel">The funnel &amp; outreach</div></div>
+        <h2 class="chtitle">Client acquisition<br>funnel &amp; outreach</h2>
+      </div>
+
+      <div class="funnel reveal" style="font-size:10.5px;">
+        <div class="f">RESEARCH</div><div class="arrow">→</div><div class="f">PROSPECT</div><div class="arrow">→</div><div class="f">QUALIFY</div><div class="arrow">→</div><div class="f">CONTACT</div><div class="arrow">→</div><div class="f">CONVERSATION</div><div class="arrow">→</div><div class="f">DISCOVERY</div><div class="arrow">→</div><div class="f">HANDOFF</div><div class="arrow">→</div><div class="f">PROPOSAL</div><div class="arrow">→</div><div class="f">DECISION</div><div class="arrow">→</div><div class="f" style="border-color:var(--operations); color:var(--operations);">ADVANCE PAID</div><div class="arrow">→</div><div class="f" style="border-color:var(--engineering); color:var(--engineering);">CLOSED</div>
+      </div>
+      <p class="reveal">Each stage means something different. Do not skip discovery just to send a proposal faster. The exact CRM status names for this funnel are in <b>Ch. 22</b>.</p>
+
+      <h3 class="section reveal" style="--accent:var(--research)">Outreach doctrine</h3>
+      <div class="principle reveal" style="--accent:var(--research);"><div class="big">Earn the conversation. Don't send a pitch.</div></div>
+      <p class="reveal">Good outreach is short, specific, relevant, human, respectful and easy to respond to. Show that you researched them, identify an observation, connect it to a possible opportunity, explain why PlotArmour may be relevant, and ask for a conversation.</p>
+
+      <div class="badgood reveal">
+        <div class="cell bad"><span class="celltag">WEAK</span><p>"Hi, we provide website and app development services. Let me know if you are interested."<br><br><i>Generic. No reason to respond. No evidence of research. Focuses on us.</i></p></div>
+        <div class="cell good"><span class="celltag">STRONGER</span><p>"I noticed you've recently expanded your retail presence. I was looking at how customers currently interact with the business online and saw a few areas that could potentially become a smoother digital experience. Happy to share what I noticed if useful."<br><br><i>Specific, researched, prospect-focused, creates curiosity.</i></p></div>
+      </div>
+
+      <p class="reveal">Avoid: <i>"Hello sir, we are a leading technology company offering innovative solutions…"</i> Avoid: <i>"We are experts in cutting-edge AI-powered digital transformation…"</i> Avoid huge lists of services.</p>
+    </section>
+
+    <section class="chapter" id="ch14">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--ai)">CH. 14</div><div class="chaplabel">Channel playbooks</div></div>
+        <h2 class="chtitle">Channel<br>playbooks</h2>
+        <p class="deck">The outreach doctrine in Ch. 13 is universal. Every channel bends it differently.</p>
+      </div>
+
+      <h4 class="sub reveal">LinkedIn</h4>
+      <div class="grid2 reveal">
+        <ul><li>Personalize the connection note — never send it blank</li><li>Wait for acceptance before pitching anything</li><li>First message references something specific about them</li></ul>
+        <ul><li>Never pitch inside the connection request itself</li><li>One follow-up after 4–5 days of silence is enough</li></ul>
+      </div>
+      <h4 class="sub reveal">Email</h4>
+      <div class="grid2 reveal">
+        <ul><li>Subject line is specific, not "Partnership opportunity"</li><li>Opening line proves you researched them, not us</li><li>One clear call to action — a short call, not a demo</li></ul>
+        <ul><li>Follow-up cadence: Ch. 15</li><li>Never attach large files or decks unsolicited</li></ul>
+      </div>
+      <h4 class="sub reveal">WhatsApp</h4>
+      <div class="grid2 reveal">
+        <ul><li>Only after some prior contact or a clearly public business number</li><li>Business hours only</li><li>Short message — WhatsApp is not email</li></ul>
+        <ul><li>Immediately stop on any opt-out signal</li><li>Never mass-broadcast the same message</li></ul>
+      </div>
+      <h4 class="sub reveal">Instagram</h4>
+      <div class="grid2 reveal">
+        <ul><li>DM only when the business is clearly run through the account</li><li>Comment-then-DM reads as more genuine than a cold DM</li></ul>
+        <ul><li>Never send the identical DM to a list — that is spam, not outreach</li></ul>
+      </div>
+      <h4 class="sub reveal">Phone</h4>
+      <div class="grid2 reveal">
+        <ul><li>Open with who you are and why you're calling in one breath</li><li>Ask permission to continue: "Do you have two minutes?"</li><li>Qualify before pitching, exactly as in any other channel</li></ul>
+        <ul><li>If a gatekeeper answers, be honest about who you are and ask who handles this</li><li>Leave a voicemail only if it's specific, never generic</li><li>Log every call in the CRM — outcome, next action</li></ul>
+      </div>
+    </section>
+
+    <section class="chapter" id="ch15">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--engineering)">CH. 15</div><div class="chaplabel">Follow-up &amp; discovery</div></div>
+        <h2 class="chtitle">Follow-up &amp;<br>discovery</h2>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--engineering)">Follow-up doctrine</h3>
+      <p class="reveal">Never make every follow-up "just following up." A follow-up should add a new observation, a relevant business development, a useful insight, clarification, or a reference to the earlier discussion.</p>
+
+      <h4 class="sub reveal">Default cadence</h4>
+      <div class="process reveal">
+        <div class="pstep"><div class="n">D0</div><div class="t">Initial outreach.</div></div>
+        <div class="pstep"><div class="n">D3</div><div class="t">Relevant follow-up — a new angle, not a repeat.</div></div>
+        <div class="pstep"><div class="n">D7</div><div class="t">New insight or observation.</div></div>
+        <div class="pstep"><div class="n">D14</div><div class="t">Final useful follow-up for this cycle.</div></div>
+        <div class="pstep"><div class="n">D30</div><div class="t">Re-engagement, only if something genuinely changed.</div></div>
+      </div>
+
+      <h4 class="sub reveal">When NOT to follow up</h4>
+      <div class="checklist reveal">
+        <div class="citem">Explicit "no" or "not interested"</div>
+        <div class="citem">Unsubscribe or opt-out request, on any channel</div>
+        <div class="citem">"Don't contact me/us again"</div>
+        <div class="citem">Wrong person, and no referral to the right one was offered</div>
+        <div class="citem">Clearly irrelevant business</div>
+        <div class="citem">Abusive or hostile response</div>
+        <div class="citem">A legal or compliance request to stop</div>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--engineering)">What happens after a reply — the decision path</h3>
+      <div class="process reveal">
+        <div class="pstep"><div class="n">01</div><div class="t">Reply is negative or a hard no → classify the objection (Ch. 16) or the rejection reason (Ch. 20), close the loop, do not push further.</div></div>
+        <div class="pstep"><div class="n">02</div><div class="t">Reply is positive but no clear problem stated → move to discovery, ask the questions below.</div></div>
+        <div class="pstep"><div class="n">03</div><div class="t">A real problem surfaces but PlotArmour isn't relevant to it → disqualify honestly (Ch. 20), don't force a fit.</div></div>
+        <div class="pstep"><div class="n">04</div><div class="t">Problem is relevant but the decision-maker isn't in the conversation yet → identify and route to them before proposing anything.</div></div>
+        <div class="pstep"><div class="n">05</div><div class="t">Decision-maker is engaged but timing is unclear → nurture on the D30 cadence instead of pushing for a proposal.</div></div>
+        <div class="pstep"><div class="n">06</div><div class="t">Problem + authority + timing all confirmed → proceed to full discovery, then Ch. 18 — Proposal.</div></div>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--engineering)">Discovery questions — Agency</h3>
+      <div class="grid2 reveal">
+        <ul>
+          <li>What are you currently using?</li>
+          <li>What isn't working? What are customers struggling with?</li>
+          <li>What process is currently manual?</li>
+          <li>What are you planning to launch?</li>
+        </ul>
+        <ul>
+          <li>What would you change about your current digital experience?</li>
+          <li>Where are customers dropping off?</li>
+          <li>What happens when the business scales?</li>
+          <li>What would a better system enable you to do?</li>
+        </ul>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--engineering)">Discovery questions — Verity</h3>
+      <div class="grid2 reveal">
+        <ul>
+          <li>How do you currently manage customers, leads and quotations?</li>
+          <li>How are orders and invoices handled/tracked?</li>
+          <li>How do you track inventory and manage purchases?</li>
+          <li>How is production tracked? How are approvals handled?</li>
+        </ul>
+        <ul>
+          <li>How do managers see business performance?</li>
+          <li>How many different tools/spreadsheets are involved?</li>
+          <li>What information is difficult to get quickly? Where does manual coordination happen?</li>
+          <li>What happens when someone leaves? Which process becomes painful as the business grows?</li>
+        </ul>
+      </div>
+
+      <div class="definition reveal">
+        <span class="term">GOOD DISCOVERY LEAVES THE TEAM KNOWING</span>
+        <p style="margin:0; font-size:14.5px; color:var(--fg2);">What the business does, how the process currently works, what is broken and why it matters, what they want to improve, how urgent it is, who is involved, a possible solution, and what happens next.</p>
+      </div>
+    </section>
+
+    <section class="chapter" id="ch16">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--journal)">CH. 16</div><div class="chaplabel">Objection handling</div></div>
+        <h2 class="chtitle">Objection<br>handling doctrine</h2>
+      </div>
+
+      <div class="principle reveal" style="--accent:var(--journal);">
+        <div class="big">Do not argue with objections. Investigate them.</div>
+      </div>
+      <p class="reveal">Every objection below is a request for more information, not a debate to win.</p>
+
+      <div class="objcard reveal"><div class="q">"Not interested."</div><p class="a">Ask what prompted that reaction — a bad past experience, no perceived need, or bad timing all need different responses. Don't push past a genuine no.</p></div>
+      <div class="objcard reveal"><div class="q">"We already have someone."</div><p class="a">"What's working well with them, and where do you still end up doing things manually?" — opens a comparison, not a confrontation.</p></div>
+      <div class="objcard reveal"><div class="q">"Send details."</div><p class="a">A common way to end a conversation politely. Send something specific and short, and ask one question back rather than a generic brochure.</p></div>
+      <div class="objcard reveal"><div class="q">"What's the price?"</div><p class="a">Answer with a range only if the scope is understood; otherwise: "It depends on scope — can I ask a couple of questions first?"</p></div>
+      <div class="objcard reveal"><div class="q">"Too expensive."</div><p class="a">Ask what it's being compared against. Price objections are usually value or trust objections in disguise.</p></div>
+      <div class="objcard reveal"><div class="q">"Maybe later."</div><p class="a">Ask what would need to be true for "later" to become "now." Log the trigger and nurture on the D30 cadence.</p></div>
+      <div class="objcard reveal"><div class="q">"We don't need this."</div><p class="a">Test the hypothesis, don't argue it: "Fair — can I ask how [specific process] works today?"</p></div>
+      <div class="objcard reveal"><div class="q">"Talk to my manager."</div><p class="a">Ask for a warm introduction rather than trying to circumvent them. Note the referrer as part of the CRM record.</p></div>
+      <div class="objcard reveal"><div class="q">"We're already using Zoho/Tally/Shopify/etc."</div><p class="a">See <b>Ch. 17 — Competitor positioning.</b> Never claim to be simply "better."</p></div>
+      <div class="objcard reveal"><div class="q">"Can you do it for ₹20k?"</div><p class="a">Never negotiate unauthorized pricing. "I'll check what's realistic for that budget and get back to you" — then escalate.</p></div>
+      <div class="objcard reveal"><div class="q">"What's your portfolio? Who are your clients?"</div><p class="a">Share only what's authorized for external sharing. Escalate if a case study is requested that you don't have approved access to.</p></div>
+    </section>
+
+    <section class="chapter" id="ch17">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--experiments)">CH. 17</div><div class="chaplabel">Competitor positioning</div></div>
+        <h2 class="chtitle">Competitor<br>positioning</h2>
+        <p class="deck">Especially relevant for Verity, where the prospect is usually replacing something, not buying nothing.</p>
+      </div>
+
+      <div class="warning reveal">
+        <span class="tag">NEVER</span>
+        <p style="margin:8px 0 0; font-size:14.5px; color:var(--fg2);">Never respond to "we already use X" with "we're better." That's an argument, and it's usually false — every tool is good at something.</p>
+      </div>
+
+      <p class="reveal">Instead, ask: <i>"What is working well with your current system, and where are you still relying on manual processes?"</i> That question does the qualification work for you.</p>
+
+      <div class="tablewrap reveal">
+        <table class="commercial">
+          <tr><th>They mention</th><th>What to ask</th></tr>
+          <tr><td>Zoho / Odoo / ERPNext</td><td>"What did you end up customizing yourselves, and what still needs a workaround?"</td></tr>
+          <tr><td>Tally</td><td>"Is that just accounting, or does it also cover inventory and production for you?"</td></tr>
+          <tr><td>Salesforce / HubSpot</td><td>"Is that CRM connected to your operations side, or is that still separate?"</td></tr>
+          <tr><td>Shopify</td><td>"How's that connected to your inventory and fulfillment behind the scenes?"</td></tr>
+          <tr><td>Custom software</td><td>"Who built and maintains it, and how easy is it to change as you grow?"</td></tr>
+          <tr><td>Spreadsheets / WhatsApp</td><td>"What happens when two people update the same sheet at once?"</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section class="chapter" id="ch18">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--research)">CH. 18 · BOOK IV</div><div class="chaplabel">Proposal &amp; RACI</div></div>
+        <h2 class="chtitle">Who does what,<br>from discovery to payment</h2>
+        <p class="deck">The handbook previously said "escalate." Here is exactly who owns each activity.</p>
+      </div>
+
+      <div class="tablewrap reveal">
+        <table class="commercial">
+          <tr><th>Activity</th><th class="center">Intern</th><th class="center">Senior</th><th class="center">Founders</th></tr>
+          <tr><td>Research</td><td class="center">R</td><td class="center">A</td><td class="center">I</td></tr>
+          <tr><td>Initial outreach</td><td class="center">R</td><td class="center">A</td><td class="center">I</td></tr>
+          <tr><td>Qualification</td><td class="center">R</td><td class="center">A</td><td class="center">I</td></tr>
+          <tr><td>Discovery call</td><td class="center">R</td><td class="center">C</td><td class="center">A</td></tr>
+          <tr><td>Technical scope</td><td class="center">I</td><td class="center">C</td><td class="center">A</td></tr>
+          <tr><td>Pricing</td><td class="center">I</td><td class="center">C</td><td class="center">A</td></tr>
+          <tr><td>Proposal drafting</td><td class="center">C</td><td class="center">C</td><td class="center">A</td></tr>
+          <tr><td>Negotiation</td><td class="center">I / C</td><td class="center">C</td><td class="center">A</td></tr>
+          <tr><td>Contract</td><td class="center">I</td><td class="center">I</td><td class="center">A</td></tr>
+          <tr><td>Invoice / payment</td><td class="center">I</td><td class="center">C</td><td class="center">A</td></tr>
+          <tr><td>Handoff to delivery</td><td class="center">R</td><td class="center">A</td><td class="center">C</td></tr>
+        </table>
+      </div>
+      <p class="reveal"><b>R</b> — does the work. <b>A</b> — accountable for the outcome. <b>C</b> — consulted before it moves. <b>I</b> — informed after.</p>
+    </section>
+
+    <section class="chapter" id="ch19">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--engineering)">CH. 19</div><div class="chaplabel">Closing doctrine</div></div>
+        <h2 class="chtitle">Closing<br>doctrine</h2>
+        <p class="deck">The funnel ends at Advance Paid → Closed. This is the path that gets a qualified opportunity there.</p>
+      </div>
+
+      <div class="process reveal">
+        <div class="pstep"><div class="n">01</div><div class="t">Discovery complete — problem, trigger, fit, authority and timing all confirmed.</div></div>
+        <div class="pstep"><div class="n">02</div><div class="t">Scope confirmed with the prospect in writing or clearly documented notes.</div></div>
+        <div class="pstep"><div class="n">03</div><div class="t">Internal feasibility confirmed — Senior/Founders sign off the scope is buildable as discussed.</div></div>
+        <div class="pstep"><div class="n">04</div><div class="t">Commercial approval — pricing and terms authorized internally.</div></div>
+        <div class="pstep"><div class="n">05</div><div class="t">Proposal sent — per the RACI in Ch. 18.</div></div>
+        <div class="pstep"><div class="n">06</div><div class="t">Decision-maker alignment confirmed — the person receiving the proposal can actually say yes.</div></div>
+        <div class="pstep"><div class="n">07</div><div class="t">Objection handling — per Ch. 16, investigate before responding.</div></div>
+        <div class="pstep"><div class="n">08</div><div class="t">Negotiation — within authorized terms only.</div></div>
+        <div class="pstep"><div class="n">09</div><div class="t">Agreement reached — verbal or written yes.</div></div>
+        <div class="pstep"><div class="n">10</div><div class="t">Invoice raised / payment requested.</div></div>
+        <div class="pstep"><div class="n">11</div><div class="t">Advance received and verified.</div></div>
+        <div class="pstep"><div class="n">12</div><div class="t">Closed — per the definition in Ch. 02.</div></div>
+        <div class="pstep"><div class="n">13</div><div class="t">Handoff to delivery, with full context transferred — not a bare client name.</div></div>
+      </div>
+    </section>
+
+    <section class="chapter" id="ch20">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--journal)">CH. 20</div><div class="chaplabel">Disqualification &amp; rejection</div></div>
+        <h2 class="chtitle">Knowing when<br>to walk away</h2>
+        <p class="deck">A good business developer doesn't just generate pipeline. They protect the company's time.</p>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--journal)">Grounds to disqualify</h3>
+      <div class="checklist reveal">
+        <div class="citem">No meaningful problem, after genuine discovery</div>
+        <div class="citem">No realistic budget for any relevant scope</div>
+        <div class="citem">An impossible timeline</div>
+        <div class="citem">No access to anyone with real authority</div>
+        <div class="citem">Abusive or disrespectful behavior</div>
+        <div class="citem">Expectations that no honest proposal could meet</div>
+        <div class="citem">A request PlotArmour isn't authorized or able to deliver</div>
+        <div class="citem">Fundamentally incompatible requirements</div>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--journal)">Rejection taxonomy</h3>
+      <p class="reveal">"Not now" and "never contact us again" are different outcomes and need different CRM statuses. Record the real reason.</p>
+      <div class="grid3 reveal">
+        <div class="box"><span class="tag" style="color:var(--journal)">NO FIT</span><p>PlotArmour genuinely isn't relevant here.</p></div>
+        <div class="box"><span class="tag" style="color:var(--journal)">NO BUDGET</span><p>Interested, cannot fund it now or ever at this size.</p></div>
+        <div class="box"><span class="tag" style="color:var(--journal)">NO TIMING</span><p>Real interest, wrong moment. Nurture on the D30 cadence.</p></div>
+        <div class="box"><span class="tag" style="color:var(--journal)">NOT INTERESTED</span><p>Flat no, no stated reason.</p></div>
+        <div class="box"><span class="tag" style="color:var(--journal)">WRONG PERSON</span><p>No path found to the actual decision-maker.</p></div>
+        <div class="box"><span class="tag" style="color:var(--journal)">REVISIT LATER</span><p>Explicit request to come back at a later date.</p></div>
+        <div class="box"><span class="tag" style="color:var(--journal)">LOST TO COMPETITOR</span><p>Chose another vendor.</p></div>
+        <div class="box"><span class="tag" style="color:var(--journal)">LOST ON PRICE</span><p>Chose not to proceed on cost alone.</p></div>
+        <div class="box"><span class="tag" style="color:var(--journal)">LOST ON SCOPE/TRUST</span><p>Scope mismatch, or confidence in PlotArmour wasn't established.</p></div>
+      </div>
+      <p class="reveal">This data is valuable to PlotArmour beyond your own pipeline — record it accurately even when a deal is lost.</p>
+    </section>
+
+    <section class="chapter" id="ch21">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--journal)">CH. 21</div><div class="chaplabel">Handoff &amp; escalation</div></div>
+        <h2 class="chtitle">Pricing discipline,<br>handoff &amp; escalation</h2>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--journal)">Pricing discipline</h3>
+      <div class="grid2 reveal">
+        <div>
+          <h4 class="sub">Interns may</h4>
+          <ul><li>Understand internal price ranges</li><li>Identify likely packages</li><li>Use pricing for internal qualification</li><li>Share approximate starting info when authorized</li></ul>
+        </div>
+        <div>
+          <h4 class="sub">Interns may not</h4>
+          <ul><li>Invent discounts or negotiate pricing</li><li>Promise final prices or timelines</li><li>Alter scope or guarantee features</li><li>Make contractual commitments</li></ul>
+        </div>
+      </div>
+      <div class="rule reveal"><span class="tag">WHEN UNCERTAIN</span><p style="margin:8px 0 0; font-size:15px; color:var(--fg2);">Escalate rather than improvise.</p></div>
+
+      <h3 class="section reveal" style="--accent:var(--journal)">Escalation matrix</h3>
+      <div class="tablewrap reveal">
+        <table class="commercial">
+          <tr><th>Situation</th><th class="center">Intern</th><th class="center">Senior</th><th class="center">Founders</th></tr>
+          <tr><td>Basic prospect / service question</td><td class="center">✓</td><td class="center">—</td><td class="center">—</td></tr>
+          <tr><td>Pricing request beyond a public range</td><td class="center">→</td><td class="center">✓</td><td class="center">—</td></tr>
+          <tr><td>Custom scope</td><td class="center">→</td><td class="center">→</td><td class="center">✓</td></tr>
+          <tr><td>Technical architecture</td><td class="center">→</td><td class="center">→</td><td class="center">✓</td></tr>
+          <tr><td>Contract terms</td><td class="center">—</td><td class="center">→</td><td class="center">✓</td></tr>
+          <tr><td>Security question</td><td class="center">—</td><td class="center">→</td><td class="center">✓</td></tr>
+          <tr><td>Legal question</td><td class="center">—</td><td class="center">→</td><td class="center">✓</td></tr>
+          <tr><td>Enterprise-scale deal</td><td class="center">—</td><td class="center">→</td><td class="center">✓</td></tr>
+          <tr><td>Agency + Verity same client</td><td class="center">→</td><td class="center">→</td><td class="center">✓</td></tr>
+          <tr><td>Attribution conflict</td><td class="center">→</td><td class="center">✓</td><td class="center">escalation if unresolved</td></tr>
+        </table>
+      </div>
+      <p class="reveal">You don't need to know everything. You need to recognize when the next person should enter the conversation.</p>
+      <div class="funnel reveal" style="justify-content:center;">
+        <div class="f" style="color:var(--engineering); border-color:var(--engineering);">DOCUMENT</div><div class="arrow">→</div><div class="f" style="color:var(--engineering); border-color:var(--engineering);">ASK</div><div class="arrow">→</div><div class="f" style="color:var(--engineering); border-color:var(--engineering);">ESCALATE</div><div class="arrow">→</div><div class="f" style="color:var(--engineering); border-color:var(--engineering);">CONTINUE</div>
+      </div>
+    </section>
+
+    <section class="chapter" id="ch22">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--operations)">CH. 22 · BOOK V</div><div class="chaplabel">Pipeline discipline</div></div>
+        <h2 class="chtitle">CRM &amp; pipeline<br>discipline</h2>
+        <p class="deck">A prospect should never exist only in someone's memory.</p>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--operations)">Lead status — the state machine</h3>
+      <p class="reveal">Every prospect record sits in exactly one of these statuses. This is the authoritative list — "interested," "qualified," "opportunity" mean nothing unless they map to one of these.</p>
+      <div class="stateflow reveal">
+        <div class="s">RESEARCH</div><div class="arrow">→</div><div class="s">PROSPECT</div><div class="arrow">→</div><div class="s">CONTACTED</div><div class="arrow">→</div><div class="s">RESPONDED</div><div class="arrow">→</div><div class="s">QUALIFIED</div><div class="arrow">→</div><div class="s">DISCOVERY</div><div class="arrow">→</div><div class="s">OPPORTUNITY</div><div class="arrow">→</div><div class="s">HANDOFF</div><div class="arrow">→</div><div class="s">PROPOSAL</div><div class="arrow">→</div><div class="s">NEGOTIATION</div><div class="arrow">→</div><div class="s">VERBAL YES</div><div class="arrow">→</div><div class="s">INVOICE / PAYMENT REQUESTED</div><div class="arrow">→</div><div class="s">ADVANCE RECEIVED</div><div class="arrow">→</div><div class="s win">CLOSED WON</div>
+      </div>
+      <h4 class="sub reveal">Terminal / negative statuses</h4>
+      <div class="stateflow terminal reveal">
+        <div class="s">NOT A FIT</div><div class="s">UNRESPONSIVE</div><div class="s">LOST</div><div class="s">DEFERRED</div><div class="s">DISQUALIFIED</div>
+      </div>
+      <p class="reveal">See <b>Ch. 20</b> for exactly which rejection reason maps to which terminal status.</p>
+
+      <h3 class="section reveal" style="--accent:var(--operations)">The official system should capture</h3>
+      <div class="grid3 reveal">
+        <ul><li>Who</li><li>What company</li><li>Why</li></ul>
+        <ul><li>When</li><li>Problem</li><li>Trigger</li></ul>
+        <ul><li>Contact</li><li>Status &amp; next action</li><li>Attribution</li></ul>
+      </div>
+      <p class="reveal">A good record lets another person take over the opportunity without starting from zero. See the full Prospect Research Card in <b>Ch. 09</b> for the complete field list.</p>
+
+      <h3 class="section reveal" style="--accent:var(--operations)">Lead conflict protocol</h3>
+      <div class="process reveal">
+        <div class="pstep"><div class="n">01</div><div class="t">Check the official records and outreach history.</div></div>
+        <div class="pstep"><div class="n">02</div><div class="t">Do not delete or alter records.</div></div>
+        <div class="pstep"><div class="n">03</div><div class="t">Inform your Senior and document the overlap.</div></div>
+        <div class="pstep"><div class="n">04</div><div class="t">Do not secretly continue competing outreach.</div></div>
+        <div class="pstep"><div class="n">05</div><div class="t">Allow internal attribution to determine ownership per Ch. 02.</div></div>
+      </div>
+      <div class="warning reveal"><span class="tag">NEVER</span><p style="margin:8px 0 0; font-size:14.5px; color:var(--fg2);">Never manipulate attribution for compensation.</p></div>
+
+      <h3 class="section reveal" style="--accent:var(--operations)">Ethical outreach — never</h3>
+      <div class="grid2 reveal">
+        <ul><li>Impersonate someone</li><li>Misrepresent PlotArmour</li><li>Claim a relationship that doesn't exist</li><li>Fabricate urgency, results, or clients</li></ul>
+        <ul><li>Fabricate technical capability</li><li>Lie about pricing</li><li>Send deceptive messages</li><li>Spam people repeatedly</li></ul>
+      </div>
+      <p class="reveal">Protect PlotArmour's reputation. Every message represents the company.</p>
+    </section>
+
+    <section class="chapter" id="ch23">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--journal)">CH. 23</div><div class="chaplabel">Confidentiality, IP &amp; AI</div></div>
+        <h2 class="chtitle">Confidentiality,<br>IP &amp; AI policy</h2>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--journal)">Confidentiality</h3>
+      <p class="reveal">You may encounter internal pricing, lead lists, client and prospect information, strategies, proposals, designs, code, credentials, internal communications, product information and business processes. These must be protected.</p>
+      <h4 class="sub reveal">Never paste any of this into an external AI tool, or share it outside PlotArmour</h4>
+      <div class="checklist reveal">
+        <div class="citem">Client names paired with private information</div>
+        <div class="citem">Phone numbers and email addresses</div>
+        <div class="citem">Contracts and proposals</div>
+        <div class="citem">Internal pricing</div>
+        <div class="citem">Source code</div>
+        <div class="citem">Credentials or API keys</div>
+        <div class="citem">Internal system screenshots</div>
+        <div class="citem">Private CRM exports</div>
+        <div class="citem">Unreleased product information</div>
+        <div class="citem">Financial information</div>
+      </div>
+      <div class="rule reveal"><span class="tag">DEFAULT RULE</span><p style="margin:8px 0 0; font-size:15px; color:var(--fg2);">If you're unsure whether something is confidential, treat it as confidential.</p></div>
+
+      <h3 class="section reveal" style="--accent:var(--journal)">Intellectual property</h3>
+      <p class="reveal">All work, design, code, strategy and materials created during the internship remain the exclusive property of PlotArmour Studio, per the Agreement. Do not reuse internal work independently, publish it without authorization, claim it as personal commercial property, or distribute source code, design files, or strategy documents.</p>
+
+      <h3 class="section reveal" style="--accent:var(--journal)">AI policy</h3>
+      <div class="grid2 reveal">
+        <div>
+          <h4 class="sub" style="color:var(--engineering);">AI may be used for</h4>
+          <ul><li>Research, brainstorming, organizing information</li><li>Drafting and refining communication</li><li>Summarizing public information</li><li>Generating ideas, structuring notes</li></ul>
+        </div>
+        <div>
+          <h4 class="sub" style="color:var(--journal);">AI must never</h4>
+          <ul><li>Replace judgement</li><li>Fabricate facts, case studies, or results</li><li>Make unauthorized commercial commitments</li><li>Be blindly copied without verification</li></ul>
+        </div>
+      </div>
+      <div class="principle reveal" style="--accent:var(--engineering);"><div class="big">AI can accelerate thinking. It cannot replace judgement.</div></div>
+      <p class="reveal">Always verify outputs, fact-check claims, and protect confidential information — never paste confidential material into an AI tool without authorization.</p>
+    </section>
+
+    <section class="chapter" id="ch24">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--research)">CH. 24</div><div class="chaplabel">Performance standard &amp; KPIs</div></div>
+        <h2 class="chtitle">What good<br>performance looks like</h2>
+        <p class="deck">Success is not defined by message count.</p>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--research)">The five levels</h3>
+      <div class="process reveal">
+        <div class="pstep"><div class="n">L1</div><div class="t"><b>Activity</b> — research completed, prospects identified, outreach sent.</div></div>
+        <div class="pstep"><div class="n">L2</div><div class="t"><b>Quality</b> — qualified prospects, response rate, positive-response rate, meaningful conversations.</div></div>
+        <div class="pstep"><div class="n">L3</div><div class="t"><b>Pipeline</b> — discovery calls, qualified opportunities, proposals sent, active negotiations.</div></div>
+        <div class="pstep"><div class="n">L4</div><div class="t"><b>Revenue</b> — advances received, closed clients, revenue generated.</div></div>
+        <div class="pstep"><div class="n">L5</div><div class="t"><b>Quality of revenue</b> — retention, client satisfaction, project quality, attribution accuracy.</div></div>
+      </div>
+
+      <h3 class="section reveal" style="--accent:var(--research)">KPI definitions</h3>
+      <div class="tablewrap reveal">
+        <table class="commercial">
+          <tr><th>KPI</th><th>Formula</th></tr>
+          <tr><td>Response rate</td><td>Replies ÷ Delivered outreach</td></tr>
+          <tr><td>Positive response rate</td><td>Positive replies ÷ Replies</td></tr>
+          <tr><td>Qualification rate</td><td>Qualified opportunities ÷ Responses</td></tr>
+          <tr><td>Discovery conversion</td><td>Discovery meetings ÷ Qualified opportunities</td></tr>
+          <tr><td>Proposal conversion</td><td>Proposals ÷ Discovery meetings</td></tr>
+          <tr><td>Close rate</td><td>Closed clients ÷ Proposals</td></tr>
+          <tr><td>Revenue per qualified opportunity</td><td>Total closed revenue ÷ Qualified opportunities</td></tr>
+        </table>
+      </div>
+      <p class="reveal">These give a Senior or Founder an objective way to compare interns — not by who sent the most messages, but by where in the funnel their work is actually strong or weak.</p>
+
+      <h3 class="section reveal" style="--accent:var(--research)">Good vs. bad, side by side</h3>
+      <div class="badgood reveal">
+        <div class="cell bad"><span class="celltag">BAD</span><p>Finding 100 random companies and sending the same message.</p></div>
+        <div class="cell good"><span class="celltag">GOOD</span><p>Finding 20 highly relevant businesses and understanding why each may have a reason to talk.</p></div>
+      </div>
+      <div class="badgood reveal">
+        <div class="cell bad"><span class="celltag">BAD</span><p>Sending a proposal immediately after a positive reply.</p></div>
+        <div class="cell good"><span class="celltag">GOOD</span><p>Understanding the problem first.</p></div>
+      </div>
+      <div class="badgood reveal">
+        <div class="cell bad"><span class="celltag">BAD</span><p>Claiming: "Yes, we can definitely build that."</p></div>
+        <div class="cell good"><span class="celltag">GOOD</span><p>Saying: "That sounds possible, but I'll confirm the exact technical approach internally."</p></div>
+      </div>
+      <div class="badgood reveal">
+        <div class="cell bad"><span class="celltag">BAD</span><p>Claiming a lead because you sent one message.</p></div>
+        <div class="cell good"><span class="celltag">GOOD</span><p>Maintaining transparent records and letting official attribution decide.</p></div>
+      </div>
+    </section>
+
+
+    <section class="chapter" id="ch25">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--fg)">CH. 25</div><div class="chaplabel">Field rules</div></div>
+        <h2 class="chtitle">Field rules</h2>
+        <p class="deck">Keep these close. They resolve most situations on their own.</p>
+      </div>
+
+      <div class="grid2 reveal">
+        <div class="rule" style="margin-bottom:12px;"><p style="margin:0; font-size:14.5px; color:var(--fg2);">Research before outreach.</p></div>
+        <div class="rule" style="margin-bottom:12px;"><p style="margin:0; font-size:14.5px; color:var(--fg2);">Never promise what you cannot control.</p></div>
+        <div class="rule" style="margin-bottom:12px;"><p style="margin:0; font-size:14.5px; color:var(--fg2);">Diagnose before prescribing.</p></div>
+        <div class="rule" style="margin-bottom:12px;"><p style="margin:0; font-size:14.5px; color:var(--fg2);">Never invent.</p></div>
+        <div class="rule" style="margin-bottom:12px;"><p style="margin:0; font-size:14.5px; color:var(--fg2);">A market is not a prospect.</p></div>
+        <div class="rule" style="margin-bottom:12px;"><p style="margin:0; font-size:14.5px; color:var(--fg2);">Escalate when uncertain.</p></div>
+        <div class="rule" style="margin-bottom:12px;"><p style="margin:0; font-size:14.5px; color:var(--fg2);">Every prospect needs a reason.</p></div>
+        <div class="rule" style="margin-bottom:12px;"><p style="margin:0; font-size:14.5px; color:var(--fg2);">One prospect can contain multiple opportunities.</p></div>
+        <div class="rule" style="margin-bottom:12px;"><p style="margin:0; font-size:14.5px; color:var(--fg2);">Every conversation should create information.</p></div>
+        <div class="rule" style="margin-bottom:12px;"><p style="margin:0; font-size:14.5px; color:var(--fg2);">Sell the outcome, not the technology.</p></div>
+        <div class="rule" style="margin-bottom:12px;"><p style="margin:0; font-size:14.5px; color:var(--fg2);">If it isn't recorded, it didn't happen.</p></div>
+        <div class="rule" style="margin-bottom:12px;"><p style="margin:0; font-size:14.5px; color:var(--fg2);">Investigate objections. Don't argue with them.</p></div>
+        <div class="rule" style="margin-bottom:12px;"><p style="margin:0; font-size:14.5px; color:var(--fg2);">Protect PlotArmour's reputation.</p></div>
+        <div class="rule" style="margin-bottom:12px;"><p style="margin:0; font-size:14.5px; color:var(--fg2);">Never manipulate attribution.</p></div>
+        <div class="rule" style="margin-bottom:12px; border-color:var(--operations);"><p style="margin:0; font-size:14.5px; color:var(--fg);">The goal is not activity. The goal is qualified opportunity.</p></div>
+      </div>
+    </section>
+
+    <section class="chapter" id="ch26">
+      <div class="reveal">
+        <div class="chaphead"><div class="chapno" style="--accent:var(--operations)">CH. 26</div><div class="chaplabel">Quick reference</div></div>
+        <h2 class="chtitle">Quick<br>reference</h2>
+      </div>
+
+      <div class="grid2 reveal">
+        <div class="box"><span class="tag" style="color:var(--research)">WHAT DO WE DO?</span><p><b>Agency</b> — create online systems and digital solutions for businesses.<br><br><b>Verity</b> — connect recurring business workflows into configurable operating infrastructure.</p></div>
+        <div class="box"><span class="tag" style="color:var(--journal)">WHAT IS A STRONG OPPORTUNITY?</span><p>Problem + Trigger + Fit + Authority + Timing. Score it — Ch. 10.</p></div>
+      </div>
+      <div class="grid2 reveal">
+        <div class="box"><span class="tag" style="color:var(--operations)">WHAT COUNTS AS A CONVERSION?</span><p>The qualifying advance payment received, per your Agreement. Nothing before that.</p></div>
+        <div class="box"><span class="tag" style="color:var(--engineering)">FOUND A SECOND OPPORTUNITY?</span><p>Record it. Explore it. Escalate it when needed.</p></div>
+      </div>
+      <div class="box reveal"><span class="tag" style="color:var(--ai)">WHAT IF I DON'T KNOW?</span><p>Document → Ask Senior → Escalate.</p></div>
+
+      <h3 class="section reveal" style="--accent:var(--journal)">What you should never do</h3>
+      <div class="grid3 reveal">
+        <ul><li>Fabricate</li><li>Spam</li></ul>
+        <ul><li>Manipulate attribution</li><li>Expose confidential information</li></ul>
+        <ul><li>Promise unauthorized terms</li><li>Misrepresent PlotArmour</li></ul>
+      </div>
+    </section>
+
+  </div>
+
+  <section class="manifesto chapter" id="ch27">
+    <div class="reveal">
+      <div class="label">CH. 27 — The PlotArmour standard</div>
+      <div class="lines">
+        <div class="quote-manifesto">We operate with curiosity before assumption.</div>
+        <div class="quote-manifesto">We research before we reach out.</div>
+        <div class="quote-manifesto">We understand problems before proposing solutions.</div>
+        <div class="quote-manifesto">We value relevance over volume. We document what we do.</div>
+        <div class="quote-manifesto">We protect every relationship and every piece of information entrusted to us.</div>
+        <div class="quote-manifesto">We never manufacture certainty. We escalate when we do not know.</div>
+        <div class="quote-manifesto">We treat every prospect as a business, not a number.</div>
+        <div class="quote-manifesto">We do not sell technology for the sake of technology. We solve real problems with technology.</div>
+        <div class="quote-manifesto" style="color:var(--fg);">And we build PlotArmour through the quality of every conversation we create.</div>
+        <div class="rule">
+          <span class="tag">THE SINGLE MOST IMPORTANT IDEA</span>
+          <p style="margin:8px 0 0; font-size:16px; color:var(--fg); font-weight:600;">Do not hunt for people to sell something to. Hunt for businesses with problems worth solving.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="sitefooter">
+    <span>PlotArmour Studio — Client Acquisition Handbook</span>
+    <span>Est. 2025</span>
+  </footer>
+
+</div>
+
+<button class="totop" id="totop" aria-label="Back to top">↑</button>
+
+<script>
+(function(){
+  var progress = document.getElementById('progress');
+  var totop = document.getElementById('totop');
+  function onScroll(){
+    var h = document.documentElement;
+    var scrolled = h.scrollTop;
+    var max = h.scrollHeight - h.clientHeight;
+    var pct = max > 0 ? (scrolled / max) * 100 : 0;
+    progress.style.width = pct + '%';
+    totop.classList.toggle('show', scrolled > window.innerHeight * 0.6);
+  }
+  document.addEventListener('scroll', onScroll, {passive:true});
+  onScroll();
+  totop.addEventListener('click', function(){ window.scrollTo({top:0, behavior:'smooth'}); });
+
+  var toggle = document.getElementById('navtoggle');
+  var rail = document.getElementById('navrail');
+  toggle.addEventListener('click', function(){
+    var open = rail.classList.toggle('open');
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  rail.addEventListener('click', function(e){
+    if (e.target.closest('a')){
+      rail.classList.remove('open');
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  var reveals = document.querySelectorAll('.reveal');
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(entry){
+      if (entry.isIntersecting){
+        entry.target.classList.add('visible');
+        io.unobserve(entry.target);
+      }
+    });
+  }, {threshold:0.12, rootMargin:'0px 0px -40px 0px'});
+  reveals.forEach(function(el){ io.observe(el); });
+
+  var links = document.querySelectorAll('.navlink');
+  var sections = Array.from(links).map(function(l){
+    return document.getElementById(l.dataset.target);
+  }).filter(Boolean);
+  var ratios = new Map();
+  var navIo = new IntersectionObserver(function(entries){
+    entries.forEach(function(entry){
+      ratios.set(entry.target.id, entry.isIntersecting ? entry.intersectionRatio : 0);
+    });
+    var bestId = null, bestRatio = 0;
+    ratios.forEach(function(ratio, id){
+      if (ratio > bestRatio){ bestRatio = ratio; bestId = id; }
+    });
+    if (bestId){
+      links.forEach(function(l){ l.classList.remove('active'); });
+      var link = document.querySelector('.navlink[data-target="'+bestId+'"]');
+      if (link) link.classList.add('active');
+    }
+  }, {rootMargin:'-45% 0px -50% 0px', threshold:[0,0.25,0.5,0.75,1]});
+  sections.forEach(function(s){ navIo.observe(s); });
+})();
+</script>
+
+</body>
+</html>

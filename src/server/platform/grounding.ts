@@ -40,15 +40,29 @@ export class GroundingCache {
    *  canonicalized (see `canonicalizeNumber`). Feeds `checkProseClaims`
    *  only — never consulted by `assertGrounded`, which stays ID-only. */
   private readonly seenNumbers = new Set<string>();
+  /** IDs surfaced only by a multi-row query result, never (yet) by a
+   *  result that resolved to exactly that one row. Feeds the rule-2
+   *  structural check in `assertGrounded` — see its docstring. */
+  private readonly multiSourceIds = new Set<string>();
+  /** IDs surfaced by a result that was exactly one row (or a single
+   *  non-array object) — overrides `multiSourceIds`, since a later,
+   *  narrower query is exactly the "ask which one, then use it" flow
+   *  rule 2 requires. */
+  private readonly singleSourceIds = new Set<string>();
 
   /** Records every `id` surfaced by a query result, and every numeric
    *  value reachable from it (for `checkProseClaims`). */
   record(result: unknown): void {
-    for (const row of Array.isArray(result) ? result : [result]) {
+    const rows = Array.isArray(result) ? result : [result];
+    for (const row of rows) {
       this.recordNumbers(row, 0);
       if (row && typeof row === "object" && "id" in row) {
         const id = (row as { id: unknown }).id;
-        if (typeof id === "string" && id.length > 0) this.seen.add(id);
+        if (typeof id === "string" && id.length > 0) {
+          this.seen.add(id);
+          if (rows.length > 1) this.multiSourceIds.add(id);
+          else this.singleSourceIds.add(id);
+        }
       }
     }
   }
@@ -66,6 +80,13 @@ export class GroundingCache {
 
   has(id: string): boolean {
     return this.seen.has(id);
+  }
+
+  /** True when `id` was only ever surfaced by a multi-row result — the
+   *  model resolved a name to several candidates and never re-queried
+   *  down to exactly one. See `assertGrounded`. */
+  isAmbiguous(id: string): boolean {
+    return this.multiSourceIds.has(id) && !this.singleSourceIds.has(id);
   }
 
   hasNumber(canonical: string): boolean {
@@ -123,22 +144,42 @@ const ID_FIELD = /Id$/;
 
 /**
  * Throws `GroundingError` if any `*Id` field in `input` was never surfaced by
- * a query this turn. Called only when a `GroundingCache` was actually passed
- * — every non-agent channel passes none, so this is a no-op cost for them.
+ * a query this turn, OR was surfaced only by a multi-row result the model
+ * never narrowed to one (Task 81 rule 2, structural half — the audit's
+ * "still open" gap, `implementation/13-conformance/task-81-compliance-
+ * audit.md`). Prompt rule 2 already tells the model to list candidates and
+ * ask; this is the gate that holds even when the model ignores that: an ID
+ * that only ever came back as one of several rows cannot be written until a
+ * later, narrower query returns it alone (an explicit disambiguation, not a
+ * guess of "the closest one"). Called only when a `GroundingCache` was
+ * actually passed — every non-agent channel passes none, so this is a no-op
+ * cost for them.
  */
 export function assertGrounded(input: unknown, cache: GroundingCache): void {
   if (!input || typeof input !== "object") return;
 
   const ungrounded: string[] = [];
+  const ambiguous: string[] = [];
   for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
     if (!ID_FIELD.test(key) || typeof value !== "string" || value.length === 0) continue;
-    if (!cache.has(value)) ungrounded.push(key);
+    if (!cache.has(value)) {
+      ungrounded.push(key);
+    } else if (cache.isAmbiguous(value)) {
+      ambiguous.push(key);
+    }
   }
 
   if (ungrounded.length > 0) {
     throw new GroundingError(
       `E_UNGROUNDED: field(s) ${ungrounded.join(", ")} reference an ID not seen in a query result this turn`,
       ungrounded,
+    );
+  }
+  if (ambiguous.length > 0) {
+    throw new GroundingError(
+      `E_UNGROUNDED: field(s) ${ambiguous.join(", ")} reference an ID that only came from a multi-record ` +
+        `query result — query again with a filter narrow enough to return exactly one match, then retry`,
+      ambiguous,
     );
   }
 }
