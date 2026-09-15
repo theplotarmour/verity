@@ -15,6 +15,7 @@ import {
   ENTITY_CHECK_IN,
   ENTITY_CONTACT,
   ENTITY_LEAD,
+  ENTITY_RESEARCH,
   ENTITY_TARGET,
   ENTITY_TEAM,
   ENTITY_TEAM_MEMBERSHIP,
@@ -23,11 +24,16 @@ import {
   OUTREACH_CAPABILITY,
   addTeamMember,
   advanceLeadStage,
+  checkDuplicateProspect,
+  confirmResearchFileUpload,
   createOutreachContact,
   createOutreachLead,
   createOutreachTeam,
+  createResearchNote,
   deriveLeadHealth,
   listOutreachContacts,
+  listResearchEntries,
+  reserveResearchFileUpload,
   flagForEscalation,
   getDailyMetrics,
   getFunnelCounts,
@@ -105,6 +111,7 @@ describeDb("capability: Outreach", () => {
       ENTITY_WEEKLY_REPORT,
       ENTITY_TEAM_WEEKLY_ASSESSMENT,
       ENTITY_CONTACT,
+      ENTITY_RESEARCH,
     ];
 
     await withTenant(tenantId, async (tx) => {
@@ -334,6 +341,138 @@ describeDb("capability: Outreach", () => {
 
     it("is Healthy for a fresh Draft/Pending lead with no overdue action", () => {
       expect(deriveLeadHealth({ category: "Draft", lastActivityAt: null, nextActionAt: null, createdAt: daysAgo(1) })).toBe("Healthy");
+    });
+  });
+
+  describe("research entries (Task 106 Phase 4)", () => {
+    it("creates a note and lists it back", async () => {
+      const lead = await executeCommand(founder, createOutreachLead, {
+        teamId: teamAId,
+        companyName: "Research Note Co",
+        whyRelevant: "Test.",
+        opportunityOwnerId: seniorAPartyId,
+      });
+      const entry = await executeCommand(founder, createResearchNote, {
+        leadId: lead.id,
+        type: "Note",
+        title: "Website analysis",
+        content: "Multi-branch operations, fragmented tooling.",
+      });
+      const entries = await executeQuery(founder, listResearchEntries, { leadId: lead.id });
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({ id: entry.id, type: "Note", title: "Website analysis" });
+    });
+
+    it("rejects a Url entry with no sourceUrl", async () => {
+      const lead = await executeCommand(founder, createOutreachLead, {
+        teamId: teamAId,
+        companyName: "Research Url Co",
+        whyRelevant: "Test.",
+        opportunityOwnerId: seniorAPartyId,
+      });
+      await expect(
+        executeCommand(founder, createResearchNote, { leadId: lead.id, type: "Url", title: "Missing URL" }),
+      ).rejects.toThrow();
+    });
+
+    it("reserves and confirms a file upload, creating a research entry", async () => {
+      const lead = await executeCommand(founder, createOutreachLead, {
+        teamId: teamAId,
+        companyName: "Research File Co",
+        whyRelevant: "Test.",
+        opportunityOwnerId: seniorAPartyId,
+      });
+      const reserved = await executeCommand(founder, reserveResearchFileUpload, {
+        leadId: lead.id,
+        fileName: "annual-report.pdf",
+        mimeType: "application/pdf",
+        byteSize: 1024,
+      });
+      expect(reserved.fileId).toBeTruthy();
+
+      const stored = await withTenant(tenantId, (tx) => tx.storedFile.findUniqueOrThrow({ where: { id: reserved.fileId } }));
+      expect(stored.status).toBe("Pending");
+      expect(stored.entityKey).toBe(ENTITY_LEAD);
+      expect(stored.entityId).toBe(lead.id);
+
+      const confirmed = await executeCommand(founder, confirmResearchFileUpload, {
+        leadId: lead.id,
+        fileId: reserved.fileId,
+        checksum: "deadbeef",
+        byteSize: 1024,
+        type: "Pdf",
+        title: "Annual report",
+      });
+      expect(confirmed.status).toBe("Stored");
+
+      const entries = await executeQuery(founder, listResearchEntries, { leadId: lead.id });
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({ type: "Pdf", title: "Annual report", fileId: reserved.fileId });
+    });
+
+    it("quarantines a confirm whose byteSize disagrees with the reservation, without creating an entry", async () => {
+      const lead = await executeCommand(founder, createOutreachLead, {
+        teamId: teamAId,
+        companyName: "Research Quarantine Co",
+        whyRelevant: "Test.",
+        opportunityOwnerId: seniorAPartyId,
+      });
+      const reserved = await executeCommand(founder, reserveResearchFileUpload, {
+        leadId: lead.id,
+        fileName: "screenshot.png",
+        mimeType: "image/png",
+        byteSize: 500,
+      });
+      const confirmed = await executeCommand(founder, confirmResearchFileUpload, {
+        leadId: lead.id,
+        fileId: reserved.fileId,
+        checksum: "abc123",
+        byteSize: 999, // disagrees with the declared 500
+        type: "Screenshot",
+        title: "Mismatched upload",
+      });
+      expect(confirmed.status).toBe("Quarantined");
+      const entries = await executeQuery(founder, listResearchEntries, { leadId: lead.id });
+      expect(entries).toHaveLength(0);
+    });
+  });
+
+  describe("checkDuplicateProspect (Task 106 Phase 4)", () => {
+    it("finds no duplicate for a genuinely new company", async () => {
+      const result = await executeQuery(founder, checkDuplicateProspect, { companyName: "Nobody Has Heard Of This Co" });
+      expect(result.possibleDuplicate).toBe(false);
+    });
+
+    it("matches on normalized company name and reveals full detail when accessible", async () => {
+      const lead = await executeCommand(founder, createOutreachLead, {
+        teamId: teamAId,
+        companyName: "Acme Manufacturing Pvt. Ltd.",
+        whyRelevant: "Test.",
+        opportunityOwnerId: seniorAPartyId,
+      });
+      const result = await executeQuery(founder, checkDuplicateProspect, { companyName: "acme manufacturing pvt ltd" });
+      expect(result.possibleDuplicate).toBe(true);
+      expect(result.accessible).toBe(true);
+      expect(result.leadId).toBe(lead.id);
+    });
+
+    it("matches on domain and hides owner/team detail when the caller lacks access", async () => {
+      await executeCommand(founder, createOutreachLead, {
+        teamId: teamAId,
+        companyName: "Domain Match Co",
+        website: "https://domainmatch.example",
+        whyRelevant: "Test.",
+        opportunityOwnerId: seniorAPartyId,
+      });
+      // seniorB leads Team B, not Team A — the match is real but inaccessible to them.
+      const result = await executeQuery(seniorB, checkDuplicateProspect, {
+        companyName: "Something Else Entirely",
+        website: "https://www.domainmatch.example/about",
+      });
+      expect(result.possibleDuplicate).toBe(true);
+      expect(result.accessible).toBe(false);
+      expect(result.leadId).toBeUndefined();
+      expect(result.message).not.toContain("Domain Match Co");
     });
   });
 

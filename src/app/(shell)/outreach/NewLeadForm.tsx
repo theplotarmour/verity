@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, ErrorState, Field, Input, Panel, Select } from "@/components/ui/primitives";
-import { runCommand } from "@/server/actions/platform";
+import { runCommand, runQuery } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
 const TRACKS = ["Undetermined", "Agency", "Verity", "Both"] as const;
@@ -27,6 +27,23 @@ export function NewLeadForm({
   const [teamId, setTeamId] = useState(defaultTeamId ?? teams[0]?.id ?? "");
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [pending, startTransition] = useTransition();
+  const [duplicateWarning, setDuplicateWarning] = useState<{ accessible: boolean; leadId?: string; message: string } | null>(null);
+
+  async function checkDuplicate(companyName: string, website: string, linkedinUrl: string) {
+    if (!companyName.trim()) {
+      setDuplicateWarning(null);
+      return;
+    }
+    const result = await runQuery<{ possibleDuplicate: boolean; accessible: boolean; leadId?: string; message: string }>(
+      "verity.outreach.check_duplicate_prospect",
+      { companyName, website: website || undefined, linkedinUrl: linkedinUrl || undefined },
+    );
+    if (result.ok && result.data.possibleDuplicate) {
+      setDuplicateWarning({ accessible: result.data.accessible, leadId: result.data.leadId, message: result.data.message });
+    } else {
+      setDuplicateWarning(null);
+    }
+  }
 
   if (teams.length === 0) return null;
   const teamMembers = members.filter((m) => m.teamId === teamId);
@@ -79,11 +96,48 @@ export function NewLeadForm({
         }}
       >
         <Field label="Company" htmlFor="companyName" required>
-          <Input id="companyName" name="companyName" required />
+          <Input
+            id="companyName"
+            name="companyName"
+            required
+            onBlur={(e) => {
+              const form = e.currentTarget.form!;
+              void checkDuplicate(
+                e.currentTarget.value,
+                String(new FormData(form).get("website") ?? ""),
+                String(new FormData(form).get("linkedinUrl") ?? ""),
+              );
+            }}
+          />
         </Field>
         <Field label="Website" htmlFor="website" hint="Optional at creation">
-          <Input id="website" name="website" placeholder="https://…" />
+          <Input
+            id="website"
+            name="website"
+            placeholder="https://…"
+            onBlur={(e) => {
+              const form = e.currentTarget.form!;
+              void checkDuplicate(
+                String(new FormData(form).get("companyName") ?? ""),
+                e.currentTarget.value,
+                String(new FormData(form).get("linkedinUrl") ?? ""),
+              );
+            }}
+          />
         </Field>
+        {duplicateWarning && (
+          <div className="sm:col-span-2">
+            <div className="glass-control rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning-subtle)] px-4 py-3 text-[13px] text-text">
+              {duplicateWarning.accessible && duplicateWarning.leadId ? (
+                <a href={`/outreach/${duplicateWarning.leadId}`} className="text-accent-ink no-underline hover:underline">
+                  {duplicateWarning.message}
+                </a>
+              ) : (
+                duplicateWarning.message
+              )}
+            </div>
+          </div>
+        )}
         <Field label="Industry" htmlFor="industry">
           <Input id="industry" name="industry" />
         </Field>

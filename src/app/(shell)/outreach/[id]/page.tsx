@@ -3,7 +3,7 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { ENTITY_LEAD, ENTITY_CONTACT, assertTeamScopeAllowed, deriveLeadHealth } from "@/server/capabilities/outreach";
+import { ENTITY_LEAD, ENTITY_CONTACT, ENTITY_RESEARCH, assertTeamScopeAllowed, deriveLeadHealth } from "@/server/capabilities/outreach";
 import { ForbiddenError } from "@/server/platform/authorization";
 import {
   Badge,
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/primitives";
 import { LeadActions } from "./LeadActions";
 import { ContactForm } from "./ContactForm";
+import { ResearchForm, ViewFileLink } from "./ResearchForm";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +53,7 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
       throw error;
     }
 
-    const [states, transitions, activities, team, canEdit, canLog, contacts, canCreateContact] = await Promise.all([
+    const [states, transitions, activities, team, canEdit, canLog, contacts, canCreateContact, researchEntries, canCreateResearch] = await Promise.all([
       tx.stateDefinition.findMany({ where: { entityKey: ENTITY_LEAD } }),
       (async () => {
         const current = await tx.stateDefinition.findUnique({
@@ -67,6 +68,8 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
       hasPermission(tx, actor.roleId, "Create", "verity.outreach.activity"),
       tx.outreachContact.findMany({ where: { leadId: id }, orderBy: { createdAt: "asc" } }),
       hasPermission(tx, actor.roleId, "Create", ENTITY_CONTACT),
+      tx.outreachResearchEntry.findMany({ where: { leadId: id }, orderBy: { createdAt: "desc" } }),
+      hasPermission(tx, actor.roleId, "Create", ENTITY_RESEARCH),
     ]);
 
     const stateById = new Map(states.map((s) => [s.id, s]));
@@ -100,6 +103,8 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
       canLog,
       contacts,
       canCreateContact,
+      researchEntries,
+      canCreateResearch,
     };
   });
 
@@ -184,7 +189,7 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
             />
           </Panel>
 
-          <Panel title="Research">
+          <Panel title="Qualification">
             <DefinitionList
               items={[
                 { term: "What they do", value: lead.whatTheyDo ?? "—" },
@@ -193,6 +198,40 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
                 { term: "Fit score", value: lead.qualityScore != null ? `${lead.qualityScore} / 10` : "—" },
               ]}
             />
+          </Panel>
+
+          <Panel title="Research">
+            {data.researchEntries.length === 0 ? (
+              <p className="text-[13px] text-text-tertiary">No research recorded yet.</p>
+            ) : (
+              <ul className="m-0 flex list-none flex-col gap-3 p-0">
+                {data.researchEntries.map((r) => (
+                  <li key={r.id} className="flex flex-col gap-1 border-b border-line pb-3 last:border-none last:pb-0">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-[14px] text-text">{r.title}</span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        <Badge>{r.type}</Badge>
+                        <span className="text-[11px] text-text-tertiary">
+                          {r.createdAt.toISOString().slice(0, 16).replace("T", " ")}
+                        </span>
+                      </span>
+                    </div>
+                    {r.content && <p className="m-0 text-[13px] text-text-secondary">{r.content}</p>}
+                    {r.sourceUrl && (
+                      <a href={r.sourceUrl} target="_blank" rel="noreferrer" className="text-[12px] text-accent-ink no-underline hover:underline">
+                        {r.sourceUrl}
+                      </a>
+                    )}
+                    {r.fileId && <ViewFileLink entryId={r.id} />}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {data.canCreateResearch && (
+              <div className="mt-4">
+                <ResearchForm leadId={lead.id} />
+              </div>
+            )}
           </Panel>
 
           <Panel title="Contacts">
