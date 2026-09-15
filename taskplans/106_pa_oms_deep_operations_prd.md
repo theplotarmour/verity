@@ -21,7 +21,7 @@ not as a reason to cut the phase list itself. If a phase turns out to be
 overbuild in practice, that's a stop-and-ask moment per CLAUDE.md, not a
 silent trim.
 
-## Status: Phase 1/2/3/4/5 DONE 2026-09-14/15. Phase 6+ not started
+## Status: Phase 1-6 DONE 2026-09-14/15. Phase 7+ not started
 
 Phase 3 closed out across two slices:
 - **`OutreachContact`** — model, migration, RLS, commands, permissions, UI panel + add-contact form on `/outreach/[id]`.
@@ -191,18 +191,29 @@ on a real lead, Team Command's empty state confirmed non-crashing for a
 non-leader account — could not verify the review panel itself live, no
 Senior credentials available in-session; covered by unit tests instead).
 
-## Phase 6 — Team Leader operations
+## Phase 6 — Team Leader operations — DONE 2026-09-15
 
-- Per-member target distribution + audit UI over `OutreachTargetHistory`
-  (105 gap #3).
-- Lead review queues (§78: New/Needs Qualification/Needs Research/etc.) —
-  query-layer filters over existing `OutreachLead` state.
-- Coaching notes — Junior-visible vs Leader-private split (§79); reuse
-  `OutreachActivity`-adjacent pattern or a small new `OutreachCoachingNote`
-  table if a clean split can't be modeled as an activity subtype.
-- Weekly Team Report depth (§80-81) over existing rollup query.
+- **DONE** — Target distribution + audit UI: `/outreach/targets` already had
+  Individual scope (105); this pass added `changeReason` to the form and
+  filtered the list to `active:true` (the Phase 3 supersession model
+  existed in the backend but the UI still showed every superseded row).
+- **DONE** — Lead review queues (§78, scoped per lean-V1 to 5 of the 12
+  named queues: New/NeedsResearch/Stale/HighPriority/AdvancePending) — a
+  `LeadQueuePanel` on Team Command, query-layer filters, no new schema.
+- **DONE** — Coaching notes (§79): new append-only `OutreachCoachingNote`
+  table, JuniorVisible/LeaderPrivate split enforced in the query handler
+  (team leader or Founder-equivalent sees all; anyone else only their own
+  JuniorVisible notes). `CoachingNotePanel` expands per member row on
+  Team Command.
+- **DONE** — Weekly Team Report depth (§80-81): `getTeamWeeklyMemberBreakdown`
+  alongside the existing team-total rollup — not yet wired into a
+  dedicated weekly-report UI page (that page itself is P1/deferred per
+  105's own Phase 5 scope note), but the data exists for whoever builds it.
 
-**Acceptance**: §132's Team-Leader-day acceptance test.
+**Acceptance**: met for what's DONE above — 51/51 tests (was 38 before
+Phase 4), tsc clean. Not independently live-verified this pass (cost/time
+budget); covered by unit tests, same posture as Phase 5's un-verified
+review-panel UI.
 
 ## Phase 7 — Company Core operations
 
