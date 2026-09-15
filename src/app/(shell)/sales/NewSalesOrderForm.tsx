@@ -174,17 +174,29 @@ export function NewSalesOrderForm({
     return map;
   }, [sellable, locationId]);
 
-  /** Where a board is, when it is not here. The fact that changes what you do. */
-  const elsewhere = useMemo(() => {
-    const map = new Map<string, string>();
+  /**
+   * What the business can actually sell of each board: the sum across every
+   * godown the person can see, with the per-godown split for the hint.
+   *
+   * Requested 2026-09-15: "show total quantity available combined across all
+   * godowns, and I can't make a sales order larger than that." The order's
+   * godown is where stock is drawn FIRST — `reserveForOrder`'s planner then
+   * draws the rest from the other godowns — so a board that is in the shop
+   * and not in the chosen godown is still sellable, and the form must say so
+   * instead of reading as out of stock.
+   */
+  const acrossGodowns = useMemo(() => {
+    const map = new Map<string, { total: number; where: string[]; taxRateBp: number | null }>();
     for (const row of sellable) {
-      if (row.locationId === locationId || row.availableUnits <= 0) continue;
-      const existing = map.get(row.productId);
-      const phrase = `${row.locationName} has ${row.availableUnits}`;
-      map.set(row.productId, existing ? `${existing}; ${phrase}` : phrase);
+      const entry = map.get(row.productId) ?? { total: 0, where: [], taxRateBp: null };
+      entry.total += row.availableUnits;
+      if (row.availableUnits > 0) entry.where.push(`${row.locationName} ${row.availableUnits}`);
+      // The GST rate is the board's, not the godown's: any row carries it.
+      if (row.taxRateBp !== null) entry.taxRateBp = row.taxRateBp;
+      map.set(row.productId, entry);
     }
     return map;
-  }, [sellable, locationId]);
+  }, [sellable]);
 
   /** The agreed price for this customer, in rupees, for the price field. */
   const agreedPrice = useMemo(() => {
@@ -229,7 +241,14 @@ export function NewSalesOrderForm({
       const lineNet = qty * netPrice(line);
       net += lineNet;
       if (taxExempt) continue;
-      const rate = inGodown.get(line.productId)?.taxRateBp ?? null;
+      // The board's rate, wherever it is held — never keyed off the chosen
+      // godown, which used to make a board held elsewhere read as "no GST
+      // rule" (2026-09-15).
+      const entry = acrossGodowns.get(line.productId);
+      // No stock row anywhere: the line is blocked as over-ordered already,
+      // and "no GST rule" would be the wrong thing to say about it.
+      if (line.productId !== "" && entry === undefined) continue;
+      const rate = entry?.taxRateBp ?? null;
       if (line.productId !== "" && rate === null) {
         unknownRate = true;
         continue;
@@ -237,25 +256,34 @@ export function NewSalesOrderForm({
       tax += (lineNet * (rate ?? 0)) / 10_000;
     }
     return { net, tax, gross: net + tax, unknownRate };
-  }, [lines, inGodown, taxExempt]);
+  }, [lines, acrossGodowns, taxExempt]);
   const total = totals.net;
 
   const complete = lines.filter(
     (line) => line.productId !== "" && Number.parseInt(line.qty, 10) > 0,
   );
+  // A line asking for more than every godown holds together cannot be
+  // placed from this screen (requested 2026-09-15). Summed per product, since
+  // the same board on two lines is one demand against one stock.
+  const overOrdered = useMemo(() => {
+    const wantedBy = new Map<string, number>();
+    for (const line of complete) {
+      wantedBy.set(line.productId, (wantedBy.get(line.productId) ?? 0) + Number.parseInt(line.qty, 10));
+    }
+    return [...wantedBy].some(([productId, wanted]) => wanted > (acrossGodowns.get(productId)?.total ?? 0));
+  }, [complete, acrossGodowns]);
+
   const canSubmit =
     customerId !== "" &&
     locationId !== "" &&
     complete.length > 0 &&
+    !overOrdered &&
     (!taxExempt || exemptReason.trim().length >= 3);
 
   const boardOptions = boards.map((board) => ({
     value: board.id,
     label: board.label,
-    note:
-      locationId === ""
-        ? undefined
-        : `${inGodown.get(board.id)?.availableUnits ?? 0} available here`,
+    note: `${acrossGodowns.get(board.id)?.total ?? 0} available`,
   }));
 
   return (
@@ -368,9 +396,7 @@ export function NewSalesOrderForm({
             label="From godown"
             htmlFor="sale-godown"
             required
-            hint={
-              locationId === "" ? "Choose one to see what is available" : undefined
-            }
+            hint="Drawn from here first, then from the other godowns"
           >
             <Combobox
               id="sale-godown"
@@ -400,13 +426,11 @@ export function NewSalesOrderForm({
         <div className="flex flex-col gap-4 border-t border-line pt-4">
           {lines.map((line, index) => {
             const stock = inGodown.get(line.productId);
+            const everywhere = acrossGodowns.get(line.productId);
+            const total = everywhere?.total ?? 0;
             const wanted = Number.parseInt(line.qty, 10);
-            const short =
-              stock !== undefined &&
-              Number.isFinite(wanted) &&
-              wanted > stock.availableUnits;
-            const notHere =
-              line.productId !== "" && (stock?.availableUnits ?? 0) === 0;
+            const short = line.productId !== "" && Number.isFinite(wanted) && wanted > total;
+            const hereUnits = stock?.availableUnits ?? 0;
             const discount = Number.parseFloat(line.discount);
             const discounted =
               Number.isFinite(discount) && discount > 0 && line.price !== "";
@@ -419,14 +443,14 @@ export function NewSalesOrderForm({
                     htmlFor={`sale-board-${index}`}
                     required
                     hint={
-                      locationId === ""
+                      line.productId === ""
                         ? undefined
-                        : notHere
-                          ? (elsewhere.get(line.productId) ??
-                            "None in any godown you can see")
-                          : stock
-                            ? `${sheets(stock.availableUnits)} available here`
-                            : undefined
+                        : total === 0
+                          ? "None in any godown you can see"
+                          : `${sheets(total)} available` +
+                            (everywhere!.where.length > 1 || (locationId !== "" && hereUnits < total)
+                              ? ` (${everywhere!.where.join(", ")})`
+                              : "")
                     }
                   >
                     <Combobox
@@ -515,8 +539,8 @@ export function NewSalesOrderForm({
                 </FormRow>
                 {short && (
                   <p className="m-0 text-[12px] text-warning">
-                    Only {stock!.availableUnits} available here. The order can
-                    still be taken; it cannot be reserved until there is stock.
+                    Only {sheets(total)} available across every godown. Reduce the
+                    quantity, or receive more stock first.
                   </p>
                 )}
               </div>
