@@ -183,6 +183,7 @@ model Tenant {
   outreachLeads                 OutreachLead[]
   outreachActivities            OutreachActivity[]
   outreachContacts               OutreachContact[]
+  outreachResearchEntries        OutreachResearchEntry[]
   outreachTargets               OutreachTarget[]
   outreachCheckIns              OutreachCheckIn[]
   outreachWeeklyReports         OutreachWeeklyReport[]
@@ -4444,6 +4445,7 @@ model OutreachLead {
   team       OutreachTeam       @relation(fields: [teamId], references: [id], onDelete: Restrict)
   activities OutreachActivity[]
   contacts   OutreachContact[]
+  research   OutreachResearchEntry[]
 
   @@index([tenantId, teamId, state])
   @@index([tenantId, opportunityOwnerId])
@@ -4507,6 +4509,37 @@ model OutreachContact {
 
   @@index([tenantId, leadId])
   @@map("outreach_contact")
+}
+
+/// APPEND-ONLY research timeline entry (Task 106 Phase 4, spec §26-29). A
+/// note, a URL, or a reference to an uploaded `StoredFile` — never all
+/// three; the platform's file-authorization pattern derives access from
+/// `StoredFile.entityKey`/`entityId` (set to this lead), not a duplicated
+/// permission on the file itself.
+model OutreachResearchEntry {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  leadId   String @map("lead_id") @db.Uuid
+
+  /// Closed set: Note | Url | Pdf | Docx | Spreadsheet | Presentation |
+  /// Image | Screenshot | Other.
+  type      String
+  title     String
+  content   String?
+  sourceUrl String? @map("source_url")
+  /// Set only when `type` references an uploaded file. No DB-level FK to
+  /// `stored_file` (cross-schema-role platform table, same reasoning as
+  /// `OutreachActivity`'s bare Party ids) — resolved by id at read time.
+  fileId    String? @map("file_id") @db.Uuid
+
+  createdByPartyId String   @map("created_by_party_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   OutreachLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, leadId, createdAt])
+  @@map("outreach_research_entry")
 }
 
 /// Flat target row — company/team/individual x daily/weekly (master-context

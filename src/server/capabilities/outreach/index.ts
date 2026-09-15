@@ -6,6 +6,7 @@ import { assertMutable, transition } from "@/server/platform/state";
 import { diffFields, recordActivity } from "@/server/platform/audit";
 import { ForbiddenError } from "@/server/platform/authorization";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
+import { reserveUpload, confirmUpload, readUrlFor } from "@/server/platform/files";
 
 /**
  * CAPABILITY: OUTREACH — `verity.capability.outreach` (Task 105, P0 scope)
@@ -44,6 +45,7 @@ export const ENTITY_WEEKLY_REPORT = "verity.outreach.weekly_report";
 export const ENTITY_TEAM_WEEKLY_ASSESSMENT = "verity.outreach.team_weekly_assessment";
 export const ENTITY_DIRECTION = "verity.outreach.direction";
 export const ENTITY_CONTACT = "verity.outreach.contact";
+export const ENTITY_RESEARCH = "verity.outreach.research_entry";
 /**
  * Nav-gating markers (2026-09-14). Founder/Senior/Junior share broad
  * Read/Create/Edit grants on `ENTITY_LEAD` etc. at Tenant scope (a
@@ -92,6 +94,21 @@ const ACTIVITY_TYPES = [
 const TRACKS = ["Agency", "Verity", "Both", "Undetermined"] as const;
 /** Closed set (spec §24): a contact's decision-influence classification. */
 const CONTACT_CLASSIFICATIONS = ["DecisionMaker", "Influencer", "Champion", "Gatekeeper", "Unknown"] as const;
+
+/** Closed set (spec §26-29): research entry types. */
+const RESEARCH_TYPES = [
+  "Note",
+  "Url",
+  "Pdf",
+  "Docx",
+  "Spreadsheet",
+  "Presentation",
+  "Image",
+  "Screenshot",
+  "Other",
+] as const;
+/** Types that never carry a file — created directly, no upload phase. */
+const FILELESS_RESEARCH_TYPES = ["Note", "Url"] as const;
 
 const REASSIGNMENT_ELIGIBLE_AFTER_MS = 14 * 24 * 60 * 60 * 1000;
 const REACTIVATION_CREDIT_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
@@ -300,6 +317,80 @@ export const listAvailableParties: QueryDefinition<Record<string, never>, Array<
 // ---------------------------------------------------------------------------
 // LEADS
 // ---------------------------------------------------------------------------
+
+function normalizeCompanyName(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function domainOf(url: string): string | null {
+  try {
+    return new URL(url.match(/^https?:\/\//) ? url : `https://${url}`).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Duplicate detection (Task 106 Phase 4, spec §45-46, §49, §96). Company-
+ * wide by design — a Junior's own team-scoped list can't tell them a
+ * different team already owns this prospect, which is the whole point.
+ * Confidentiality-preserving: a match outside the caller's access returns
+ * only a generic message (spec §8), never the other owner/team/status.
+ */
+export const checkDuplicateProspect: QueryDefinition<
+  { companyName: string; website?: string; linkedinUrl?: string },
+  { possibleDuplicate: boolean; accessible: boolean; leadId?: string; companyName?: string; message: string }
+> = {
+  key: "verity.outreach.check_duplicate_prospect",
+  entity: ENTITY_LEAD,
+  input: z.object({
+    companyName: z.string().min(1),
+    website: z.string().min(1).optional(),
+    linkedinUrl: z.string().min(1).optional(),
+  }),
+  handler: async (ctx, input) => {
+    const normalizedName = normalizeCompanyName(input.companyName);
+    const domain = input.website ? domainOf(input.website) : null;
+    const normalizedLinkedin = input.linkedinUrl?.toLowerCase().replace(/\/$/, "") ?? null;
+
+    // Company-wide scan, deliberately unfiltered by team — this is the one
+    // outreach read that must see across the whole tenant to do its job.
+    const candidates = await ctx.tx.outreachLead.findMany({
+      select: { id: true, companyName: true, website: true, linkedinUrl: true, teamId: true },
+    });
+    const match = candidates.find((c) => {
+      if (normalizeCompanyName(c.companyName) === normalizedName) return true;
+      if (domain && c.website && domainOf(c.website) === domain) return true;
+      if (normalizedLinkedin && c.linkedinUrl && c.linkedinUrl.toLowerCase().replace(/\/$/, "") === normalizedLinkedin) return true;
+      return false;
+    });
+
+    if (!match) return { possibleDuplicate: false, accessible: false, message: "No existing record found." };
+
+    let accessible = true;
+    try {
+      await assertTeamScopeAllowed(ctx.tx, ctx.actor.userId, match.teamId);
+    } catch (error) {
+      if (error instanceof ForbiddenError) accessible = false;
+      else throw error;
+    }
+
+    if (!accessible) {
+      return {
+        possibleDuplicate: true,
+        accessible: false,
+        message: "A PlotArmour record for this company may already exist. Ask your Team Leader before creating a duplicate.",
+      };
+    }
+    return {
+      possibleDuplicate: true,
+      accessible: true,
+      leadId: match.id,
+      companyName: match.companyName,
+      message: `"${match.companyName}" already exists in your accessible pipeline.`,
+    };
+  },
+};
 
 export const createOutreachLead: CommandDefinition<
   {
@@ -880,6 +971,170 @@ export const listOutreachContacts: QueryDefinition<{ leadId: string }, Array<Rec
 };
 
 // ---------------------------------------------------------------------------
+// RESEARCH (Task 106 Phase 4, spec §26-29) — a chronological timeline of
+// notes, URLs and uploaded artifacts per prospect. File entries go through
+// the platform's two-phase upload (files.ts) with `entityKey`/`entityId`
+// set to this lead, so read authorization derives from the lead rather than
+// being duplicated onto the file (files.ts's own documented pattern).
+// ---------------------------------------------------------------------------
+
+/** Shared: 404s cleanly on a missing lead instead of a raw FK violation. */
+async function requireLead(tx: TenantScopedClient, leadId: string) {
+  return tx.outreachLead.findUniqueOrThrow({ where: { id: leadId } });
+}
+
+export const createResearchNote: CommandDefinition<
+  { leadId: string; type: "Note" | "Url"; title: string; content?: string; sourceUrl?: string },
+  { id: string }
+> = {
+  key: "verity.outreach.create_research_note",
+  entity: ENTITY_RESEARCH,
+  verb: "Create",
+  input: z.object({
+    leadId: z.string().uuid(),
+    type: z.enum(FILELESS_RESEARCH_TYPES),
+    title: z.string().min(1),
+    content: z.string().min(1).optional(),
+    sourceUrl: z.string().min(1).optional(),
+  }),
+  handler: async (ctx, input) => {
+    await requireLead(ctx.tx, input.leadId);
+    if (input.type === "Url" && !input.sourceUrl) {
+      throw new ValidationError("E_VALIDATION: a Url research entry needs sourceUrl");
+    }
+    const createdBy = await actorPartyId(ctx.tx, ctx.actor.userId);
+    const entry = await ctx.tx.outreachResearchEntry.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        leadId: input.leadId,
+        type: input.type,
+        title: input.title,
+        content: input.content ?? null,
+        sourceUrl: input.sourceUrl ?? null,
+        createdByPartyId: createdBy,
+      },
+    });
+    return { result: { id: entry.id }, events: [{ name: "verity.outreach.research_added", entityId: entry.id }] };
+  },
+};
+
+/**
+ * Phase one of a file-backed research entry: reserves a `StoredFile` (Pending,
+ * unreadable) and returns an upload URL. The research entry itself is not
+ * created until `confirmResearchFileUpload` — an entry referencing bytes
+ * that never arrived would be a row claiming an artifact exists.
+ */
+export const reserveResearchFileUpload: CommandDefinition<
+  { leadId: string; fileName: string; mimeType: string; byteSize: number },
+  { fileId: string; uploadUrl?: string }
+> = {
+  key: "verity.outreach.reserve_research_file",
+  entity: ENTITY_RESEARCH,
+  verb: "Create",
+  input: z.object({
+    leadId: z.string().uuid(),
+    fileName: z.string().min(1),
+    mimeType: z.string().min(1),
+    byteSize: z.number().int().positive(),
+  }),
+  handler: async (ctx, input) => {
+    await requireLead(ctx.tx, input.leadId);
+    const uploadedBy = await actorPartyId(ctx.tx, ctx.actor.userId);
+    const reserved = await reserveUpload(ctx.tx, {
+      tenantId: ctx.actor.tenantId,
+      uploadedById: uploadedBy,
+      fileName: input.fileName,
+      mimeType: input.mimeType,
+      byteSize: input.byteSize,
+      entityKey: ENTITY_LEAD,
+      entityId: input.leadId,
+    });
+    return { result: { fileId: reserved.fileId, uploadUrl: reserved.uploadUrl }, events: [] };
+  },
+};
+
+/** Phase two: confirm the bytes arrived, then create the research entry. */
+export const confirmResearchFileUpload: CommandDefinition<
+  {
+    leadId: string;
+    fileId: string;
+    checksum: string;
+    byteSize: number;
+    type: Exclude<(typeof RESEARCH_TYPES)[number], "Note" | "Url">;
+    title: string;
+  },
+  { id: string; status: "Stored" | "Quarantined" }
+> = {
+  key: "verity.outreach.confirm_research_file",
+  entity: ENTITY_RESEARCH,
+  verb: "Create",
+  input: z.object({
+    leadId: z.string().uuid(),
+    fileId: z.string().uuid(),
+    checksum: z.string().min(1),
+    byteSize: z.number().int().positive(),
+    type: z.enum(["Pdf", "Docx", "Spreadsheet", "Presentation", "Image", "Screenshot", "Other"]),
+    title: z.string().min(1),
+  }),
+  handler: async (ctx, input) => {
+    await requireLead(ctx.tx, input.leadId);
+    const result = await confirmUpload(ctx.tx, {
+      fileId: input.fileId,
+      checksum: input.checksum,
+      byteSize: input.byteSize,
+    });
+    if (!result.ok) {
+      // Quarantined: no research entry is created for bytes that failed
+      // their own declared size — same "don't claim an artifact that
+      // isn't there" reasoning as the reserve step's own doc comment.
+      return { result: { id: input.fileId, status: "Quarantined" }, events: [] };
+    }
+    const createdBy = await actorPartyId(ctx.tx, ctx.actor.userId);
+    const entry = await ctx.tx.outreachResearchEntry.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        leadId: input.leadId,
+        type: input.type,
+        title: input.title,
+        fileId: input.fileId,
+        createdByPartyId: createdBy,
+      },
+    });
+    return {
+      result: { id: entry.id, status: "Stored" },
+      events: [{ name: "verity.outreach.research_added", entityId: entry.id }],
+    };
+  },
+};
+
+export const listResearchEntries: QueryDefinition<{ leadId: string }, Array<Record<string, unknown>>> = {
+  key: "verity.outreach.list_research",
+  entity: ENTITY_RESEARCH,
+  input: z.object({ leadId: z.string().uuid() }),
+  handler: async (ctx, input) =>
+    ctx.tx.outreachResearchEntry.findMany({ where: { leadId: input.leadId }, orderBy: { createdAt: "asc" } }),
+};
+
+/**
+ * Closes the file-authorization gap taskplan 106 recorded: authorizes
+ * against the research entry's OWNING LEAD (via `requireLead`, which fails
+ * closed under tenant RLS the same way every other lookup here does) before
+ * minting a signed URL — never against the file record alone.
+ */
+export const getResearchFileUrl: QueryDefinition<{ entryId: string }, { url: string }> = {
+  key: "verity.outreach.research_file_url",
+  entity: ENTITY_RESEARCH,
+  input: z.object({ entryId: z.string().uuid() }),
+  handler: async (ctx, input) => {
+    const entry = await ctx.tx.outreachResearchEntry.findUniqueOrThrow({ where: { id: input.entryId } });
+    if (!entry.fileId) throw new ValidationError("E_VALIDATION: this research entry has no file");
+    await requireLead(ctx.tx, entry.leadId);
+    const url = await readUrlFor(ctx.tx, entry.fileId);
+    return { url };
+  },
+};
+
+// ---------------------------------------------------------------------------
 // TARGETS
 // ---------------------------------------------------------------------------
 
@@ -1363,9 +1618,15 @@ export function registerOutreachCapability(): void {
   registerCommand(flagForEscalation);
   registerCommand(resolveEscalation);
   registerCommand(createOutreachContact);
+  registerCommand(createResearchNote);
+  registerCommand(reserveResearchFileUpload);
+  registerCommand(confirmResearchFileUpload);
 
   registerQuery(listOutreachTeams);
   registerQuery(listOutreachContacts);
+  registerQuery(listResearchEntries);
+  registerQuery(getResearchFileUrl);
+  registerQuery(checkDuplicateProspect);
   registerQuery(listOutreachLeads);
   registerQuery(listOverdueFollowUps);
   registerQuery(getFunnelCounts);
