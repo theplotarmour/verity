@@ -172,6 +172,18 @@ export type RuntimeConfig = z.infer<typeof configSchema>;
  * A blank variable means "not configured". Normalising it here, once, is the
  * only place that belief has to be encoded.
  */
+/** The value when it parses as an http(s) URL — a bare host gets `https://` — else undefined. */
+function httpUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const candidate = /^https?:\/\//i.test(value) ? value : `https://${value.replace(/^\/+/, "")}`;
+  try {
+    const parsed = new URL(candidate);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.origin : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function env(name: string): string | undefined {
   const value = process.env[name];
   if (value === undefined) return undefined;
@@ -227,7 +239,12 @@ function loadConfig(): RuntimeConfig {
             forcePathStyle: env("VERITY_S3_FORCE_PATH_STYLE"),
           }
         : undefined,
-      supabaseUrl: env("SUPABASE_URL") ?? env("NEXT_PUBLIC_SUPABASE_URL"),
+      // Only a usable URL counts. Found 2026-09-15: the deployment's
+      // SUPABASE_URL held a value the SDK rejected ("Invalid supabaseUrl"),
+      // and because it was non-empty it shadowed the public one that sign-in
+      // was already using — so every admin call (creating a login, signed
+      // file URLs) failed while everything else worked.
+      supabaseUrl: httpUrl(env("SUPABASE_URL")) ?? httpUrl(env("NEXT_PUBLIC_SUPABASE_URL")),
       serviceRoleKey: env("SUPABASE_SERVICE_ROLE_KEY"),
       bucket: env("SUPABASE_MEDIA_BUCKET"),
     },
