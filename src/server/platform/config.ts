@@ -244,7 +244,13 @@ function loadConfig(): RuntimeConfig {
       // and because it was non-empty it shadowed the public one that sign-in
       // was already using — so every admin call (creating a login, signed
       // file URLs) failed while everything else worked.
-      supabaseUrl: httpUrl(env("SUPABASE_URL")) ?? httpUrl(env("NEXT_PUBLIC_SUPABASE_URL")),
+      // The API host is the same one the browser signs in against, so the
+      // public URL — proven by every sign-in — is the authority; SUPABASE_URL
+      // is only a stand-in when no public one exists (an OIDC deployment that
+      // still uses Supabase Storage). Second finding the same day: with the
+      // scheme fixed, the deployment's SUPABASE_URL then failed with "fetch
+      // failed" — a URL to a host that is not the API.
+      supabaseUrl: httpUrl(env("NEXT_PUBLIC_SUPABASE_URL")) ?? httpUrl(env("SUPABASE_URL")),
       serviceRoleKey: env("SUPABASE_SERVICE_ROLE_KEY"),
       bucket: env("SUPABASE_MEDIA_BUCKET"),
     },
