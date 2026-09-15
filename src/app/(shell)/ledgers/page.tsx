@@ -50,13 +50,17 @@ async function LedgersPage({
   // whose name you were looking for, which is the opposite of what it is for.
   const balances = await executeQuery(actor, partyBalances, {});
 
-  // Exactly one party, as the query requires. A ledger of everybody at once is
-  // not a ledger, it is a journal, and nobody asked for one.
-  const selected = customer
-    ? { customerId: customer }
-    : supplier
-      ? { supplierId: supplier }
-      : null;
+  // One business at a time. A firm we both buy from and sell to is ONE
+  // business, so choosing either side opens the ledger for both (2026-09-15:
+  // "one dropdown containing both customers and suppliers").
+  const linkedSupplier = customer ? suppliers.find((row) => row.linkedCustomerId === customer) : undefined;
+  const chosenSupplier = supplier ? suppliers.find((row) => row.id === supplier) : undefined;
+  const selected =
+    customer
+      ? { customerId: customer, ...(linkedSupplier ? { supplierId: linkedSupplier.id } : {}) }
+      : supplier
+        ? { supplierId: supplier, ...(chosenSupplier?.linkedCustomerId ? { customerId: chosenSupplier.linkedCustomerId } : {}) }
+        : null;
 
   const ledger = selected
     ? await executeQuery(actor, partyLedger, selected)
@@ -65,8 +69,22 @@ async function LedgersPage({
   const selectedName = customer
     ? (customers.find((row) => row.id === customer)?.displayName ?? "Unknown customer")
     : supplier
-      ? (suppliers.find((row) => row.id === supplier)?.displayName ?? "Unknown supplier")
+      ? (chosenSupplier?.displayName ?? "Unknown supplier")
       : null;
+
+  // The single picker: every customer, plus every supplier that is not the
+  // same business as a customer already listed.
+  const linkedCustomerIds = new Set(suppliers.map((row) => row.linkedCustomerId).filter(Boolean));
+  const parties = [
+    ...customers.map((row) => ({
+      value: `customer:${row.id}`,
+      label: row.displayName,
+      note: linkedCustomerIds.has(row.id) ? "Customer & supplier" : "Customer",
+    })),
+    ...suppliers
+      .filter((row) => !row.linkedCustomerId)
+      .map((row) => ({ value: `supplier:${row.id}`, label: row.displayName, note: "Supplier" })),
+  ].sort((a, b) => a.label.localeCompare(b.label));
 
   return (
     <>
@@ -75,10 +93,10 @@ async function LedgersPage({
         description="Everyone the business trades with, and which way the money is owed. Open a name to see every movement against them, oldest first. Nothing is cached — a balance is the sum of its entries, so nothing can disagree with it."
       />
       <LedgerView
-        customers={customers.map((row) => ({ id: row.id, name: row.displayName }))}
-        suppliers={suppliers.map((row) => ({ id: row.id, name: row.displayName }))}
-        selectedCustomerId={customer ?? null}
-        selectedSupplierId={supplier ?? null}
+        parties={parties}
+        selectedValue={customer ? `customer:${customer}` : supplier ? `supplier:${supplier}` : null}
+        bothSides={Boolean(selected && "customerId" in selected && "supplierId" in selected)}
+        isSupplier={Boolean(supplier) && !chosenSupplier?.linkedCustomerId}
         selectedName={selectedName}
         ledger={ledger}
         balances={balances}

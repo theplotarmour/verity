@@ -201,6 +201,64 @@ export async function signInWithPassword(formData: FormData): Promise<ActionFail
 }
 
 /**
+ * "Forgot password?" — the link on the sign-in form pointed at a page that
+ * did not exist (2026-09-15). Supabase sends the email; Verity only asks.
+ *
+ * The reply is the SAME whether or not the address has an account: saying
+ * "no account for that email" is the enumeration oracle the sign-in message
+ * already refuses to be. Throttled on the same per-address key as sign-in.
+ */
+export async function requestPasswordReset(formData: FormData): Promise<ActionFailure | { ok: true }> {
+  const email = String(formData.get("email") ?? "").trim();
+  if (!email) return { ok: false, code: "E_VALIDATION", message: "Enter the email you sign in with.", retryable: true };
+
+  const throttle = await sharedRateLimit(signInKey(email), "signin");
+  if (!throttle.allowed) {
+    return {
+      ok: false,
+      code: "E_VALIDATION",
+      message: `Too many attempts. Try again in ${throttle.retryAfterSeconds} seconds.`,
+      retryable: true,
+    };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const site = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${site}/reset-password/update`,
+  });
+  if (error) {
+    // Logged without the address; the person still sees the uniform reply.
+    log("warn", "Password reset request failed", { reason: error.code ?? "provider" });
+  }
+  return { ok: true };
+}
+
+/**
+ * The second half: the person arrived from the email link, which
+ * `/reset-password/update` has already exchanged for a session, and now
+ * types the new password. Only that session can call this.
+ */
+export async function updatePassword(formData: FormData): Promise<ActionFailure | never> {
+  const password = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+  if (password.length < 8) return { ok: false, code: "E_VALIDATION", message: "Use at least 8 characters.", retryable: true };
+  if (password !== confirm) return { ok: false, code: "E_VALIDATION", message: "The two passwords do not match.", retryable: true };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) {
+    return {
+      ok: false,
+      code: "E_VALIDATION",
+      message: "That reset link is no longer valid. Ask for a new one.",
+      retryable: false,
+    };
+  }
+  redirect("/");
+}
+
+/**
  * Records a successful authentication against the security stream (EXE-AUD-002).
  *
  * Best-effort by design: the sign-in has already succeeded, and failing to write

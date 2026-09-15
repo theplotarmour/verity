@@ -118,7 +118,16 @@ export async function createTeamLogin(input: {
       throw error;
     }
   } catch (error) {
-    return toActionFailure(error);
+    const failure = toActionFailure(error);
+    // An owner creating a login is the one person who can act on the real
+    // reason (a duplicate email, a role they may not grant, a database
+    // refusal) — "Something went wrong" sent them to support with nothing
+    // to say (2026-09-15). Platform errors keep their own codes above; only
+    // the catch-all gets the underlying message appended.
+    if (failure.code === "E_UNKNOWN" && error instanceof Error && error.message) {
+      return { ...failure, issues: [error.message.slice(0, 300)] };
+    }
+    return failure;
   }
 }
 

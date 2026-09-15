@@ -2149,17 +2149,40 @@ export const partyBalances: QueryDefinition<
   },
 };
 
+/**
+ * One business's ledger, both sides of the trade together when they are
+ * linked, and every obligation — not only the ones with a document yet.
+ *
+ * Requested 2026-09-15: "the ledger should contain all transactions that
+ * are already made, or if we or they owe something." Two changes:
+ *
+ * 1. A linked customer+supplier is ONE ledger. Pass both ids and the
+ *    entries interleave by date under one running balance.
+ * 2. Money owed with no invoice yet — an order taken on credit, goods
+ *    received and not yet billed — appears as a PENDING line, flagged, so
+ *    the balance at the foot agrees with "Who owes what". It used to show
+ *    only `trading_ledger_entry` rows, and a customer with ₹50,000 ordered
+ *    on credit read as owing nothing here while owing ₹50,000 there.
+ *
+ * SIGN: positive means they owe us, on both sides. A customer's invoice is
+ * a debit (+), their payment a credit (−); a supplier's bill is a credit
+ * (−), our payment to them a debit (+). Same rule the ledger rows already
+ * carry, so the two sides sum without translation.
+ */
 export const partyLedger: QueryDefinition<
   { customerId?: string; supplierId?: string },
   {
     balancePaise: number;
     entries: Array<{
       id: string;
+      side: "customer" | "supplier";
       entryType: string;
       amountPaise: number;
       narration: string | null;
       occurredAt: Date;
       runningBalancePaise: number;
+      /** Owed with no document yet — an order on credit, goods received unbilled. */
+      pending: boolean;
     }>;
   }
 > = {
@@ -2170,35 +2193,103 @@ export const partyLedger: QueryDefinition<
     supplierId: z.string().uuid().optional(),
   }),
   handler: async (ctx, input) => {
-    if (Boolean(input.customerId) === Boolean(input.supplierId)) {
-      throw new ValidationError("E_VALIDATION: name exactly one party");
+    if (!input.customerId && !input.supplierId) {
+      throw new ValidationError("E_VALIDATION: name at least one party");
     }
 
+    type Row = {
+      id: string;
+      side: "customer" | "supplier";
+      entryType: string;
+      amountPaise: number;
+      narration: string | null;
+      occurredAt: Date;
+      pending: boolean;
+    };
+    const rows: Row[] = [];
+
     const entries = await ctx.tx.tradingLedgerEntry.findMany({
-      where: input.customerId
-        ? { customerId: input.customerId }
-        : { supplierId: input.supplierId },
+      where: {
+        OR: [
+          ...(input.customerId ? [{ customerId: input.customerId }] : []),
+          ...(input.supplierId ? [{ supplierId: input.supplierId }] : []),
+        ],
+      },
       orderBy: { occurredAt: "asc" },
     });
+    for (const entry of entries) {
+      rows.push({
+        id: entry.id,
+        side: entry.customerId ? "customer" : "supplier",
+        entryType: entry.entryType,
+        amountPaise: entry.amountPaise,
+        narration: entry.narration,
+        occurredAt: entry.occurredAt,
+        pending: false,
+      });
+    }
+
+    if (input.customerId) {
+      // The same rule `partyBalances` applies: credit orders with no invoice.
+      const committed = await ctx.tx.tradingSalesOrder.findMany({
+        where: {
+          customerId: input.customerId,
+          state: { notIn: ["draft", "cancelled"] },
+          paymentTerms: "credit",
+          tradingInvoices: { none: {} },
+        },
+        select: { id: true, reference: true, totalPricePaise: true, createdAt: true },
+      });
+      for (const order of committed) {
+        if (order.totalPricePaise <= 0) continue;
+        rows.push({
+          id: `pending-so-${order.id}`,
+          side: "customer",
+          entryType: "debit",
+          amountPaise: order.totalPricePaise,
+          narration: `Order ${order.reference ?? order.id.slice(0, 8)} taken on credit — not yet billed`,
+          occurredAt: order.createdAt,
+          pending: true,
+        });
+      }
+    }
+
+    if (input.supplierId) {
+      const openOrders = await ctx.tx.tradingPurchaseOrder.findMany({
+        where: {
+          supplierId: input.supplierId,
+          state: { notIn: ["draft", "cancelled"] },
+          tradingInvoices: { none: {} },
+        },
+        select: { id: true, reference: true, createdAt: true, lines: { select: { qtyReceived: true, unitCostPaise: true } } },
+      });
+      for (const order of openOrders) {
+        const value = order.lines.reduce((sum, line) => sum + line.qtyReceived * line.unitCostPaise, 0);
+        if (value <= 0) continue;
+        rows.push({
+          id: `pending-po-${order.id}`,
+          side: "supplier",
+          entryType: "credit",
+          amountPaise: value,
+          narration: `Goods received on order ${order.reference ?? order.id.slice(0, 8)} — not yet billed`,
+          occurredAt: order.createdAt,
+          pending: true,
+        });
+      }
+    }
+
+    rows.sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
 
     // The running balance is computed for DISPLAY and never stored (P3). A
     // stored one would be a second source of truth that can disagree with the
     // entries it summarises.
     let running = 0;
-    const rows = entries.map((entry) => {
-      running +=
-        entry.entryType === "debit" ? entry.amountPaise : -entry.amountPaise;
-      return {
-        id: entry.id,
-        entryType: entry.entryType,
-        amountPaise: entry.amountPaise,
-        narration: entry.narration,
-        occurredAt: entry.occurredAt,
-        runningBalancePaise: running,
-      };
+    const out = rows.map((entry) => {
+      running += entry.entryType === "debit" ? entry.amountPaise : -entry.amountPaise;
+      return { ...entry, runningBalancePaise: running };
     });
 
-    return { balancePaise: running, entries: rows };
+    return { balancePaise: running, entries: out };
   },
 };
 

@@ -22,11 +22,14 @@ import type { ActionFailure } from "@/server/platform/action-error";
 
 type Entry = {
   id: string;
+  side: "customer" | "supplier";
   entryType: string;
   amountPaise: number;
   narration: string | null;
   occurredAt: Date | string;
   runningBalancePaise: number;
+  /** Owed with no document yet — flagged, counted. */
+  pending: boolean;
 };
 
 /**
@@ -37,9 +40,9 @@ type Entry = {
  * purchase invoice is a credit, so the balance goes negative precisely when the
  * business owes the most — the least intuitive possible reading.
  */
-function balanceDirection(balancePaise: number, isSupplier: boolean): string {
-  if (isSupplier) return balancePaise < 0 ? "we owe" : "in our favour";
-  return balancePaise > 0 ? "they owe" : "in their favour";
+function balanceDirection(balancePaise: number): string {
+  // One sign convention on every ledger: positive means they owe us.
+  return balancePaise > 0 ? "they owe us" : "we owe them";
 }
 
 /** Whole days since an instant. Module scope: `Date.now()` is impure, and a
@@ -110,25 +113,27 @@ function net(row: Balance): number {
 }
 
 export function LedgerView({
-  customers,
-  suppliers,
-  selectedCustomerId,
-  selectedSupplierId,
+  parties,
+  selectedValue,
+  bothSides,
+  isSupplier,
   selectedName,
   ledger,
   balances,
 }: {
-  customers: Array<{ id: string; name: string }>;
-  suppliers: Array<{ id: string; name: string }>;
-  selectedCustomerId: string | null;
-  selectedSupplierId: string | null;
+  /** One list: customers, suppliers, and a linked pair once. `customer:<id>` / `supplier:<id>`. */
+  parties: Array<{ value: string; label: string; note: string }>;
+  selectedValue: string | null;
+  /** A linked customer+supplier: both sides interleaved under one balance. */
+  bothSides: boolean;
+  /** A supplier-only business (never linked): headings read from their side. */
+  isSupplier: boolean;
   selectedName: string | null;
   ledger: { balancePaise: number; entries: Entry[] } | null;
   balances: Balance[];
 }) {
   const router = useRouter();
-  const isSupplier = Boolean(selectedSupplierId);
-  const selectedAny = Boolean(selectedCustomerId || selectedSupplierId);
+  const selectedAny = Boolean(selectedValue);
 
   // The overview is the default view. Reported: choosing a party first meant
   // the page said nothing at all until you already knew whose name you wanted,
@@ -140,44 +145,24 @@ export function LedgerView({
   return (
     <>
       <div className="mb-6">
-        <Panel title="Choose a party">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="min-w-[240px] flex-1">
-              <Field label="Customer" htmlFor="ledger-customer">
-                <Combobox
-                  id="ledger-customer"
-                  value={selectedCustomerId ?? ""}
-                  placeholder="Search customers"
-                  onChange={(value) =>
-                    router.push(value ? `/ledgers?customer=${value}` : "/ledgers")
-                  }
-                  options={customers.map((customer) => ({
-                    value: customer.id,
-                    label: customer.name,
-                  }))}
-                />
-              </Field>
-            </div>
-            <div className="min-w-[240px] flex-1">
-              <Field label="Supplier" htmlFor="ledger-supplier">
-                <Combobox
-                  id="ledger-supplier"
-                  value={selectedSupplierId ?? ""}
-                  placeholder="Search suppliers"
-                  onChange={(value) =>
-                    router.push(value ? `/ledgers?supplier=${value}` : "/ledgers")
-                  }
-                  options={suppliers.map((supplier) => ({
-                    value: supplier.id,
-                    label: supplier.name,
-                  }))}
-                />
-              </Field>
-            </div>
+        <Panel title="Choose a business">
+          <div className="max-w-[480px]">
+            <Field label="Customer or supplier" htmlFor="ledger-party">
+              <Combobox
+                id="ledger-party"
+                value={selectedValue ?? ""}
+                placeholder="Search customers and suppliers"
+                onChange={(value) => {
+                  const [kind, id] = value.split(":");
+                  router.push(id ? `/ledgers?${kind}=${id}` : "/ledgers");
+                }}
+                options={parties}
+              />
+            </Field>
           </div>
           <p className="mb-0 mt-3 text-[12px] text-text-tertiary">
-            One party at a time. A ledger of everybody at once is a journal, and
-            answers a different question.
+            One business at a time. A firm we both buy from and sell to is listed once and
+            opens as one ledger, both sides together.
           </p>
         </Panel>
       </div>
@@ -195,21 +180,21 @@ export function LedgerView({
           <div className="mb-6">
             <StatRow cols={3}>
               <Stat
-                label={isSupplier ? "We owe" : "They owe"}
+                label={ledger.balancePaise >= 0 ? "They need to send us" : "We need to send them"}
                 value={rupees(Math.abs(ledger.balancePaise))}
                 hint={
                   ledger.balancePaise === 0
                     ? "Settled"
-                    : ledger.balancePaise > 0
-                      ? "Outstanding against us"
-                      : "In credit"
+                    : ledger.entries.some((e) => e.pending)
+                      ? "Includes what is owed but not yet billed"
+                      : "From every entry below"
                 }
               />
               <Stat label="Entries" value={String(ledger.entries.length)} />
               <Stat
-                label="Party"
+                label="Business"
                 value={selectedName ?? "—"}
-                hint={isSupplier ? "Supplier" : "Customer"}
+                hint={bothSides ? "Customer & supplier" : isSupplier ? "Supplier" : "Customer"}
               />
             </StatRow>
           </div>
@@ -231,8 +216,8 @@ export function LedgerView({
                     {[
                       "Date",
                       "Particulars",
-                      isSupplier ? "We paid" : "They owe",
-                      isSupplier ? "We owe" : "They paid",
+                      bothSides ? "Owed to us · paid by us" : isSupplier ? "We paid" : "They owe",
+                      bothSides ? "Owed to them · paid by them" : isSupplier ? "We owe" : "They paid",
                       "Balance",
                     ].map((heading, index) => (
                       <th
@@ -255,6 +240,13 @@ export function LedgerView({
                       </td>
                       <td className="border-b border-line px-3 py-2 text-[14px] text-text">
                         {entry.narration ?? "—"}
+                        {(entry.pending || bothSides) && (
+                          <span className="ml-2 text-[11px] uppercase tracking-wide text-text-tertiary">
+                            {bothSides ? (entry.side === "customer" ? "sale" : "purchase") : ""}
+                            {bothSides && entry.pending ? " · " : ""}
+                            {entry.pending ? "not yet billed" : ""}
+                          </span>
+                        )}
                       </td>
                       <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
                         {entry.entryType === "debit"
@@ -280,10 +272,7 @@ export function LedgerView({
                           <>
                             {rupees(Math.abs(entry.runningBalancePaise))}{" "}
                             <span className="text-[12px] text-text-tertiary">
-                              {balanceDirection(
-                                entry.runningBalancePaise,
-                                isSupplier,
-                              )}
+                              {balanceDirection(entry.runningBalancePaise)}
                             </span>
                           </>
                         )}
@@ -383,8 +372,11 @@ export function netAcrossBusinesses(balances: Balance[]): NettedLine[] {
 
 function OwedOverview({ balances }: { balances: Balance[] }) {
   const lines = netAcrossBusinesses(balances);
+  // A business whose two sides cancel exactly (reported 2026-09-15: "We need
+  // to send X ₹0.00") is settled, and a settled business is not a row on a
+  // who-owes-what list.
   const owedToUs = lines.filter((row) => row.netPaise > 0);
-  const weOwe = lines.filter((row) => row.netPaise <= 0);
+  const weOwe = lines.filter((row) => row.netPaise < 0);
 
   const router = useRouter();
   const [settling, setSettling] = useState<Settling | null>(null);

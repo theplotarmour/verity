@@ -5,6 +5,7 @@ import { executeQuery } from "@/server/platform/query";
 import { ForbiddenError } from "@/server/platform/authorization";
 import { listRoles } from "@/server/platform/administration";
 import { BUSINESS_ACTIVITIES, activitiesOf } from "@/server/capabilities/plywood";
+import Link from "next/link";
 import { PageHeader, PermissionDenied } from "@/components/ui/primitives";
 import { RolesDesk } from "./RolesDesk";
 
@@ -66,6 +67,16 @@ async function RolesPage() {
       <PageHeader
         title="Roles"
         description="What each role may do, written as business activities. Ticking one grants everything it needs — taking a sales order also needs to read the catalogue, the customer and the stock, and half a permission is an error message nobody can act on."
+        actions={
+          // Reached from People, and not in the sidebar — so the way back has
+          // to be on the page (2026-09-15).
+          <Link
+            href="/people"
+            className="rounded-md border border-line px-3 py-1 text-[13px] text-text no-underline transition-colors hover:bg-glass-2"
+          >
+            ← Back to People
+          </Link>
+        }
       />
       <RolesDesk roles={rows} activities={activities} />
     </>
