@@ -57,6 +57,8 @@ import {
   ENTITY_JUNIOR_WORKSPACE,
   ENTITY_CONTACT,
   ENTITY_RESEARCH,
+  ENTITY_TASK,
+  ENTITY_MEETING,
 } from "../src/server/capabilities/outreach";
 
 const TENANT_NAME = "PlotArmour Studio";
@@ -185,6 +187,8 @@ async function main() {
         ENTITY_TEAM_WEEKLY_ASSESSMENT,
         ENTITY_CONTACT,
         ENTITY_RESEARCH,
+        ENTITY_TASK,
+        ENTITY_MEETING,
       ];
       // Founders' Office: full company-wide visibility (master-context §7-10).
       await tx.permission.createMany({
@@ -226,7 +230,7 @@ async function main() {
       // escalation are both ordinary Junior responsibilities (spec §17-19).
       await tx.permission.createMany({
         data: [
-          ...[ENTITY_LEAD, ENTITY_ACTIVITY, ENTITY_CHECK_IN, ENTITY_WEEKLY_REPORT, ENTITY_CONTACT, ENTITY_RESEARCH].flatMap((entity) =>
+          ...[ENTITY_LEAD, ENTITY_ACTIVITY, ENTITY_CHECK_IN, ENTITY_WEEKLY_REPORT, ENTITY_CONTACT, ENTITY_RESEARCH, ENTITY_TASK, ENTITY_MEETING].flatMap((entity) =>
             (["Read", "Create", "ActionExecute"] as const).map((verb) => ({
               tenantId,
               roleId: juniorRole.id,

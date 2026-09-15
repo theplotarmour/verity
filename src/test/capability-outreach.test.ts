@@ -15,8 +15,10 @@ import {
   ENTITY_CHECK_IN,
   ENTITY_CONTACT,
   ENTITY_LEAD,
+  ENTITY_MEETING,
   ENTITY_RESEARCH,
   ENTITY_TARGET,
+  ENTITY_TASK,
   ENTITY_TEAM,
   ENTITY_TEAM_MEMBERSHIP,
   ENTITY_TEAM_WEEKLY_ASSESSMENT,
@@ -28,12 +30,18 @@ import {
   confirmResearchFileUpload,
   createOutreachContact,
   createOutreachLead,
+  createOutreachMeeting,
+  createOutreachTask,
   createOutreachTeam,
   createResearchNote,
   deriveLeadHealth,
   listOutreachContacts,
+  listOutreachMeetings,
+  listOutreachTasks,
   listResearchEntries,
+  listTeamCheckIns,
   reserveResearchFileUpload,
+  reviewCheckIn,
   flagForEscalation,
   getDailyMetrics,
   getFunnelCounts,
@@ -41,6 +49,7 @@ import {
   getTeamWeeklyRollup,
   listAvailableParties,
   listEscalatedLeads,
+  listFollowUpQueue,
   listOutreachLeads,
   listOutreachTargets,
   listOverdueFollowUps,
@@ -53,9 +62,11 @@ import {
   renameTeam,
   resolveEscalation,
   setOutreachTarget,
+  setTaskStatus,
   submitDailyCheckIn,
   submitTeamWeeklyAssessment,
   submitWeeklyReport,
+  updateMeetingOutcome,
 } from "@/server/capabilities/outreach";
 
 /**
@@ -112,6 +123,8 @@ describeDb("capability: Outreach", () => {
       ENTITY_TEAM_WEEKLY_ASSESSMENT,
       ENTITY_CONTACT,
       ENTITY_RESEARCH,
+      ENTITY_TASK,
+      ENTITY_MEETING,
     ];
 
     await withTenant(tenantId, async (tx) => {
@@ -473,6 +486,152 @@ describeDb("capability: Outreach", () => {
       expect(result.accessible).toBe(false);
       expect(result.leadId).toBeUndefined();
       expect(result.message).not.toContain("Domain Match Co");
+    });
+  });
+
+  describe("tasks (Task 106 Phase 5)", () => {
+    it("infers SelfCreated origin when assigning to yourself", async () => {
+      const task = await executeCommand(founder, createOutreachTask, {
+        teamId: teamAId,
+        title: "Follow up with legal",
+        assignedToPartyId: founderPartyId,
+      });
+      const stored = await withTenant(tenantId, (tx) => tx.outreachTask.findUniqueOrThrow({ where: { id: task.id } }));
+      expect(stored.origin).toBe("SelfCreated");
+      expect(stored.status).toBe("Todo");
+      expect(stored.priority).toBe("Medium");
+    });
+
+    it("infers TeamLeaderAssigned origin when assigning to someone else", async () => {
+      const task = await executeCommand(founder, createOutreachTask, {
+        teamId: teamAId,
+        title: "Research ABC Manufacturing",
+        assignedToPartyId: seniorAPartyId,
+        priority: "High",
+      });
+      const stored = await withTenant(tenantId, (tx) => tx.outreachTask.findUniqueOrThrow({ where: { id: task.id } }));
+      expect(stored.origin).toBe("TeamLeaderAssigned");
+      expect(stored.priority).toBe("High");
+    });
+
+    it("marks a task Done and stamps completedAt", async () => {
+      const task = await executeCommand(founder, createOutreachTask, {
+        teamId: teamAId,
+        title: "Send pitch deck",
+        assignedToPartyId: founderPartyId,
+      });
+      const result = await executeCommand(founder, setTaskStatus, { taskId: task.id, status: "Done" });
+      expect(result.status).toBe("Done");
+      const stored = await withTenant(tenantId, (tx) => tx.outreachTask.findUniqueOrThrow({ where: { id: task.id } }));
+      expect(stored.completedAt).not.toBeNull();
+    });
+
+    it("lists tasks filtered by assignee", async () => {
+      const tasks = await executeQuery(founder, listOutreachTasks, { assignedToPartyId: founderPartyId });
+      expect(tasks.length).toBeGreaterThan(0);
+      expect(tasks.every((t) => t.assignedToPartyId === founderPartyId)).toBe(true);
+    });
+  });
+
+  describe("meetings (Task 106 Phase 5)", () => {
+    it("creates a meeting and records its outcome", async () => {
+      const lead = await executeCommand(founder, createOutreachLead, {
+        teamId: teamAId,
+        companyName: "Meeting Test Co",
+        whyRelevant: "Test.",
+        opportunityOwnerId: seniorAPartyId,
+      });
+      const meeting = await executeCommand(founder, createOutreachMeeting, {
+        leadId: lead.id,
+        scheduledAt: new Date(Date.now() + DAY_MS).toISOString(),
+        purpose: "Discovery call",
+      });
+      const listed = await executeQuery(founder, listOutreachMeetings, { leadId: lead.id });
+      expect(listed).toHaveLength(1);
+      expect(listed[0]).toMatchObject({ id: meeting.id, status: "Scheduled" });
+
+      const outcome = await executeCommand(founder, updateMeetingOutcome, {
+        meetingId: meeting.id,
+        status: "Completed",
+        outcomeNotes: "Positive, wants a proposal.",
+      });
+      expect(outcome.status).toBe("Completed");
+    });
+  });
+
+  describe("daily check-in review (Task 106 Phase 5, spec §64-71)", () => {
+    it("submits with the two new questions and reviews without touching the Junior's own text", async () => {
+      const uniqueDay = new Date(Date.now() + 60 * DAY_MS).toISOString();
+      const checkIn = await executeCommand(seniorA, submitDailyCheckIn, {
+        checkInDate: uniqueDay,
+        summary: "Worked 5 leads.",
+        mostImportantDevelopment: "XYZ Corp replied positively.",
+        needsAttention: "Need help closing ABC Manufacturing.",
+      });
+
+      const reviewed = await executeCommand(founder, reviewCheckIn, {
+        checkInId: checkIn.id,
+        reviewStatus: "NeedsClarification",
+        leaderFeedback: "Which contact at XYZ replied?",
+      });
+      expect(reviewed.reviewStatus).toBe("NeedsClarification");
+
+      // The review is a separate append-only row — the check-in itself
+      // (the Junior's own text) is never touched, at the database level.
+      const stored = await withTenant(tenantId, (tx) => tx.outreachCheckIn.findUniqueOrThrow({ where: { id: checkIn.id } }));
+      expect(stored.summary).toBe("Worked 5 leads.");
+      expect(stored.mostImportantDevelopment).toBe("XYZ Corp replied positively.");
+
+      const reviewRow = await withTenant(tenantId, (tx) => tx.outreachCheckInReview.findUniqueOrThrow({ where: { id: reviewed.id } }));
+      expect(reviewRow).toMatchObject({
+        checkInId: checkIn.id,
+        reviewStatus: "NeedsClarification",
+        leaderFeedback: "Which contact at XYZ replied?",
+      });
+    });
+
+    it("lists a team's check-ins for a given day, including the leader's own", async () => {
+      const day = new Date(Date.now() + 61 * DAY_MS).toISOString();
+      await executeCommand(seniorA, submitDailyCheckIn, { checkInDate: day, summary: "Team A day." });
+      const results = await executeQuery(founder, listTeamCheckIns, { teamId: teamAId, date: day });
+      const row = results.find((c) => c.summary === "Team A day.");
+      expect(row).toBeDefined();
+      expect(row!.currentReview).toBeNull();
+    });
+  });
+
+  describe("follow-up queue bucketing (Task 106 Phase 5, spec §61)", () => {
+    it("buckets active leads by next-action date", async () => {
+      const overdueLead = await executeCommand(founder, createOutreachLead, {
+        teamId: teamAId,
+        companyName: "Overdue Bucket Co",
+        whyRelevant: "Test.",
+        opportunityOwnerId: seniorAPartyId,
+      });
+      await executeCommand(founder, logOutreachActivity, {
+        leadId: overdueLead.id,
+        channel: "Email",
+        activityType: "FollowUp",
+        nextActionAt: new Date(Date.now() - DAY_MS).toISOString(),
+      });
+
+      const upcomingLead = await executeCommand(founder, createOutreachLead, {
+        teamId: teamAId,
+        companyName: "Upcoming Bucket Co",
+        whyRelevant: "Test.",
+        opportunityOwnerId: seniorAPartyId,
+      });
+      await executeCommand(founder, logOutreachActivity, {
+        leadId: upcomingLead.id,
+        channel: "Email",
+        activityType: "FollowUp",
+        nextActionAt: new Date(Date.now() + 10 * DAY_MS).toISOString(),
+      });
+
+      const queue = await executeQuery(founder, listFollowUpQueue, { teamId: teamAId });
+      expect(queue.overdue.some((l) => l.id === overdueLead.id)).toBe(true);
+      expect(queue.upcoming.some((l) => l.id === upcomingLead.id)).toBe(true);
+      expect(queue.overdue.some((l) => l.id === upcomingLead.id)).toBe(false);
     });
   });
 

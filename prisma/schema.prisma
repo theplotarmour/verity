@@ -184,6 +184,9 @@ model Tenant {
   outreachActivities            OutreachActivity[]
   outreachContacts               OutreachContact[]
   outreachResearchEntries        OutreachResearchEntry[]
+  outreachTasks                  OutreachTask[]
+  outreachMeetings               OutreachMeeting[]
+  outreachCheckInReviews         OutreachCheckInReview[]
   outreachTargets               OutreachTarget[]
   outreachCheckIns              OutreachCheckIn[]
   outreachWeeklyReports         OutreachWeeklyReport[]
@@ -4446,6 +4449,8 @@ model OutreachLead {
   activities OutreachActivity[]
   contacts   OutreachContact[]
   research   OutreachResearchEntry[]
+  tasks      OutreachTask[]
+  meetings   OutreachMeeting[]
 
   @@index([tenantId, teamId, state])
   @@index([tenantId, opportunityOwnerId])
@@ -4542,6 +4547,72 @@ model OutreachResearchEntry {
   @@map("outreach_research_entry")
 }
 
+/// A work item (Task 106 Phase 5, spec §53-55). Capability-private — not a
+/// platform primitive (none exists: grepped the schema, no `model.*Task`
+/// before this). May stand alone or reference a prospect.
+model OutreachTask {
+  id       String  @id @default(uuid()) @db.Uuid
+  tenantId String  @map("tenant_id") @db.Uuid
+  teamId   String  @map("team_id") @db.Uuid
+  leadId   String? @map("lead_id") @db.Uuid
+
+  title       String
+  description String?
+  /// Closed set: Low | Medium | High | Urgent.
+  priority String    @default("Medium")
+  dueAt    DateTime? @map("due_at")
+
+  /// Closed set: Todo | InProgress | Blocked | Done | Cancelled.
+  status String @default("Todo")
+  /// Closed set: TeamLeaderAssigned | SelfCreated | SystemGenerated (spec
+  /// §54) — lets management see initiative separately from assigned load.
+  origin String
+
+  assignedToPartyId String  @map("assigned_to_party_id") @db.Uuid
+  assignedByPartyId String  @map("assigned_by_party_id") @db.Uuid
+
+  completedAt DateTime? @map("completed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   OutreachLead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, teamId, status])
+  @@index([tenantId, assignedToPartyId, status])
+  @@map("outreach_task")
+}
+
+/// A scheduled or completed meeting against a prospect (spec §62).
+model OutreachMeeting {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  leadId   String @map("lead_id") @db.Uuid
+
+  organizerPartyId String   @map("organizer_party_id") @db.Uuid
+  scheduledAt      DateTime @map("scheduled_at")
+  purpose          String?
+  locationOrUrl    String?  @map("location_or_url")
+  prepNotes        String?  @map("prep_notes")
+  outcomeNotes     String?  @map("outcome_notes")
+
+  /// Closed set: Scheduled | Completed | Cancelled | NoShow.
+  status String @default("Scheduled")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(1)
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   OutreachLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, leadId, scheduledAt])
+  @@index([tenantId, organizerPartyId, scheduledAt])
+  @@map("outreach_meeting")
+}
+
 /// Flat target row — company/team/individual x daily/weekly (master-context
 /// spec §11-12). Progress is always computed live from `OutreachActivity`/
 /// `OutreachLead` counts, never hand-typed (Task 93's `onboardingChecklist`
@@ -4600,10 +4671,42 @@ model OutreachCheckIn {
   tomorrowPlan  String?  @map("tomorrow_plan")
   submittedAt   DateTime @default(now()) @map("submitted_at")
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Task 106 Phase 5 (spec §64-71): the two questions the original 5-field
+  /// shape didn't ask. `mostImportantDevelopment` is distinct from
+  /// `summary` (what happened, in full, vs. the one thing that mattered);
+  /// `needsAttention` is what the Junior is explicitly flagging up.
+  mostImportantDevelopment String? @map("most_important_development")
+  needsAttention           String? @map("needs_attention")
+
+  tenant Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  reviews OutreachCheckInReview[]
 
   @@unique([tenantId, partyId, checkInDate])
   @@map("outreach_check_in")
+}
+
+/// APPEND-ONLY review of a daily check-in (spec §68's Submitted → Reviewed
+/// → NeedsClarification workflow). A separate row, never an UPDATE to
+/// `OutreachCheckIn` — that table has a hard append-only trigger (see its
+/// migration), matching handbook Ch. 02's "never rewrite the Junior's own
+/// text" rule literally rather than trusting application code to honor it.
+/// "Current" review status is the latest row for a given `checkInId`.
+model OutreachCheckInReview {
+  id                String   @id @default(uuid()) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  checkInId         String   @map("check_in_id") @db.Uuid
+  reviewedByPartyId String   @map("reviewed_by_party_id") @db.Uuid
+  /// Closed set: Reviewed | NeedsClarification (never "Submitted" — that's
+  /// the check-in's own implicit starting state, not a review outcome).
+  reviewStatus   String   @map("review_status")
+  leaderFeedback String?  @map("leader_feedback")
+  reviewedAt     DateTime @default(now()) @map("reviewed_at")
+
+  tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  checkIn OutreachCheckIn @relation(fields: [checkInId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, checkInId, reviewedAt])
+  @@map("outreach_check_in_review")
 }
 
 /// Junior's weekly reflection (master-context spec §24). Aggregation is a

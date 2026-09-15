@@ -46,6 +46,8 @@ export const ENTITY_TEAM_WEEKLY_ASSESSMENT = "verity.outreach.team_weekly_assess
 export const ENTITY_DIRECTION = "verity.outreach.direction";
 export const ENTITY_CONTACT = "verity.outreach.contact";
 export const ENTITY_RESEARCH = "verity.outreach.research_entry";
+export const ENTITY_TASK = "verity.outreach.task";
+export const ENTITY_MEETING = "verity.outreach.meeting";
 /**
  * Nav-gating markers (2026-09-14). Founder/Senior/Junior share broad
  * Read/Create/Edit grants on `ENTITY_LEAD` etc. at Tenant scope (a
@@ -109,6 +111,18 @@ const RESEARCH_TYPES = [
 ] as const;
 /** Types that never carry a file — created directly, no upload phase. */
 const FILELESS_RESEARCH_TYPES = ["Note", "Url"] as const;
+
+/** Closed set (spec §53): task work-item fields. */
+const TASK_PRIORITIES = ["Low", "Medium", "High", "Urgent"] as const;
+const TASK_STATUSES = ["Todo", "InProgress", "Blocked", "Done", "Cancelled"] as const;
+/** Closed set (spec §54) — initiative vs. assigned load, never client-set directly. */
+const TASK_ORIGINS = ["TeamLeaderAssigned", "SelfCreated", "SystemGenerated"] as const;
+
+/** Closed set (spec §62): meeting lifecycle. */
+const MEETING_STATUSES = ["Scheduled", "Completed", "Cancelled", "NoShow"] as const;
+
+/** Closed set (spec §68): daily-report review workflow. */
+const CHECK_IN_REVIEW_STATUSES = ["Submitted", "Reviewed", "NeedsClarification"] as const;
 
 const REASSIGNMENT_ELIGIBLE_AFTER_MS = 14 * 24 * 60 * 60 * 1000;
 const REACTIVATION_CREDIT_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
@@ -742,6 +756,47 @@ export const listOverdueFollowUps: QueryDefinition<{ teamId?: string }, Array<Re
   },
 };
 
+/**
+ * Follow-up queue, bucketed (Task 106 Phase 5, spec §61: OVERDUE/TODAY/
+ * TOMORROW/UPCOMING). A query-shape change over the same data
+ * `listOverdueFollowUps` already reads — that query stays as-is for
+ * existing callers, this is the bucketed successor for the queue UI.
+ */
+export const listFollowUpQueue: QueryDefinition<
+  { teamId?: string },
+  { overdue: Array<Record<string, unknown>>; today: Array<Record<string, unknown>>; tomorrow: Array<Record<string, unknown>>; upcoming: Array<Record<string, unknown>> }
+> = {
+  key: "verity.outreach.follow_up_queue",
+  entity: ENTITY_LEAD,
+  input: z.object({ teamId: z.string().uuid().optional() }),
+  handler: async (ctx, input) => {
+    await assertTeamScopeAllowed(ctx.tx, ctx.actor.userId, input.teamId);
+    const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setUTCHours(0, 0, 0, 0);
+    const todayEnd = new Date(todayStart);
+    todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
+    const tomorrowEnd = new Date(todayEnd);
+    tomorrowEnd.setUTCDate(tomorrowEnd.getUTCDate() + 1);
+
+    const active = await ctx.tx.outreachLead.findMany({
+      where: {
+        ...(input.teamId ? { teamId: input.teamId } : {}),
+        state: { notIn: [...TERMINAL_STATES, "closed_won"] },
+        nextActionAt: { not: null },
+      },
+      orderBy: { nextActionAt: "asc" },
+    });
+
+    return {
+      overdue: active.filter((l) => l.nextActionAt! < todayStart),
+      today: active.filter((l) => l.nextActionAt! >= todayStart && l.nextActionAt! < todayEnd),
+      tomorrow: active.filter((l) => l.nextActionAt! >= todayEnd && l.nextActionAt! < tomorrowEnd),
+      upcoming: active.filter((l) => l.nextActionAt! >= tomorrowEnd),
+    };
+  },
+};
+
 /** Pipeline funnel counts by state — master-context spec §49, §62. */
 export const getFunnelCounts: QueryDefinition<{ teamId?: string }, Array<{ state: string; count: number }>> = {
   key: "verity.outreach.funnel_counts",
@@ -1135,6 +1190,178 @@ export const getResearchFileUrl: QueryDefinition<{ entryId: string }, { url: str
 };
 
 // ---------------------------------------------------------------------------
+// TASKS (Task 106 Phase 5, spec §53-55) — capability-private work items, no
+// platform Task primitive exists (grepped the schema before adding this).
+// ---------------------------------------------------------------------------
+
+export const createOutreachTask: CommandDefinition<
+  {
+    teamId: string;
+    leadId?: string;
+    title: string;
+    description?: string;
+    priority?: (typeof TASK_PRIORITIES)[number];
+    dueAt?: string;
+    assignedToPartyId: string;
+  },
+  { id: string }
+> = {
+  key: "verity.outreach.create_task",
+  entity: ENTITY_TASK,
+  verb: "Create",
+  input: z.object({
+    teamId: z.string().uuid(),
+    leadId: z.string().uuid().optional(),
+    title: z.string().min(1),
+    description: z.string().min(1).optional(),
+    priority: z.enum(TASK_PRIORITIES).optional(),
+    dueAt: z.string().datetime().optional(),
+    assignedToPartyId: z.string().uuid(),
+  }),
+  handler: async (ctx, input) => {
+    await assertTeamScopeAllowed(ctx.tx, ctx.actor.userId, input.teamId);
+    if (input.leadId) await requireLead(ctx.tx, input.leadId);
+    const assignedBy = await actorPartyId(ctx.tx, ctx.actor.userId);
+    // Origin is derived, never client-supplied (spec §54's whole point is
+    // telling initiative apart from assigned load without trusting the
+    // client to self-report which one this is).
+    const origin: (typeof TASK_ORIGINS)[number] = assignedBy === input.assignedToPartyId ? "SelfCreated" : "TeamLeaderAssigned";
+    const task = await ctx.tx.outreachTask.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        teamId: input.teamId,
+        leadId: input.leadId ?? null,
+        title: input.title,
+        description: input.description ?? null,
+        priority: input.priority ?? "Medium",
+        dueAt: input.dueAt ? new Date(input.dueAt) : null,
+        origin,
+        assignedToPartyId: input.assignedToPartyId,
+        assignedByPartyId: assignedBy,
+      },
+    });
+    return { result: { id: task.id }, events: [{ name: "verity.outreach.task_created", entityId: task.id }] };
+  },
+};
+
+export const setTaskStatus: CommandDefinition<{ taskId: string; status: (typeof TASK_STATUSES)[number] }, { id: string; status: string }> = {
+  key: "verity.outreach.set_task_status",
+  entity: ENTITY_TASK,
+  verb: "Edit",
+  input: z.object({ taskId: z.string().uuid(), status: z.enum(TASK_STATUSES) }),
+  handler: async (ctx, input) => {
+    const task = await ctx.tx.outreachTask.findUniqueOrThrow({ where: { id: input.taskId } });
+    const updated = await ctx.tx.outreachTask.update({
+      where: { id: task.id },
+      data: {
+        status: input.status,
+        completedAt: input.status === "Done" ? new Date() : task.completedAt,
+        version: { increment: 1 },
+      },
+    });
+    return {
+      result: { id: updated.id, status: updated.status },
+      events: [{ name: "verity.outreach.task_status_changed", entityId: updated.id, payload: { status: input.status } }],
+    };
+  },
+};
+
+export const listOutreachTasks: QueryDefinition<
+  { teamId?: string; assignedToPartyId?: string; status?: (typeof TASK_STATUSES)[number] },
+  Array<Record<string, unknown>>
+> = {
+  key: "verity.outreach.list_tasks",
+  entity: ENTITY_TASK,
+  input: z.object({
+    teamId: z.string().uuid().optional(),
+    assignedToPartyId: z.string().uuid().optional(),
+    status: z.enum(TASK_STATUSES).optional(),
+  }),
+  handler: async (ctx, input) => {
+    await assertTeamScopeAllowed(ctx.tx, ctx.actor.userId, input.teamId);
+    return ctx.tx.outreachTask.findMany({
+      where: {
+        ...(input.teamId ? { teamId: input.teamId } : {}),
+        ...(input.assignedToPartyId ? { assignedToPartyId: input.assignedToPartyId } : {}),
+        ...(input.status ? { status: input.status } : {}),
+      },
+      orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }],
+    });
+  },
+};
+
+// ---------------------------------------------------------------------------
+// MEETINGS (Task 106 Phase 5, spec §62)
+// ---------------------------------------------------------------------------
+
+export const createOutreachMeeting: CommandDefinition<
+  { leadId: string; scheduledAt: string; purpose?: string; locationOrUrl?: string; prepNotes?: string },
+  { id: string }
+> = {
+  key: "verity.outreach.create_meeting",
+  entity: ENTITY_MEETING,
+  verb: "Create",
+  input: z.object({
+    leadId: z.string().uuid(),
+    scheduledAt: z.string().datetime(),
+    purpose: z.string().min(1).optional(),
+    locationOrUrl: z.string().min(1).optional(),
+    prepNotes: z.string().min(1).optional(),
+  }),
+  handler: async (ctx, input) => {
+    await requireLead(ctx.tx, input.leadId);
+    const organizer = await actorPartyId(ctx.tx, ctx.actor.userId);
+    const meeting = await ctx.tx.outreachMeeting.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        leadId: input.leadId,
+        organizerPartyId: organizer,
+        scheduledAt: new Date(input.scheduledAt),
+        purpose: input.purpose ?? null,
+        locationOrUrl: input.locationOrUrl ?? null,
+        prepNotes: input.prepNotes ?? null,
+      },
+    });
+    return { result: { id: meeting.id }, events: [{ name: "verity.outreach.meeting_created", entityId: meeting.id }] };
+  },
+};
+
+export const updateMeetingOutcome: CommandDefinition<
+  { meetingId: string; status: Exclude<(typeof MEETING_STATUSES)[number], "Scheduled">; outcomeNotes?: string },
+  { id: string; status: string }
+> = {
+  key: "verity.outreach.update_meeting_outcome",
+  entity: ENTITY_MEETING,
+  verb: "Edit",
+  input: z.object({
+    meetingId: z.string().uuid(),
+    status: z.enum(["Completed", "Cancelled", "NoShow"]),
+    outcomeNotes: z.string().min(1).optional(),
+  }),
+  handler: async (ctx, input) => {
+    const meeting = await ctx.tx.outreachMeeting.update({
+      where: { id: input.meetingId },
+      data: { status: input.status, outcomeNotes: input.outcomeNotes ?? null, version: { increment: 1 } },
+    });
+    return {
+      result: { id: meeting.id, status: meeting.status },
+      events: [{ name: "verity.outreach.meeting_outcome_recorded", entityId: meeting.id, payload: { status: input.status } }],
+    };
+  },
+};
+
+export const listOutreachMeetings: QueryDefinition<{ leadId?: string }, Array<Record<string, unknown>>> = {
+  key: "verity.outreach.list_meetings",
+  entity: ENTITY_MEETING,
+  input: z.object({ leadId: z.string().uuid().optional() }),
+  handler: async (ctx, input) =>
+    ctx.tx.outreachMeeting.findMany({
+      where: input.leadId ? { leadId: input.leadId } : {},
+      orderBy: { scheduledAt: "asc" },
+    }),
+};
+
+// ---------------------------------------------------------------------------
 // TARGETS
 // ---------------------------------------------------------------------------
 
@@ -1265,6 +1492,8 @@ export const submitDailyCheckIn: CommandDefinition<
     learning?: string;
     blocker?: string;
     tomorrowPlan?: string;
+    mostImportantDevelopment?: string;
+    needsAttention?: string;
   },
   { id: string }
 > = {
@@ -1278,6 +1507,10 @@ export const submitDailyCheckIn: CommandDefinition<
     learning: z.string().optional(),
     blocker: z.string().optional(),
     tomorrowPlan: z.string().optional(),
+    // Task 106 Phase 5 (spec §64-71): the two questions the original
+    // 5-field shape didn't ask.
+    mostImportantDevelopment: z.string().optional(),
+    needsAttention: z.string().optional(),
   }),
   handler: async (ctx, input) => {
     const partyId = await actorPartyId(ctx.tx, ctx.actor.userId);
@@ -1291,9 +1524,98 @@ export const submitDailyCheckIn: CommandDefinition<
         learning: input.learning ?? null,
         blocker: input.blocker ?? null,
         tomorrowPlan: input.tomorrowPlan ?? null,
+        mostImportantDevelopment: input.mostImportantDevelopment ?? null,
+        needsAttention: input.needsAttention ?? null,
       },
     });
     return { result: { id: checkIn.id }, events: [{ name: "verity.outreach.check_in_submitted", entityId: checkIn.id }] };
+  },
+};
+
+/**
+ * Team Leader review of a Junior's daily report (spec §68: Submitted →
+ * Reviewed → NeedsClarification). `OutreachCheckIn` carries a hard
+ * append-only DB trigger (its original migration), so review is a
+ * NEW row in `OutreachCheckInReview`, never an UPDATE to the check-in
+ * itself — matching handbook Ch. 02's "never rewrite the Junior's own
+ * text" rule at the database level, not just by convention.
+ */
+export const reviewCheckIn: CommandDefinition<
+  { checkInId: string; reviewStatus: Exclude<(typeof CHECK_IN_REVIEW_STATUSES)[number], "Submitted">; leaderFeedback?: string },
+  { id: string; reviewStatus: string }
+> = {
+  key: "verity.outreach.review_check_in",
+  entity: ENTITY_CHECK_IN,
+  verb: "Create",
+  input: z.object({
+    checkInId: z.string().uuid(),
+    reviewStatus: z.enum(["Reviewed", "NeedsClarification"]),
+    leaderFeedback: z.string().min(1).optional(),
+  }),
+  handler: async (ctx, input) => {
+    await ctx.tx.outreachCheckIn.findUniqueOrThrow({ where: { id: input.checkInId } });
+    const reviewer = await actorPartyId(ctx.tx, ctx.actor.userId);
+    const review = await ctx.tx.outreachCheckInReview.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        checkInId: input.checkInId,
+        reviewedByPartyId: reviewer,
+        reviewStatus: input.reviewStatus,
+        leaderFeedback: input.leaderFeedback ?? null,
+      },
+    });
+    return {
+      result: { id: review.id, reviewStatus: review.reviewStatus },
+      events: [{ name: "verity.outreach.check_in_reviewed", entityId: input.checkInId, payload: { reviewStatus: input.reviewStatus } }],
+    };
+  },
+};
+
+/**
+ * A team's check-ins for one day, for the Team Leader review screen. Each
+ * row carries its latest review (if any) as `currentReview` — the most
+ * recent `OutreachCheckInReview` row, or null if still un-reviewed
+ * (implicitly "Submitted").
+ */
+export const listTeamCheckIns: QueryDefinition<{ teamId: string; date: string }, Array<Record<string, unknown>>> = {
+  key: "verity.outreach.list_team_check_ins",
+  entity: ENTITY_CHECK_IN,
+  input: z.object({ teamId: z.string().uuid(), date: z.string().datetime() }),
+  handler: async (ctx, input) => {
+    await assertTeamScopeAllowed(ctx.tx, ctx.actor.userId, input.teamId);
+    const dayStart = new Date(input.date);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+    // Leaders/co-leaders aren't OutreachTeamMembership rows (that table is
+    // the Junior roster only — see OutreachTeam.leaderId/coLeaderId) but
+    // they submit check-ins too, same as every other page's member-list
+    // computation in this file.
+    const team = await ctx.tx.outreachTeam.findUniqueOrThrow({
+      where: { id: input.teamId },
+      include: { memberships: { where: { active: true } } },
+    });
+    const memberIds = [
+      team.leaderId,
+      ...(team.coLeaderId ? [team.coLeaderId] : []),
+      ...team.memberships.map((m) => m.partyId),
+    ];
+
+    const checkIns = await ctx.tx.outreachCheckIn.findMany({
+      where: { partyId: { in: memberIds }, checkInDate: { gte: dayStart, lt: dayEnd } },
+      orderBy: { submittedAt: "asc" },
+    });
+    const reviews = checkIns.length
+      ? await ctx.tx.outreachCheckInReview.findMany({
+          where: { checkInId: { in: checkIns.map((c) => c.id) } },
+          orderBy: { reviewedAt: "desc" },
+        })
+      : [];
+    const latestReviewByCheckIn = new Map<string, (typeof reviews)[number]>();
+    for (const r of reviews) if (!latestReviewByCheckIn.has(r.checkInId)) latestReviewByCheckIn.set(r.checkInId, r);
+
+    return checkIns.map((c) => ({ ...c, currentReview: latestReviewByCheckIn.get(c.id) ?? null }));
   },
 };
 
@@ -1621,6 +1943,11 @@ export function registerOutreachCapability(): void {
   registerCommand(createResearchNote);
   registerCommand(reserveResearchFileUpload);
   registerCommand(confirmResearchFileUpload);
+  registerCommand(createOutreachTask);
+  registerCommand(setTaskStatus);
+  registerCommand(createOutreachMeeting);
+  registerCommand(updateMeetingOutcome);
+  registerCommand(reviewCheckIn);
 
   registerQuery(listOutreachTeams);
   registerQuery(listOutreachContacts);
@@ -1629,6 +1956,7 @@ export function registerOutreachCapability(): void {
   registerQuery(checkDuplicateProspect);
   registerQuery(listOutreachLeads);
   registerQuery(listOverdueFollowUps);
+  registerQuery(listFollowUpQueue);
   registerQuery(getFunnelCounts);
   registerQuery(getLeadTimeline);
   registerQuery(listOutreachTargets);
@@ -1640,4 +1968,7 @@ export function registerOutreachCapability(): void {
   registerQuery(listAvailableParties);
   registerQuery(listEscalatedLeads);
   registerQuery(getTeamComparison);
+  registerQuery(listOutreachTasks);
+  registerQuery(listOutreachMeetings);
+  registerQuery(listTeamCheckIns);
 }

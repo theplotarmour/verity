@@ -30,6 +30,8 @@ export function CheckInForm() {
               learning: String(form.get("learning") ?? "") || undefined,
               blocker: String(form.get("blocker") ?? "") || undefined,
               tomorrowPlan: String(form.get("tomorrowPlan") ?? "") || undefined,
+              mostImportantDevelopment: String(form.get("mostImportantDevelopment") ?? "") || undefined,
+              needsAttention: String(form.get("needsAttention") ?? "") || undefined,
             },
             "/outreach/check-in",
           );
@@ -46,12 +48,22 @@ export function CheckInForm() {
           <textarea id="summary" name="summary" required rows={2} className={textareaClass} />
         </Field>
       </div>
+      <div className="sm:col-span-2">
+        <Field label="What was the most important development?" htmlFor="mostImportantDevelopment">
+          <textarea id="mostImportantDevelopment" name="mostImportantDevelopment" rows={2} className={textareaClass} />
+        </Field>
+      </div>
       <Field label="What did you learn?" htmlFor="learning">
         <textarea id="learning" name="learning" rows={2} className={textareaClass} />
       </Field>
       <Field label="Blocker" htmlFor="blocker">
         <textarea id="blocker" name="blocker" rows={2} className={textareaClass} />
       </Field>
+      <div className="sm:col-span-2">
+        <Field label="What needs your Team Leader's attention?" htmlFor="needsAttention">
+          <textarea id="needsAttention" name="needsAttention" rows={2} className={textareaClass} />
+        </Field>
+      </div>
       <div className="sm:col-span-2">
         <Field label="Tomorrow's priority" htmlFor="tomorrowPlan">
           <textarea id="tomorrowPlan" name="tomorrowPlan" rows={2} className={textareaClass} />

@@ -3,7 +3,15 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { ENTITY_LEAD, ENTITY_CONTACT, ENTITY_RESEARCH, assertTeamScopeAllowed, deriveLeadHealth } from "@/server/capabilities/outreach";
+import {
+  ENTITY_LEAD,
+  ENTITY_CONTACT,
+  ENTITY_RESEARCH,
+  ENTITY_TASK,
+  ENTITY_MEETING,
+  assertTeamScopeAllowed,
+  deriveLeadHealth,
+} from "@/server/capabilities/outreach";
 import { ForbiddenError } from "@/server/platform/authorization";
 import {
   Badge,
@@ -22,6 +30,8 @@ import {
 import { LeadActions } from "./LeadActions";
 import { ContactForm } from "./ContactForm";
 import { ResearchForm, ViewFileLink } from "./ResearchForm";
+import { TaskPanel } from "./TaskPanel";
+import { MeetingPanel } from "./MeetingPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +63,22 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
       throw error;
     }
 
-    const [states, transitions, activities, team, canEdit, canLog, contacts, canCreateContact, researchEntries, canCreateResearch] = await Promise.all([
+    const [
+      states,
+      transitions,
+      activities,
+      team,
+      canEdit,
+      canLog,
+      contacts,
+      canCreateContact,
+      researchEntries,
+      canCreateResearch,
+      tasks,
+      canCreateTask,
+      meetings,
+      canCreateMeeting,
+    ] = await Promise.all([
       tx.stateDefinition.findMany({ where: { entityKey: ENTITY_LEAD } }),
       (async () => {
         const current = await tx.stateDefinition.findUnique({
@@ -70,6 +95,10 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
       hasPermission(tx, actor.roleId, "Create", ENTITY_CONTACT),
       tx.outreachResearchEntry.findMany({ where: { leadId: id }, orderBy: { createdAt: "desc" } }),
       hasPermission(tx, actor.roleId, "Create", ENTITY_RESEARCH),
+      tx.outreachTask.findMany({ where: { leadId: id }, orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }] }),
+      hasPermission(tx, actor.roleId, "Create", ENTITY_TASK),
+      tx.outreachMeeting.findMany({ where: { leadId: id }, orderBy: { scheduledAt: "asc" } }),
+      hasPermission(tx, actor.roleId, "Create", ENTITY_MEETING),
     ]);
 
     const stateById = new Map(states.map((s) => [s.id, s]));
@@ -105,6 +134,10 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
       canCreateContact,
       researchEntries,
       canCreateResearch,
+      tasks,
+      canCreateTask,
+      meetings,
+      canCreateMeeting,
     };
   });
 
@@ -297,32 +330,65 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
           </Panel>
         </div>
 
-        <Panel title="Timeline" flush>
-          {data.activities.length === 0 ? (
-            <EmptyState
-              title="No activity logged"
-              description="Nothing has been recorded against this lead yet. Field rule: if it isn't recorded, it didn't happen."
-            />
-          ) : (
-            <RowList>
-              {data.activities.map((a) => (
-                <Row key={a.id}>
-                  <span className="flex flex-col gap-0.5">
-                    <span className="text-[14px] text-text">
-                      {a.activityType.replace(/([A-Z])/g, " $1").trim()} · {a.channel}
+        <div className="flex flex-col gap-6">
+          <Panel title="Timeline" flush>
+            {data.activities.length === 0 ? (
+              <EmptyState
+                title="No activity logged"
+                description="Nothing has been recorded against this lead yet. Field rule: if it isn't recorded, it didn't happen."
+              />
+            ) : (
+              <RowList>
+                {data.activities.map((a) => (
+                  <Row key={a.id}>
+                    <span className="flex flex-col gap-0.5">
+                      <span className="text-[14px] text-text">
+                        {a.activityType.replace(/([A-Z])/g, " $1").trim()} · {a.channel}
+                      </span>
+                      {a.message && <span className="text-[12px] text-text-secondary">{a.message}</span>}
+                      {a.response && <span className="text-[12px] text-text-tertiary">Response: {a.response}</span>}
+                      <span className="text-[11px] text-text-tertiary">{data.partyName.get(a.actorPartyId) ?? "—"}</span>
                     </span>
-                    {a.message && <span className="text-[12px] text-text-secondary">{a.message}</span>}
-                    {a.response && <span className="text-[12px] text-text-tertiary">Response: {a.response}</span>}
-                    <span className="text-[11px] text-text-tertiary">{data.partyName.get(a.actorPartyId) ?? "—"}</span>
-                  </span>
-                  <span className="tabular shrink-0 text-[12px] text-text-tertiary">
-                    {a.occurredAt.toISOString().slice(0, 16).replace("T", " ")}
-                  </span>
-                </Row>
-              ))}
-            </RowList>
-          )}
-        </Panel>
+                    <span className="tabular shrink-0 text-[12px] text-text-tertiary">
+                      {a.occurredAt.toISOString().slice(0, 16).replace("T", " ")}
+                    </span>
+                  </Row>
+                ))}
+              </RowList>
+            )}
+          </Panel>
+
+          <TaskPanel
+            leadId={lead.id}
+            teamId={lead.teamId}
+            tasks={data.tasks.map((t) => ({
+              id: t.id,
+              title: t.title,
+              description: t.description,
+              priority: t.priority,
+              status: t.status,
+              origin: t.origin,
+              dueAt: t.dueAt ? t.dueAt.toISOString() : null,
+              assignedToPartyId: t.assignedToPartyId,
+            }))}
+            teamMembers={data.teamMembers}
+            partyName={data.partyName}
+            canCreate={data.canCreateTask}
+          />
+
+          <MeetingPanel
+            leadId={lead.id}
+            meetings={data.meetings.map((m) => ({
+              id: m.id,
+              scheduledAt: m.scheduledAt.toISOString(),
+              purpose: m.purpose,
+              locationOrUrl: m.locationOrUrl,
+              status: m.status,
+              outcomeNotes: m.outcomeNotes,
+            }))}
+            canCreate={data.canCreateMeeting}
+          />
+        </div>
       </div>
     </>
   );

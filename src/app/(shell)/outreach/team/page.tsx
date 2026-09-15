@@ -9,6 +9,7 @@ import { RemoveMemberButton } from "./RemoveMemberButton";
 import { AddMemberForm } from "./AddMemberForm";
 import { RenameTeamForm } from "./RenameTeamForm";
 import { ResolveEscalationButton } from "../ResolveEscalationButton";
+import { CheckInReviewPanel } from "./CheckInReviewPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,29 @@ export default async function TeamCommandPage() {
     const activities = await tx.outreachActivity.findMany({
       where: { actorPartyId: { in: memberPartyIds } },
     });
+
+    // Today's check-ins, with the latest review (if any) for each — same
+    // "leaders aren't memberships" fix as listTeamCheckIns.
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+    const todayEnd = new Date(todayStart);
+    todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
+    const allTeamPartyIds = [team.leaderId, ...(team.coLeaderId ? [team.coLeaderId] : []), ...memberPartyIds];
+    const todaysCheckIns = await tx.outreachCheckIn.findMany({
+      where: { partyId: { in: allTeamPartyIds }, checkInDate: { gte: todayStart, lt: todayEnd } },
+      orderBy: { submittedAt: "asc" },
+    });
+    const checkInReviews = todaysCheckIns.length
+      ? await tx.outreachCheckInReview.findMany({
+          where: { checkInId: { in: todaysCheckIns.map((c) => c.id) } },
+          orderBy: { reviewedAt: "desc" },
+        })
+      : [];
+    const latestReview = new Map<string, (typeof checkInReviews)[number]>();
+    for (const r of checkInReviews) if (!latestReview.has(r.checkInId)) latestReview.set(r.checkInId, r);
+    const checkInPartyIds = [...new Set(todaysCheckIns.map((c) => c.partyId))];
+    const checkInParties = checkInPartyIds.length ? await tx.party.findMany({ where: { id: { in: checkInPartyIds } } }) : [];
+    const allPartyName = new Map(checkInParties.map((p) => [p.id, p.displayName]));
 
     const memberRows = memberPartyIds.map((partyId) => {
       const ownedLeads = leads.filter((l) => l.opportunityOwnerId === partyId);
@@ -129,6 +153,14 @@ export default async function TeamCommandPage() {
       })),
       memberRows,
       escalations,
+      todaysCheckIns: todaysCheckIns.map((c) => ({
+        id: c.id,
+        partyName: allPartyName.get(c.partyId) ?? "Unknown",
+        summary: c.summary,
+        mostImportantDevelopment: c.mostImportantDevelopment,
+        needsAttention: c.needsAttention,
+        currentReviewStatus: (latestReview.get(c.id)?.reviewStatus ?? "Submitted") as "Submitted" | "Reviewed" | "NeedsClarification",
+      })),
     };
   });
 
@@ -190,6 +222,10 @@ export default async function TeamCommandPage() {
           </Panel>
         </div>
       )}
+
+      <div className="mb-6">
+        <CheckInReviewPanel checkIns={data.todaysCheckIns} />
+      </div>
 
       <div className="mb-6">
         <Panel title="Member performance" flush action={<AddMemberForm teamId={data.teamId} candidates={data.availableParties} />}>
