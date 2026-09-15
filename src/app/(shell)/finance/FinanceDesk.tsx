@@ -19,6 +19,7 @@ import {
 import { Combobox } from "@/components/ui/Combobox";
 import { Modal, ModalCancel } from "@/components/ui/Modal";
 import { runCommand } from "@/server/actions/platform";
+import { netAcrossBusinesses } from "../ledgers/LedgerView";
 import type { ActionFailure } from "@/server/platform/action-error";
 
 type Invoice = {
@@ -44,24 +45,9 @@ export type Balance = {
   counterAdvancePaise: number;
   oldestOpenAt: Date | string | null;
   provisionalBills: number;
+  /** The same firm on the other side of the trade, when the two are linked. */
+  sameBusinessAs: string | null;
 };
-
-/**
- * What one party's position comes to, signed from this business's point of
- * view: positive means they owe us, negative means we owe them.
- *
- * A customer's advance and a supplier's bill both push it negative, which is
- * the whole point — one number, one direction, whichever side of the trade the
- * party sits on.
- */
-function netOf(row: Balance): number {
-  const magnitude =
-    row.outstandingPaise +
-    row.uninvoicedPaise -
-    row.onAccountPaise +
-    row.counterAdvancePaise;
-  return row.side === "customer" ? magnitude : -magnitude;
-}
 
 function rupees(paise: number): string {
   return `₹${Math.round(paise / 100).toLocaleString("en-IN")}`;
@@ -160,6 +146,10 @@ export function FinanceDesk({
 
   const receivable = balances.filter((row) => row.side === "customer");
   const payable = balances.filter((row) => row.side === "supplier");
+  // One figure per business, netted across a linked customer+supplier pair
+  // — the same reading /ledgers gives (2026-09-15: "if I owe someone 10 and
+  // they owe me 5, the total transaction should only be of 5").
+  const netted = useMemo(() => netAcrossBusinesses(balances), [balances]);
 
   const totals = useMemo(
     () => ({
@@ -174,22 +164,18 @@ export function FinanceDesk({
       // A party who has overpaid is not negative debt. They are owed a refund,
       // which belongs on the other side of the screen, and that is where the
       // ledger already puts them.
-      owedToUs: receivable.reduce(
-        (sum, row) => sum + Math.max(0, netOf(row)),
-        0,
-      ),
-      owedByUs:
-        payable.reduce((sum, row) => sum + Math.max(0, -netOf(row)), 0) +
-        // A customer in credit is money the business has and will have to give
-        // back or supply against. It belongs with what is owed out.
-        receivable.reduce((sum, row) => sum + Math.max(0, -netOf(row)), 0),
+      owedToUs: netted.reduce((sum, row) => sum + Math.max(0, row.netPaise), 0),
+      // A customer in credit is money the business has and will have to give
+      // back or supply against. It belongs with what is owed out — which the
+      // sign of a netted line already says.
+      owedByUs: netted.reduce((sum, row) => sum + Math.max(0, -row.netPaise), 0),
       overdue: receivable.reduce((sum, row) => {
         const age = daysSince(row.oldestOpenAt);
         return sum + (age !== null && age > 30 ? row.outstandingPaise : 0);
       }, 0),
       provisional: payable.reduce((sum, row) => sum + row.provisionalBills, 0),
     }),
-    [receivable, payable],
+    [receivable, payable, netted],
   );
 
   const unbilled = unbilledSales.length + unbilledPurchases.length;

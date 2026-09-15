@@ -325,19 +325,28 @@ export async function issueSalesInvoice(
       );
     }
 
-    // A missing customer state must NOT fall back to the business's own
-    // (rule freeze §4.4). Doing so silently labels an interstate supply as
-    // intrastate, which charges the wrong tax and files the wrong return —
-    // and it fails in the direction that looks correct on screen.
-    if (!order.customer.stateCode) {
-      throw new ValidationError(
-        `E_VALIDATION: ${order.customer.displayName} has no state code, so the place of supply ` +
-          "cannot be determined and the invoice would be taxed as if it were local",
-      );
-    }
-    // Snapshotted onto the invoice: a customer who later moves state must not
-    // retrospectively change how an old invoice was taxed.
-    const placeOfSupplyStateCode = order.customer.stateCode;
+    // Place of supply, in order of what the business actually knows:
+    //
+    // 1. The customer's recorded state.
+    // 2. Failing that, the first two digits of their GSTIN — a registered
+    //    buyer's state is a fact of the registration, not a field somebody
+    //    has to remember to type twice.
+    // 3. Failing both, the buyer is unregistered with no address on record:
+    //    an over-the-counter sale, delivered at the seller's premises, whose
+    //    place of supply IS the seller's state (IGST Act s.10(1)(c)).
+    //
+    // Rule freeze §4.4 refused case 3 outright, on the ground that a fallback
+    // to the seller's state silently mislabels an interstate supply. That
+    // guard stays exactly where it bites — a REGISTERED buyer never reaches
+    // case 3, because case 2 answers from the GSTIN — and is withdrawn for
+    // the walk-in buyer it was blocking (product owner, 2026-09-15: "I am not
+    // able to raise invoice if a customer doesn't have state code"). The
+    // resolved code is snapshotted onto the invoice either way, so a customer
+    // who later moves state does not retrospectively change how it was taxed.
+    const placeOfSupplyStateCode =
+      order.customer.stateCode ??
+      (order.customer.gstin ? order.customer.gstin.slice(0, 2) : null) ??
+      supplyStateCode;
 
     // The day of supply. Declared before the rate lookup because the rate is
     // resolved AS AT this instant — the whole point of an effective-dated rule.

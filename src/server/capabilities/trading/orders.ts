@@ -276,19 +276,54 @@ export const editSupplier: CommandDefinition<
   }),
   handler: async (ctx, input) => {
     const { supplierId, ...changes } = input;
-    await ctx.tx.tradingSupplier.findUniqueOrThrow({ where: { id: supplierId } });
+    const supplier = await ctx.tx.tradingSupplier.findUniqueOrThrow({ where: { id: supplierId } });
     await ctx.tx.tradingSupplier.update({
       where: { id: supplierId },
       data: { ...changes, version: { increment: 1 } },
     });
+    // ONE BUSINESS, TWO ROWS. A supplier linked to a customer is the same
+    // legal entity, so its identity fields are one fact: a state code added
+    // on either screen must be true on both (requested 2026-09-15 — the
+    // customer side got a state code and the supplier side still refused
+    // the bill). `active` is per-side and is deliberately not carried.
+    const shared = sharedIdentityChanges(changes);
+    if (supplier.linkedCustomerId && Object.keys(shared).length > 0) {
+      await ctx.tx.tradingCustomer.update({
+        where: { id: supplier.linkedCustomerId },
+        data: { ...shared, version: { increment: 1 } },
+      });
+    }
     return {
       result: { id: supplierId },
       events: [
         { name: "verity.trading.supplier_edited", entityId: supplierId },
+        ...(supplier.linkedCustomerId && Object.keys(shared).length > 0
+          ? [{ name: "verity.trading.customer_edited", entityId: supplier.linkedCustomerId }]
+          : []),
       ],
     };
   },
 };
+
+/**
+ * The fields a linked customer and supplier hold in common — identity, not
+ * terms. Credit limit is the customer's alone; `active` is per side.
+ */
+function sharedIdentityChanges(changes: {
+  displayName?: string;
+  gstin?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  stateCode?: string | null;
+}): { displayName?: string; gstin?: string | null; phone?: string | null; email?: string | null; stateCode?: string | null } {
+  const out: ReturnType<typeof sharedIdentityChanges> = {};
+  if (changes.displayName !== undefined) out.displayName = changes.displayName;
+  if (changes.gstin !== undefined) out.gstin = changes.gstin;
+  if (changes.phone !== undefined) out.phone = changes.phone;
+  if (changes.email !== undefined) out.email = changes.email;
+  if (changes.stateCode !== undefined) out.stateCode = changes.stateCode;
+  return out;
+}
 
 export const removeSupplier: CommandDefinition<
   { supplierId: string },
@@ -382,10 +417,23 @@ export const editCustomer: CommandDefinition<
       where: { id: customerId },
       data: { ...changes, version: { increment: 1 } },
     });
+    // The same business on the supplier side takes the same identity change
+    // — see `editSupplier` for the reasoning. Credit limit stays here.
+    const shared = sharedIdentityChanges(changes);
+    const linked = Object.keys(shared).length > 0
+      ? await ctx.tx.tradingSupplier.findFirst({ where: { linkedCustomerId: customerId }, select: { id: true } })
+      : null;
+    if (linked) {
+      await ctx.tx.tradingSupplier.update({
+        where: { id: linked.id },
+        data: { ...shared, version: { increment: 1 } },
+      });
+    }
     return {
       result: { id: customerId },
       events: [
         { name: "verity.trading.customer_edited", entityId: customerId },
+        ...(linked ? [{ name: "verity.trading.supplier_edited", entityId: linked.id }] : []),
       ],
     };
   },

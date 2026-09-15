@@ -70,6 +70,15 @@ the business's own state, which silently labels an interstate supply as
 intrastate: the wrong tax, the wrong return, and it looks correct on screen.
 Rule freeze §4.4, and the failure direction is the reason it matters.
 
+> **Amended 2026-09-15 (product owner: "I am not able to raise invoice if a
+> customer doesn't have state code").** Place of supply now resolves in
+> order: the customer's recorded state; else the first two digits of their
+> GSTIN; else — an unregistered buyer with no address on record, an
+> over-the-counter sale — the seller's own state (IGST Act s.10(1)(c)).
+> §4.4's guard still holds where it bites: a registered buyer never reaches
+> the last step, because the GSTIN answers. `finance.ts raiseSalesInvoice`,
+> test in `plywood-business-identity.test.ts`.
+
 **Snapshot columns are nullable and not backfilled.** Invoices raised before
 this migration genuinely have no recorded seller identity. Inventing one from
 today's tenant name would be a fabricated fact on a tax document; an honest null

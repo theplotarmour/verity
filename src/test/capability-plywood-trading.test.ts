@@ -41,6 +41,8 @@ import {
   createPurchaseOrder,
   createSalesOrder,
   createSupplier,
+  editCustomer,
+  editSupplier,
   dispatchOrder,
   purchaseOrderDetail,
   receiveGoods,
@@ -587,6 +589,34 @@ describeDb("capability: Plywood trading — purchase and sale", () => {
   });
 
   /* ------------------------------ the boundaries ---------------------------- */
+
+  it("carries an identity change across a linked supplier and customer, both ways (2026-09-15)", async () => {
+    // Every supplier is also a customer (createSupplier's own rule), and the
+    // two rows describe one legal entity — so a state code added on either
+    // screen must be true on both, or the other side's next bill refuses.
+    const supplier = await executeCommand(owner, createSupplier, { displayName: "Two Sided Traders" });
+    const linked = await withTenant(tenantId, (tx) =>
+      tx.tradingSupplier.findUniqueOrThrow({ where: { id: supplier.id } }),
+    );
+    expect(linked.linkedCustomerId).not.toBeNull();
+    const customerId = linked.linkedCustomerId!;
+
+    await executeCommand(owner, editCustomer, { customerId, stateCode: "09", phone: "9999900000" });
+    const afterCustomerEdit = await withTenant(tenantId, (tx) =>
+      tx.tradingSupplier.findUniqueOrThrow({ where: { id: supplier.id } }),
+    );
+    expect(afterCustomerEdit.stateCode).toBe("09");
+    expect(afterCustomerEdit.phone).toBe("9999900000");
+
+    await executeCommand(owner, editSupplier, { supplierId: supplier.id, displayName: "Two Sided Traders Pvt Ltd", active: false });
+    const afterSupplierEdit = await withTenant(tenantId, (tx) =>
+      tx.tradingCustomer.findUniqueOrThrow({ where: { id: customerId } }),
+    );
+    expect(afterSupplierEdit.displayName).toBe("Two Sided Traders Pvt Ltd");
+    // Per-side fields stay per side: deactivating the supplier does not
+    // deactivate the customer, and the credit limit is the customer's alone.
+    expect(afterSupplierEdit.active).toBe(true);
+  });
 
   it("refuses a malformed GSTIN before it can reach a filing", async () => {
     await expect(

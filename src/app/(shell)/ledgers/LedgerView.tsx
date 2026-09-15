@@ -332,30 +332,59 @@ type Settling = {
   outstandingPaise: number;
 };
 
-function OwedOverview({ balances }: { balances: Balance[] }) {
-  // A firm we both buy from and sell to appears twice, once on each side. The
-  // two rows are shown as one line with a note, because "they need to send us
-  // X" and "we need to send them Y" about the same firm on two different lines
-  // is not two facts, it is one fact told confusingly.
+/**
+ * One line per business, with the money already netted.
+ *
+ * REPORTED 2026-09-15: "if I owe someone 10 and they owe me 5, the total
+ * transaction should only be of 5 — not one of 10 and another of 5." A firm
+ * we both buy from and sell to is one relationship; the amount that has to
+ * travel is the difference, and the side it travels to is whichever is left
+ * after the two cancel. The carrier row is the side the net points to, so
+ * the settle button records the payment against the right ledger; the note
+ * keeps both gross figures visible so nobody has to trust the subtraction.
+ */
+export type NettedLine = Balance & {
+  /** Positive: they send us. Negative: we send them. Already netted across a linked pair. */
+  netPaise: number;
+  /** For a linked pair, the two gross positions the net came from. */
+  nettedFrom?: { theyOweUsPaise: number; weOweThemPaise: number };
+};
+
+export function netAcrossBusinesses(balances: Balance[]): NettedLine[] {
   const byId = new Map(balances.map((row) => [row.partyId, row]));
   const paired = new Set<string>();
-  const lines: Balance[] = [];
+  const lines: NettedLine[] = [];
   for (const row of balances) {
     if (paired.has(row.partyId)) continue;
     const other = row.sameBusinessAs ? byId.get(row.sameBusinessAs) : undefined;
     if (!other) {
-      lines.push(row);
+      lines.push({ ...row, netPaise: net(row) });
       continue;
     }
     paired.add(row.partyId);
     paired.add(other.partyId);
-    // The side with the larger obligation carries the line, so the sentence
-    // reads in the direction the money actually has to travel.
-    lines.push(Math.abs(net(row)) >= Math.abs(net(other)) ? row : other);
+    const combined = net(row) + net(other);
+    const customerSide = row.side === "customer" ? row : other;
+    const supplierSide = row.side === "customer" ? other : row;
+    // Money travels to whichever side the net points at; that side carries
+    // the line so "record payment" lands on the ledger that will clear.
+    const carrier = combined > 0 ? customerSide : supplierSide;
+    lines.push({
+      ...carrier,
+      netPaise: combined,
+      nettedFrom: {
+        theyOweUsPaise: Math.max(0, net(customerSide)) + Math.max(0, net(supplierSide)),
+        weOweThemPaise: Math.max(0, -net(customerSide)) + Math.max(0, -net(supplierSide)),
+      },
+    });
   }
+  return lines;
+}
 
-  const owedToUs = lines.filter((row) => net(row) > 0);
-  const weOwe = lines.filter((row) => net(row) <= 0);
+function OwedOverview({ balances }: { balances: Balance[] }) {
+  const lines = netAcrossBusinesses(balances);
+  const owedToUs = lines.filter((row) => row.netPaise > 0);
+  const weOwe = lines.filter((row) => row.netPaise <= 0);
 
   const router = useRouter();
   const [settling, setSettling] = useState<Settling | null>(null);
@@ -379,8 +408,8 @@ function OwedOverview({ balances }: { balances: Balance[] }) {
     });
   }
 
-  const totalIn = owedToUs.reduce((sum, row) => sum + net(row), 0);
-  const totalOut = weOwe.reduce((sum, row) => sum + Math.abs(net(row)), 0);
+  const totalIn = owedToUs.reduce((sum, row) => sum + row.netPaise, 0);
+  const totalOut = weOwe.reduce((sum, row) => sum + Math.abs(row.netPaise), 0);
 
   return (
     <div className="flex flex-col gap-5">
@@ -419,7 +448,7 @@ function OwedOverview({ balances }: { balances: Balance[] }) {
             partyName: row.partyName,
             side: row.side,
             direction: "in",
-            outstandingPaise: Math.abs(net(row)),
+            outstandingPaise: Math.abs(row.netPaise),
           })
         }
       />
@@ -436,7 +465,7 @@ function OwedOverview({ balances }: { balances: Balance[] }) {
             partyName: row.partyName,
             side: row.side,
             direction: "out",
-            outstandingPaise: Math.abs(net(row)),
+            outstandingPaise: Math.abs(row.netPaise),
           })
         }
       />
@@ -609,11 +638,11 @@ function OwedTable({
 }: {
   title: string;
   empty: string;
-  rows: Balance[];
-  lead: (row: Balance) => string;
+  rows: NettedLine[];
+  lead: (row: NettedLine) => string;
   actionLabel: string;
   pending: boolean;
-  onSettle: (row: Balance) => void;
+  onSettle: (row: NettedLine) => void;
 }) {
   return (
     <Panel title={title} flush={rows.length === 0}>
@@ -626,9 +655,9 @@ function OwedTable({
             <tbody>
               {rows
                 .slice()
-                .sort((a, b) => Math.abs(net(b)) - Math.abs(net(a)))
+                .sort((a, b) => Math.abs(b.netPaise) - Math.abs(a.netPaise))
                 .map((row) => {
-                  const amount = Math.abs(net(row));
+                  const amount = Math.abs(row.netPaise);
                   const age = daysSince(row.oldestOpenAt);
                   return (
                     <tr key={`${row.side}-${row.partyId}`}>
@@ -644,8 +673,8 @@ function OwedTable({
                           {lead(row)}
                         </Link>
                         <span className="mt-0.5 block text-[12px] text-text-tertiary">
-                          {row.sameBusinessAs
-                            ? "Customer and supplier"
+                          {row.nettedFrom
+                            ? `Customer and supplier · they owe ${rupees(row.nettedFrom.theyOweUsPaise)}, we owe ${rupees(row.nettedFrom.weOweThemPaise)} — netted`
                             : row.side === "customer"
                               ? "Customer"
                               : "Supplier"}

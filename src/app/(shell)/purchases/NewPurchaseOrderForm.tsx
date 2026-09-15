@@ -1,6 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { CommandButton } from "@/components/ui/CommandAccess";
+import { NewSupplierModal } from "@/components/ui/business/NewSupplierModal";
+import { runCommand } from "@/server/actions/platform";
 import {
   Button,
   Checkbox,
@@ -89,6 +93,23 @@ export function NewPurchaseOrderForm({
   // every order somebody forgot to tick.
   const [gst, setGst] = useState(true);
   const [lines, setLines] = useState<Line[]>([{ ...EMPTY_LINE }]);
+  // Requested 2026-09-15: add a supplier without abandoning a half-written
+  // order — the same shape the sales form gives customers. The new one is
+  // selected on the way back, because the only reason to create a supplier
+  // here is to buy from them.
+  const [addingSupplier, setAddingSupplier] = useState(false);
+  const [creating, startCreating] = useTransition();
+  const router = useRouter();
+  function createSupplier(input: unknown) {
+    startCreating(async () => {
+      const result = await runCommand("verity.trading.create_supplier", input, "/purchases");
+      if (result.ok) {
+        chooseSupplier((result.data as { id: string }).id);
+        setAddingSupplier(false);
+        router.refresh();
+      }
+    });
+  }
   // Seeded when the dialog opens on an order, not from an effect: an effect
   // would overwrite a half-typed amendment on the next render.
   const [loaded, setLoaded] = useState<string | null>(null);
@@ -326,18 +347,30 @@ export function NewPurchaseOrderForm({
                 : undefined
             }
           >
-            <Combobox
-              id="po-supplier"
-              value={supplierId}
-              onChange={chooseSupplier}
-              required
-              placeholder="Search suppliers"
-              options={suppliers.map((row) => ({
-                value: row.id,
-                label: row.displayName,
-                note: row.stateCode ? undefined : "No state code",
-              }))}
-            />
+            <div className="flex gap-2">
+              <div className="min-w-0 flex-1">
+                <Combobox
+                  id="po-supplier"
+                  value={supplierId}
+                  onChange={chooseSupplier}
+                  required
+                  placeholder="Search suppliers"
+                  options={suppliers.map((row) => ({
+                    value: row.id,
+                    label: row.displayName,
+                    note: row.stateCode ? undefined : "No state code",
+                  }))}
+                />
+              </div>
+              <CommandButton
+                commands={"verity.trading.create_supplier"}
+                disabled={pending || creating}
+                onClick={() => setAddingSupplier(true)}
+                aria-label="Add a supplier"
+              >
+                +
+              </CommandButton>
+            </div>
           </Field>
           <Field label="Deliver to" htmlFor="po-godown" required>
             <Combobox
@@ -504,6 +537,14 @@ export function NewPurchaseOrderForm({
           </div>
         </div>
       </div>
+      {/* Stacked above this dialog the same way the sales form stacks its
+          customer dialog: Escape closes only the one on top. */}
+      <NewSupplierModal
+        open={addingSupplier}
+        pending={creating}
+        onClose={() => setAddingSupplier(false)}
+        onSubmit={createSupplier}
+      />
     </Modal>
   );
 }

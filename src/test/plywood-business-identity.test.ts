@@ -399,7 +399,7 @@ describeDb("plywood business identity (slice 2)", () => {
     expect(after.sellerLegalNameSnapshot).toBe("Naksh Plywood Private Limited");
   });
 
-  it("refuses to invoice a customer whose state is unknown, rather than assuming it is local", async () => {
+  it("invoices a walk-in customer with no state as a local supply, and a registered one by their GSTIN's state", async () => {
     const product = await executeCommand(owner, createProduct, {
       brandId,
       name: `Board ${randomUUID().slice(0, 8)}`,
@@ -419,30 +419,49 @@ describeDb("plywood business identity (slice 2)", () => {
       lines: [{ productId: product.id, qtyReceived: 20 }],
     });
 
-    // No state code: an out-of-town dealer someone entered in a hurry.
-    const customer = await executeCommand(owner, createCustomer, {
-      displayName: "Unknown State Traders",
+    // Rule freeze §4.4 used to refuse this outright. Withdrawn for the
+    // unregistered walk-in buyer (2026-09-15): with no GSTIN and no address
+    // on record, an over-the-counter sale's place of supply is the seller's
+    // own state (IGST Act s.10(1)(c)), and refusing the invoice stopped a
+    // real business invoicing real counter sales.
+    const walkIn = await executeCommand(owner, createCustomer, {
+      displayName: "Counter Sale Customer",
       creditLimitPaise: 10_000_000,
     });
     const so = await executeCommand(owner, createSalesOrder, {
-      customerId: customer.id, locationId: godownId,
+      customerId: walkIn.id, locationId: godownId,
       lines: [{ productId: product.id, qtyOrdered: 5, unitPricePaise: 150_000 }],
     });
     await executeCommand(owner, reserveForOrder, { orderId: so.id });
-
-    // THE DEFECT (rule freeze §4.4): the old code fell back to the business's
-    // own state, which silently taxes an interstate supply as if it were
-    // local — the wrong tax, the wrong return, and it looks right on screen.
-    //
-    // Since Task 71 the goods still go out — a customer missing a state code
-    // does not stop a lorry — and the automatic invoice refuses instead,
-    // reporting why rather than silently producing nothing.
     const issued = await executeCommand(owner, dispatchOrder, { orderId: so.id });
-    expect(issued.invoicing).toBeNull();
-    expect(issued.invoicingRefusal).toMatch(/no state code/);
+    expect(issued.invoicingRefusal).toBeNull();
+    const local = await withTenant(tenantId, (tx) =>
+      tx.tradingInvoice.findFirstOrThrow({ where: { salesOrderId: so.id } }),
+    );
+    expect(local.placeOfSupplyStateCode).toBe("07");
+    expect(local.igstPaise).toBe(0);
+    expect(local.cgstPaise).toBeGreaterThan(0);
 
-    await expect(
-      executeCommand(owner, raiseSalesInvoice, { salesOrderId: so.id }),
-    ).rejects.toThrow(/no state code/);
+    // A REGISTERED buyer never falls through to the seller's state: the
+    // GSTIN's first two digits are their state, so the §4.4 guard still
+    // bites exactly where it was meant to — here, a Maharashtra GSTIN with
+    // no state code typed is still an interstate supply from Delhi.
+    const registered = await executeCommand(owner, createCustomer, {
+      displayName: "Registered Elsewhere Traders",
+      gstin: "27AAACG2115R1ZH",
+      creditLimitPaise: 10_000_000,
+    });
+    const so2 = await executeCommand(owner, createSalesOrder, {
+      customerId: registered.id, locationId: godownId,
+      lines: [{ productId: product.id, qtyOrdered: 5, unitPricePaise: 150_000 }],
+    });
+    await executeCommand(owner, reserveForOrder, { orderId: so2.id });
+    await executeCommand(owner, dispatchOrder, { orderId: so2.id });
+    const inter = await withTenant(tenantId, (tx) =>
+      tx.tradingInvoice.findFirstOrThrow({ where: { salesOrderId: so2.id } }),
+    );
+    expect(inter.placeOfSupplyStateCode).toBe("27");
+    expect(inter.igstPaise).toBeGreaterThan(0);
+    expect(inter.cgstPaise).toBe(0);
   });
 });
