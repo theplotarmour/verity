@@ -294,7 +294,7 @@ export function NewSalesOrderForm({
       description={
         editing
           ? "Only possible while nothing has gone out and no stock is held. Say whether the money is already in hand."
-          : "Say whether the money is already in hand. Anything owed appears on Who owes what."
+          : "Say whether the money is already in hand. Anything owed appears on Ledgers."
       }
       width="lg"
       footer={
@@ -567,7 +567,7 @@ export function NewSalesOrderForm({
               hint={
                 paymentTerms === "prepaid"
                   ? "Settles itself when the goods go out"
-                  : "Appears on Who owes what until it is paid"
+                  : "Appears on Ledgers until it is paid"
               }
             >
               <Combobox

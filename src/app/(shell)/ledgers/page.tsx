@@ -89,7 +89,7 @@ async function LedgersPage({
   return (
     <>
       <PageHeader
-        title="Who owes what"
+        title="Ledgers"
         description="Everyone the business trades with, and which way the money is owed. Open a name to see every movement against them, oldest first. Nothing is cached — a balance is the sum of its entries, so nothing can disagree with it."
       />
       <LedgerView

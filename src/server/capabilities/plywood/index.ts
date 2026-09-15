@@ -1205,7 +1205,9 @@ export function registerPlywoodCapability(): void {
       },
       {
         href: "/ledgers",
-        label: "Who owes what",
+        // Asked for by the name people look for (2026-09-15: "add ledgers
+        // option in sidebar" — it was there as "Who owes what" and not found).
+        label: "Ledgers",
         group: "Money",
         order: 42,
         icon: "ledger",

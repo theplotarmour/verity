@@ -41,7 +41,7 @@ async function FinancePage() {
     <>
       <PageHeader
         title="Finance"
-        description="The paperwork behind the money: which invoices and supplier bills exist, which are still waiting on a supplier's own document, and anything that moved without producing one. Money itself is recorded on Transactions, and who owes what is on Who owes what."
+        description="The paperwork behind the money: which invoices and supplier bills exist, which are still waiting on a supplier's own document, and anything that moved without producing one. Money itself is recorded on Transactions, and who owes what is on Ledgers."
       />
       <FinanceDesk
         invoices={invoices}
