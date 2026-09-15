@@ -49,6 +49,7 @@ export const ENTITY_RESEARCH = "verity.outreach.research_entry";
 export const ENTITY_TASK = "verity.outreach.task";
 export const ENTITY_MEETING = "verity.outreach.meeting";
 export const ENTITY_COACHING_NOTE = "verity.outreach.coaching_note";
+export const ENTITY_AI_INSIGHT = "verity.outreach.ai_insight";
 /**
  * Nav-gating markers (2026-09-14). Founder/Senior/Junior share broad
  * Read/Create/Edit grants on `ENTITY_LEAD` etc. at Tenant scope (a
@@ -135,6 +136,13 @@ const COACHING_NOTE_VISIBILITIES = ["JuniorVisible", "LeaderPrivate"] as const;
  * `qualityScore` rather than inventing a second scoring concept.
  */
 const LEAD_QUEUES = ["New", "NeedsResearch", "Stale", "HighPriority", "AdvancePending"] as const;
+
+/** Closed set (Task 106 Phase 8, master-context §85's permitted list). */
+export const INSIGHT_KINDS = ["Summary", "NextStep", "Qualification"] as const;
+export type InsightKind = (typeof INSIGHT_KINDS)[number];
+/** Bumped whenever `insightPrompt` changes shape — stored on every row so a
+ *  reader can tell which instructions produced which suggestion (§32). */
+export const INSIGHT_PROMPT_VERSION = "2026-09-15.1";
 
 const REASSIGNMENT_ELIGIBLE_AFTER_MS = 14 * 24 * 60 * 60 * 1000;
 const REACTIVATION_CREDIT_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
@@ -727,7 +735,7 @@ export const resolveEscalation: CommandDefinition<{ leadId: string }, { id: stri
 };
 
 export const listOutreachLeads: QueryDefinition<
-  { teamId?: string; ownerId?: string; state?: string },
+  { teamId?: string; ownerId?: string; state?: string; leadId?: string },
   Array<Record<string, unknown>>
 > = {
   key: "verity.outreach.list_leads",
@@ -736,11 +744,14 @@ export const listOutreachLeads: QueryDefinition<
     teamId: z.string().uuid().optional(),
     ownerId: z.string().uuid().optional(),
     state: z.string().optional(),
+    /// One lead by id (Phase 8: the agent reads a single record, not the book).
+    leadId: z.string().uuid().optional(),
   }),
   handler: async (ctx, input) => {
     await assertTeamScopeAllowed(ctx.tx, ctx.actor.userId, input.teamId);
     return ctx.tx.outreachLead.findMany({
       where: {
+        ...(input.leadId ? { id: input.leadId } : {}),
         ...(input.teamId ? { teamId: input.teamId } : {}),
         ...(input.ownerId ? { opportunityOwnerId: input.ownerId } : {}),
         ...(input.state ? { state: input.state } : {}),
@@ -2249,6 +2260,112 @@ export const getTeamWeeklyMemberBreakdown: QueryDefinition<
 };
 
 // ---------------------------------------------------------------------------
+// AI INSIGHTS — Task 106 Phase 8 (master-context §85; §32-33 provenance).
+//
+// The LLM turn itself runs OUTSIDE any command (it is a network call that
+// may take seconds; a command's transaction is not the place for it — the
+// same reasoning `src/server/actions/people.ts` gives for Supabase Auth).
+// `src/server/actions/outreach.ts` orchestrates: authorize the lead read
+// as the actor, run `runAgentTurn` (Task 84 — every read it makes goes
+// through `enforcePolicy()` as the same human, so nothing outside their
+// access can reach the model), then persist through `recordAiInsight`.
+// This file owns the prompt, the command and the query, nothing provider-
+// shaped: `agent-chat.ts` stays the only module that knows an LLM exists.
+// ---------------------------------------------------------------------------
+
+/**
+ * The task the agent is given. It is told the lead id and which reads to
+ * make; it is NOT handed any record content here — it must query, so the
+ * grounding cache (Task 84 area 4) sees every id and the turn's tool-call
+ * record is a true list of what it was grounded on. §85's never-list is
+ * restated in the model's own instructions, not merely assumed.
+ */
+/** The only tools an insight turn is given (`runAgentTurn`'s `toolKeys`) — the prompt's "use ONLY these" is enforced, not requested. */
+export const INSIGHT_TOOL_KEYS = [
+  "verity.outreach.list_leads",
+  "verity.outreach.lead_timeline",
+  "verity.outreach.list_contacts",
+  "verity.outreach.list_research",
+] as const;
+
+export function insightPrompt(kind: InsightKind, leadId: string): string {
+  const reads =
+    `Use ONLY these tools, in this order, on lead id ${leadId}: ` +
+    `verity.outreach.list_leads (with leadId set to this lead), verity.outreach.lead_timeline, ` +
+    `verity.outreach.list_contacts, verity.outreach.list_research. ` +
+    `Do not call any command. Do not call any other query.`;
+  const never =
+    "Never invent facts, business problems or buying signals; never claim a deal is closed; " +
+    "never make a commercial commitment; never draft a message to send. If the records are too thin " +
+    "to say something, say exactly that in one sentence.";
+  const ask: Record<InsightKind, string> = {
+    Summary:
+      "Write a 3-5 sentence plain-English summary of this prospect for a colleague picking it up cold: " +
+      "who they are, why we think they're relevant, what has happened so far, and where it stands. Cite only what the records say.",
+    NextStep:
+      "Suggest the single most useful next action for the opportunity owner, in 2-3 sentences, and say which record " +
+      "(an activity, a contact, a research note) makes you suggest it. If the lead already has a next action set, say whether it still fits and why.",
+    Qualification:
+      "Assess fit against the PlotArmour tracks (Agency / Verity / Both) using only the recorded research and conversation. " +
+      "Give a one-line verdict, then 2-4 bullet reasons each tied to a record. State plainly what is unknown.",
+  };
+  return `${reads}\n\n${ask[kind]}\n\n${never}\n\nReply in plain prose. No headings, no JSON.`;
+}
+
+/**
+ * Persist a suggestion the orchestrator already obtained. Called with
+ * `channel: "human"` by the action — the human asked for it and is the
+ * requester of record; the model's own reads were the `agent`-channel part.
+ */
+export const recordAiInsight: CommandDefinition<
+  { leadId: string; kind: InsightKind; content: string; model: string; promptVersion: string; sourceReads: string[] },
+  { id: string }
+> = {
+  key: "verity.outreach.record_ai_insight",
+  entity: ENTITY_AI_INSIGHT,
+  verb: "Create",
+  input: z.object({
+    leadId: z.string().uuid(),
+    kind: z.enum(INSIGHT_KINDS),
+    content: z.string().trim().min(1).max(8000),
+    model: z.string().min(1).max(200),
+    promptVersion: z.string().min(1).max(40),
+    sourceReads: z.array(z.string().min(1).max(200)).max(20),
+  }),
+  handler: async (ctx, input) => {
+    const lead = await ctx.tx.outreachLead.findUnique({ where: { id: input.leadId } });
+    if (!lead) throw new ValidationError("E_VALIDATION: lead does not exist");
+    await assertTeamScopeAllowed(ctx.tx, ctx.actor.userId, lead.teamId);
+    const requestedByPartyId = await actorPartyId(ctx.tx, ctx.actor.userId);
+    const row = await ctx.tx.outreachAiInsight.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        leadId: input.leadId,
+        kind: input.kind,
+        content: input.content,
+        model: input.model,
+        promptVersion: input.promptVersion,
+        sourceReads: input.sourceReads,
+        requestedByPartyId,
+      },
+    });
+    return { result: { id: row.id }, events: [{ name: "verity.outreach.ai_insight_recorded", entityId: row.id }] };
+  },
+};
+
+export const listAiInsights: QueryDefinition<{ leadId: string }, Array<Record<string, unknown>>> = {
+  key: "verity.outreach.list_ai_insights",
+  entity: ENTITY_AI_INSIGHT,
+  input: z.object({ leadId: z.string().uuid() }),
+  handler: async (ctx, input) => {
+    const lead = await ctx.tx.outreachLead.findUnique({ where: { id: input.leadId } });
+    if (!lead) return [];
+    await assertTeamScopeAllowed(ctx.tx, ctx.actor.userId, lead.teamId);
+    return ctx.tx.outreachAiInsight.findMany({ where: { leadId: input.leadId }, orderBy: { createdAt: "desc" }, take: 10 });
+  },
+};
+
+// ---------------------------------------------------------------------------
 // COMPANY DIRECTION — master-context spec §10-11. Phase 2.
 // ---------------------------------------------------------------------------
 
@@ -2461,6 +2578,7 @@ export function registerOutreachCapability(): void {
   registerCommand(updateMeetingOutcome);
   registerCommand(reviewCheckIn);
   registerCommand(createCoachingNote);
+  registerCommand(recordAiInsight);
 
   registerQuery(listOutreachTeams);
   registerQuery(listOutreachContacts);
@@ -2491,4 +2609,5 @@ export function registerOutreachCapability(): void {
   registerQuery(getVerticalIntelligence);
   registerQuery(getChannelIntelligence);
   registerQuery(getConversionFunnel);
+  registerQuery(listAiInsights);
 }

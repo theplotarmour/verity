@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { prisma } from "@/server/platform/db";
@@ -10,7 +10,35 @@ import { ForbiddenError, clearScopeResolvers } from "@/server/platform/authoriza
 import { clearTransitionGuards } from "@/server/platform/state";
 import { clearContributions } from "@/server/platform/contribution";
 import { provisionIdentity } from "@/server/platform/identity";
+// Task 106 Phase 8: the insight action runs an LLM turn OUTSIDE the
+// database — stubbed here so the test proves the orchestration (authorize
+// as actor, persist with provenance), never the model. Hoisted by vitest.
+const agentTurn = vi.hoisted(() => vi.fn());
+const currentActor = vi.hoisted(() => ({ value: null as unknown }));
+vi.mock("@/server/platform/agent-chat", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/server/platform/agent-chat")>();
+  realAgentTurn.value = original.runAgentTurn;
+  return { ...original, runAgentTurn: agentTurn };
+});
+const realAgentTurn = vi.hoisted(() => ({ value: null as unknown }));
+vi.mock("@/server/platform/auth", () => ({ requireActor: async () => currentActor.value }));
+vi.mock("@/server/platform/request-limits", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/server/platform/request-limits")>()),
+  limitActorRequests: async () => undefined,
+}));
+vi.mock("@/server/platform/config", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/server/platform/config")>();
+  // Opt-in live check below uses the deployment's real provider config.
+  if (process.env.VERITY_TEST_REAL_AGENT === "1") return original;
+  return { ...original, readAgentProviderConfig: () => ({ apiKey: "test", baseUrl: "http://provider.invalid", model: "test-model" }) };
+});
+vi.mock("next/cache", () => ({ revalidatePath: () => undefined }));
+// This file registers the capability itself in `beforeAll`; the action's own
+// bootstrap would register it a second time.
+vi.mock("@/server/capabilities/registry", () => ({ installCapabilities: () => undefined }));
+import { generateLeadInsight } from "@/server/actions/outreach";
 import {
+  ENTITY_AI_INSIGHT,
   ENTITY_ACTIVITY,
   ENTITY_CHECK_IN,
   ENTITY_COACHING_NOTE,
@@ -57,7 +85,11 @@ import {
   getFunnelCounts,
   getTeamComparison,
   getVerticalIntelligence,
+  INSIGHT_TOOL_KEYS,
+  insightPrompt,
+  listAiInsights,
   listDirections,
+  recordAiInsight,
   postCompanyDirection,
   getTeamWeeklyRollup,
   listAvailableParties,
@@ -139,6 +171,7 @@ describeDb("capability: Outreach", () => {
       ENTITY_TASK,
       ENTITY_MEETING,
       ENTITY_COACHING_NOTE,
+      ENTITY_AI_INSIGHT,
     ];
 
     await withTenant(tenantId, async (tx) => {
@@ -1300,6 +1333,122 @@ describeDb("capability: Outreach", () => {
       expect(raw.priorityVertical).toBe("Retail");
       // Defaults when omitted: an empty list, not null.
       expect(history.find((d) => d.id === second.id)!.priorityIndustries).toEqual([]);
+    });
+  });
+
+  describe("AI insights (Task 106 Phase 8, master-context §85, §32-33)", () => {
+    let leadId: string;
+    beforeAll(async () => {
+      const lead = await executeCommand(founder, createOutreachLead, {
+        teamId: teamAId,
+        companyName: "Phase Eight Co",
+        whyRelevant: "Test.",
+        opportunityOwnerId: seniorAPartyId,
+      });
+      leadId = lead.id;
+    });
+
+    it("the prompt names the reads, forbids commands, and restates §85's never-list", () => {
+      const prompt = insightPrompt("NextStep", leadId);
+      expect(prompt).toContain(leadId);
+      expect(prompt).toContain("verity.outreach.lead_timeline");
+      expect(prompt).toContain("Do not call any command");
+      expect(prompt).toMatch(/never claim a deal is closed/i);
+      expect(prompt).toMatch(/never draft a message to send/i);
+    });
+
+    it("records a suggestion with provenance and lists it back, newest first", async () => {
+      const saved = await executeCommand(founder, recordAiInsight, {
+        leadId,
+        kind: "Summary",
+        content: "A manufacturing prospect, contacted once, awaiting reply.",
+        model: "test-model",
+        promptVersion: "2026-09-15.1",
+        sourceReads: ["verity.outreach.list_leads", "verity.outreach.lead_timeline"],
+      });
+      const rows = await executeQuery(founder, listAiInsights, { leadId });
+      expect(rows[0]?.id).toBe(saved.id);
+      expect(rows[0]?.requestedByPartyId).toBe(founderPartyId);
+      expect(rows[0]?.sourceReads).toEqual(["verity.outreach.list_leads", "verity.outreach.lead_timeline"]);
+      expect(rows[0]?.model).toBe("test-model");
+    });
+
+    it("a leader of another team can neither record nor list suggestions on this lead", async () => {
+      await expect(
+        executeCommand(seniorB, recordAiInsight, {
+          leadId,
+          kind: "Summary",
+          content: "x",
+          model: "m",
+          promptVersion: "v",
+          sourceReads: [],
+        }),
+      ).rejects.toThrow(ForbiddenError);
+      await expect(executeQuery(seniorB, listAiInsights, { leadId })).rejects.toThrow(ForbiddenError);
+    });
+
+    it("the action persists the turn's reply with the queries it actually ran as provenance", async () => {
+      currentActor.value = founder;
+      agentTurn.mockResolvedValueOnce({
+        reply: "  Suggest a follow-up call; the last activity was a week ago.  ",
+        toolCalls: [
+          { key: "verity.outreach.list_leads", kind: "query", input: { leadId }, ok: true, output: [] },
+          { key: "verity.outreach.lead_timeline", kind: "query", input: { leadId }, ok: true, output: [] },
+          { key: "verity.outreach.list_contacts", kind: "query", input: { leadId }, ok: false, output: "boom" },
+        ],
+      });
+      const result = await generateLeadInsight({ leadId, kind: "NextStep" });
+      expect(result.ok).toBe(true);
+      const rows = await executeQuery(founder, listAiInsights, { leadId });
+      const row = rows.find((r) => r.kind === "NextStep")!;
+      expect(row.content).toBe("Suggest a follow-up call; the last activity was a week ago.");
+      // Only successful reads count as grounding; the failed one is not claimed.
+      expect(row.sourceReads).toEqual(["verity.outreach.list_leads", "verity.outreach.lead_timeline"]);
+      if (process.env.VERITY_TEST_REAL_AGENT !== "1") expect(row.model).toBe("test-model");
+      expect(agentTurn).toHaveBeenCalledTimes(1);
+      expect(agentTurn.mock.calls[0]![0]).toBe(founder);
+      // The turn is narrowed to the four reads — enforced, not merely asked.
+      expect(agentTurn.mock.calls[0]![3]).toEqual({ toolKeys: INSIGHT_TOOL_KEYS });
+    });
+
+    it("the action refuses to record a reply that read nothing", async () => {
+      currentActor.value = founder;
+      agentTurn.mockResolvedValueOnce({ reply: "Probably a great fit.", toolCalls: [] });
+      const result = await generateLeadInsight({ leadId, kind: "Qualification" });
+      expect(result.ok).toBe(false);
+      const rows = await executeQuery(founder, listAiInsights, { leadId });
+      expect(rows.some((r) => r.kind === "Qualification")).toBe(false);
+    });
+
+    // Opt-in, costs a real model call: VERITY_TEST_REAL_AGENT=1 with the
+    // provider variables set. Proves the prompt actually drives the reads
+    // the provenance claims, against the throwaway tenant, never a real one.
+    (process.env.VERITY_TEST_REAL_AGENT === "1" ? it : it.skip)("LIVE: a real turn reads the lead's records and records a grounded summary", async () => {
+      currentActor.value = founder;
+      await executeCommand(founder, logOutreachActivity, {
+        leadId,
+        channel: "LinkedIn",
+        activityType: "FirstOutreach",
+        message: "Intro note about fragmented purchasing.",
+      });
+      agentTurn.mockImplementationOnce(realAgentTurn.value as typeof agentTurn);
+      const result = await generateLeadInsight({ leadId, kind: "Summary" });
+      expect(result.ok).toBe(true);
+      const rows = await executeQuery(founder, listAiInsights, { leadId });
+      const row = rows.find((r) => r.kind === "Summary" && r.model !== "test-model")!;
+      expect(row).toBeDefined();
+      expect(row.sourceReads).toContain("verity.outreach.lead_timeline");
+      expect(String(row.content).length).toBeGreaterThan(40);
+      console.log("LIVE summary:", row.content, "\nreads:", row.sourceReads);
+    }, 120_000);
+
+    it("the action authorizes the lead as the actor before spending a turn", async () => {
+      currentActor.value = seniorB;
+      agentTurn.mockClear();
+      const result = await generateLeadInsight({ leadId, kind: "Summary" });
+      expect(result.ok).toBe(false);
+      expect(result.ok === false && result.code).toBe("E_FORBIDDEN");
+      expect(agentTurn).not.toHaveBeenCalled();
     });
   });
 });

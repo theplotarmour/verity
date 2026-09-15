@@ -21,7 +21,7 @@ not as a reason to cut the phase list itself. If a phase turns out to be
 overbuild in practice, that's a stop-and-ask moment per CLAUDE.md, not a
 silent trim.
 
-## Status: Phase 1-7 DONE 2026-09-14/15. Phase 8 (AI) not started, deferred by design
+## Status: Phase 1-8 DONE 2026-09-14/15 (Phase 8 lean scope: lead insights). Provider quota blocks live use — see Phase 8
 
 Phase 3 closed out across two slices:
 - **`OutreachContact`** — model, migration, RLS, commands, permissions, UI panel + add-contact form on `/outreach/[id]`.
@@ -274,18 +274,48 @@ findings on the changed pages. The two audit migrations from
 with `prisma migrate deploy` on 2026-09-15. Not live-browser-verified this
 pass — same posture as Phase 6.
 
-## Phase 8 — AI (last, per spec's own §124 and lean-V1)
+## Phase 8 — AI — DONE 2026-09-15, lean scope (lead insights only)
 
-Do not scaffold before Phases 3-7 are real. When triggered:
-- Reuse `agent-chat.ts` (Task 84 pattern) for the conversational surfaces
-  (§37-39 team-leader/core questions).
-- Any persisted AI job/result needs provenance fields (§32) and a hard
-  RBAC filter applied **before** context retrieval, never after (§39,
-  §136 — release blocker if violated). Design this from the first line,
-  don't retrofit.
-- AI-suggestion vs human-confirmed fields stay visually and structurally
-  distinct (§33) — e.g. `aiSuggestedClassification` vs `classification`
-  columns, never one shared field silently overwritten by AI.
+Scope chosen with the product owner 2026-09-15: lead insights, not
+drafting/sending, not weekly summaries, not a job queue.
+
+- **DONE** — `OutreachAiInsight`: append-only, RLS, audit trigger, entity
+  registered, grants written into the migration itself (`20260915170000`)
+  for the three live roles — not an ad-hoc script. Provenance per §32:
+  `model`, `promptVersion`, `sourceReads` (the query keys the turn actually
+  executed), `requestedByPartyId`. §33 holds structurally: nothing in this
+  table is read back into `OutreachLead`; a human acts on a suggestion by
+  running the real command themselves.
+- **DONE** — `generateLeadInsight` (`src/server/actions/outreach.ts`), an
+  action not a command because the model call is a network round trip
+  (`people.ts`'s own reasoning): authorize as the actor first
+  (`listAiInsights` throws E_FORBIDDEN outside the actor's led team, before
+  a token is spent), run `runAgentTurn` (Task 84) narrowed to four reads,
+  persist via `recordAiInsight`. "RBAC before context retrieval" is not a
+  filter over an assembled context — the model only ever receives what its
+  own actor-scoped, `enforcePolicy()`-gated queries returned (ADR-017).
+- **DONE** — `AiInsightPanel` on `/outreach/[id]`: Summary / Next step /
+  Qualification; every entry labelled "AI suggestion" with model, requester
+  and what it read. No dismiss (append-only; newest 10 shown).
+- **Platform change, small and general** — `runAgentTurn` gained
+  `options.toolKeys`, a restriction on the actor-filtered manifest, never an
+  addition. The insight prompt's "use ONLY these tools" is enforced by it.
+- **Tests** — 6 new (prompt shape, persist + list, cross-team E_FORBIDDEN on
+  both command and query, action orchestration with the turn mocked, refuses
+  an ungrounded reply, authorizes before spending a turn) plus one opt-in
+  live test (`VERITY_TEST_REAL_AGENT=1`).
+
+**Live-provider findings (deployment, not code — flagged, not fixed here):**
+1. `OPENAI_MODEL=groq/compound` does not support tool calling (Groq 400
+   "`tool calling` is not supported with this model"). Every turn of the
+   existing Task 84 dock has therefore failed on this deployment since it
+   shipped; Task 84 recorded it as "not visually verified live". Tool-capable
+   models on the account: `openai/gpt-oss-120b`, `openai/gpt-oss-20b`.
+2. The full actor manifest is ~18k tokens per request; Groq's free tier
+   allows 8k tokens/minute. With `toolKeys` the insight turn's first request
+   is ~5k and the model made the right reads as the actor — but the second
+   request (with tool results) pushed the minute over 8k. Proven up to the
+   provider's quota; needs a paid tier or a different provider to ship.
 
 ## Testing (§129-136), carried forward from 105 Phase 4's pattern
 

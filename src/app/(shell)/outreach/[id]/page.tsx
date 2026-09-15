@@ -9,6 +9,7 @@ import {
   ENTITY_RESEARCH,
   ENTITY_TASK,
   ENTITY_MEETING,
+  ENTITY_AI_INSIGHT,
   assertTeamScopeAllowed,
   deriveLeadHealth,
 } from "@/server/capabilities/outreach";
@@ -32,6 +33,8 @@ import { ContactForm } from "./ContactForm";
 import { ResearchForm, ViewFileLink } from "./ResearchForm";
 import { TaskPanel } from "./TaskPanel";
 import { MeetingPanel } from "./MeetingPanel";
+import { AiInsightPanel } from "./AiInsightPanel";
+import { readAgentProviderConfig } from "@/server/platform/config";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +81,8 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
       canCreateTask,
       meetings,
       canCreateMeeting,
+      aiInsights,
+      canRequestInsight,
     ] = await Promise.all([
       tx.stateDefinition.findMany({ where: { entityKey: ENTITY_LEAD } }),
       (async () => {
@@ -99,6 +104,8 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
       hasPermission(tx, actor.roleId, "Create", ENTITY_TASK),
       tx.outreachMeeting.findMany({ where: { leadId: id }, orderBy: { scheduledAt: "asc" } }),
       hasPermission(tx, actor.roleId, "Create", ENTITY_MEETING),
+      tx.outreachAiInsight.findMany({ where: { leadId: id }, orderBy: { createdAt: "desc" }, take: 10 }),
+      hasPermission(tx, actor.roleId, "Create", ENTITY_AI_INSIGHT),
     ]);
 
     const stateById = new Map(states.map((s) => [s.id, s]));
@@ -113,6 +120,7 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
         lead.opportunityOwnerId,
         ...(lead.closerId ? [lead.closerId] : []),
         ...activities.map((a) => a.actorPartyId),
+        ...aiInsights.map((i) => i.requestedByPartyId),
         ...teamMemberPartyIds,
       ]),
     ];
@@ -138,6 +146,8 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
       canCreateTask,
       meetings,
       canCreateMeeting,
+      aiInsights,
+      canRequestInsight,
     };
   });
 
@@ -387,6 +397,21 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
               outcomeNotes: m.outcomeNotes,
             }))}
             canCreate={data.canCreateMeeting}
+          />
+
+          <AiInsightPanel
+            leadId={lead.id}
+            canRequest={data.canRequestInsight}
+            configured={readAgentProviderConfig() !== undefined}
+            insights={data.aiInsights.map((i) => ({
+              id: i.id,
+              kind: i.kind,
+              content: i.content,
+              model: i.model,
+              sourceReads: i.sourceReads,
+              requestedBy: data.partyName.get(i.requestedByPartyId) ?? "Unknown",
+              createdAt: i.createdAt.toISOString(),
+            }))}
           />
         </div>
       </div>

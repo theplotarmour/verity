@@ -188,6 +188,7 @@ model Tenant {
   outreachMeetings               OutreachMeeting[]
   outreachCheckInReviews         OutreachCheckInReview[]
   outreachCoachingNotes          OutreachCoachingNote[]
+  outreachAiInsights    OutreachAiInsight[]
   outreachTargets               OutreachTarget[]
   outreachCheckIns              OutreachCheckIn[]
   outreachWeeklyReports         OutreachWeeklyReport[]
@@ -4466,6 +4467,7 @@ model OutreachLead {
   tasks      OutreachTask[]
   meetings   OutreachMeeting[]
   coachingNotes OutreachCoachingNote[]
+  aiInsights    OutreachAiInsight[]
 
   @@index([tenantId, teamId, state])
   @@index([tenantId, opportunityOwnerId])
@@ -4824,4 +4826,38 @@ model OutreachDirection {
 
   @@index([tenantId, postedAt])
   @@map("outreach_direction")
+}
+
+/// APPEND-ONLY AI suggestion about a lead (Task 106 Phase 8; master-context
+/// §85's permitted list, §32-33's provenance rule). NEVER a fact about the
+/// lead: nothing here is read back into `OutreachLead`. A person accepts a
+/// suggestion by running the real command themselves (advance the stage,
+/// log the activity) — the row stays what it was, a suggestion with its
+/// provenance, so "what the AI said" and "what a human decided" can never
+/// be confused for each other. Generated as the requesting human's own
+/// actor (ADR-017): `sourceReads` lists the query keys the turn actually
+/// executed, so a reader can see what it was grounded on — and, since
+/// those ran through `enforcePolicy()`, that nothing outside the
+/// requester's own access reached the model.
+model OutreachAiInsight {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  leadId   String @map("lead_id") @db.Uuid
+
+  /// Closed set: Summary | NextStep | Qualification.
+  kind    String
+  content String
+
+  /// Provenance (§32): which model, which prompt version, which reads.
+  model             String
+  promptVersion     String   @map("prompt_version")
+  sourceReads       String[] @default([]) @map("source_reads")
+  requestedByPartyId String  @map("requested_by_party_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   OutreachLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, leadId, createdAt])
+  @@map("outreach_ai_insight")
 }

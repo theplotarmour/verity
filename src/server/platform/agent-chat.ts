@@ -326,8 +326,20 @@ export async function runAgentTurn(
   actor: ActorContext,
   history: ChatMessage[],
   userMessage: string,
+  options: {
+    /**
+     * Narrow this turn's tools to these command/query keys. A RESTRICTION on
+     * the actor-filtered manifest — a key the actor may not use is still
+     * absent — never a way to add one. Task 106 Phase 8 needed it: a
+     * single-purpose turn ("summarise this lead") should not carry every
+     * tool the actor holds, both for the model's focus and because the full
+     * manifest is ~18k tokens, over a free-tier provider's per-minute cap.
+     */
+    toolKeys?: readonly string[];
+  } = {},
 ): Promise<AgentTurnResult> {
-  const manifest = await withTenant(actor.tenantId, (tx) => buildToolManifest(tx, actor));
+  const fullManifest = await withTenant(actor.tenantId, (tx) => buildToolManifest(tx, actor));
+  const manifest = options.toolKeys ? fullManifest.filter((t) => options.toolKeys!.includes(t.key)) : fullManifest;
   const tools = manifest.map(toOpenAiTool);
   const grounding = new GroundingCache();
 
