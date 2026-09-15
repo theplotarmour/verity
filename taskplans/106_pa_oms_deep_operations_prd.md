@@ -21,7 +21,7 @@ not as a reason to cut the phase list itself. If a phase turns out to be
 overbuild in practice, that's a stop-and-ask moment per CLAUDE.md, not a
 silent trim.
 
-## Status: Phase 1/2/3/4 DONE 2026-09-14/15. Phase 5+ not started
+## Status: Phase 1/2/3/4/5 DONE 2026-09-14/15. Phase 6+ not started
 
 Phase 3 closed out across two slices:
 - **`OutreachContact`** — model, migration, RLS, commands, permissions, UI panel + add-contact form on `/outreach/[id]`.
@@ -158,20 +158,38 @@ the real PlotArmour tenant (note round-trip, duplicate banner against a
 real lead), 38/38 tests, tsc clean. §131's Junior-day items covering
 research/contact/duplicate all exercised live.
 
-## Phase 5 — Daily execution
+## Phase 5 — Daily execution — DONE 2026-09-15
 
-- `OutreachTask` model + CRUD, origin field (TEAM_LEADER_ASSIGNED /
-  SELF_CREATED / SYSTEM_GENERATED per §54).
-- `OutreachMeeting` model + CRUD (§62).
-- Daily report rework: `OutreachCheckIn` gains the 7-question structure
-  (§67), a status chain (§68), and drillable auto-metric counts (§65).
-  This closes 105's own recorded gap #5.
-- Junior "My Day" (§46) and nav additions (§47) — extends 105's existing
-  `/outreach/workspace`, does not replace it.
-- Follow-up queue bucketing (§61) — query-shape change over existing data.
+- **DONE** — `OutreachTask` model + CRUD, origin (SelfCreated/
+  TeamLeaderAssigned, SystemGenerated reserved for future automation)
+  derived server-side from assignee vs. actor, never client-set (§54).
+- **DONE** — `OutreachMeeting` model + CRUD, Scheduled/Completed/Cancelled/
+  NoShow lifecycle with outcome notes (§62).
+- **DONE** — Daily report rework: `submitDailyCheckIn` gains
+  `mostImportantDevelopment`/`needsAttention` (closing 105's gap #5's
+  question-count half). The status-chain half required a design
+  correction mid-build: `OutreachCheckIn` has a hard append-only DB
+  trigger from its original migration, so a first attempt (UPDATE-based
+  review columns) was silently blocked and surfaced as a failing test
+  (P2025 "no record found"). Fixed with a proper append-only
+  `OutreachCheckInReview` table — one row per review action, "current"
+  status is the latest row, matching handbook Ch. 02's "never rewrite the
+  Junior's own text" rule at the database level. UI: a review panel on
+  Team Command (Senior marks Reviewed / requests clarification).
+- **DONE** — Follow-up queue bucketing (§61): `listFollowUpQueue` returns
+  overdue/today/tomorrow/upcoming, alongside (not replacing)
+  `listOverdueFollowUps`.
+- **NOT DONE** — Junior "My Day" nav additions (§46-47): the task/meeting/
+  check-in-review data this needs now all exists, but no dedicated Junior
+  homepage surface was built this pass — deferred, not silently dropped.
+- Drillable auto-metric counts (§65) were already true of `getDailyMetrics`
+  before this phase (105) — nothing new needed there.
 
-**Acceptance**: §134's reporting acceptance test (create N records, confirm
-daily report auto-counts match, every count drillable to source rows).
+**Acceptance**: met for everything DONE above — 46/46 tests (was 38),
+live-verified via chrome-devtools MCP (task create/complete round-tripped
+on a real lead, Team Command's empty state confirmed non-crashing for a
+non-leader account — could not verify the review panel itself live, no
+Senior credentials available in-session; covered by unit tests instead).
 
 ## Phase 6 — Team Leader operations
 
