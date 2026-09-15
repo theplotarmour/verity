@@ -844,13 +844,57 @@ export const listEscalatedLeads: QueryDefinition<{ teamId?: string }, Array<Reco
   },
 };
 
-/** Company Core's team-to-team comparison (master-context spec §8's own table shape). */
+/**
+ * Shared shape for every Company-Core roll-up below (Task 106 Phase 7,
+ * spec §84-85): an optional inclusive-from / exclusive-to window applied
+ * to activity `occurredAt`, lead `createdAt` and `closedAt`. No window
+ * means all-time — the pre-Phase-7 behaviour, unchanged.
+ */
+const WINDOW_INPUT = z.object({
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+});
+type WindowInput = z.infer<typeof WINDOW_INPUT>;
+function dateRange(input: WindowInput): { gte?: Date; lt?: Date } | undefined {
+  if (!input.from && !input.to) return undefined;
+  return { ...(input.from ? { gte: new Date(input.from) } : {}), ...(input.to ? { lt: new Date(input.to) } : {}) };
+}
+function isOpenPipeline(state: string): boolean {
+  return !(TERMINAL_STATES as readonly string[]).includes(state) && state !== "closed_won";
+}
+/** Activity-type buckets every roll-up here counts the same way (the daily workbook's own columns). */
+function tally(acts: Array<{ activityType: string }>) {
+  return {
+    outreach: acts.filter((a) => a.activityType === "FirstOutreach").length,
+    followUps: acts.filter((a) => a.activityType === "FollowUp").length,
+    responses: acts.filter((a) => a.activityType === "Response").length,
+    meetings: acts.filter((a) => a.activityType === "MeetingBooked" || a.activityType === "MeetingCompleted").length,
+    proposals: acts.filter((a) => a.activityType === "ProposalSent").length,
+    pitchDecks: acts.filter((a) => a.activityType === "PitchDeck").length,
+    businessResearch: acts.filter((a) => a.activityType === "BusinessResearch").length,
+  };
+}
+/** Responses per first outreach, 0-1, or null when there is nothing to divide by. */
+function rate(numerator: number, denominator: number): number | null {
+  return denominator > 0 ? Math.round((numerator / denominator) * 1000) / 1000 : null;
+}
+
+/**
+ * Company Core's team-to-team comparison (master-context spec §8's own
+ * table shape; 2026-09-13 doc §5 adds Leader and Target columns). Phase 7
+ * adds the time window, the leader's name, the team's active Weekly
+ * QualifiedProspects target for the window's start (the one number §5's
+ * table shows as "Target"), and a response rate — same source facts, one
+ * more derived column each, no stored aggregate.
+ */
 export const getTeamComparison: QueryDefinition<
-  Record<string, never>,
+  WindowInput,
   Array<{
     teamId: string;
     teamName: string;
+    leaderName: string;
     memberCount: number;
+    target: number | null;
     leads: number;
     outreach: number;
     followUps: number;
@@ -859,42 +903,303 @@ export const getTeamComparison: QueryDefinition<
     proposals: number;
     pitchDecks: number;
     businessResearch: number;
+    responseRate: number | null;
     pipeline: number;
     closed: number;
   }>
 > = {
   key: "verity.outreach.team_comparison",
   entity: ENTITY_TEAM,
-  input: z.object({}),
-  handler: async (ctx) => {
+  input: WINDOW_INPUT,
+  handler: async (ctx, input) => {
+    const range = dateRange(input);
+    const at = input.from ? new Date(input.from) : new Date();
     const [teams, allLeads] = await Promise.all([
       ctx.tx.outreachTeam.findMany({ where: { active: true }, include: { memberships: { where: { active: true } } } }),
       ctx.tx.outreachLead.findMany(),
     ]);
     const teamIds = teams.map((t) => t.id);
-    const activities = teamIds.length
-      ? await ctx.tx.outreachActivity.findMany({ where: { lead: { teamId: { in: teamIds } } }, include: { lead: true } })
-      : [];
+    const [activities, leaders, targets] = await Promise.all([
+      teamIds.length
+        ? ctx.tx.outreachActivity.findMany({
+            where: { lead: { teamId: { in: teamIds } }, ...(range ? { occurredAt: range } : {}) },
+            include: { lead: true },
+          })
+        : Promise.resolve([]),
+      ctx.tx.party.findMany({ where: { id: { in: teams.map((t) => t.leaderId) } } }),
+      teamIds.length
+        ? ctx.tx.outreachTarget.findMany({
+            where: {
+              scope: "Team",
+              teamId: { in: teamIds },
+              period: "Weekly",
+              metric: "QualifiedProspects",
+              active: true,
+              periodStart: { lte: at },
+              periodEnd: { gte: at },
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+    const leaderName = new Map(leaders.map((p) => [p.id, p.displayName]));
+    const targetFor = new Map(targets.map((t) => [t.teamId, t.targetValue]));
+    const inWindow = (d: Date | null) => !range || (d != null && (!range.gte || d >= range.gte) && (!range.lt || d < range.lt));
 
     return teams.map((t) => {
-      const leads = allLeads.filter((l) => l.teamId === t.id);
+      const teamLeads = allLeads.filter((l) => l.teamId === t.id);
       const acts = activities.filter((a) => a.lead.teamId === t.id);
+      const counts = tally(acts);
       return {
         teamId: t.id,
         teamName: t.name,
+        leaderName: leaderName.get(t.leaderId) ?? "Unknown",
         memberCount: t.memberships.length,
-        leads: leads.length,
-        outreach: acts.filter((a) => a.activityType === "FirstOutreach").length,
-        followUps: acts.filter((a) => a.activityType === "FollowUp").length,
-        responses: acts.filter((a) => a.activityType === "Response").length,
-        meetings: acts.filter((a) => a.activityType === "MeetingBooked" || a.activityType === "MeetingCompleted").length,
-        proposals: acts.filter((a) => a.activityType === "ProposalSent").length,
-        pitchDecks: acts.filter((a) => a.activityType === "PitchDeck").length,
-        businessResearch: acts.filter((a) => a.activityType === "BusinessResearch").length,
-        pipeline: leads.filter((l) => !(TERMINAL_STATES as readonly string[]).includes(l.state) && l.state !== "closed_won").length,
-        closed: leads.filter((l) => l.state === "closed_won").length,
+        target: targetFor.get(t.id) ?? null,
+        leads: teamLeads.filter((l) => inWindow(l.createdAt)).length,
+        ...counts,
+        responseRate: rate(counts.responses, counts.outreach),
+        // Open pipeline is a point-in-time fact, never windowed.
+        pipeline: teamLeads.filter((l) => isOpenPipeline(l.state)).length,
+        closed: teamLeads.filter((l) => l.state === "closed_won" && inWindow(l.closedAt)).length,
       };
     });
+  },
+};
+
+// ---------------------------------------------------------------------------
+// COMPANY PULSE + INTELLIGENCE — Task 106 Phase 7 (spec §84-85, §90;
+// master-context §52-54; 2026-09-13 doc §4 "Company pulse"). Every number
+// here is a read over the activity log and the lead table — derived, never
+// stored (capability-builder skill's own source-of-truth rule).
+// ---------------------------------------------------------------------------
+
+/** The organisation-wide stat row at the top of the Core view (2026-09-13 doc §4). */
+export const getCompanyPulse: QueryDefinition<
+  WindowInput,
+  {
+    activeTeams: number;
+    activeMembers: number;
+    leads: number;
+    outreach: number;
+    followUps: number;
+    responses: number;
+    meetings: number;
+    proposals: number;
+    responseRate: number | null;
+    activePipeline: number;
+    closed: number;
+  }
+> = {
+  key: "verity.outreach.company_pulse",
+  entity: ENTITY_LEAD,
+  input: WINDOW_INPUT,
+  handler: async (ctx, input) => {
+    const range = dateRange(input);
+    const [teams, leads, activities, closed] = await Promise.all([
+      ctx.tx.outreachTeam.findMany({ where: { active: true }, include: { memberships: { where: { active: true } } } }),
+      ctx.tx.outreachLead.findMany({ select: { state: true, createdAt: true } }),
+      ctx.tx.outreachActivity.findMany({ where: range ? { occurredAt: range } : {}, select: { activityType: true } }),
+      ctx.tx.outreachLead.count({ where: { state: "closed_won", ...(range ? { closedAt: range } : {}) } }),
+    ]);
+    const counts = tally(activities);
+    const memberIds = new Set(teams.flatMap((t) => t.memberships.map((m) => m.partyId)));
+    return {
+      activeTeams: teams.length,
+      activeMembers: memberIds.size,
+      leads: leads.filter((l) => !range || ((!range.gte || l.createdAt >= range.gte) && (!range.lt || l.createdAt < range.lt))).length,
+      outreach: counts.outreach,
+      followUps: counts.followUps,
+      responses: counts.responses,
+      meetings: counts.meetings,
+      proposals: counts.proposals,
+      responseRate: rate(counts.responses, counts.outreach),
+      activePipeline: leads.filter((l) => isOpenPipeline(l.state)).length,
+      closed,
+    };
+  },
+};
+
+type IntelligenceRow = {
+  key: string;
+  leads: number;
+  outreach: number;
+  responses: number;
+  meetings: number;
+  proposals: number;
+  closed: number;
+  responseRate: number | null;
+  /** §53: "Do not optimize prematurely on tiny sample sizes." Below this many first outreaches the rate is shown but flagged. */
+  thinSample: boolean;
+};
+const THIN_SAMPLE_BELOW = 20;
+
+/** Performance by industry (master-context §52): "Which markets are actually converting?" */
+export const getVerticalIntelligence: QueryDefinition<WindowInput, IntelligenceRow[]> = {
+  key: "verity.outreach.vertical_intelligence",
+  entity: ENTITY_LEAD,
+  input: WINDOW_INPUT,
+  handler: async (ctx, input) => {
+    const range = dateRange(input);
+    const [leads, activities] = await Promise.all([
+      ctx.tx.outreachLead.findMany({ select: { id: true, industry: true, state: true, createdAt: true, closedAt: true } }),
+      ctx.tx.outreachActivity.findMany({ where: range ? { occurredAt: range } : {}, select: { leadId: true, activityType: true } }),
+    ]);
+    const industryOf = new Map(leads.map((l) => [l.id, l.industry?.trim() || "Unspecified"]));
+    const inWindow = (d: Date | null) => !range || (d != null && (!range.gte || d >= range.gte) && (!range.lt || d < range.lt));
+    const rows = new Map<string, { leads: number; closed: number; acts: Array<{ activityType: string }> }>();
+    const bucket = (key: string) => rows.get(key) ?? rows.set(key, { leads: 0, closed: 0, acts: [] }).get(key)!;
+    for (const l of leads) {
+      const b = bucket(industryOf.get(l.id)!);
+      if (inWindow(l.createdAt)) b.leads += 1;
+      if (l.state === "closed_won" && inWindow(l.closedAt)) b.closed += 1;
+    }
+    for (const a of activities) bucket(industryOf.get(a.leadId) ?? "Unspecified").acts.push(a);
+    return [...rows.entries()]
+      .map(([key, b]) => {
+        const c = tally(b.acts);
+        return {
+          key,
+          leads: b.leads,
+          outreach: c.outreach,
+          responses: c.responses,
+          meetings: c.meetings,
+          proposals: c.proposals,
+          closed: b.closed,
+          responseRate: rate(c.responses, c.outreach),
+          thinSample: c.outreach < THIN_SAMPLE_BELOW,
+        };
+      })
+      .filter((r) => r.leads > 0 || r.outreach > 0)
+      .sort((a, b) => b.leads - a.leads || a.key.localeCompare(b.key));
+  },
+};
+
+/**
+ * Performance by channel (master-context §53). A lead has no single channel
+ * — each activity does — so `leads` here means distinct leads touched on
+ * that channel, and `closed` means distinct closed-won leads that were
+ * ever contacted on it (attribution is shared, not split).
+ */
+export const getChannelIntelligence: QueryDefinition<WindowInput, IntelligenceRow[]> = {
+  key: "verity.outreach.channel_intelligence",
+  entity: ENTITY_ACTIVITY,
+  input: WINDOW_INPUT,
+  handler: async (ctx, input) => {
+    const range = dateRange(input);
+    const activities = await ctx.tx.outreachActivity.findMany({
+      where: range ? { occurredAt: range } : {},
+      select: { leadId: true, channel: true, activityType: true, lead: { select: { state: true } } },
+    });
+    const rows = new Map<string, { leads: Set<string>; closed: Set<string>; acts: Array<{ activityType: string }> }>();
+    for (const a of activities) {
+      const b = rows.get(a.channel) ?? rows.set(a.channel, { leads: new Set(), closed: new Set(), acts: [] }).get(a.channel)!;
+      b.leads.add(a.leadId);
+      if (a.lead.state === "closed_won") b.closed.add(a.leadId);
+      b.acts.push(a);
+    }
+    return [...rows.entries()]
+      .map(([key, b]) => {
+        const c = tally(b.acts);
+        return {
+          key,
+          leads: b.leads.size,
+          outreach: c.outreach,
+          responses: c.responses,
+          meetings: c.meetings,
+          proposals: c.proposals,
+          closed: b.closed.size,
+          responseRate: rate(c.responses, c.outreach),
+          thinSample: c.outreach < THIN_SAMPLE_BELOW,
+        };
+      })
+      .sort((a, b) => b.outreach - a.outreach || a.key.localeCompare(b.key));
+  },
+};
+
+/**
+ * Bottleneck detection (master-context spec §63) — a stage-to-stage ratio
+ * reading over already-agreed facts. Lived in `reports/page.tsx` since 105
+ * Phase 5; moved here so the Intelligence page and Reports read one rule.
+ */
+export function detectBottleneck(counts: {
+  prospected: number;
+  contacted: number;
+  responded: number;
+  qualifiedPlus: number;
+  proposal: number;
+  closedWon: number;
+}): string | null {
+  const { prospected, contacted, responded, qualifiedPlus, proposal, closedWon } = counts;
+  if (prospected < 5) return null; // too little volume to read anything into ratios
+  if (contacted > 0 && responded / contacted < 0.1) return "High outreach, low responses — likely a targeting or messaging problem.";
+  if (responded > 0 && qualifiedPlus / responded < 0.3) return "High responses, low qualification — likely a conversation/qualification problem.";
+  if (qualifiedPlus > 0 && proposal / qualifiedPlus < 0.2) return "Qualified opportunities aren't reaching proposal — likely a discovery/fit problem.";
+  if (proposal > 0 && closedWon / proposal < 0.2) return "Proposals aren't converting — likely a commercial/pricing/decision problem.";
+  if (prospected > 0 && contacted / prospected < 0.5) return "High prospecting, low outreach — a research-to-action gap.";
+  return null;
+}
+
+/**
+ * Handbook Ch. 22's 14 linear stages (as seeded in 20260912120000) in order, for reach-counting: a lead
+ * at `proposal` has necessarily passed `contacted`. Counting "reached or
+ * beyond" is what makes stage-to-stage conversion a ratio of the same
+ * population, not of whoever happens to sit at each stage right now.
+ */
+const LINEAR_STAGES = [
+  "research",
+  "prospect",
+  "contacted",
+  "responded",
+  "qualified",
+  "discovery",
+  "opportunity",
+  "handoff",
+  "proposal",
+  "negotiation",
+  "verbal_yes",
+  "invoice_requested",
+  "advance_received",
+  "closed_won",
+] as const;
+
+/** Stage reach + stage-to-stage conversion + the §63 bottleneck reading (spec §90). */
+export const getConversionFunnel: QueryDefinition<
+  WindowInput,
+  { stages: Array<{ key: string; atStage: number; reached: number; conversionFromPrevious: number | null }>; bottleneck: string | null }
+> = {
+  key: "verity.outreach.conversion_funnel",
+  entity: ENTITY_LEAD,
+  input: WINDOW_INPUT,
+  handler: async (ctx, input) => {
+    const range = dateRange(input);
+    const leads = await ctx.tx.outreachLead.findMany({
+      where: range ? { createdAt: range } : {},
+      select: { state: true },
+    });
+    const index = new Map(LINEAR_STAGES.map((k, i) => [k, i]));
+    // A terminal/negative lead still reached whatever stage it left from —
+    // that is unknown from `state` alone, so it counts only at `research`.
+    const rank = (state: string) => index.get(state as (typeof LINEAR_STAGES)[number]) ?? 0;
+    const stages = LINEAR_STAGES.map((key, i) => {
+      const reached = leads.filter((l) => rank(l.state) >= i).length;
+      const atStage = leads.filter((l) => l.state === key).length;
+      return { key, atStage, reached, conversionFromPrevious: i === 0 ? null : null as number | null };
+    });
+    for (let i = 1; i < stages.length; i += 1) {
+      stages[i]!.conversionFromPrevious = rate(stages[i]!.reached, stages[i - 1]!.reached);
+    }
+    const reachedAt = (key: (typeof LINEAR_STAGES)[number]) => stages[index.get(key)!]!.reached;
+    return {
+      stages,
+      bottleneck: detectBottleneck({
+        prospected: reachedAt("prospect"),
+        contacted: reachedAt("contacted"),
+        responded: reachedAt("responded"),
+        qualifiedPlus: reachedAt("qualified"),
+        proposal: reachedAt("proposal"),
+        closedWon: reachedAt("closed_won"),
+      }),
+    };
   },
 };
 
@@ -1954,6 +2259,10 @@ export const postCompanyDirection: CommandDefinition<
     primaryTrack?: (typeof TRACKS)[number];
     companyProspectingTarget?: number;
     strategicNote?: string;
+    priorityIndustries?: string[];
+    secondaryOpportunity?: string;
+    geographicFocus?: string;
+    targetCompanyProfile?: string;
   },
   { id: string }
 > = {
@@ -1966,13 +2275,20 @@ export const postCompanyDirection: CommandDefinition<
     primaryTrack: z.enum(TRACKS).optional(),
     companyProspectingTarget: z.number().int().positive().optional(),
     strategicNote: z.string().optional(),
+    // Task 106 Phase 7 (spec §91). Industries are a list so vertical
+    // intelligence can match a lead's `industry` without parsing copy.
+    priorityIndustries: z.array(z.string().trim().min(1)).max(20).optional(),
+    secondaryOpportunity: z.string().optional(),
+    geographicFocus: z.string().optional(),
+    targetCompanyProfile: z.string().optional(),
   }),
   handler: async (ctx, input) => {
     const postedById = await actorPartyId(ctx.tx, ctx.actor.userId);
-    // APPEND-ONLY (ADR-009): close every prior Active direction rather than
-    // editing one — a new direction is a new fact, not a correction of the
-    // old row.
-    await ctx.tx.outreachDirection.updateMany({ where: { status: "Active" }, data: { status: "Closed" } });
+    // APPEND-ONLY (ADR-009): a new direction is a new fact that supersedes
+    // the old one by being later — nothing on the old row changes. The
+    // table's own migration enforces this (SELECT + INSERT policies, a
+    // reject_mutation trigger), which is why the earlier "close the prior
+    // Active row" UPDATE here silently did nothing (Phase 7 correction).
     const direction = await ctx.tx.outreachDirection.create({
       data: {
         tenantId: ctx.actor.tenantId,
@@ -1981,6 +2297,10 @@ export const postCompanyDirection: CommandDefinition<
         primaryTrack: input.primaryTrack ?? "Undetermined",
         companyProspectingTarget: input.companyProspectingTarget ?? null,
         strategicNote: input.strategicNote ?? null,
+        priorityIndustries: input.priorityIndustries ?? [],
+        secondaryOpportunity: input.secondaryOpportunity ?? null,
+        geographicFocus: input.geographicFocus ?? null,
+        targetCompanyProfile: input.targetCompanyProfile ?? null,
         postedById,
       },
     });
@@ -1988,18 +2308,34 @@ export const postCompanyDirection: CommandDefinition<
   },
 };
 
+/** Derived: the latest posted direction is the current one; no stored flag. */
 export const getCurrentDirection: QueryDefinition<Record<string, never>, Record<string, unknown> | null> = {
   key: "verity.outreach.current_direction",
   entity: ENTITY_DIRECTION,
   input: z.object({}),
-  handler: async (ctx) => ctx.tx.outreachDirection.findFirst({ where: { status: "Active" }, orderBy: { postedAt: "desc" } }),
+  handler: async (ctx) => {
+    const latest = await ctx.tx.outreachDirection.findFirst({ orderBy: { postedAt: "desc" } });
+    return latest ? { ...latest, status: "Active", closedAt: null } : null;
+  },
 };
 
+/**
+ * History (§66) newest first, each row carrying its derived `status` and
+ * `closedAt` — the moment the next direction was posted — so a reader can
+ * see how long each held without a column nothing could maintain.
+ */
 export const listDirections: QueryDefinition<Record<string, never>, Array<Record<string, unknown>>> = {
   key: "verity.outreach.list_directions",
   entity: ENTITY_DIRECTION,
   input: z.object({}),
-  handler: async (ctx) => ctx.tx.outreachDirection.findMany({ orderBy: { postedAt: "desc" }, take: 20 }),
+  handler: async (ctx) => {
+    const rows = await ctx.tx.outreachDirection.findMany({ orderBy: { postedAt: "desc" }, take: 20 });
+    return rows.map((d, i) => ({
+      ...d,
+      status: i === 0 ? "Active" : "Closed",
+      closedAt: i === 0 ? null : rows[i - 1]!.postedAt,
+    }));
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -2090,6 +2426,10 @@ export function registerOutreachCapability(): void {
         requiresEntity: ENTITY_TARGET, shells: ["platform", "operations"] },
       { href: "/outreach/reports", label: "Reports", group: "Overview", order: 33, icon: "ledger",
         requiresEntity: ENTITY_WEEKLY_REPORT, requiresVerb: "Create", shells: ["platform", "operations"] },
+      // Company Core only (Task 106 Phase 7, spec §90): Create on Direction
+      // is the same structural "this is Core" signal the Outreach page uses.
+      { href: "/outreach/intelligence", label: "Intelligence", group: "Overview", order: 34, icon: "overview",
+        requiresEntity: ENTITY_DIRECTION, requiresVerb: "Create", shells: ["platform", "operations"] },
     ],
   });
 
@@ -2147,4 +2487,8 @@ export function registerOutreachCapability(): void {
   registerQuery(listLeadQueue);
   registerQuery(listCoachingNotes);
   registerQuery(getTeamWeeklyMemberBreakdown);
+  registerQuery(getCompanyPulse);
+  registerQuery(getVerticalIntelligence);
+  registerQuery(getChannelIntelligence);
+  registerQuery(getConversionFunnel);
 }

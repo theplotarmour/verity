@@ -15,6 +15,7 @@ import {
   ENTITY_CHECK_IN,
   ENTITY_COACHING_NOTE,
   ENTITY_CONTACT,
+  ENTITY_DIRECTION,
   ENTITY_LEAD,
   ENTITY_MEETING,
   ENTITY_RESEARCH,
@@ -49,8 +50,15 @@ import {
   reviewCheckIn,
   flagForEscalation,
   getDailyMetrics,
+  getChannelIntelligence,
+  getCompanyPulse,
+  getConversionFunnel,
+  getCurrentDirection,
   getFunnelCounts,
   getTeamComparison,
+  getVerticalIntelligence,
+  listDirections,
+  postCompanyDirection,
   getTeamWeeklyRollup,
   listAvailableParties,
   listEscalatedLeads,
@@ -150,20 +158,36 @@ describeDb("capability: Outreach", () => {
           })),
         ),
       });
+      // Create on Direction is the capability's structural "Company Core"
+      // signal (`listCoachingNotes`, the Outreach/Intelligence pages) — so
+      // only the Founder's role carries it; everyone else may read it.
+      await tx.permission.create({ data: { tenantId, roleId: role.id, verb: "Read", entity: ENTITY_DIRECTION, scope: "Tenant" } });
+      const founderRole = await tx.role.create({ data: { tenantId, name: "Founder" } });
+      await tx.permission.createMany({
+        data: [...everything, ENTITY_DIRECTION].flatMap((entity) =>
+          (["Read", "Create", "Edit", "ActionExecute"] as const).map((verb) => ({
+            tenantId,
+            roleId: founderRole.id,
+            verb,
+            entity,
+            scope: "Tenant" as const,
+          })),
+        ),
+      });
 
       const founderIdentity = await provisionIdentity(tx, {
         organizationId,
         authUserId: randomUUID(),
         displayName: "Founder",
       });
-      await tx.tenantMembership.update({ where: { id: founderIdentity.membershipId }, data: { roleId: role.id } });
+      await tx.tenantMembership.update({ where: { id: founderIdentity.membershipId }, data: { roleId: founderRole.id } });
       founderPartyId = founderIdentity.partyId;
       founder = {
         tenantId,
         userId: founderIdentity.userId,
         membershipId: founderIdentity.membershipId,
         organizationId,
-        roleId: role.id,
+        roleId: founderRole.id,
       };
 
       const seniorAIdentity = await provisionIdentity(tx, {
@@ -1140,6 +1164,142 @@ describeDb("capability: Outreach", () => {
       expect(typeof teamARow!.leads).toBe("number");
       expect(typeof teamARow!.pipeline).toBe("number");
       expect(typeof teamARow!.closed).toBe("number");
+    });
+  });
+
+  describe("company pulse + intelligence (Task 106 Phase 7, spec §84-85, §90)", () => {
+    let manufacturingLeadId: string;
+
+    beforeAll(async () => {
+      const lead = await executeCommand(founder, createOutreachLead, {
+        teamId: teamAId,
+        companyName: "Phase Seven Manufacturing",
+        whyRelevant: "Fragmented purchasing.",
+        opportunityOwnerId: seniorAPartyId,
+        industry: "Manufacturing",
+      });
+      manufacturingLeadId = lead.id;
+      await executeCommand(founder, createOutreachLead, {
+        teamId: teamBId,
+        companyName: "Phase Seven No Industry",
+        whyRelevant: "Test.",
+        opportunityOwnerId: seniorAPartyId,
+      });
+      await executeCommand(founder, logOutreachActivity, {
+        leadId: lead.id,
+        channel: "LinkedIn",
+        activityType: "FirstOutreach",
+        message: "Intro note.",
+      });
+      await executeCommand(founder, logOutreachActivity, {
+        leadId: lead.id,
+        channel: "LinkedIn",
+        activityType: "Response",
+        response: "Interested.",
+      });
+    });
+
+    it("reports the organisation-wide pulse, all-time and windowed", async () => {
+      const allTime = await executeQuery(founder, getCompanyPulse, {});
+      expect(allTime.activeTeams).toBeGreaterThanOrEqual(2);
+      expect(allTime.outreach).toBeGreaterThanOrEqual(1);
+      expect(allTime.responses).toBeGreaterThanOrEqual(1);
+      expect(allTime.responseRate).not.toBeNull();
+      expect(allTime.activePipeline).toBeGreaterThanOrEqual(1);
+
+      // A window entirely in the past contains none of this run's activity.
+      const past = await executeQuery(founder, getCompanyPulse, {
+        from: new Date(Date.now() - 400 * DAY_MS).toISOString(),
+        to: new Date(Date.now() - 399 * DAY_MS).toISOString(),
+      });
+      expect(past.outreach).toBe(0);
+      expect(past.leads).toBe(0);
+      expect(past.responseRate).toBeNull();
+      // Open pipeline is point-in-time, never windowed.
+      expect(past.activePipeline).toBe(allTime.activePipeline);
+    });
+
+    it("team comparison carries the leader's name, a window and a response rate", async () => {
+      const rows = await executeQuery(founder, getTeamComparison, {});
+      const teamA = rows.find((r) => r.teamId === teamAId)!;
+      expect(teamA.leaderName).toBe("Senior A");
+      expect(teamA.target).toBeNull();
+      expect(teamA.outreach).toBeGreaterThanOrEqual(1);
+      expect(teamA.responseRate).not.toBeNull();
+
+      const windowed = await executeQuery(founder, getTeamComparison, {
+        from: new Date(Date.now() - 400 * DAY_MS).toISOString(),
+        to: new Date(Date.now() - 399 * DAY_MS).toISOString(),
+      });
+      expect(windowed.find((r) => r.teamId === teamAId)!.outreach).toBe(0);
+    });
+
+    it("groups performance by industry, flagging thin samples (§52-53)", async () => {
+      const rows = await executeQuery(founder, getVerticalIntelligence, {});
+      const manufacturing = rows.find((r) => r.key === "Manufacturing")!;
+      expect(manufacturing).toBeDefined();
+      expect(manufacturing.leads).toBeGreaterThanOrEqual(1);
+      expect(manufacturing.outreach).toBeGreaterThanOrEqual(1);
+      expect(manufacturing.responses).toBeGreaterThanOrEqual(1);
+      expect(manufacturing.thinSample).toBe(true);
+      // Leads with no industry land in one named bucket, never vanish.
+      expect(rows.some((r) => r.key === "Unspecified")).toBe(true);
+    });
+
+    it("groups performance by channel, counting distinct leads touched (§53)", async () => {
+      const rows = await executeQuery(founder, getChannelIntelligence, {});
+      const linkedIn = rows.find((r) => r.key === "LinkedIn")!;
+      expect(linkedIn).toBeDefined();
+      expect(linkedIn.leads).toBeGreaterThanOrEqual(1);
+      expect(linkedIn.outreach).toBeGreaterThanOrEqual(1);
+      expect(linkedIn.responseRate).not.toBeNull();
+      void manufacturingLeadId;
+    });
+
+    it("reads the funnel as reach-or-beyond so conversion is a ratio of one population (§63, §90)", async () => {
+      const funnel = await executeQuery(founder, getConversionFunnel, {});
+      expect(funnel.stages.map((s) => s.key)[0]).toBe("research");
+      expect(funnel.stages.at(-1)!.key).toBe("closed_won");
+      for (let i = 1; i < funnel.stages.length; i += 1) {
+        expect(funnel.stages[i]!.reached).toBeLessThanOrEqual(funnel.stages[i - 1]!.reached);
+      }
+      expect(funnel.stages[0]!.conversionFromPrevious).toBeNull();
+      expect(funnel.stages[0]!.reached).toBeGreaterThanOrEqual(funnel.stages[0]!.atStage);
+      expect(funnel.bottleneck === null || typeof funnel.bottleneck === "string").toBe(true);
+    });
+  });
+
+  describe("company direction fields (Task 106 Phase 7, spec §91, §66)", () => {
+    it("stores the extended fields; the prior direction reads Closed at the next one's postedAt, derived", async () => {
+      const first = await executeCommand(founder, postCompanyDirection, {
+        weekLabel: "Week 1",
+        priorityVertical: "Retail",
+        priorityIndustries: ["Retail", "Hospitality"],
+        geographicFocus: "Delhi NCR",
+        targetCompanyProfile: "50-500 staff, multi-outlet",
+        secondaryOpportunity: "Agency digital systems",
+      });
+      const current = await executeQuery(founder, getCurrentDirection, {});
+      expect(current?.id).toBe(first.id);
+      expect(current?.priorityIndustries).toEqual(["Retail", "Hospitality"]);
+      expect(current?.geographicFocus).toBe("Delhi NCR");
+      expect(current?.targetCompanyProfile).toBe("50-500 staff, multi-outlet");
+      expect(current?.secondaryOpportunity).toBe("Agency digital systems");
+      expect(current?.closedAt).toBeNull();
+
+      const second = await executeCommand(founder, postCompanyDirection, { weekLabel: "Week 2", priorityVertical: "Manufacturing" });
+      const history = await executeQuery(founder, listDirections, {});
+      const closed = history.find((d) => d.id === first.id)!;
+      const active = history.find((d) => d.id === second.id)!;
+      expect(closed.status).toBe("Closed");
+      expect(closed.closedAt).toEqual(active.postedAt);
+      expect(active.status).toBe("Active");
+      expect(active.closedAt).toBeNull();
+      // The table is append-only: the earlier row itself is untouched.
+      const raw = await withTenant(tenantId, (tx) => tx.outreachDirection.findUniqueOrThrow({ where: { id: first.id } }));
+      expect(raw.priorityVertical).toBe("Retail");
+      // Defaults when omitted: an empty list, not null.
+      expect(history.find((d) => d.id === second.id)!.priorityIndustries).toEqual([]);
     });
   });
 });

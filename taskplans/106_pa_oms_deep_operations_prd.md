@@ -21,7 +21,7 @@ not as a reason to cut the phase list itself. If a phase turns out to be
 overbuild in practice, that's a stop-and-ask moment per CLAUDE.md, not a
 silent trim.
 
-## Status: Phase 1-6 DONE 2026-09-14/15. Phase 7+ not started
+## Status: Phase 1-7 DONE 2026-09-14/15. Phase 8 (AI) not started, deferred by design
 
 Phase 3 closed out across two slices:
 - **`OutreachContact`** — model, migration, RLS, commands, permissions, UI panel + add-contact form on `/outreach/[id]`.
@@ -215,16 +215,64 @@ Phase 4), tsc clean. Not independently live-verified this pass (cost/time
 budget); covered by unit tests, same posture as Phase 5's un-verified
 review-panel UI.
 
-## Phase 7 — Company Core operations
+## Phase 7 — Company Core operations — DONE 2026-09-15
 
-- Company Pulse + Team Comparison depth (§84-85) — extends 105's existing
-  `getTeamComparison`.
-- Intelligence page (§90) — funnel/conversion/bottleneck views, extends
-  105 Phase 5's `detectBottleneck()`.
-- Company Direction field extension (priority industries, geographic
-  focus, target profile — §91).
+- **DONE** — Company Pulse (§84, 2026-09-13 doc §4): `getCompanyPulse`
+  with a `from`/`to` window; the Outreach page's Core view now opens with
+  the organisation's numbers for Today / This week / This month / All time
+  (`RangeSwitch`, tenant-zone day boundaries in `outreach/range.ts`).
+  Active pipeline is point-in-time, never windowed — stated on the stat.
+- **DONE** — Team Comparison depth (§85, doc §5): `getTeamComparison` takes
+  the same window and adds Leader, Target (the team's active Weekly
+  QualifiedProspects target at the window's start) and response rate. The
+  page reads the registered query via `executeQuery` instead of carrying
+  its own copy of the arithmetic (it did, since 105).
+- **DONE** — Intelligence page (§90; master-context §52-54, §63) at
+  `/outreach/intelligence`, Core-only (Create on Direction, the same
+  structural signal the Outreach page uses): `getConversionFunnel`
+  (reach-or-beyond per stage so each conversion is a ratio of one
+  population, plus the §63 bottleneck reading — `detectBottleneck` moved
+  from `reports/page.tsx` into the capability so both screens read one
+  rule), `getVerticalIntelligence` (by lead industry; "Unspecified" bucket,
+  never dropped), `getChannelIntelligence` (distinct leads touched per
+  channel; closed attribution is shared, not split). Rates on fewer than
+  20 first outreaches are flagged `thinSample` per §53's own warning.
+- **DONE** — Direction field extension (§91, §10's example): `priorityIndustries`
+  (a list, so vertical intelligence can match a lead's `industry` without
+  parsing copy), `secondaryOpportunity`, `geographicFocus`,
+  `targetCompanyProfile`. Form, banner and history updated.
+- **CORRECTED, pre-existing defect found by this phase's own test** —
+  `outreach_direction` is append-only by its 20260913100000 migration
+  (SELECT + INSERT policies, `reject_mutation` trigger), so
+  `postCompanyDirection`'s "close the prior Active row" UPDATE had matched
+  zero rows since 105 Phase 2: every direction on the live tenant still read
+  `Active`, and only `getCurrentDirection`'s `postedAt` ordering made the UI
+  look right. Same class as Phase 5's check-in-review finding. Fixed the
+  honest way (ADR-009, the Phase 5 precedent): the `status` column is
+  dropped (`20260915160000`), "current" = latest posted, a prior row's
+  `closedAt` = the next row's `postedAt`, both derived in `listDirections`.
+  A first attempt added a stored `closed_at` column (`20260915150000`)
+  before the trigger was found; the second migration removes it again.
+- **ALSO** — `20260915150000` re-attaches `audit_command_mutation` to every
+  `outreach_*` table idempotently: the 2026-09-07 audit migration attaches it
+  to tables that exist when it runs, which on the shared database was after
+  every outreach table but on a fresh CI database is before them.
 
-**Acceptance**: §133's Core-day acceptance test.
+**Not done, deferred**: per-person analytical drill-down (doc §7 "Company →
+Team → Person") — `getTeamWeeklyMemberBreakdown` already carries the
+numbers, no Core-side page for it yet; ₹ pipeline value (doc §4 "Active
+Pipeline ₹X") — leads carry no deal-value field, so the pulse shows a count
+and says so rather than inventing one.
+
+**Acceptance**: 57 tests in `capability-outreach.test.ts` (was 51); all 6
+new ones pass, and the full file runs 52/57 against the remote database —
+the 5 failures are environmental and pre-date this phase (1 needs a bound
+storage driver, 4 hit the 30 s per-test timeout on the remote pooler and
+pass when run alone). tsc and eslint clean, impeccable detector zero
+findings on the changed pages. The two audit migrations from
+`codex/audit-2026-09-07-remediation` plus this phase's two were applied
+with `prisma migrate deploy` on 2026-09-15. Not live-browser-verified this
+pass — same posture as Phase 6.
 
 ## Phase 8 — AI (last, per spec's own §124 and lean-V1)
 

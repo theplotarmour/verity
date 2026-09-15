@@ -3,8 +3,17 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { ENTITY_DIRECTION, ENTITY_LEAD, assertTeamScopeAllowed, deriveLeadHealth } from "@/server/capabilities/outreach";
+import {
+  ENTITY_DIRECTION,
+  ENTITY_LEAD,
+  assertTeamScopeAllowed,
+  deriveLeadHealth,
+  getAttentionExceptions,
+  getCompanyPulse,
+  getTeamComparison,
+} from "@/server/capabilities/outreach";
 import { ForbiddenError } from "@/server/platform/authorization";
+import { executeQuery } from "@/server/platform/query";
 import { DataTable } from "@/components/ui/DataTable";
 import {
   Badge,
@@ -21,6 +30,8 @@ import { NewLeadForm } from "./NewLeadForm";
 import { DirectionForm } from "./DirectionForm";
 import { ResolveEscalationButton } from "./ResolveEscalationButton";
 import { Donut, Legend } from "@/components/ui/charts";
+import { RangeSwitch } from "./RangeSwitch";
+import { RANGE_LABEL, percent, rangeFromParam, windowFor } from "./range";
 
 export const dynamic = "force-dynamic";
 
@@ -46,11 +57,12 @@ type LeadRow = Record<string, unknown> & {
 export default async function OutreachPage({
   searchParams,
 }: {
-  searchParams: Promise<{ team?: string; state?: string }>;
+  searchParams: Promise<{ team?: string; state?: string; range?: string }>;
 }) {
   installCapabilities();
   const actor = await requireActor();
   const filters = await searchParams;
+  const range = rangeFromParam(filters.range);
 
   const data = await withTenant(actor.tenantId, async (tx) => {
     if (!(await hasPermission(tx, actor.roleId, "Read", ENTITY_LEAD))) return null;
@@ -65,7 +77,7 @@ export default async function OutreachPage({
       throw error;
     }
 
-    const [teams, leads, states, canCreate, canPostDirection, currentDirection, directionHistory] = await Promise.all([
+    const [teams, leads, states, canCreate, canPostDirection, directionHistory, tenant] = await Promise.all([
       tx.outreachTeam.findMany({
         where: { active: true },
         include: { _count: { select: { memberships: true } }, memberships: { where: { active: true } } },
@@ -82,83 +94,30 @@ export default async function OutreachPage({
       tx.stateDefinition.findMany({ where: { entityKey: ENTITY_LEAD }, orderBy: { key: "asc" } }),
       hasPermission(tx, actor.roleId, "Create", ENTITY_LEAD),
       hasPermission(tx, actor.roleId, "Create", ENTITY_DIRECTION),
-      tx.outreachDirection.findFirst({ where: { status: "Active" }, orderBy: { postedAt: "desc" } }),
       tx.outreachDirection.findMany({ orderBy: { postedAt: "desc" }, take: 20 }),
+      tx.tenant.findUnique({ where: { id: actor.tenantId }, select: { timeZone: true } }),
     ]);
+    // The direction table is append-only, so "current" is derived: the
+    // latest posted (Task 106 Phase 7 correction — see `listDirections`).
+    const currentDirection = directionHistory[0] ?? null;
+    const window = windowFor(range, tenant?.timeZone ?? "Asia/Kolkata");
 
-    // Attention/exceptions (master-context spec §9) and Company Direction
-    // (spec §10) are company-wide reads — only meaningful, and only shown,
-    // when nobody's narrowed the view to one team. `canPostDirection`
-    // (Founder-only, per the permission grant) doubles as this screen's
-    // signal for "this is the Company Core view," same idea as
-    // `assertTeamScopeAllowed`'s structural-not-role-name approach.
-    let exceptions: Array<{ kind: string; message: string }> = [];
-    if (!filters.team && canPostDirection) {
-      const dayStart = new Date();
-      dayStart.setUTCHours(0, 0, 0, 0);
-      const [overdueCount, noNextActionCount, checkIns] = await Promise.all([
-        tx.outreachLead.count({
-          where: { state: { notIn: [...TERMINAL_STATES, "closed_won"] }, nextActionAt: { lt: new Date() } },
-        }),
-        tx.outreachLead.count({
-          where: { state: { notIn: [...TERMINAL_STATES, "closed_won"] }, nextActionAt: null },
-        }),
-        tx.outreachCheckIn.findMany({ where: { checkInDate: { gte: dayStart } } }),
-      ]);
-      if (overdueCount > 0) exceptions.push({ kind: "follow_up_overdue", message: `${overdueCount} follow-up${overdueCount === 1 ? "" : "s"} overdue.` });
-      if (noNextActionCount > 0)
-        exceptions.push({ kind: "no_next_action", message: `${noNextActionCount} active lead${noNextActionCount === 1 ? "" : "s"} with no next action set.` });
-      const checkedIn = new Set(checkIns.map((c) => c.partyId));
-      for (const team of teams) {
-        const memberIds = team.memberships.map((m) => m.partyId);
-        const missing = memberIds.filter((id) => !checkedIn.has(id));
-        if (missing.length > 0)
-          exceptions.push({ kind: "missing_check_in", message: `${team.name}: ${missing.length} of ${memberIds.length} haven't checked in today.` });
-      }
-    }
-
-    // Team-to-team comparison (master-context spec §8's own table shape) —
-    // Founder-only, company-wide, so it needs every lead/activity, not just
-    // the current `?team=` filter's slice.
-    let teamComparison: Array<{
-      id: string;
-      name: string;
-      members: number;
-      leads: number;
-      outreach: number;
-      followUps: number;
-      responses: number;
-      meetings: number;
-      proposals: number;
-      pipeline: number;
-      closed: number;
-    }> = [];
-    if (!filters.team && canPostDirection) {
-      const teamIds = teams.map((t) => t.id);
-      const [allLeads, allActivities] = await Promise.all([
-        tx.outreachLead.findMany(),
-        teamIds.length
-          ? tx.outreachActivity.findMany({ where: { lead: { teamId: { in: teamIds } } }, include: { lead: true } })
-          : Promise.resolve([]),
-      ]);
-      teamComparison = teams.map((t) => {
-        const tLeads = allLeads.filter((l) => l.teamId === t.id);
-        const tActs = allActivities.filter((a) => a.lead.teamId === t.id);
-        return {
-          id: t.id,
-          name: t.name,
-          members: t.memberships.length,
-          leads: tLeads.length,
-          outreach: tActs.filter((a) => a.activityType === "FirstOutreach").length,
-          followUps: tActs.filter((a) => a.activityType === "FollowUp").length,
-          responses: tActs.filter((a) => a.activityType === "Response").length,
-          meetings: tActs.filter((a) => a.activityType === "MeetingBooked" || a.activityType === "MeetingCompleted").length,
-          proposals: tActs.filter((a) => a.activityType === "ProposalSent").length,
-          pipeline: tLeads.filter((l) => !TERMINAL_STATES.includes(l.state) && l.state !== "closed_won").length,
-          closed: tLeads.filter((l) => l.state === "closed_won").length,
-        };
-      });
-    }
+    // Company-wide reads — attention/exceptions (spec §9), the pulse and
+    // the team comparison (Task 106 Phase 7, 2026-09-13 doc §4-5) — are only
+    // meaningful, and only shown, when nobody's narrowed the view to one
+    // team. `canPostDirection` (Founder-only, per the permission grant)
+    // doubles as this screen's signal for "this is the Company Core view,"
+    // same idea as `assertTeamScopeAllowed`'s structural-not-role-name
+    // approach. Each is the registered query, run as this actor — the
+    // page holds no second copy of the arithmetic.
+    const isCoreView = !filters.team && canPostDirection;
+    const [exceptions, pulse, teamComparison] = isCoreView
+      ? await Promise.all([
+          executeQuery(actor, getAttentionExceptions, {}),
+          executeQuery(actor, getCompanyPulse, window),
+          executeQuery(actor, getTeamComparison, window),
+        ])
+      : [[], null, []];
 
     const category = new Map(states.map((s) => [s.key, s.category]));
     const teamName = new Map(teams.map((t) => [t.id, t.name]));
@@ -247,8 +206,9 @@ export default async function OutreachPage({
       canCreate,
       canPostDirection,
       currentDirection,
-      directionHistory: !filters.team && canPostDirection ? directionHistory : [],
+      directionHistory: isCoreView ? directionHistory : [],
       exceptions,
+      pulse,
       teamComparison,
       escalations,
     };
@@ -262,6 +222,19 @@ export default async function OutreachPage({
       <PageHeader
         title="Outreach"
         description="PlotArmour's client-acquisition pipeline — one lead database, one activity history, one pipeline. Company Core view."
+        actions={
+          data.pulse ? (
+            <>
+              <Link
+                href={`/outreach/intelligence?range=${range}`}
+                className="rounded-md border border-line px-3 py-1 text-[13px] text-text no-underline transition-colors hover:bg-glass-2"
+              >
+                Intelligence
+              </Link>
+              <RangeSwitch basePath="/outreach" active={range} />
+            </>
+          ) : undefined
+        }
       />
 
       {/* Operations Room framing (spec §105): the company's own direction is
@@ -290,6 +263,41 @@ export default async function OutreachPage({
                 </div>
                 <Badge tone="accent">{data.currentDirection.primaryTrack}</Badge>
               </div>
+              {(data.currentDirection.priorityIndustries.length > 0 ||
+                data.currentDirection.secondaryOpportunity ||
+                data.currentDirection.geographicFocus ||
+                data.currentDirection.targetCompanyProfile) && (
+                <dl className="mt-3 grid gap-x-8 gap-y-2 text-[13px] sm:grid-cols-2">
+                  {data.currentDirection.priorityIndustries.length > 0 && (
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <dt className="text-text-tertiary">Priority industries</dt>
+                      <dd className="m-0 flex flex-wrap gap-1.5">
+                        {data.currentDirection.priorityIndustries.map((i) => (
+                          <Badge key={i}>{i}</Badge>
+                        ))}
+                      </dd>
+                    </div>
+                  )}
+                  {data.currentDirection.secondaryOpportunity && (
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <dt className="text-text-tertiary">Secondary opportunity</dt>
+                      <dd className="m-0 text-text">{data.currentDirection.secondaryOpportunity}</dd>
+                    </div>
+                  )}
+                  {data.currentDirection.geographicFocus && (
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <dt className="text-text-tertiary">Geographic focus</dt>
+                      <dd className="m-0 text-text">{data.currentDirection.geographicFocus}</dd>
+                    </div>
+                  )}
+                  {data.currentDirection.targetCompanyProfile && (
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <dt className="text-text-tertiary">Target company profile</dt>
+                      <dd className="m-0 text-text">{data.currentDirection.targetCompanyProfile}</dd>
+                    </div>
+                  )}
+                </dl>
+              )}
               <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1">
                 {data.currentDirection.companyProspectingTarget != null && (
                   <span className="text-[13px] text-text-secondary">
@@ -322,17 +330,18 @@ export default async function OutreachPage({
         <div className="mb-6">
           <Panel title="Direction history" flush>
             <RowList>
-              {data.directionHistory.map((d) => (
+              {data.directionHistory.map((d, i) => (
                 <Row key={d.id}>
                   <span className="flex flex-col gap-0.5">
                     <span className="text-[14px] text-text">{d.weekLabel}</span>
                     <span className="text-[12px] text-text-secondary">
                       {d.priorityVertical ?? "No priority vertical set"}
+                      {d.geographicFocus ? ` · ${d.geographicFocus}` : ""}
                     </span>
                   </span>
                   <span className="flex items-center gap-2">
                     <Badge>{d.primaryTrack}</Badge>
-                    <Badge tone={d.status === "Active" ? "accent" : undefined}>{d.status}</Badge>
+                    <Badge tone={i === 0 ? "accent" : undefined}>{i === 0 ? "Active" : "Closed"}</Badge>
                   </span>
                 </Row>
               ))}
@@ -341,12 +350,37 @@ export default async function OutreachPage({
         </div>
       )}
 
-      <StatRow cols={4} className="mb-6">
-        <Stat label="Teams" value={data.teams.length} />
-        <Stat label="Active leads" value={data.activeLeads} />
-        <Stat label="Closed Won" value={data.closedWon} />
-        <Stat label="Follow-ups overdue" value={data.overdue} />
-      </StatRow>
+      {data.pulse ? (
+        /* Company pulse (2026-09-13 doc §4): the organisation's own numbers
+           for the chosen window, read live — never a stored aggregate. Two
+           bands, not ten framed cards; the window's name sits on the first
+           so a reader knows which week a "47" belongs to. */
+        <div className="mb-6">
+          <p className="mb-2 text-[11px] uppercase tracking-wide text-text-tertiary">
+            {RANGE_LABEL[range]} · {data.pulse.activeTeams} active team{data.pulse.activeTeams === 1 ? "" : "s"} ·{" "}
+            {data.pulse.activeMembers} member{data.pulse.activeMembers === 1 ? "" : "s"}
+          </p>
+          <StatRow cols={4}>
+            <Stat label="Leads added" value={data.pulse.leads} />
+            <Stat label="Outreach" value={data.pulse.outreach} />
+            <Stat label="Follow-ups" value={data.pulse.followUps} />
+            <Stat label="Responses" value={data.pulse.responses} hint={`${percent(data.pulse.responseRate)} response rate`} />
+          </StatRow>
+          <StatRow cols={4} className="mt-3">
+            <Stat label="Meetings" value={data.pulse.meetings} />
+            <Stat label="Proposals" value={data.pulse.proposals} />
+            <Stat label="Active pipeline" value={data.pulse.activePipeline} hint="Open now, not windowed" />
+            <Stat label="Closed won" value={data.pulse.closed} hint={`${data.overdue} follow-up${data.overdue === 1 ? "" : "s"} overdue`} />
+          </StatRow>
+        </div>
+      ) : (
+        <StatRow cols={4} className="mb-6">
+          <Stat label="Teams" value={data.teams.length} />
+          <Stat label="Active leads" value={data.activeLeads} />
+          <Stat label="Closed Won" value={data.closedWon} />
+          <Stat label="Follow-ups overdue" value={data.overdue} />
+        </StatRow>
+      )}
 
       {data.canPostDirection && (
         <div className="mb-6">
@@ -390,17 +424,20 @@ export default async function OutreachPage({
 
       {data.teamComparison.length > 0 && (
         <div className="mb-6">
-          <Panel title="Team performance" flush>
+          <Panel title={`Team performance · ${RANGE_LABEL[range].toLowerCase()}`} flush>
             <div className="overflow-x-auto px-6">
-              <table className="w-full min-w-[720px] border-collapse text-[13px]">
+              <table className="w-full min-w-[880px] border-collapse text-[13px]">
                 <thead>
                   <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-text-tertiary">
                     <th className="py-2 font-medium">Team</th>
+                    <th className="py-2 font-medium">Leader</th>
                     <th className="py-2 text-right font-medium">Members</th>
+                    <th className="py-2 text-right font-medium">Target</th>
                     <th className="py-2 text-right font-medium">Leads</th>
                     <th className="py-2 text-right font-medium">Outreach</th>
                     <th className="py-2 text-right font-medium">Follow-ups</th>
                     <th className="py-2 text-right font-medium">Responses</th>
+                    <th className="py-2 text-right font-medium">Resp. rate</th>
                     <th className="py-2 text-right font-medium">Meetings</th>
                     <th className="py-2 text-right font-medium">Proposals</th>
                     <th className="py-2 text-right font-medium">Pipeline</th>
@@ -409,17 +446,20 @@ export default async function OutreachPage({
                 </thead>
                 <tbody>
                   {data.teamComparison.map((t) => (
-                    <tr key={t.id} className="border-b border-line last:border-none">
+                    <tr key={t.teamId} className="border-b border-line last:border-none">
                       <td className="py-2.5 text-text">
-                        <Link href={`/outreach?team=${t.id}`} className="text-text no-underline hover:text-accent-ink">
-                          {t.name}
+                        <Link href={`/outreach?team=${t.teamId}`} className="text-text no-underline hover:text-accent-ink">
+                          {t.teamName}
                         </Link>
                       </td>
-                      <td className="tabular py-2.5 text-right text-text-secondary">{t.members}</td>
+                      <td className="py-2.5 text-text-secondary">{t.leaderName}</td>
+                      <td className="tabular py-2.5 text-right text-text-secondary">{t.memberCount}</td>
+                      <td className="tabular py-2.5 text-right text-text-secondary">{t.target ?? "—"}</td>
                       <td className="tabular py-2.5 text-right text-text-secondary">{t.leads}</td>
                       <td className="tabular py-2.5 text-right text-text-secondary">{t.outreach}</td>
                       <td className="tabular py-2.5 text-right text-text-secondary">{t.followUps}</td>
                       <td className="tabular py-2.5 text-right text-text-secondary">{t.responses}</td>
+                      <td className="tabular py-2.5 text-right text-text-secondary">{percent(t.responseRate)}</td>
                       <td className="tabular py-2.5 text-right text-text-secondary">{t.meetings}</td>
                       <td className="tabular py-2.5 text-right text-text-secondary">{t.proposals}</td>
                       <td className="tabular py-2.5 text-right text-text-secondary">{t.pipeline}</td>

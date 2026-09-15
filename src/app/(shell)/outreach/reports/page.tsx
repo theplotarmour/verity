@@ -2,7 +2,12 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { ENTITY_DIRECTION, ENTITY_TEAM_WEEKLY_ASSESSMENT, ENTITY_WEEKLY_REPORT } from "@/server/capabilities/outreach";
+import {
+  ENTITY_DIRECTION,
+  ENTITY_TEAM_WEEKLY_ASSESSMENT,
+  ENTITY_WEEKLY_REPORT,
+  detectBottleneck,
+} from "@/server/capabilities/outreach";
 import { EmptyState, PageHeader, Panel, PermissionDenied, Row, RowList, Stat, StatRow } from "@/components/ui/primitives";
 import { WeeklyReportForm } from "./WeeklyReportForm";
 import { TeamAssessmentForm } from "./TeamAssessmentForm";
@@ -10,25 +15,6 @@ import { TeamAssessmentForm } from "./TeamAssessmentForm";
 export const dynamic = "force-dynamic";
 
 const TERMINAL_STATES = ["not_a_fit", "unresponsive", "lost", "deferred", "disqualified"];
-
-/** Bottleneck detection (master-context spec §63) — a stage-to-stage ratio reading, computed over already-agreed facts, never a report designed ahead of the data. */
-function detectBottleneck(counts: {
-  prospected: number;
-  contacted: number;
-  responded: number;
-  qualifiedPlus: number;
-  proposal: number;
-  closedWon: number;
-}): string | null {
-  const { prospected, contacted, responded, qualifiedPlus, proposal, closedWon } = counts;
-  if (prospected < 5) return null; // too little volume to read anything into ratios
-  if (contacted > 0 && responded / contacted < 0.1) return "High outreach, low responses — likely a targeting or messaging problem.";
-  if (responded > 0 && qualifiedPlus / responded < 0.3) return "High responses, low qualification — likely a conversation/qualification problem.";
-  if (qualifiedPlus > 0 && proposal / qualifiedPlus < 0.2) return "Qualified opportunities aren't reaching proposal — likely a discovery/fit problem.";
-  if (proposal > 0 && closedWon / proposal < 0.2) return "Proposals aren't converting — likely a commercial/pricing/decision problem.";
-  if (prospected > 0 && contacted / prospected < 0.5) return "High prospecting, low outreach — a research-to-action gap.";
-  return null;
-}
 
 /**
  * Individual weekly report (master-context spec §24) + Senior's team weekly

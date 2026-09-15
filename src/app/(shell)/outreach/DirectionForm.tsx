@@ -45,6 +45,15 @@ export function DirectionForm() {
                 ? Number(form.get("companyProspectingTarget"))
                 : undefined,
               strategicNote: String(form.get("strategicNote") ?? "") || undefined,
+              // Task 106 Phase 7 (spec §91). Comma-separated in the field,
+              // a list on the wire — the server never parses product copy.
+              priorityIndustries: String(form.get("priorityIndustries") ?? "")
+                .split(",")
+                .map((x) => x.trim())
+                .filter(Boolean),
+              secondaryOpportunity: String(form.get("secondaryOpportunity") ?? "") || undefined,
+              geographicFocus: String(form.get("geographicFocus") ?? "") || undefined,
+              targetCompanyProfile: String(form.get("targetCompanyProfile") ?? "") || undefined,
             },
             "/outreach",
           );
@@ -74,6 +83,18 @@ export function DirectionForm() {
       </Field>
       <Field label="Prospecting target" htmlFor="companyProspectingTarget">
         <Input id="companyProspectingTarget" name="companyProspectingTarget" type="number" min="1" />
+      </Field>
+      <Field label="Priority industries" htmlFor="priorityIndustries" hint="Comma-separated; matched against each lead's industry">
+        <Input id="priorityIndustries" name="priorityIndustries" placeholder="Manufacturing, Distributors" />
+      </Field>
+      <Field label="Secondary opportunity" htmlFor="secondaryOpportunity">
+        <Input id="secondaryOpportunity" name="secondaryOpportunity" placeholder="Agency digital systems" />
+      </Field>
+      <Field label="Geographic focus" htmlFor="geographicFocus">
+        <Input id="geographicFocus" name="geographicFocus" placeholder="Delhi NCR, Jaipur" />
+      </Field>
+      <Field label="Target company profile" htmlFor="targetCompanyProfile">
+        <Input id="targetCompanyProfile" name="targetCompanyProfile" placeholder="50–500 staff, fragmented purchasing" />
       </Field>
       <div className="sm:col-span-2">
         <Field label="Strategic note" htmlFor="strategicNote">

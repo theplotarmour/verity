@@ -4805,8 +4805,18 @@ model OutreachDirection {
   primaryTrack             String   @default("Undetermined") @map("primary_track")
   companyProspectingTarget Int?     @map("company_prospecting_target")
   strategicNote            String?  @map("strategic_note")
-  /// Closed set: Active | Closed.
-  status                   String   @default("Active")
+  /// Task 106 Phase 7 (spec §91, master-context §10's own example): the
+  /// direction fields the first cut left out. `priorityIndustries` is a
+  /// list, not a joined string, so vertical intelligence can match a
+  /// lead's `industry` against it without parsing product copy.
+  priorityIndustries       String[] @default([]) @map("priority_industries")
+  secondaryOpportunity     String?  @map("secondary_opportunity")
+  geographicFocus          String?  @map("geographic_focus")
+  targetCompanyProfile     String?  @map("target_company_profile")
+  /// No `status`/`closedAt` column by design: the table is append-only
+  /// (its own migration's trigger), so "current" is derived — the latest
+  /// `postedAt` — and an earlier row's close time is the next row's
+  /// `postedAt`. See `listDirections` for the derivation.
   postedById               String   @map("posted_by_id") @db.Uuid
   postedAt                 DateTime @default(now()) @map("posted_at")
 
