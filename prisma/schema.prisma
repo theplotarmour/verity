@@ -187,6 +187,7 @@ model Tenant {
   outreachTasks                  OutreachTask[]
   outreachMeetings               OutreachMeeting[]
   outreachCheckInReviews         OutreachCheckInReview[]
+  outreachCoachingNotes          OutreachCoachingNote[]
   outreachTargets               OutreachTarget[]
   outreachCheckIns              OutreachCheckIn[]
   outreachWeeklyReports         OutreachWeeklyReport[]
@@ -4451,6 +4452,7 @@ model OutreachLead {
   research   OutreachResearchEntry[]
   tasks      OutreachTask[]
   meetings   OutreachMeeting[]
+  coachingNotes OutreachCoachingNote[]
 
   @@index([tenantId, teamId, state])
   @@index([tenantId, opportunityOwnerId])
@@ -4707,6 +4709,29 @@ model OutreachCheckInReview {
 
   @@index([tenantId, checkInId, reviewedAt])
   @@map("outreach_check_in_review")
+}
+
+/// APPEND-ONLY coaching note (Task 106 Phase 6, spec §79). Feedback is
+/// never edited after the fact — a correction is a new note, same
+/// reasoning as every other append-only table here. `visibility` splits
+/// what the Junior themselves may read from Leader-only management notes.
+model OutreachCoachingNote {
+  id             String @id @default(uuid()) @db.Uuid
+  tenantId       String @map("tenant_id") @db.Uuid
+  teamId         String @map("team_id") @db.Uuid
+  leadId         String? @map("lead_id") @db.Uuid
+  aboutPartyId   String @map("about_party_id") @db.Uuid
+  authorPartyId  String @map("author_party_id") @db.Uuid
+  content        String
+  /// Closed set: JuniorVisible | LeaderPrivate.
+  visibility     String @default("JuniorVisible")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   OutreachLead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, teamId, aboutPartyId, createdAt])
+  @@map("outreach_coaching_note")
 }
 
 /// Junior's weekly reflection (master-context spec §24). Aggregation is a

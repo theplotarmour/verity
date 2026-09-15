@@ -4,7 +4,7 @@ import { registerCommand, ValidationError, type CommandDefinition } from "@/serv
 import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 import { assertMutable, transition } from "@/server/platform/state";
 import { diffFields, recordActivity } from "@/server/platform/audit";
-import { ForbiddenError } from "@/server/platform/authorization";
+import { ForbiddenError, hasPermission } from "@/server/platform/authorization";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
 import { reserveUpload, confirmUpload, readUrlFor } from "@/server/platform/files";
 
@@ -48,6 +48,7 @@ export const ENTITY_CONTACT = "verity.outreach.contact";
 export const ENTITY_RESEARCH = "verity.outreach.research_entry";
 export const ENTITY_TASK = "verity.outreach.task";
 export const ENTITY_MEETING = "verity.outreach.meeting";
+export const ENTITY_COACHING_NOTE = "verity.outreach.coaching_note";
 /**
  * Nav-gating markers (2026-09-14). Founder/Senior/Junior share broad
  * Read/Create/Edit grants on `ENTITY_LEAD` etc. at Tenant scope (a
@@ -123,6 +124,17 @@ const MEETING_STATUSES = ["Scheduled", "Completed", "Cancelled", "NoShow"] as co
 
 /** Closed set (spec §68): daily-report review workflow. */
 const CHECK_IN_REVIEW_STATUSES = ["Submitted", "Reviewed", "NeedsClarification"] as const;
+
+/** Closed set (spec §79): who may read a coaching note. */
+const COACHING_NOTE_VISIBILITIES = ["JuniorVisible", "LeaderPrivate"] as const;
+
+/**
+ * Closed set (spec §78) — scoped down per lean-V1 to the queues that map
+ * cleanly onto data this capability already has, not the full 12-queue
+ * list. `StaleLeads` and `HighPriority` reuse `deriveLeadHealth`/
+ * `qualityScore` rather than inventing a second scoring concept.
+ */
+const LEAD_QUEUES = ["New", "NeedsResearch", "Stale", "HighPriority", "AdvancePending"] as const;
 
 const REASSIGNMENT_ELIGIBLE_AFTER_MS = 14 * 24 * 60 * 60 * 1000;
 const REACTIVATION_CREDIT_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
@@ -1480,6 +1492,124 @@ export const listOutreachTargets: QueryDefinition<
 };
 
 // ---------------------------------------------------------------------------
+// TEAM LEADER OPERATIONS (Task 106 Phase 6) — lead review queues, coaching
+// notes. Target distribution reuses Phase 3's setOutreachTarget/
+// listOutreachTargets as-is; weekly report depth is the member-breakdown
+// query right after getTeamWeeklyRollup below.
+// ---------------------------------------------------------------------------
+
+/**
+ * Lead review queues (spec §78, scoped per the LEAD_QUEUES comment).
+ * Query-layer filters over existing OutreachLead data — no new schema.
+ */
+export const listLeadQueue: QueryDefinition<{ teamId: string; queue: (typeof LEAD_QUEUES)[number] }, Array<Record<string, unknown>>> = {
+  key: "verity.outreach.lead_queue",
+  entity: ENTITY_LEAD,
+  input: z.object({ teamId: z.string().uuid(), queue: z.enum(LEAD_QUEUES) }),
+  handler: async (ctx, input) => {
+    await assertTeamScopeAllowed(ctx.tx, ctx.actor.userId, input.teamId);
+    const active = { teamId: input.teamId, state: { notIn: [...TERMINAL_STATES, "closed_won"] } };
+
+    switch (input.queue) {
+      case "New": {
+        const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+        return ctx.tx.outreachLead.findMany({ where: { ...active, createdAt: { gte: threeDaysAgo } }, orderBy: { createdAt: "desc" } });
+      }
+      case "NeedsResearch": {
+        const leads = await ctx.tx.outreachLead.findMany({ where: active });
+        const withResearch = new Set(
+          (await ctx.tx.outreachResearchEntry.findMany({ where: { leadId: { in: leads.map((l) => l.id) } }, select: { leadId: true } })).map(
+            (r) => r.leadId,
+          ),
+        );
+        return leads.filter((l) => !withResearch.has(l.id));
+      }
+      case "Stale": {
+        const leads = await ctx.tx.outreachLead.findMany({ where: active });
+        const states = await ctx.tx.stateDefinition.findMany({ where: { entityKey: ENTITY_LEAD } });
+        const category = new Map(states.map((s) => [s.key, s.category]));
+        return leads.filter(
+          (l) => deriveLeadHealth({ category: category.get(l.state) ?? "Draft", lastActivityAt: l.lastActivityAt, nextActionAt: l.nextActionAt, createdAt: l.createdAt }) === "Stale",
+        );
+      }
+      case "HighPriority":
+        return ctx.tx.outreachLead.findMany({ where: { ...active, qualityScore: { gte: 8 } }, orderBy: { qualityScore: "desc" } });
+      case "AdvancePending":
+        return ctx.tx.outreachLead.findMany({ where: { ...active, state: { in: ["invoice_requested", "advance_received"] } } });
+    }
+  },
+};
+
+/**
+ * Coaching notes (spec §79) — append-only. `LeaderPrivate` notes never
+ * reach the query result for the Junior they're about; only a team leader
+ * (structurally, same leaderId/coLeaderId check as everywhere else in
+ * this file) or Founder sees the full set.
+ */
+export const createCoachingNote: CommandDefinition<
+  { teamId: string; aboutPartyId: string; leadId?: string; content: string; visibility?: (typeof COACHING_NOTE_VISIBILITIES)[number] },
+  { id: string }
+> = {
+  key: "verity.outreach.create_coaching_note",
+  entity: ENTITY_COACHING_NOTE,
+  verb: "Create",
+  input: z.object({
+    teamId: z.string().uuid(),
+    aboutPartyId: z.string().uuid(),
+    leadId: z.string().uuid().optional(),
+    content: z.string().min(1),
+    visibility: z.enum(COACHING_NOTE_VISIBILITIES).optional(),
+  }),
+  handler: async (ctx, input) => {
+    await assertTeamScopeAllowed(ctx.tx, ctx.actor.userId, input.teamId);
+    if (input.leadId) await requireLead(ctx.tx, input.leadId);
+    const author = await actorPartyId(ctx.tx, ctx.actor.userId);
+    const note = await ctx.tx.outreachCoachingNote.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        teamId: input.teamId,
+        leadId: input.leadId ?? null,
+        aboutPartyId: input.aboutPartyId,
+        authorPartyId: author,
+        content: input.content,
+        visibility: input.visibility ?? "JuniorVisible",
+      },
+    });
+    return { result: { id: note.id }, events: [{ name: "verity.outreach.coaching_note_added", entityId: note.id }] };
+  },
+};
+
+export const listCoachingNotes: QueryDefinition<{ teamId: string; aboutPartyId: string }, Array<Record<string, unknown>>> = {
+  key: "verity.outreach.list_coaching_notes",
+  entity: ENTITY_COACHING_NOTE,
+  input: z.object({ teamId: z.string().uuid(), aboutPartyId: z.string().uuid() }),
+  handler: async (ctx, input) => {
+    const actorParty = await actorPartyId(ctx.tx, ctx.actor.userId);
+    const team = await ctx.tx.outreachTeam.findUniqueOrThrow({ where: { id: input.teamId } });
+    const isLeaderOfThisTeam = team.leaderId === actorParty || team.coLeaderId === actorParty;
+    // Same "is this Company Core" structural signal used elsewhere in this
+    // file (outreach/page.tsx's canPostDirection) — Create on the
+    // Founder-only Direction entity, reused rather than inventing a
+    // second role-detection primitive.
+    const isFounder = await hasPermission(ctx.tx, ctx.actor.roleId, "Create", ENTITY_DIRECTION);
+
+    if (!isLeaderOfThisTeam && !isFounder) {
+      // A non-leader may only read their own JuniorVisible notes — never
+      // another Junior's, and never a LeaderPrivate note about themselves.
+      if (actorParty !== input.aboutPartyId) throw new ForbiddenError("E_FORBIDDEN: cannot view another person's coaching notes");
+      return ctx.tx.outreachCoachingNote.findMany({
+        where: { teamId: input.teamId, aboutPartyId: input.aboutPartyId, visibility: "JuniorVisible" },
+        orderBy: { createdAt: "desc" },
+      });
+    }
+    return ctx.tx.outreachCoachingNote.findMany({
+      where: { teamId: input.teamId, aboutPartyId: input.aboutPartyId },
+      orderBy: { createdAt: "desc" },
+    });
+  },
+};
+
+// ---------------------------------------------------------------------------
 // DAILY CHECK-IN / WEEKLY REPORTS — numeric fields are ALWAYS a live query,
 // never hand-typed (master-context spec §21-23, Task 93 precedent).
 // ---------------------------------------------------------------------------
@@ -1771,6 +1901,48 @@ export const getTeamWeeklyRollup: QueryDefinition<{ teamId: string; weekStart: s
   },
 };
 
+/**
+ * Weekly report depth (Task 106 Phase 6, spec §80-81): per-member counts
+ * over the same range `getTeamWeeklyRollup` aggregates — so a Senior's
+ * Weekly Team Report can show who did what, not just the team total.
+ */
+export const getTeamWeeklyMemberBreakdown: QueryDefinition<
+  { teamId: string; weekStart: string; weekEnd: string },
+  Array<{ partyId: string; name: string; leads: number; outreach: number; responses: number; closed: number }>
+> = {
+  key: "verity.outreach.team_weekly_member_breakdown",
+  entity: ENTITY_LEAD,
+  input: z.object({ teamId: z.string().uuid(), weekStart: z.string().datetime(), weekEnd: z.string().datetime() }),
+  handler: async (ctx, input) => {
+    await assertTeamScopeAllowed(ctx.tx, ctx.actor.userId, input.teamId);
+    const range = { gte: new Date(input.weekStart), lt: new Date(input.weekEnd) };
+    const team = await ctx.tx.outreachTeam.findUniqueOrThrow({
+      where: { id: input.teamId },
+      include: { memberships: { where: { active: true } } },
+    });
+    const memberPartyIds = [
+      team.leaderId,
+      ...(team.coLeaderId ? [team.coLeaderId] : []),
+      ...team.memberships.map((m) => m.partyId),
+    ];
+    const [parties, leads, activities] = await Promise.all([
+      ctx.tx.party.findMany({ where: { id: { in: memberPartyIds } } }),
+      ctx.tx.outreachLead.findMany({ where: { teamId: input.teamId, createdAt: range } }),
+      ctx.tx.outreachActivity.findMany({ where: { occurredAt: range, lead: { teamId: input.teamId } } }),
+    ]);
+    const partyName = new Map(parties.map((p) => [p.id, p.displayName]));
+
+    return memberPartyIds.map((partyId) => ({
+      partyId,
+      name: partyName.get(partyId) ?? "Unknown",
+      leads: leads.filter((l) => l.leadOriginatorId === partyId).length,
+      outreach: activities.filter((a) => a.actorPartyId === partyId && a.activityType === "FirstOutreach").length,
+      responses: activities.filter((a) => a.actorPartyId === partyId && a.activityType === "Response").length,
+      closed: leads.filter((l) => l.leadOriginatorId === partyId && l.state === "closed_won").length,
+    }));
+  },
+};
+
 // ---------------------------------------------------------------------------
 // COMPANY DIRECTION — master-context spec §10-11. Phase 2.
 // ---------------------------------------------------------------------------
@@ -1948,6 +2120,7 @@ export function registerOutreachCapability(): void {
   registerCommand(createOutreachMeeting);
   registerCommand(updateMeetingOutcome);
   registerCommand(reviewCheckIn);
+  registerCommand(createCoachingNote);
 
   registerQuery(listOutreachTeams);
   registerQuery(listOutreachContacts);
@@ -1971,4 +2144,7 @@ export function registerOutreachCapability(): void {
   registerQuery(listOutreachTasks);
   registerQuery(listOutreachMeetings);
   registerQuery(listTeamCheckIns);
+  registerQuery(listLeadQueue);
+  registerQuery(listCoachingNotes);
+  registerQuery(getTeamWeeklyMemberBreakdown);
 }

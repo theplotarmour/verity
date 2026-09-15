@@ -44,6 +44,7 @@ export function TargetForm({
               targetValue: Number(form.get("targetValue")),
               periodStart: new Date(String(form.get("periodStart"))).toISOString(),
               periodEnd: new Date(String(form.get("periodEnd"))).toISOString(),
+              changeReason: String(form.get("changeReason") ?? "") || undefined,
             },
             "/outreach/targets",
           );
@@ -110,6 +111,11 @@ export function TargetForm({
       <Field label="Period end" htmlFor="periodEnd">
         <Input id="periodEnd" name="periodEnd" type="date" required defaultValue={inSevenDays.toISOString().slice(0, 10)} />
       </Field>
+      <div className="sm:col-span-3">
+        <Field label="Reason for change" htmlFor="changeReason" hint="Optional — shown on the target if this supersedes an existing one for the same period">
+          <Input id="changeReason" name="changeReason" placeholder="e.g. raised after strong week 1 response rate" />
+        </Field>
+      </div>
       {failure && (
         <div className="sm:col-span-3">
           <ErrorState title="Could not set target" message={failure.message} issues={failure.issues} retryable={failure.retryable} />

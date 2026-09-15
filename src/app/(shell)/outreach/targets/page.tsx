@@ -19,7 +19,10 @@ export default async function TargetsPage() {
 
     const [teams, targets] = await Promise.all([
       tx.outreachTeam.findMany({ where: { active: true }, include: { memberships: true }, orderBy: { name: "asc" } }),
-      tx.outreachTarget.findMany({ orderBy: { periodStart: "desc" }, take: 50 }),
+      // Active-only (Task 106 Phase 3's supersession model) — a superseded
+      // row stays queryable via includeSuperseded on the query API, but
+      // this "current state" screen doesn't clutter with old values.
+      tx.outreachTarget.findMany({ where: { active: true }, orderBy: { periodStart: "desc" }, take: 50 }),
     ]);
 
     const teamName = new Map(teams.map((t) => [t.id, t.name]));
@@ -53,6 +56,7 @@ export default async function TargetsPage() {
         targetValue: t.targetValue,
         periodStart: t.periodStart.toISOString().slice(0, 10),
         periodEnd: t.periodEnd.toISOString().slice(0, 10),
+        changeReason: t.changeReason,
       })),
     };
   });
@@ -83,6 +87,7 @@ export default async function TargetsPage() {
                   <span className="text-[12px] text-text-tertiary">
                     {t.metric.replace(/([A-Z])/g, " $1").trim()} · {t.period} · {t.periodStart} → {t.periodEnd}
                   </span>
+                  {t.changeReason && <span className="text-[12px] text-text-tertiary">Reason: {t.changeReason}</span>}
                 </span>
                 <span className="tabular shrink-0 text-[14px] text-text">{t.targetValue}</span>
               </Row>

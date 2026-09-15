@@ -10,6 +10,8 @@ import { AddMemberForm } from "./AddMemberForm";
 import { RenameTeamForm } from "./RenameTeamForm";
 import { ResolveEscalationButton } from "../ResolveEscalationButton";
 import { CheckInReviewPanel } from "./CheckInReviewPanel";
+import { LeadQueuePanel } from "./LeadQueuePanel";
+import { CoachingNotePanel } from "./CoachingNotePanel";
 
 export const dynamic = "force-dynamic";
 
@@ -223,8 +225,9 @@ export default async function TeamCommandPage() {
         </div>
       )}
 
-      <div className="mb-6">
+      <div className="mb-6 grid gap-6 lg:grid-cols-2">
         <CheckInReviewPanel checkIns={data.todaysCheckIns} />
+        <LeadQueuePanel teamId={data.teamId} />
       </div>
 
       <div className="mb-6">
@@ -240,28 +243,33 @@ export default async function TeamCommandPage() {
               <span className="w-8" />
             </div>
             {data.memberRows.map((m) => (
-              <div key={m.id} className="flex items-center gap-4 py-2.5">
-                {/* A cockpit reads people, not just rows — an initials badge
-                    (never used on Founder's aggregate team table) keeps this
-                    screen about the individuals a Senior manages. Overdue
-                    still carries its own signal below via color, not a
-                    second dot competing with the badge. */}
-                <span
-                  aria-hidden="true"
-                  className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-[11px] font-medium text-accent-ink"
-                >
-                  {initials(m.name)}
-                </span>
-                <span className="flex-1 text-[14px] text-text">{m.name}</span>
-                <span className="tabular w-16 text-right text-[13px] text-text-secondary">{m.leads}</span>
-                <span className="tabular w-20 text-right text-[13px] text-text-secondary">{m.outreach}</span>
-                <span className="tabular w-16 text-right text-[13px] text-text-secondary">{m.closed}</span>
-                <span className={`tabular w-16 text-right text-[13px] ${m.overdue > 0 ? "font-medium text-danger" : "text-text-secondary"}`}>
-                  {m.overdue}
-                </span>
-                <span className="w-8 text-right">
-                  <RemoveMemberButton teamId={data.teamId} partyId={m.id} name={m.name} />
-                </span>
+              <div key={m.id} className="py-2.5">
+                <div className="flex items-center gap-4">
+                  {/* A cockpit reads people, not just rows — an initials badge
+                      (never used on Founder's aggregate team table) keeps this
+                      screen about the individuals a Senior manages. Overdue
+                      still carries its own signal below via color, not a
+                      second dot competing with the badge. */}
+                  <span
+                    aria-hidden="true"
+                    className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-[11px] font-medium text-accent-ink"
+                  >
+                    {initials(m.name)}
+                  </span>
+                  <span className="flex-1 text-[14px] text-text">{m.name}</span>
+                  <span className="tabular w-16 text-right text-[13px] text-text-secondary">{m.leads}</span>
+                  <span className="tabular w-20 text-right text-[13px] text-text-secondary">{m.outreach}</span>
+                  <span className="tabular w-16 text-right text-[13px] text-text-secondary">{m.closed}</span>
+                  <span className={`tabular w-16 text-right text-[13px] ${m.overdue > 0 ? "font-medium text-danger" : "text-text-secondary"}`}>
+                    {m.overdue}
+                  </span>
+                  <span className="w-8 text-right">
+                    <RemoveMemberButton teamId={data.teamId} partyId={m.id} name={m.name} />
+                  </span>
+                </div>
+                <div className="pl-12">
+                  <CoachingNotePanel teamId={data.teamId} aboutPartyId={m.id} aboutName={m.name} />
+                </div>
               </div>
             ))}
           </div>

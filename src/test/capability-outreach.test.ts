@@ -13,6 +13,7 @@ import { provisionIdentity } from "@/server/platform/identity";
 import {
   ENTITY_ACTIVITY,
   ENTITY_CHECK_IN,
+  ENTITY_COACHING_NOTE,
   ENTITY_CONTACT,
   ENTITY_LEAD,
   ENTITY_MEETING,
@@ -28,6 +29,7 @@ import {
   advanceLeadStage,
   checkDuplicateProspect,
   confirmResearchFileUpload,
+  createCoachingNote,
   createOutreachContact,
   createOutreachLead,
   createOutreachMeeting,
@@ -35,6 +37,9 @@ import {
   createOutreachTeam,
   createResearchNote,
   deriveLeadHealth,
+  getTeamWeeklyMemberBreakdown,
+  listCoachingNotes,
+  listLeadQueue,
   listOutreachContacts,
   listOutreachMeetings,
   listOutreachTasks,
@@ -125,6 +130,7 @@ describeDb("capability: Outreach", () => {
       ENTITY_RESEARCH,
       ENTITY_TASK,
       ENTITY_MEETING,
+      ENTITY_COACHING_NOTE,
     ];
 
     await withTenant(tenantId, async (tx) => {
@@ -632,6 +638,75 @@ describeDb("capability: Outreach", () => {
       expect(queue.overdue.some((l) => l.id === overdueLead.id)).toBe(true);
       expect(queue.upcoming.some((l) => l.id === upcomingLead.id)).toBe(true);
       expect(queue.overdue.some((l) => l.id === upcomingLead.id)).toBe(false);
+    });
+  });
+
+  describe("lead review queues (Task 106 Phase 6, spec §78)", () => {
+    it("NeedsResearch excludes a lead once it has a research entry", async () => {
+      const lead = await executeCommand(founder, createOutreachLead, {
+        teamId: teamAId,
+        companyName: "Queue Research Co",
+        whyRelevant: "Test.",
+        opportunityOwnerId: seniorAPartyId,
+      });
+      let queue = await executeQuery(founder, listLeadQueue, { teamId: teamAId, queue: "NeedsResearch" });
+      expect(queue.some((l) => l.id === lead.id)).toBe(true);
+
+      await executeCommand(founder, createResearchNote, { leadId: lead.id, type: "Note", title: "Website check" });
+      queue = await executeQuery(founder, listLeadQueue, { teamId: teamAId, queue: "NeedsResearch" });
+      expect(queue.some((l) => l.id === lead.id)).toBe(false);
+    });
+
+    it("HighPriority filters on qualityScore >= 8", async () => {
+      const highLead = await executeCommand(founder, createOutreachLead, {
+        teamId: teamAId,
+        companyName: "Queue High Priority Co",
+        whyRelevant: "Test.",
+        opportunityOwnerId: seniorAPartyId,
+        qualityScore: 9,
+      });
+      const lowLead = await executeCommand(founder, createOutreachLead, {
+        teamId: teamAId,
+        companyName: "Queue Low Priority Co",
+        whyRelevant: "Test.",
+        opportunityOwnerId: seniorAPartyId,
+        qualityScore: 3,
+      });
+      const queue = await executeQuery(founder, listLeadQueue, { teamId: teamAId, queue: "HighPriority" });
+      expect(queue.some((l) => l.id === highLead.id)).toBe(true);
+      expect(queue.some((l) => l.id === lowLead.id)).toBe(false);
+    });
+  });
+
+  describe("coaching notes (Task 106 Phase 6, spec §79)", () => {
+    it("a team's own leader can create and list notes, including LeaderPrivate ones", async () => {
+      const note = await executeCommand(seniorA, createCoachingNote, {
+        teamId: teamAId,
+        aboutPartyId: seniorAPartyId,
+        content: "Strong week, good qualification discipline.",
+        visibility: "LeaderPrivate",
+      });
+      const notes = await executeQuery(seniorA, listCoachingNotes, { teamId: teamAId, aboutPartyId: seniorAPartyId });
+      expect(notes.some((n) => n.id === note.id && n.visibility === "LeaderPrivate")).toBe(true);
+    });
+
+    it("a different team's leader cannot list another team's notes about someone else", async () => {
+      await executeCommand(seniorA, createCoachingNote, {
+        teamId: teamAId,
+        aboutPartyId: seniorAPartyId,
+        content: "Cross-team access check.",
+      });
+      await expect(executeQuery(seniorB, listCoachingNotes, { teamId: teamAId, aboutPartyId: seniorAPartyId })).rejects.toThrow();
+    });
+  });
+
+  describe("weekly report member breakdown (Task 106 Phase 6, spec §80-81)", () => {
+    it("returns a row per team member with real counts", async () => {
+      const weekStart = new Date(Date.now() + 70 * DAY_MS).toISOString();
+      const weekEnd = new Date(Date.now() + 77 * DAY_MS).toISOString();
+      const breakdown = await executeQuery(founder, getTeamWeeklyMemberBreakdown, { teamId: teamAId, weekStart, weekEnd });
+      expect(breakdown.some((m) => m.partyId === seniorAPartyId)).toBe(true);
+      expect(breakdown.every((m) => typeof m.leads === "number" && typeof m.outreach === "number")).toBe(true);
     });
   });
 

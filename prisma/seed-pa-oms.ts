@@ -59,6 +59,7 @@ import {
   ENTITY_RESEARCH,
   ENTITY_TASK,
   ENTITY_MEETING,
+  ENTITY_COACHING_NOTE,
 } from "../src/server/capabilities/outreach";
 
 const TENANT_NAME = "PlotArmour Studio";
@@ -189,6 +190,7 @@ async function main() {
         ENTITY_RESEARCH,
         ENTITY_TASK,
         ENTITY_MEETING,
+        ENTITY_COACHING_NOTE,
       ];
       // Founders' Office: full company-wide visibility (master-context §7-10).
       await tx.permission.createMany({
@@ -242,6 +244,10 @@ async function main() {
           { tenantId, roleId: juniorRole.id, verb: "Edit" as const, entity: ENTITY_LEAD, scope: "Tenant" as const },
           { tenantId, roleId: juniorRole.id, verb: "Read" as const, entity: ENTITY_TEAM, scope: "Tenant" as const },
           { tenantId, roleId: juniorRole.id, verb: "Read" as const, entity: ENTITY_TARGET, scope: "Tenant" as const },
+          // Read only — a Junior never authors a coaching note, only reads
+          // the JuniorVisible ones about themselves (listCoachingNotes'
+          // own handler enforces the self-only + visibility narrowing).
+          { tenantId, roleId: juniorRole.id, verb: "Read" as const, entity: ENTITY_COACHING_NOTE, scope: "Tenant" as const },
           { tenantId, roleId: juniorRole.id, verb: "Read" as const, entity: ENTITY_DIRECTION, scope: "Tenant" as const },
           // Nav-gating marker only (2026-09-14) — see the Senior grant above.
           { tenantId, roleId: juniorRole.id, verb: "Read" as const, entity: ENTITY_JUNIOR_WORKSPACE, scope: "Tenant" as const },
