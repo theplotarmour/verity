@@ -17,6 +17,7 @@ export default defineConfig({
       "src/server/platform/oidc-browser.test.ts",
       "src/test/oidc-provider.test.ts",
       "src/test/proxy.test.ts",
+      "scripts/scheduler-time.test.mjs",
     ],
     setupFiles: ["./src/test/setup-pure-env.ts"],
     fileParallelism: false,

@@ -83,7 +83,7 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 
 - Severity: **P1**
 - Workstream: On-prem operations
-- Status: Confirmed
+- Status: Implemented in code; fresh Compose cadence proof pending
 - Surface: Compose/deploy scripts versus `vercel.json` and GitHub scheduled workflow
 - Authority: ADR-015/016 scheduled-work contract and capability schedule contributions
 - Evidence: Vercel daily and GitHub frequent/hourly/weekly callers exist; no Compose scheduler, systemd timer, cron install, or on-prem runbook.
@@ -97,6 +97,7 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 - Detection and auditability: Metrics exist only if scraped; no packaged “last successful cadence” alert.
 - Suggested direction: Add a supported local scheduler/worker with secrets, locking, retry/backoff, outcome monitoring and documented timezone behavior.
 - Retest gate: Fresh install runs every cadence, records outcomes, prevents overlap, retries transient failures, and alerts on sustained failure.
+- Corrective work (2026-09-16): Compose now packages a credential-minimal scheduler sidecar for frequent/hourly/daily/weekly UTC boundaries. The authenticated endpoint acquires database leases, stores attempts and outcomes, and readiness fails when the frequent success heartbeat is stale. The sidecar applies bounded retry with jitter; fresh Compose execution remains the closure gate.
 
 ## VCA-006 — Direct page reads bypass active-capability enforcement
 
@@ -285,7 +286,7 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 
 - Severity: **P2**
 - Workstream: On-prem operations
-- Status: Documentation conflict
+- Status: Corrected in templates; supported-profile boot proof pending
 - Surface: `.env.example`, `config.ts`, local ignored env, deploy template
 - Authority: runtime configuration boundary
 - Evidence: example says `OPENAI_*` unused while code reads them; local env contains legacy `S3_*`, code reads `VERITY_S3_*`; deploy template is newer.
@@ -297,12 +298,13 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 - Scope: non-Compose and legacy deployments especially.
 - Suggested direction: generate examples/docs from config schema and add “unknown legacy variable” preflight warnings.
 - Retest gate: every supported profile boots from its documented template and provider checks pass.
+- Corrective work (2026-09-16): root and deployment templates now name the current OIDC, `VERITY_S3_*`, scheduler, private session, and OpenAI-compatible variables. Preflight validates the selected deployment profile. Template generation from the typed schema remains future hardening; both documented profiles still require fresh boot proof.
 
 ## VCA-017 — First-run installer executes preflight before required provider configuration is supplied
 
 - Severity: **P2**
 - Workstream: On-prem operations
-- Status: Confirmed
+- Status: Corrected in code; fresh-host proof pending
 - Surface: `deploy/scripts/install.sh`, install guide, env template
 - Authority: idempotent one-command installation claim
 - Evidence: template has blank required Supabase fields; install copies it then runs preflight; guide tells user to edit afterward/rerun.
@@ -314,12 +316,13 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 - Scope: default fresh on-prem install.
 - Suggested direction: explicit two-phase init/configure/install or profile-aware interactive/noninteractive inputs.
 - Retest gate: fresh VM follows docs once, without bypasses, and produces healthy service.
+- Corrective work (2026-09-16): first run now creates the mode-0600 secret-bearing configuration and exits before starting services; the documented second run resumes at profile validation and then builds, migrates, bootstraps, starts web plus scheduler, and verifies health. Fresh-host evidence remains required.
 
 ## VCA-018 — Readiness can be green while required product dependencies and restored data are unusable
 
 - Severity: **P2**
 - Workstream: On-prem operations
-- Status: Confirmed/design limitation
+- Status: Corrected in code; dependency-failure matrix pending
 - Surface: `/api/ready`
 - Authority: operational readiness and recovery gates
 - Evidence: endpoint probes only `SELECT 1`; local response 200 despite untested auth/storage/scheduler; restore uses it as success proof.
@@ -331,6 +334,7 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 - Scope: all deployments; optional dependencies must remain profile-aware.
 - Suggested direction: retain liveness, add migration/schema and configured-required dependency readiness plus deeper post-restore verification.
 - Retest gate: each dependency failure produces the documented signal without breaking deliberately optional profiles.
+- Corrective work (2026-09-16): readiness now reports stable redacted checks for database, expected schema sentinel, RLS enforceability, selected identity reachability, configured object storage, scheduler freshness, restore quarantine, signing-secret strength, and privileged-URL absence. Optional unconfigured storage is reported as skipped, not falsely healthy. Live failure injection remains required.
 
 ## VCA-019 — SECURITY DEFINER execute grants rely on schema-USAGE isolation instead of least-privilege function ACLs
 

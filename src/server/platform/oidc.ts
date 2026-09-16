@@ -146,9 +146,10 @@ export async function discoverJwksUri(
 export async function discoverProviderMetadata(
   issuer: string,
   fetchImpl: typeof fetch = fetch,
+  signal?: AbortSignal,
 ): Promise<OidcProviderMetadata> {
   const url = discoveryUrl(issuer);
-  const response = await fetchImpl(url, { redirect: "error" });
+  const response = await fetchImpl(url, { redirect: "error", signal });
   if (!response.ok) {
     throw new OidcConfigurationError(`discovery failed for ${url} (HTTP ${response.status})`);
   }

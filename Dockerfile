@@ -132,6 +132,8 @@ RUN groupadd --system --gid 1001 nodejs \
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/run-scheduler.mjs ./scripts/run-scheduler.mjs
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/scheduler-time.mjs ./scripts/scheduler-time.mjs
 
 # Migrations are deliberately NOT run here — see the taskplan's "Database /
 # migration model" section. Baking `prisma migrate deploy` into the image

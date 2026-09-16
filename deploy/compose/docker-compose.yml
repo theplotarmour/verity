@@ -169,6 +169,33 @@ services:
     # its own SIGTERM handler and closes the HTTP server gracefully.
     stop_grace_period: 30s
 
+  # Provider-neutral on-prem schedule binding. It holds only the dedicated
+  # trigger secret and the web URL: no database, migration, identity, or object
+  # store credential is available to this process.
+  scheduler:
+    <<: *hardening
+    image: ${VERITY_IMAGE:-verity:local}
+    build:
+      context: ../..
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+    command: ["node", "scripts/run-scheduler.mjs"]
+    depends_on:
+      web:
+        # Readiness intentionally includes the scheduler heartbeat, so waiting
+        # for web to become healthy here would deadlock first startup.
+        condition: service_started
+    environment:
+      TZ: UTC
+      VERITY_SCHEDULER_BASE_URL: http://web:3000
+      VERITY_SCHEDULER_TIMEOUT_MS: ${VERITY_SCHEDULER_TIMEOUT_MS:-300000}
+      VERITY_SCHEDULER_MAX_ATTEMPTS: ${VERITY_SCHEDULER_MAX_ATTEMPTS:-3}
+      CRON_SECRET: ${CRON_SECRET:?set CRON_SECRET in the env file (deploy/scripts/install.sh generates one)}
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+
   # The operator toolchain. Never runs as a service — `docker compose run` only.
   # See the Dockerfile's `tools` stage for why the runtime image cannot do this.
   tools:

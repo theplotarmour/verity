@@ -14,9 +14,9 @@ import { z } from "zod";
  *
  * WHAT IS DELIBERATELY NOT HERE
  * `CRON_SECRET` is read through `readCronSecret()` below, not through
- * `runtimeConfig`. It is genuinely optional (a deployment with no scheduler
- * is valid — `/api/scheduled` returns 503 rather than failing to boot,
- * ADR-015) and, unlike everything else here, is read fresh on every request
+ * `runtimeConfig`. The application still fails closed at `/api/scheduled` when
+ * it is absent, while the supported on-prem profile requires it in preflight.
+ * Unlike everything else here, it is read fresh on every request
  * rather than fixed for the process lifetime: `scheduled-work-trigger.test.ts`
  * toggles it between calls within one test run to exercise that exact
  * behaviour. Baking it into a value parsed once at import time would freeze

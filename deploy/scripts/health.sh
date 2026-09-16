@@ -31,8 +31,11 @@ probe() {
 }
 
 log "checking ${BASE}"
-for _ in $(seq 1 30); do
-  curl -sf --max-time 5 "${BASE}/api/health" >/dev/null 2>&1 && break
+for _ in $(seq 1 60); do
+  # On first start the scheduler establishes its database-backed heartbeat.
+  # Waiting on readiness, rather than liveness, prevents the installer from
+  # racing that truthful gate and reporting a healthy but unscheduled system.
+  curl -sf --max-time 5 "${BASE}/api/ready" >/dev/null 2>&1 && break
   sleep 2
 done
 

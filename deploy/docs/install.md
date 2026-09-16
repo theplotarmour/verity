@@ -1,7 +1,8 @@
 # Installing Verity
 
-**Task 42.** One stateless application, one PostgreSQL, optionally one
-S3-compatible object store. Nothing else.
+**Task 42 / Taskplan 108.** One stateless application, one PostgreSQL, one
+least-privilege scheduler sidecar, and optionally one S3-compatible object
+store.
 
 ## Requirements
 
@@ -15,16 +16,22 @@ S3-compatible object store. Nothing else.
 ```bash
 git clone <repository> verity && cd verity
 
-# Generates deploy/config/verity.env with strong secrets (mode 0600),
-# runs preflight, builds, migrates, bootstraps, starts, verifies.
+# First run generates deploy/config/verity.env with strong secrets (mode 0600)
+# and exits before starting anything.
 ./deploy/scripts/install.sh
 
-# With the bundled object store:
+# Edit the generated identity/storage profile, then rerun. This validates the
+# complete profile, builds, migrates, bootstraps, starts, and verifies.
+./deploy/scripts/install.sh
+
+# To start the optional object store on that second run:
 VERITY_WITH_MINIO=1 ./deploy/scripts/install.sh
 ```
 
-Then edit `deploy/config/verity.env` to point at your identity provider and
-re-run. The installer never overwrites an existing env file.
+The explicit two-stage flow prevents a fresh install from failing preflight on
+the intentionally blank provider fields, and prevents operators from bypassing
+preflight to get past that failure. The installer never overwrites an existing
+env file; every later run resumes from validation.
 
 **Back up `deploy/config/verity.env` separately.** It is not recoverable from
 the deployment.
@@ -98,3 +105,24 @@ certificate rotation on the deployment's critical path for no security gain.
 
 Liveness and readiness are reported separately, because a process that is alive
 with a dead database must not look the same as one that is down.
+
+## Scheduler
+
+The Compose profile starts `scheduler` with the web service. It calls only the
+authenticated `/api/scheduled` boundary and receives no database, identity,
+migration, or storage credentials. Frequent jobs run on the next UTC minute;
+hourly, daily, and weekly jobs run on UTC clock boundaries (weekly is Monday
+00:00 UTC). Tenant-facing handlers remain responsible for interpreting the
+tenant's configured IANA timezone.
+
+Each cadence uses a database lease to prevent overlap across multiple sidecars.
+Every authenticated attempt records correlation ID, attempt, outcome, duration,
+tenant/work counts, and next run time in `scheduler_run`. Failed rows are the
+dead-letter inventory; an operator can replay the same idempotent cadence with
+an incremented `attempt` query parameter. The sidecar performs three bounded
+attempts by default with exponential backoff and jitter.
+
+```bash
+docker compose --env-file deploy/config/verity.env \
+  -f deploy/compose/docker-compose.yml logs scheduler
+```

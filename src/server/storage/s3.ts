@@ -2,6 +2,7 @@ import "server-only";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadBucketCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -74,6 +75,11 @@ function clientFor(settings: S3Settings): S3Client {
 /** Test seam: drops the cached client so a new configuration takes effect. */
 export function resetS3Client(): void {
   cached = null;
+}
+
+/** Non-destructive bucket reachability/authorization probe for readiness. */
+export async function probeS3Storage(settings: S3Settings, signal: AbortSignal): Promise<void> {
+  await clientFor(settings).send(new HeadBucketCommand({ Bucket: settings.bucket }), { abortSignal: signal });
 }
 
 export function s3StorageDriver(

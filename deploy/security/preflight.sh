@@ -21,8 +21,12 @@ for key in POSTGRES_SUPERUSER_PASSWORD VERITY_APP_PASSWORD VERITY_SESSION_SECRET
   value="$(env_value "${key}")"
   case "${value}" in
     CHANGE_ME*) fail "${key} is still the example placeholder" ;;
-    "")         [ "${key}" = "CRON_SECRET" ] || fail "${key} is empty" ;;
-    *)          [ "${#value}" -ge 16 ] || fail "${key} is shorter than 16 characters" ;;
+    "")         fail "${key} is empty" ;;
+    *)
+      minimum=16
+      case "${key}" in VERITY_SESSION_SECRET|CRON_SECRET) minimum=32 ;; esac
+      [ "${#value}" -ge "${minimum}" ] || fail "${key} is shorter than ${minimum} characters"
+      ;;
   esac
 done
 [ "${FAILURES}" -eq 0 ] && pass "no example or weak credential in ${ENV_FILE}"
@@ -79,6 +83,11 @@ if [ "${DRIVER}" = "s3" ]; then
   for key in VERITY_S3_BUCKET VERITY_S3_ACCESS_KEY_ID VERITY_S3_SECRET_ACCESS_KEY; do
     [ -n "$(env_value "${key}")" ] || fail "VERITY_STORAGE_DRIVER=s3 but ${key} is empty"
   done
+  s3_secret="$(env_value VERITY_S3_SECRET_ACCESS_KEY)"
+  case "${s3_secret}" in
+    CHANGE_ME*) fail "VERITY_S3_SECRET_ACCESS_KEY is still the example placeholder" ;;
+    *) [ "${#s3_secret}" -ge 16 ] || fail "VERITY_S3_SECRET_ACCESS_KEY is shorter than 16 characters" ;;
+  esac
   endpoint="$(env_value VERITY_S3_ENDPOINT)"
   style="$(env_value VERITY_S3_FORCE_PATH_STYLE)"
   # SignatureDoesNotMatch from a virtual-hosted signature against a path-style

@@ -12,6 +12,7 @@ const [composeSource, dockerfile, nextConfig, packageSource] = await Promise.all
 const compose = parse(composeSource);
 const webEnvironment = compose?.services?.web?.environment ?? {};
 const toolsEnvironment = compose?.services?.tools?.environment ?? {};
+const schedulerEnvironment = compose?.services?.scheduler?.environment ?? {};
 const packageJson = JSON.parse(packageSource);
 const failures = [];
 
@@ -23,6 +24,17 @@ if (!Object.hasOwn(toolsEnvironment, "DIRECT_URL")) {
 }
 if (!String(webEnvironment.DATABASE_URL ?? "").includes("verity_app")) {
   failures.push("web DATABASE_URL must use the non-bypass runtime role");
+}
+if (!compose?.services?.scheduler) {
+  failures.push("on-prem compose must package the scheduler service");
+}
+if (!Object.hasOwn(schedulerEnvironment, "CRON_SECRET")) {
+  failures.push("scheduler must receive its dedicated trigger secret");
+}
+for (const forbidden of ["DATABASE_URL", "DIRECT_URL", "VERITY_SESSION_SECRET", "SUPABASE_SERVICE_ROLE_KEY", "VERITY_S3_SECRET_ACCESS_KEY"]) {
+  if (Object.hasOwn(schedulerEnvironment, forbidden)) {
+    failures.push(`scheduler must not receive ${forbidden}`);
+  }
 }
 if (!dockerfile.startsWith("# Verity") || !dockerfile.includes("FROM node:22-bookworm-slim AS base")) {
   failures.push("all container stages must inherit the pinned Node 22 base line");

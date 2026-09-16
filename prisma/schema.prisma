@@ -972,6 +972,51 @@ model OidcLoginTransaction {
   @@map("oidc_login_transaction")
 }
 
+/// Global scheduler lease. The endpoint acquires one row per cadence before
+/// enumerating tenants, so two sidecars (or a retry racing a slow run) cannot
+/// execute the same cadence concurrently.
+model SchedulerLease {
+  cadence     String   @id
+  ownerToken  String   @map("owner_token") @db.Uuid
+  lockedUntil DateTime @map("locked_until")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+
+  @@map("scheduler_lease")
+}
+
+/// Durable operator evidence for every authenticated scheduler attempt.
+/// Failed rows are the dead-letter inventory and may be replayed explicitly by
+/// calling the same idempotent cadence with an incremented attempt number.
+model SchedulerRun {
+  id            String    @id @default(uuid()) @db.Uuid
+  cadence       String
+  status        String
+  correlationId String    @map("correlation_id") @db.Uuid
+  attempt       Int       @default(1)
+  startedAt     DateTime  @default(now()) @map("started_at")
+  finishedAt    DateTime? @map("finished_at")
+  durationMs    Int?      @map("duration_ms")
+  nextRunAt     DateTime  @map("next_run_at")
+  tenantCount   Int?      @map("tenant_count")
+  workCount     Int?      @map("work_count")
+  details       Json      @default("{}")
+
+  @@index([cadence, startedAt])
+  @@index([cadence, status, finishedAt])
+  @@map("scheduler_run")
+}
+
+/// Global fail-closed deployment markers written only by operator tooling.
+/// The web role can read these for readiness but cannot clear quarantine.
+model DeploymentState {
+  key       String   @id
+  status    String
+  details   Json     @default("{}")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@map("deployment_state")
+}
+
 /// A configuration value at one precedence scope (Authority: Spec PLA-CFG-001).
 ///
 /// `scopeId` identifies the organization or user for the narrower scopes and is

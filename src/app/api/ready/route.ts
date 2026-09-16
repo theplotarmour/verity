@@ -1,93 +1,68 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/server/platform/db";
 import { buildIdentity, captureError, observeDuration } from "@/server/platform/observability";
+import {
+  probeDatabase,
+  probeIdentity,
+  probeRestoreState,
+  probeRls,
+  probeRuntimePrivileges,
+  probeScheduler,
+  probeSchema,
+  probeStorage,
+  type ReadinessCheck,
+} from "@/server/platform/readiness";
 
 /**
- * Readiness — "this instance can serve traffic because its required
- * transactional database is reachable."
- *
- * Authority: taskplans/32_health_readiness.md.
- *
- * Uses the existing Prisma singleton (`src/server/platform/db.ts`) — never a
- * second client, which would be a second connection pool with its own
- * lifecycle nobody asked for. A database outage MUST make this fail (503);
- * it must NOT make `/api/health` fail — see that route's own comment for why
- * the two are kept separate.
- *
- * Only the database is probed. Storage (Task 27) and auth (Task 28) are
- * deliberately not — both are already designed to degrade gracefully when
- * unavailable (a deployment with no storage configured is valid; auth
- * failures are the page's own concern via `requireActor()`), so probing them
- * here would report "not ready" for conditions that are not actually
- * outages. The database is different: nothing in this application works
- * without it.
+ * Profile-aware readiness. Each dependency has a stable public reason code;
+ * raw driver/provider errors stay in protected telemetry and never enter the
+ * response. Optional unconfigured storage is explicit rather than falsely
+ * green. All network probes are bounded in the readiness module.
  */
-
 export const dynamic = "force-dynamic";
 
-const READY_TIMEOUT_MS = 3000;
-
-/**
- * `SELECT 1` against the existing Prisma singleton, bounded to
- * `READY_TIMEOUT_MS`. `Promise.race` does not cancel the losing side, so a
- * database call that eventually settles after the timeout already won would
- * otherwise print an unhandled-rejection warning — the attached no-op
- * `.catch()` exists solely to prevent that, not to change the outcome. The
- * timer is always cleared, on either path, so no open handle survives this
- * call.
- */
-async function probeDatabase(): Promise<void> {
-  const dbProbe = prisma.$queryRaw`SELECT 1`;
-  dbProbe.catch(() => {});
-
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(`database probe timed out after ${READY_TIMEOUT_MS}ms`)),
-      READY_TIMEOUT_MS,
-    );
-  });
-
+async function check(
+  name: string,
+  code: string,
+  work: () => Promise<void | ReadinessCheck>,
+): Promise<[string, ReadinessCheck]> {
   try {
-    await Promise.race([dbProbe, timeout]);
-  } finally {
-    clearTimeout(timer);
+    const result = await work();
+    return [name, result ?? { status: "ok" }];
+  } catch (error) {
+    captureError(error, { route: "/api/ready", dependency: name, reasonCode: code });
+    return [name, { status: "error", code }];
   }
 }
 
 export async function GET() {
   const startedAt = Date.now();
-  try {
-    await probeDatabase();
-    const durationMs = Date.now() - startedAt;
-    // Recorded as an ordinary dependency measurement (Task 40): readiness is
-    // the one probe that runs on a schedule against the database, so it is
-    // also the cheapest continuous answer to "is the database getting slower".
-    observeDuration("dependency_duration_ms", durationMs, {
-      dependency: "database",
-      operation: "ready_probe",
-      outcome: "ok",
-    });
-    return NextResponse.json({
-      status: "ready",
-      checks: { db: "ok" },
+  const entries = await Promise.all([
+    check("db", "database_unavailable", probeDatabase),
+    check("schema", "schema_incompatible", probeSchema),
+    check("rls", "rls_not_enforceable", probeRls),
+    check("identity", "identity_unavailable", probeIdentity),
+    check("storage", "storage_unavailable", probeStorage),
+    check("scheduler", "scheduler_stale", probeScheduler),
+    check("restore", "restore_quarantined", probeRestoreState),
+    check("runtime", "runtime_privilege_or_secret_invalid", async () => probeRuntimePrivileges()),
+  ]);
+  const checks = Object.fromEntries(entries) as Record<string, ReadinessCheck>;
+  const ready = Object.values(checks).every((value) => value.status !== "error");
+  const durationMs = Date.now() - startedAt;
+
+  observeDuration("dependency_duration_ms", durationMs, {
+    dependency: "readiness",
+    operation: "ready_probe",
+    outcome: ready ? "ok" : "error",
+  });
+
+  return NextResponse.json(
+    {
+      status: ready ? "ready" : "not_ready",
+      checks,
       durationMs,
       ...buildIdentity(),
-    });
-  } catch (error) {
-    const durationMs = Date.now() - startedAt;
-    observeDuration("dependency_duration_ms", durationMs, {
-      dependency: "database",
-      operation: "ready_probe",
-      outcome: "error",
-    });
-    captureError(error, { route: "/api/ready", dependency: "database" });
-    const code = error instanceof Error && error.message.includes("timed out")
-      ? "database_timeout"
-      : "database_unavailable";
-    return NextResponse.json(
-      { status: "not_ready", checks: { db: "error", code }, durationMs, ...buildIdentity() },
-      { status: 503 },
-    );
-  }
+    },
+    { status: ready ? 200 : 503 },
+  );
 }

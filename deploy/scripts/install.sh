@@ -34,6 +34,8 @@ else
     "${ENV_FILE}" > "${tmp}"
   cat "${tmp}" > "${ENV_FILE}"
   log "generated credentials — back up ${ENV_FILE}; it is not recoverable from the deployment"
+  log "configuration initialized; edit provider/storage values in ${ENV_FILE}, then rerun this command"
+  exit 0
 fi
 
 require_env_file
@@ -52,8 +54,8 @@ compose up -d db
 "${SCRIPT_DIR}/migrate.sh"
 "${SCRIPT_DIR}/bootstrap.sh" || warn "bootstrap did not complete — see above; the application is still installed"
 
-log "starting the application"
-compose up -d web
+log "starting the application and scheduler"
+compose up -d web scheduler
 
 "${SCRIPT_DIR}/health.sh"
 log "install complete"

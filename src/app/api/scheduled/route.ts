@@ -1,6 +1,6 @@
-import { captureError } from "@/server/platform/observability";
+import { captureError, logger } from "@/server/platform/observability";
 import { NextResponse } from "next/server";
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { runDueWork, type ScheduleCadence } from "@/server/platform/contribution";
 import { prisma } from "@/server/platform/db";
 import { withTenant } from "@/server/platform/tenancy";
@@ -73,6 +73,7 @@ async function dispatch(request: Request): Promise<NextResponse> {
   const url = new URL(request.url);
   const requested = url.searchParams.get("tenant");
   const cadence = (url.searchParams.get("cadence") ?? "frequent") as ScheduleCadence;
+  const attempt = Number(url.searchParams.get("attempt") ?? "1");
 
   const everyTenant = requested === "all";
   if (!everyTenant && (!requested || !/^[0-9a-f-]{36}$/i.test(requested))) {
@@ -81,34 +82,154 @@ async function dispatch(request: Request): Promise<NextResponse> {
   if (!["frequent", "hourly", "daily", "weekly"].includes(cadence)) {
     return NextResponse.json({ error: "unknown cadence" }, { status: 400 });
   }
+  if (!Number.isInteger(attempt) || attempt < 1 || attempt > 10) {
+    return NextResponse.json({ error: "invalid attempt" }, { status: 400 });
+  }
 
-  installCapabilities();
-  installAdministration();
+  const ownerToken = randomUUID();
+  const correlationId = correlationIdFor(request);
+  if (!(await acquireLease(cadence, ownerToken))) {
+    return NextResponse.json(
+      { error: "cadence already running", cadence, correlationId },
+      { status: 409 },
+    );
+  }
 
-  const tenantIds = everyTenant ? await schedulerTenantIds() : [requested!];
+  const startedAt = new Date();
+  let runId: string | undefined;
+
+  try {
+    const run = await prisma.schedulerRun.create({
+      data: {
+        cadence,
+        status: "Running",
+        correlationId,
+        attempt,
+        startedAt,
+        nextRunAt: nextCadenceBoundary(cadence, startedAt),
+      },
+      select: { id: true },
+    });
+    runId = run.id;
+    installCapabilities();
+    installAdministration();
+
+    const tenantIds = everyTenant ? await schedulerTenantIds() : [requested!];
 
   // Sequential, not parallel. Fanning out would multiply concurrent database
   // connections by the tenant count against a pooled database — ADR-016 records
   // that a slow tenant delays the ones after it, and that a queue is the answer
   // when that becomes the constraint rather than a prediction.
-  const results = [];
-  for (const tenantId of tenantIds) {
-    try {
-      results.push(await runForTenant(tenantId, cadence));
-    } catch (error) {
-      captureError(error, { route: "scheduled" });
-      results.push({ tenantId, ran: 0, outcomes: [{ key: "tenant", status: "failed", events: 0, ms: 0, error: "Tenant work failed" }] });
+    const results = [];
+    for (const tenantId of tenantIds) {
+      try {
+        results.push(await runForTenant(tenantId, cadence));
+      } catch (error) {
+        captureError(error, { route: "scheduled" });
+        results.push({ tenantId, ran: 0, outcomes: [{ key: "tenant", status: "failed", events: 0, ms: 0, error: "Tenant work failed" }] });
+      }
     }
-  }
 
-  const failed = results.some((result) => result.outcomes.some((outcome) => outcome.status === "failed"));
-  return NextResponse.json({
-    failed,
-    cadence,
-    tenants: results.length,
-    ran: results.reduce((sum, result) => sum + result.ran, 0),
-    results,
-  }, { status: failed ? 503 : 200 });
+    const failed = results.some((result) => result.outcomes.some((outcome) => outcome.status === "failed"));
+    const workCount = results.reduce((sum, result) => sum + result.ran, 0);
+    await finishRun(run.id, startedAt, failed ? "Failed" : "Succeeded", {
+      tenantCount: results.length,
+      workCount,
+      details: { results },
+    });
+    logger.info("scheduled cadence completed", {
+      cadence,
+      correlationId,
+      attempt,
+      failed,
+      tenantCount: results.length,
+      workCount,
+    });
+    return NextResponse.json({
+      failed,
+      cadence,
+      correlationId,
+      tenants: results.length,
+      ran: workCount,
+      results,
+    }, { status: failed ? 503 : 200 });
+  } catch (error) {
+    captureError(error, { route: "scheduled", cadence, correlationId });
+    if (runId) {
+      await finishRun(runId, startedAt, "Failed", { details: { error: "Scheduler execution failed" } });
+    }
+    return NextResponse.json(
+      { error: "scheduled execution failed", cadence, correlationId },
+      { status: 503 },
+    );
+  } finally {
+    await releaseLease(cadence, ownerToken);
+  }
+}
+
+function correlationIdFor(request: Request): string {
+  const supplied = request.headers.get("x-correlation-id");
+  return supplied && /^[0-9a-f-]{36}$/i.test(supplied) ? supplied : randomUUID();
+}
+
+function nextCadenceBoundary(cadence: ScheduleCadence, from: Date): Date {
+  const next = new Date(from);
+  next.setUTCSeconds(0, 0);
+  if (cadence === "frequent") next.setUTCMinutes(next.getUTCMinutes() + 1);
+  else if (cadence === "hourly") next.setUTCHours(next.getUTCHours() + 1, 0, 0, 0);
+  else if (cadence === "daily") {
+    next.setUTCDate(next.getUTCDate() + 1);
+    next.setUTCHours(0, 0, 0, 0);
+  } else {
+    const days = ((8 - next.getUTCDay()) % 7) || 7;
+    next.setUTCDate(next.getUTCDate() + days);
+    next.setUTCHours(0, 0, 0, 0);
+  }
+  return next;
+}
+
+async function acquireLease(cadence: ScheduleCadence, ownerToken: string): Promise<boolean> {
+  const rows = await prisma.$queryRaw<Array<{ cadence: string }>>`
+    INSERT INTO "scheduler_lease" ("cadence", "owner_token", "locked_until", "updated_at")
+    VALUES (${cadence}, ${ownerToken}::uuid, now() + interval '30 minutes', now())
+    ON CONFLICT ("cadence") DO UPDATE
+      SET "owner_token" = EXCLUDED."owner_token",
+          "locked_until" = EXCLUDED."locked_until",
+          "updated_at" = now()
+      WHERE "scheduler_lease"."locked_until" < now()
+    RETURNING "cadence"
+  `;
+  return rows.length === 1;
+}
+
+async function releaseLease(cadence: ScheduleCadence, ownerToken: string): Promise<void> {
+  try {
+    await prisma.$executeRaw`
+      DELETE FROM "scheduler_lease"
+      WHERE "cadence" = ${cadence} AND "owner_token" = ${ownerToken}::uuid
+    `;
+  } catch (error) {
+    captureError(error, { route: "scheduled", cadence, operation: "release_lease" });
+  }
+}
+
+async function finishRun(
+  id: string,
+  startedAt: Date,
+  status: "Succeeded" | "Failed",
+  data: { tenantCount?: number; workCount?: number; details: object },
+): Promise<void> {
+  await prisma.schedulerRun.update({
+    where: { id },
+    data: {
+      status,
+      finishedAt: new Date(),
+      durationMs: Date.now() - startedAt.getTime(),
+      tenantCount: data.tenantCount,
+      workCount: data.workCount,
+      details: data.details,
+    },
+  });
 }
 
 /**
