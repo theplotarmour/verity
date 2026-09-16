@@ -15,7 +15,7 @@
     "validate:deployment-security": "node scripts/validate-deployment-security.mjs",
     "lint": "eslint",
     "test": "vitest run",
-    "test:pure": "vitest run --config vitest.pure.config.mts",
+    "test:pure": "prisma generate && vitest run --config vitest.pure.config.mts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",

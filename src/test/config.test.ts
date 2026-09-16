@@ -136,13 +136,13 @@ describe("runtime configuration boundary", () => {
     expect(runtimeConfig.storage.bucket).toBeUndefined();
   });
 
-  it("prefers SUPABASE_URL over NEXT_PUBLIC_SUPABASE_URL for the storage endpoint", async () => {
+  it("prefers the public Supabase API URL for the storage endpoint", async () => {
     Object.assign(process.env, REQUIRED_ENV);
     process.env.SUPABASE_URL = "https://storage-specific.supabase.co";
 
     const { runtimeConfig } = await importConfig();
 
-    expect(runtimeConfig.storage.supabaseUrl).toBe("https://storage-specific.supabase.co");
+    expect(runtimeConfig.storage.supabaseUrl).toBe(REQUIRED_ENV.NEXT_PUBLIC_SUPABASE_URL);
   });
 
   it("readCronSecret reads process.env live rather than a value cached at import", async () => {
