@@ -10,6 +10,7 @@ import { ConflictError, CustomFieldValidationError } from "@/server/platform/ent
 import { executeQuery, getQuery } from "@/server/platform/query";
 import {
   createSupabaseServerClient,
+  activeAuthProviderName,
   listMemberships,
   requireActor,
   resolveActor,
@@ -139,6 +140,14 @@ export async function switchOrganization(membershipId: string): Promise<ActionRe
  * `FormData` is opaque to that logger, so the credential never reaches the log.
  */
 export async function signInWithPassword(formData: FormData): Promise<ActionFailure | never> {
+  if (activeAuthProviderName() !== "supabase") {
+    return {
+      ok: false,
+      code: "E_VALIDATION",
+      message: "Use your organization's sign-in provider.",
+      retryable: false,
+    };
+  }
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
 
@@ -209,6 +218,9 @@ export async function signInWithPassword(formData: FormData): Promise<ActionFail
  * already refuses to be. Throttled on the same per-address key as sign-in.
  */
 export async function requestPasswordReset(formData: FormData): Promise<ActionFailure | { ok: true }> {
+  if (activeAuthProviderName() !== "supabase") {
+    return { ok: false, code: "E_VALIDATION", message: "Password recovery is managed by your identity provider.", retryable: false };
+  }
   const email = String(formData.get("email") ?? "").trim();
   if (!email) return { ok: false, code: "E_VALIDATION", message: "Enter the email you sign in with.", retryable: true };
 
@@ -240,6 +252,9 @@ export async function requestPasswordReset(formData: FormData): Promise<ActionFa
  * types the new password. Only that session can call this.
  */
 export async function updatePassword(formData: FormData): Promise<ActionFailure | never> {
+  if (activeAuthProviderName() !== "supabase") {
+    return { ok: false, code: "E_VALIDATION", message: "Password recovery is managed by your identity provider.", retryable: false };
+  }
   const password = String(formData.get("password") ?? "");
   const confirm = String(formData.get("confirm") ?? "");
   if (password.length < 8) return { ok: false, code: "E_VALIDATION", message: "Use at least 8 characters.", retryable: true };
@@ -282,6 +297,7 @@ async function recordAuthSuccess(): Promise<void> {
 }
 
 export async function signOut(): Promise<never> {
+  if (activeAuthProviderName() === "oidc") redirect("/api/auth/oidc/logout");
   const supabase = await createSupabaseServerClient();
   await supabase.auth.signOut();
   redirect("/sign-in");

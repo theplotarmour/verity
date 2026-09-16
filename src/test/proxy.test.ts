@@ -49,6 +49,7 @@ describe("session refresh boundary", () => {
     getUser.mockReset();
     process.env.NEXT_PUBLIC_SUPABASE_URL = "http://supabase.test";
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key-for-test";
+    delete process.env.VERITY_AUTH_PROVIDER;
   });
 
   it("returns a Response on the happy path", async () => {
@@ -86,6 +87,16 @@ describe("session refresh boundary", () => {
     // being randomly signed out.
     expect(consoleError).toHaveBeenCalled();
     consoleError.mockRestore();
+  });
+
+  it("does not contact Supabase for an OIDC deployment", async () => {
+    process.env.VERITY_AUTH_PROVIDER = "oidc";
+    vi.mocked(createServerClient).mockClear();
+
+    const response = await callProxy();
+
+    expect(response).toBeInstanceOf(Response);
+    expect(createServerClient).not.toHaveBeenCalled();
   });
   it("serves a fresh enforcing CSP and requests private, week-long session cookies", async () => {
     getUser.mockResolvedValue({ data: { user: null }, error: null });

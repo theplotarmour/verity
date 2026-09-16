@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { resolveActor } from "@/server/platform/auth";
+import { activeAuthProviderName, resolveActor } from "@/server/platform/auth";
 import { SignInForm } from "./SignInForm";
 import { AuthShell } from "./AuthShell";
 
@@ -40,14 +40,40 @@ export const dynamic = "force-dynamic";
  * Only the experience changed. The authentication contract, session
  * handling, membership resolution and redirect behaviour are untouched.
  */
-export default async function SignInPage() {
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   // Already signed in with a usable membership? Nothing to do here.
   const actor = await resolveActor();
   if (actor) redirect("/");
 
+  const provider = activeAuthProviderName();
+  const { error } = await searchParams;
+
   return (
     <AuthShell title="Welcome back." lead="Sign in to your Verity workspace.">
-      <SignInForm />
+      {provider === "oidc" ? (
+        <div className="flex flex-col gap-4">
+          {error && (
+            <p role="alert" className="m-0 rounded-md border border-danger/25 bg-danger-subtle px-3 py-2.5 text-[13px] text-danger">
+              Your organization could not complete sign-in. Try again or contact your identity administrator.
+            </p>
+          )}
+          <a
+            href="/api/auth/oidc/start"
+            className="inline-flex min-h-11 items-center justify-center rounded-md bg-[var(--brand)] px-4 text-[14px] font-medium text-white no-underline transition-opacity hover:opacity-90"
+          >
+            Continue with organization sign-in
+          </a>
+          <p className="m-0 text-center text-[13px] leading-relaxed text-text-secondary">
+            Passwords and account recovery are managed by your organization&apos;s identity provider.
+          </p>
+        </div>
+      ) : (
+        <SignInForm />
+      )}
     </AuthShell>
   );
 }

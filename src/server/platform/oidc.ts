@@ -52,6 +52,20 @@ export type OidcSettings = {
   emailClaim: string;
   /** Tolerance for clock skew between this host and the provider. */
   clockToleranceSeconds: number;
+  /** Browser relying-party settings. */
+  redirectUri?: string;
+  clientSecret?: string;
+  scopes?: string;
+  sessionMaxAgeSeconds?: number;
+  sessionIdleSeconds?: number;
+};
+
+export type OidcProviderMetadata = {
+  issuer: string;
+  authorizationEndpoint: string;
+  tokenEndpoint: string;
+  jwksUri: string;
+  endSessionEndpoint?: string;
 };
 
 export class OidcConfigurationError extends Error {
@@ -128,6 +142,47 @@ export async function discoverJwksUri(
   return document.jwks_uri;
 }
 
+/** Strict discovery used by the interactive authorization-code flow. */
+export async function discoverProviderMetadata(
+  issuer: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<OidcProviderMetadata> {
+  const url = discoveryUrl(issuer);
+  const response = await fetchImpl(url, { redirect: "error" });
+  if (!response.ok) {
+    throw new OidcConfigurationError(`discovery failed for ${url} (HTTP ${response.status})`);
+  }
+  const document = (await response.json()) as Record<string, unknown>;
+  if (document.issuer !== issuer) {
+    throw new OidcConfigurationError(
+      `discovery document declares issuer ${String(document.issuer)}, expected ${issuer}`,
+    );
+  }
+
+  const endpoint = (name: string): string => {
+    const value = document[name];
+    if (typeof value !== "string" || value.length === 0) {
+      throw new OidcConfigurationError(`discovery document for ${issuer} carries no ${name}`);
+    }
+    const parsed = new URL(value);
+    if (parsed.protocol !== "https:" && parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
+      throw new OidcConfigurationError(`${name} must use HTTPS`);
+    }
+    return parsed.toString();
+  };
+
+  return {
+    issuer,
+    authorizationEndpoint: endpoint("authorization_endpoint"),
+    tokenEndpoint: endpoint("token_endpoint"),
+    jwksUri: endpoint("jwks_uri"),
+    endSessionEndpoint:
+      typeof document.end_session_endpoint === "string"
+        ? endpoint("end_session_endpoint")
+        : undefined,
+  };
+}
+
 /**
  * Claims → `Principal`. The only place in the platform where a claim name is
  * written down, which is what keeps every other module free of OIDC.
@@ -162,6 +217,7 @@ export async function verifyIdToken(
   token: string,
   settings: OidcSettings,
   keys: JWTVerifyGetKey | CryptoKey | Uint8Array,
+  options: { expectedNonce?: string } = {},
 ): Promise<Principal> {
   let payload: JWTPayload;
   try {
@@ -169,6 +225,7 @@ export async function verifyIdToken(
       issuer: settings.issuer,
       audience: settings.audience ?? settings.clientId,
       clockTolerance: settings.clockToleranceSeconds,
+      algorithms: ["RS256", "PS256", "ES256"],
     }));
   } catch (error) {
     // The provider's message is kept because an operator debugging a federation
@@ -176,6 +233,13 @@ export async function verifyIdToken(
     // the token is the caller's own, so nothing is disclosed that they did not
     // already hold.
     throw new OidcVerificationError(error instanceof Error ? error.message : String(error));
+  }
+
+  if (options.expectedNonce !== undefined && payload.nonce !== options.expectedNonce) {
+    throw new OidcVerificationError("nonce does not match the initiating browser transaction");
+  }
+  if (payload.azp !== undefined && payload.azp !== settings.clientId) {
+    throw new OidcVerificationError("authorized party does not match this client");
   }
 
   return normalizePrincipal(payload, settings);

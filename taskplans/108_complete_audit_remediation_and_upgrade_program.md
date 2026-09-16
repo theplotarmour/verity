@@ -187,8 +187,8 @@ Certification remains serial even when implementation is parallel.
 | Phase 0 — Containment and baseline | WP-00 | Preserve evidence, quarantine stale artifacts, establish closure records | Partial — repository baseline preserved; deployed-artifact/credential inventory requires environment access |
 | Phase 1 — Trustworthy release foundation | WP-01, WP-02 | Valid CI, current fixtures, clean dependency tree, bounded security upgrades | Implemented and pushed; fresh GitHub/isolated-DB run pending |
 | Phase 2 — Core security boundaries | WP-03, WP-04 | Least-privilege database runtime and uniform capability enforcement | Implemented in code — DB/Compose proof remains unavailable on this host |
-| Phase 3 — Identity lifecycle | WP-05 | Complete selected browser identity and recovery profile | Pending identity ADR |
-| Phase 4 — On-prem operations | WP-06 | Install, configure, schedule, observe, and report readiness locally | Pending Phases 2–3 |
+| Phase 3 — Identity lifecycle | WP-05 | Complete selected browser identity and recovery profile | Implemented in code — fresh IdP browser lifecycle proof pending |
+| Phase 4 — On-prem operations | WP-06 | Install, configure, schedule, observe, and report readiness locally | Pending Phase 3 deployment proof |
 | Phase 5 — Recovery and certification | WP-07, WP-08, WP-09 | Fail-closed DR, immutable supply chain, exact-artifact certification | Pending Phase 4 |
 | Phase 6 — Modular control plane | WP-10, WP-11A, WP-11B | Packs, enforced versions, constrained extensions and contributions | Pending Phase 2 and ADRs |
 | Phase 7 — Authority and final verdict | WP-12 | Reconcile all claims and publish evidence-bound verdicts | Pending all claimed phases |
@@ -227,6 +227,15 @@ Implemented in the first phase run:
   capability-owned pages that query through direct tenant-scoped clients;
 - record capability denials in the security stream for human and scheduler
   execution paths.
+- selected the complete OIDC browser profile in ADR-020 and implemented
+  authorization code plus PKCE, signed short-lived state transactions, exact
+  redirects, nonce validation, replay-resistant database consumption, local
+  bounded sessions, renewal, logout, and provider-specific sign-in guidance;
+- require pre-provisioned memberships for OIDC subjects and refuse implicit
+  email/domain linking or OIDC use of Supabase password/reset actions;
+- added pure OIDC browser/provider and proxy isolation coverage (130 pure tests
+  after this slice); live IdP and browser lifecycle evidence remains an exit
+  gate rather than being inferred from unit tests.
 
 Local gates passed: clean dependency resolution, zero-advisory `npm audit`,
 workflow validation, deployment-invariant validation, Prisma validation/client

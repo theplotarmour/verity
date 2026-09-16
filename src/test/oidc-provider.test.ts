@@ -91,6 +91,20 @@ describe("OIDC token verification (P2-P6)", () => {
     ).rejects.toThrow(/E_OIDC_VERIFY/);
   });
 
+  it("rejects an authorization response with the wrong nonce", async () => {
+    await expect(
+      verifyIdToken(await token({ sub: "u", nonce: "unexpected" }), SETTINGS, keys, {
+        expectedNonce: "expected",
+      }),
+    ).rejects.toThrow(/E_OIDC_VERIFY/);
+  });
+
+  it("rejects an authorized-party claim for another client", async () => {
+    await expect(
+      verifyIdToken(await token({ sub: "u", azp: "another-client" }), SETTINGS, keys),
+    ).rejects.toThrow(/E_OIDC_VERIFY/);
+  });
+
   it("honours an explicit audience override distinct from the client id (P3)", async () => {
     const settings = { ...SETTINGS, audience: "https://api.verity.test" };
 
@@ -267,6 +281,7 @@ describe("provider selection through the configuration boundary (P1, AC-04)", ()
     "VERITY_AUTH_PROVIDER",
     "VERITY_OIDC_ISSUER",
     "VERITY_OIDC_CLIENT_ID",
+    "VERITY_OIDC_REDIRECT_URI",
     "VERITY_OIDC_PRINCIPAL_CLAIM",
     "VERITY_OIDC_CLOCK_TOLERANCE_SECONDS",
   ] as const;
@@ -301,6 +316,7 @@ describe("provider selection through the configuration boundary (P1, AC-04)", ()
     process.env.VERITY_AUTH_PROVIDER = "oidc";
     process.env.VERITY_OIDC_ISSUER = ISSUER;
     process.env.VERITY_OIDC_CLIENT_ID = CLIENT_ID;
+    process.env.VERITY_OIDC_REDIRECT_URI = "https://verity.example.test/api/auth/oidc/callback";
     process.env.VERITY_SESSION_SECRET = "a-session-signing-secret";
 
     const { runtimeConfig } = await import("@/server/platform/config");
@@ -328,6 +344,7 @@ describe("provider selection through the configuration boundary (P1, AC-04)", ()
     process.env.VERITY_AUTH_PROVIDER = "oidc";
     process.env.VERITY_OIDC_ISSUER = ISSUER;
     process.env.VERITY_OIDC_CLIENT_ID = CLIENT_ID;
+    process.env.VERITY_OIDC_REDIRECT_URI = "https://verity.example.test/api/auth/oidc/callback";
 
     await expect(import("@/server/platform/config")).rejects.toThrow(/VERITY_SESSION_SECRET/);
   });

@@ -13,6 +13,7 @@ import {
 } from "./oidc";
 import type { AuthProvider, Principal } from "./authProvider";
 import type { ActorContext } from "./command";
+import { OIDC_SESSION_COOKIE, readOidcSession } from "./oidc-browser";
 
 /**
  * Authentication and actor resolution.
@@ -128,15 +129,6 @@ class SupabaseAuthProvider implements AuthProvider {
 }
 
 /**
- * The OIDC cookie name. Holds the identity provider's signed id token.
- *
- * It is verified on every request exactly as a bearer header is: nothing
- * trusts the cookie's presence, only its verified content. It is therefore
- * not a session of ours — it is the provider's assertion, carried.
- */
-const OIDC_TOKEN_COOKIE = "verity_oidc_id_token";
-
-/**
  * An external OpenID Connect identity provider as an `AuthProvider`
  * (Task 36, taskplans/36_enterprise_identity_oidc.md).
  *
@@ -174,19 +166,13 @@ class OidcAuthProvider implements AuthProvider {
     return this.keys;
   }
 
-  /** Bearer header first (machines and APIs), then the browser session cookie. */
-  private async readToken(): Promise<string | null> {
-    const header = bearerToken((await headers()).get("authorization"));
-    if (header) return header;
-    return (await cookies()).get(OIDC_TOKEN_COOKIE)?.value ?? null;
-  }
-
   async getPrincipal(): Promise<Principal | null> {
-    const token = await this.readToken();
-    if (!token) return null;
-
+    const bearer = bearerToken((await headers()).get("authorization"));
     try {
-      return await verifyIdToken(token, this.settings, await this.keySet());
+      if (bearer) return await verifyIdToken(bearer, this.settings, await this.keySet());
+      const session = (await cookies()).get(OIDC_SESSION_COOKIE)?.value;
+      if (!session) return null;
+      return await readOidcSession(session, this.settings, runtimeConfig.auth.jwtSecret);
     } catch (error) {
       // A rejected token is an unauthenticated request, not a server error: the
       // caller gets the same "no principal" a missing token gets, so a probe

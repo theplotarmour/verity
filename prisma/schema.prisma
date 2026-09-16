@@ -959,6 +959,19 @@ model TenantActivation {
   @@map("tenant_activation")
 }
 
+/// Replay ledger for browser OIDC authorization transactions. Stores only a
+/// SHA-256 state digest; verifier, nonce, and return path remain in the signed,
+/// short-lived HttpOnly browser cookie.
+model OidcLoginTransaction {
+  stateHash String    @id @map("state_hash")
+  expiresAt DateTime  @map("expires_at")
+  consumedAt DateTime? @map("consumed_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@map("oidc_login_transaction")
+}
+
 /// A configuration value at one precedence scope (Authority: Spec PLA-CFG-001).
 ///
 /// `scopeId` identifies the organization or user for the narrower scopes and is

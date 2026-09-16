@@ -1,6 +1,10 @@
 import { contentSecurityPolicy } from "./server/platform/csp";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  OIDC_SESSION_COOKIE,
+  renewOidcSessionIfNeeded,
+} from "./server/platform/oidc-browser";
 
 /**
  * Session refresh at the Next.js request boundary.
@@ -26,6 +30,37 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   let response = NextResponse.next({ request: { headers: request.headers } });
 
   try {
+    if (process.env.VERITY_AUTH_PROVIDER === "oidc") {
+      const token = request.cookies.get(OIDC_SESSION_COOKIE)?.value;
+      if (token) {
+        const clientId = process.env.VERITY_OIDC_CLIENT_ID;
+        const secret = process.env.VERITY_SESSION_SECRET;
+        if (!clientId || !secret) throw new Error("OIDC session renewal is not configured");
+        const renewed = await renewOidcSessionIfNeeded(
+          token,
+          {
+            issuer: process.env.VERITY_OIDC_ISSUER ?? "",
+            clientId,
+            principalClaim: process.env.VERITY_OIDC_PRINCIPAL_CLAIM ?? "sub",
+            emailClaim: process.env.VERITY_OIDC_EMAIL_CLAIM ?? "email",
+            clockToleranceSeconds: Number(process.env.VERITY_OIDC_CLOCK_TOLERANCE_SECONDS ?? 60),
+            sessionIdleSeconds: Number(process.env.VERITY_OIDC_SESSION_IDLE_SECONDS ?? 3_600),
+            sessionMaxAgeSeconds: Number(process.env.VERITY_OIDC_SESSION_MAX_AGE_SECONDS ?? 28_800),
+          },
+          secret,
+        );
+        if (renewed) {
+          response.cookies.set(OIDC_SESSION_COOKIE, renewed.token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            maxAge: renewed.maxAge,
+            path: "/",
+            priority: "high",
+          });
+        }
+      }
+    } else {
     // Deliberately NOT `runtimeConfig` (src/server/platform/config.ts): that
     // module validates and throws on import, which is exactly wrong for this
     // boundary — a throw here must stay inside this try/catch and degrade,
@@ -49,6 +84,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
     // Touching getUser() is what triggers the refresh.
     await supabase.auth.getUser();
+    }
   } catch (error) {
     /**
      * This function's contract with Next.js is that it resolves to a Response.

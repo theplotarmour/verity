@@ -57,10 +57,16 @@ case "${PROVIDER}" in
   oidc)
     [ -n "$(env_value VERITY_OIDC_ISSUER)" ] || fail "VERITY_AUTH_PROVIDER=oidc but VERITY_OIDC_ISSUER is empty"
     [ -n "$(env_value VERITY_OIDC_CLIENT_ID)" ] || fail "VERITY_AUTH_PROVIDER=oidc but VERITY_OIDC_CLIENT_ID is empty"
+    [ -n "$(env_value VERITY_OIDC_REDIRECT_URI)" ] || fail "VERITY_AUTH_PROVIDER=oidc but VERITY_OIDC_REDIRECT_URI is empty"
     issuer="$(env_value VERITY_OIDC_ISSUER)"
+    redirect_uri="$(env_value VERITY_OIDC_REDIRECT_URI)"
     case "${issuer}" in
       https://*) ;;
       *) [ "${ENVIRONMENT}" = "production" ] && fail "VERITY_OIDC_ISSUER must be https in production (got ${issuer})" ;;
+    esac
+    case "${redirect_uri}" in
+      https://*/api/auth/oidc/callback) ;;
+      *) [ "${ENVIRONMENT}" = "production" ] && fail "VERITY_OIDC_REDIRECT_URI must be the HTTPS Verity callback URL" ;;
     esac
     ;;
   *) fail "VERITY_AUTH_PROVIDER must be supabase or oidc (got ${PROVIDER})" ;;

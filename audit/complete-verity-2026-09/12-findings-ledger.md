@@ -6,7 +6,7 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 
 - Severity: **P1**
 - Workstream: Cross-cutting
-- Status: Confirmed
+- Status: Corrected in code; fresh GitHub Actions proof pending
 - Surface: `.github/workflows/verify.yml`
 - Authority: `implementation/13-conformance/release-gates.md`; workflow's own reproducibility contract
 - Evidence: E-CI-01; duplicate `NEXT_PUBLIC_SUPABASE_URL` at lines 41/52 and anon key at 42/53; GitHub annotates the workflow invalid.
@@ -44,7 +44,7 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 
 - Severity: **P1**
 - Workstream: Security / On-prem operations
-- Status: Confirmed
+- Status: Implemented in code; fresh IdP/browser proof pending
 - Surface: `auth.ts`, sign-in routes/actions, deployment OIDC profile
 - Authority: provider portability claims; Task 36 explicitly records its excluded browser flow
 - Evidence: OIDC reads bearer header or `verity_oidc_id_token`; no code sets the cookie; no callback/login route; sign-in/user lifecycle actions call Supabase.
@@ -58,12 +58,13 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 - Detection and auditability: Preflight validates settings, not login capability; readiness stays green.
 - Suggested direction: Implement standards-compliant authorization code + PKCE, callback/state/nonce, secure cookie rotation/logout, and provider-neutral identity lifecycle, or label OIDC bearer-only.
 - Retest gate: Fresh on-prem IdP lab completes login, renewal, logout, unknown-user denial, provisioning, recovery, and tenant-switch audit scenarios.
+- Corrective work (2026-09-16): ADR-020 selects a complete browser OIDC profile. The application now provides authorization-code plus PKCE start/callback routes, signed state and nonce transactions, an atomic database replay ledger, strict discovery/token verification, pre-provisioned membership binding, bounded local sessions with renewal, and provider logout. Unit/static gates pass; the retest gate remains open until exercised against a fresh IdP in a browser.
 
 ## VCA-004 — Restore automation converts database errors into apparent success
 
 - Severity: **P1**
 - Workstream: On-prem operations
-- Status: Confirmed
+- Status: Corrected in code; browser proof pending
 - Surface: `deploy/scripts/restore.sh`, backup/restore runbook, `/api/ready`
 - Authority: release/recovery integrity; runbook's own fail-on-error rule
 - Evidence: `pg_restore ... || warn`, followed by restart, DB-only health check, and `restore complete`; runbook describes a different data-only migrate-first process.
@@ -215,7 +216,7 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 
 - Severity: **P2**
 - Workstream: Security / Product operations
-- Status: Confirmed
+- Status: Corrected in code; browser proof pending
 - Surface: `/sign-in` -> `/reset-password`
 - Authority: usable account lifecycle
 - Evidence: link at `SignInForm.tsx:105`; no route in source or clean build route manifest.
@@ -227,6 +228,7 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 - Scope: Supabase browser users; OIDC lifecycle is separately incomplete.
 - Suggested direction: Implement provider-appropriate recovery with enumeration resistance and audit, or remove the link until supported.
 - Retest gate: End-to-end recovery with expired/tampered/reused token cases and no account oracle.
+- Corrective work (2026-09-16): OIDC sign-in now exposes only organization-managed recovery guidance and never links to the absent Supabase reset route. Supabase remains the password/recovery provider for its own profile. Provider-specific browser verification remains required before closure.
 
 ## VCA-013 — Current test fixtures conflict with tightened production validation/configuration
 

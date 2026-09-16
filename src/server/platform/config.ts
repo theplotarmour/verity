@@ -86,6 +86,11 @@ const configSchema = z.object({
           principalClaim: z.string().min(1).default("sub"),
           emailClaim: z.string().min(1).default("email"),
           clockToleranceSeconds: z.coerce.number().nonnegative().default(60),
+          redirectUri: z.string().url(),
+          clientSecret: z.string().min(1).optional(),
+          scopes: z.string().min(1).default("openid profile email"),
+          sessionMaxAgeSeconds: z.coerce.number().int().min(300).max(86_400).default(28_800),
+          sessionIdleSeconds: z.coerce.number().int().min(300).max(28_800).default(3_600),
         })
         .optional(),
     })
@@ -221,6 +226,11 @@ function loadConfig(): RuntimeConfig {
             principalClaim: env("VERITY_OIDC_PRINCIPAL_CLAIM"),
             emailClaim: env("VERITY_OIDC_EMAIL_CLAIM"),
             clockToleranceSeconds: env("VERITY_OIDC_CLOCK_TOLERANCE_SECONDS"),
+            redirectUri: env("VERITY_OIDC_REDIRECT_URI"),
+            clientSecret: env("VERITY_OIDC_CLIENT_SECRET"),
+            scopes: env("VERITY_OIDC_SCOPES"),
+            sessionMaxAgeSeconds: env("VERITY_OIDC_SESSION_MAX_AGE_SECONDS"),
+            sessionIdleSeconds: env("VERITY_OIDC_SESSION_IDLE_SECONDS"),
           }
         : undefined,
     },
