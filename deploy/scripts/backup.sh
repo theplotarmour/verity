@@ -13,6 +13,7 @@ mkdir -p "${BACKUP_DIR}"
 DB="$(env_value POSTGRES_DB)"; DB="${DB:-verity}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 TARGET="${BACKUP_DIR}/verity-${STAMP}.dump"
+MANIFEST="${TARGET}.manifest"
 
 log "dumping ${DB} to ${TARGET}"
 # -Fc: custom format, so a restore can be selective and parallel. Written to a
@@ -36,5 +37,31 @@ compose exec -T db sh -c 'cat > /tmp/verify.dump && pg_restore --list /tmp/verif
 SIZE="$(wc -c < "${TARGET}" | tr -d ' ')"
 [ "${SIZE}" -gt 1024 ] || die "backup is only ${SIZE} bytes — refusing to report success"
 
-log "backup complete and verified: ${TARGET} (${SIZE} bytes)"
+SHA256="$(sha256sum "${TARGET}" | awk '{print $1}')"
+MIGRATIONS="$(compose exec -T db psql -U postgres -d "${DB}" -v ON_ERROR_STOP=1 -tAc \
+  'SELECT count(*) FROM public._prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL' | tr -d '[:space:]')"
+TENANTS="$(compose exec -T db psql -U postgres -d "${DB}" -v ON_ERROR_STOP=1 -tAc \
+  'SELECT count(*) FROM public.tenant' | tr -d '[:space:]')"
+COMMIT="$(env_value VERITY_COMMIT)"; COMMIT="${COMMIT:-unknown}"
+VERSION="$(env_value VERITY_VERSION)"; VERSION="${VERSION:-unknown}"
+
+# Values above are generated identifiers/numbers, not free-form data. The
+# manifest deliberately contains no environment file or live credential.
+( umask 077; printf '%s\n' \
+  "format=verity-full-logical-v1" \
+  "created_at=${STAMP}" \
+  "postgres_major=16" \
+  "artifact_version=${VERSION}" \
+  "source_commit=${COMMIT}" \
+  "database_file=$(basename "${TARGET}")" \
+  "database_sha256=${SHA256}" \
+  "database_bytes=${SIZE}" \
+  "migration_count=${MIGRATIONS}" \
+  "tenant_count=${TENANTS}" \
+  "object_store_status=not_included" \
+  "encryption_status=operator_managed" > "${MANIFEST}" )
+
+warn "object-store bytes are not yet included; pair this database artifact with a provider snapshot before treating it as a complete recovery set"
+
+log "backup complete and verified: ${TARGET} (${SIZE} bytes; manifest ${MANIFEST})"
 printf '%s\n' "${TARGET}"

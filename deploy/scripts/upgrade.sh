@@ -22,8 +22,8 @@ compose build
 log "step 3/5 — applying migrations"
 "${SCRIPT_DIR}/migrate.sh"
 
-log "step 4/5 — restarting the application"
-compose up -d web
+log "step 4/5 — restarting the application and scheduler"
+compose up -d web scheduler
 
 log "step 5/5 — verifying"
 if "${SCRIPT_DIR}/health.sh"; then

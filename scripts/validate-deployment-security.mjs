@@ -2,11 +2,13 @@ import { readFile } from "node:fs/promises";
 import { parse } from "yaml";
 
 const root = new URL("../", import.meta.url);
-const [composeSource, dockerfile, nextConfig, packageSource] = await Promise.all([
+const [composeSource, dockerfile, nextConfig, packageSource, restoreScript, backupScript] = await Promise.all([
   readFile(new URL("deploy/compose/docker-compose.yml", root), "utf8"),
   readFile(new URL("Dockerfile", root), "utf8"),
   readFile(new URL("next.config.ts", root), "utf8"),
   readFile(new URL("package.json", root), "utf8"),
+  readFile(new URL("deploy/scripts/restore.sh", root), "utf8"),
+  readFile(new URL("deploy/scripts/backup.sh", root), "utf8"),
 ]);
 
 const compose = parse(composeSource);
@@ -44,6 +46,15 @@ if (packageJson.engines?.node !== "22.x") {
 }
 if (nextConfig.includes("hostname: '*.supabase.co'")) {
   failures.push("Next image optimization must not trust every Supabase tenant");
+}
+if (!restoreScript.includes("--exit-on-error") || restoreScript.includes('|| warn "pg_restore')) {
+  failures.push("restore must fail closed on every pg_restore error");
+}
+if (!restoreScript.includes("compose stop web scheduler")) {
+  failures.push("restore must quarantine both web and scheduler before destructive work");
+}
+if (!backupScript.includes("sha256sum") || !restoreScript.includes("database_sha256")) {
+  failures.push("backup and restore must bind the archive to a SHA-256 manifest");
 }
 
 if (failures.length > 0) {

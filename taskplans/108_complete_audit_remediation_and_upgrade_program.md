@@ -189,7 +189,7 @@ Certification remains serial even when implementation is parallel.
 | Phase 2 — Core security boundaries | WP-03, WP-04 | Least-privilege database runtime and uniform capability enforcement | Implemented in code — DB/Compose proof remains unavailable on this host |
 | Phase 3 — Identity lifecycle | WP-05 | Complete selected browser identity and recovery profile | Implemented in code — fresh IdP browser lifecycle proof pending |
 | Phase 4 — On-prem operations | WP-06 | Install, configure, schedule, observe, and report readiness locally | Implemented in code — fresh Compose/provider proof pending |
-| Phase 5 — Recovery and certification | WP-07, WP-08, WP-09 | Fail-closed DR, immutable supply chain, exact-artifact certification | Pending Phase 4 |
+| Phase 5 — Recovery and certification | WP-07, WP-08, WP-09 | Fail-closed DR, immutable supply chain, exact-artifact certification | Partial — fail-closed DB recovery implemented; object restore, immutable release, and lab certification pending |
 | Phase 6 — Modular control plane | WP-10, WP-11A, WP-11B | Packs, enforced versions, constrained extensions and contributions | Pending Phase 2 and ADRs |
 | Phase 7 — Authority and final verdict | WP-12 | Reconcile all claims and publish evidence-bound verdicts | Pending all claimed phases |
 
@@ -249,6 +249,15 @@ Implemented in the first phase run:
 - added deployment invariants preventing the scheduler from receiving database,
   migration, identity-session, or storage credentials (131 pure tests after
   this slice). Fresh Docker/IdP/object-store execution remains required.
+- selected one PostgreSQL 16 full-logical backup contract and aligned scripts
+  and runbook; backups now use atomic partial files, archive validation, SHA-256,
+  and a secret-free manifest;
+- made restore stop web and scheduler, verify compatibility/checksum before
+  destruction, use `pg_restore --exit-on-error`, quarantine the restored
+  database, and verify structural/security invariants before explicitly
+  releasing traffic;
+- kept WP-07/Phase 5 partial because object-store export/restore and blind
+  failure-injection evidence are not available, and kept WP-08/WP-09 open.
 
 Local gates passed: clean dependency resolution, zero-advisory `npm audit`,
 workflow validation, deployment-invariant validation, Prisma validation/client

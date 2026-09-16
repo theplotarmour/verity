@@ -64,7 +64,7 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 
 - Severity: **P1**
 - Workstream: On-prem operations
-- Status: Corrected in code; browser proof pending
+- Status: Corrected in code; blind database-plus-object rehearsal pending
 - Surface: `deploy/scripts/restore.sh`, backup/restore runbook, `/api/ready`
 - Authority: release/recovery integrity; runbook's own fail-on-error rule
 - Evidence: `pg_restore ... || warn`, followed by restart, DB-only health check, and `restore complete`; runbook describes a different data-only migrate-first process.
@@ -78,6 +78,7 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 - Detection and auditability: Error exists in console output but final success message and readiness status contradict it.
 - Suggested direction: Choose one supported backup contract, use strict exit handling, verify checksums/counts/migrations/RLS/grants/triggers/files and refuse traffic on mismatch.
 - Retest gate: Injected restore error fails closed; full destroy-and-restore rehearsal passes application and isolation checks.
+- Corrective work (2026-09-16): script and runbook now select one full PostgreSQL 16 logical contract. Backup writes an atomically completed, readable, checksummed archive plus manifest. Restore verifies before destruction, stops web and scheduler, uses `--exit-on-error`, marks quarantine, validates role/RLS/constraints/migrations/timezone/tenant count, and only then releases services. Object-store export/restore and the blind failure-injection matrix remain open, so recovery is not certified.
 
 ## VCA-005 — On-prem deployments have no scheduler binding
 
