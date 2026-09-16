@@ -3,7 +3,12 @@ import { beforeEach, expect, it, vi } from "vitest";
 const stubs = vi.hoisted(() => ({
   actor: vi.fn(), limit: vi.fn(), turn: vi.fn(), confirm: vi.fn(),
 }));
-vi.mock("@/server/platform/auth", () => ({ requireActor: stubs.actor }));
+vi.mock("@/server/platform/auth", () => ({
+  requireActor: stubs.actor,
+  AuthenticationRequiredError: class AuthenticationRequiredError extends Error {
+    readonly code = "E_UNAUTHENTICATED" as const;
+  },
+}));
 vi.mock("@/server/capabilities/registry", () => ({ installCapabilities: vi.fn() }));
 vi.mock("@/server/platform/administration", () => ({ installAdministration: vi.fn() }));
 vi.mock("@/server/platform/request-limits", async (original) => ({
@@ -15,6 +20,7 @@ vi.mock("@/server/platform/agent-chat", () => ({
 }));
 import { POST } from "@/app/api/agent/chat/route";
 import { RateLimitError } from "@/server/platform/request-limits";
+import { AuthenticationRequiredError } from "@/server/platform/auth";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -28,8 +34,17 @@ const request = (body: unknown) => new Request("http://localhost/api/agent/chat"
 });
 
 it("refuses unauthenticated requests before provider work", async () => {
-  stubs.actor.mockRejectedValueOnce(new Error("unauthenticated"));
-  expect((await POST(request({ message: "hello" }))).status).toBe(401);
+  stubs.actor.mockRejectedValueOnce(new AuthenticationRequiredError());
+  const response = await POST(request({ message: "hello" }));
+  expect(response.status).toBe(401);
+  expect(await response.json()).toMatchObject({ code: "E_UNAUTHENTICATED" });
+  expect(stubs.turn).not.toHaveBeenCalled();
+});
+it("does not disguise actor-resolution faults as unauthenticated requests", async () => {
+  stubs.actor.mockRejectedValueOnce(new Error("database unavailable"));
+  const response = await POST(request({ message: "hello" }));
+  expect(response.status).toBe(500);
+  expect(await response.json()).toMatchObject({ code: "E_UNKNOWN" });
   expect(stubs.turn).not.toHaveBeenCalled();
 });
 it("returns shared quota refusal with Retry-After", async () => {

@@ -3,7 +3,7 @@ import { installAdministration } from "@/server/platform/administration";
 import { limitActorRequests, RateLimitError, readBoundedJson } from "@/server/platform/request-limits";
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { requireActor } from "@/server/platform/auth";
+import { AuthenticationRequiredError, requireActor } from "@/server/platform/auth";
 import {
   runAgentTurn,
   executeConfirmedPreview,
@@ -56,11 +56,11 @@ export async function POST(request: Request): Promise<Response> {
   let actor;
   try {
     actor = await requireActor();
-  } catch {
-    return NextResponse.json(
-      { ok: false, code: "E_FORBIDDEN", message: "Sign in to use the assistant.", retryable: false },
-      { status: 401 },
-    );
+  } catch (error) {
+    if (error instanceof AuthenticationRequiredError) {
+      return NextResponse.json(toActionFailure(error), { status: 401 });
+    }
+    return NextResponse.json(toActionFailure(error), { status: 500 });
   }
 
   try { await limitActorRequests(actor.tenantId, actor.userId, "chat"); }

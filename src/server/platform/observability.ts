@@ -218,6 +218,43 @@ export const logger = {
   error: (message: string, fields?: Record<string, unknown>) => log("error", message, fields),
 };
 
+const EXPECTED_DENIAL_CODES = new Set([
+  "E_UNAUTHENTICATED",
+  "E_FORBIDDEN",
+  "E_CAPABILITY_INACTIVE",
+  "E_CAPABILITY_UNKNOWN",
+  "E_CAPABILITY_DEPENDENCY_INACTIVE",
+  "E_CAPABILITY_VERSION_INCOMPATIBLE",
+]);
+
+/**
+ * Records request outcomes that are part of normal access control or routing.
+ *
+ * Next may pass either the original error or a React-processed error carrying
+ * only a digest to `onRequestError`, so this intentionally recognizes both.
+ * It never emits the error message or stack: authorization messages can contain
+ * actor/entity identifiers, and expected control flow is not fault telemetry.
+ */
+export function recordExpectedRequestOutcome(
+  error: unknown,
+  fields?: Record<string, unknown>,
+): boolean {
+  const candidate = error as { code?: unknown; digest?: unknown } | null;
+  const code = typeof candidate?.code === "string" ? candidate.code : undefined;
+  const digest = typeof candidate?.digest === "string" ? candidate.digest : undefined;
+  const reasonCode = code && EXPECTED_DENIAL_CODES.has(code)
+    ? code
+    : digest?.startsWith("NEXT_REDIRECT")
+      ? "NEXT_REDIRECT"
+      : digest?.startsWith("NEXT_HTTP_ERROR_FALLBACK;404")
+        ? "NEXT_NOT_FOUND"
+        : undefined;
+
+  if (!reasonCode) return false;
+  log("info", "request outcome", { ...(fields ?? {}), reasonCode });
+  return true;
+}
+
 /* ------------------------------------------------------------------------- *
  * Metrics
  * ------------------------------------------------------------------------- */

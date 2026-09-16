@@ -324,9 +324,26 @@ export async function resolveActor(): Promise<ActorContext | null> {
   };
 }
 
-/** Resolves an actor or throws. For paths that require authentication. */
+/**
+ * An expected request denial, not a system fault.
+ *
+ * A distinct type prevents callers from turning a database/session-provider
+ * failure into a misleading 401, and lets the shared action boundary keep
+ * routine anonymous requests out of error telemetry.
+ */
+export class AuthenticationRequiredError extends Error {
+  readonly code = "E_UNAUTHENTICATED" as const;
+  readonly digest = "E_UNAUTHENTICATED";
+
+  constructor(message = "Sign in to continue.") {
+    super(message);
+    this.name = "AuthenticationRequiredError";
+  }
+}
+
+/** Resolves an actor or throws a typed, expected authentication denial. */
 export async function requireActor(): Promise<ActorContext> {
   const actor = await resolveActor();
-  if (!actor) throw new Error("E_UNAUTHENTICATED: no authenticated actor for this request");
+  if (!actor) throw new AuthenticationRequiredError();
   return actor;
 }

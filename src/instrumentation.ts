@@ -6,11 +6,16 @@ export async function register() {
 }
 
 export const onRequestError: Instrumentation.onRequestError = async (error, request, context) => {
-  const Sentry = await import("@sentry/nextjs");
+  const { captureError, recordExpectedRequestOutcome } = await import("./server/platform/observability");
+  if (recordExpectedRequestOutcome(error, {
+    route: context.routePath,
+    routeType: context.routeType,
+    method: request.method,
+  })) return;
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { captureError } = await import("./server/platform/observability");
     captureError(error);
     return;
   }
+  const Sentry = await import("@sentry/nextjs");
   await Sentry.captureRequestError(error, request, context);
 };

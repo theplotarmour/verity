@@ -11,6 +11,7 @@ import {
   metricsSnapshot,
   observeDuration,
   redactFieldsForLog,
+  recordExpectedRequestOutcome,
   registerErrorSink,
   registerLogSink,
   registerMetricSink,
@@ -19,6 +20,8 @@ import {
   withRequestContext,
   type LogRecord,
 } from "@/server/platform/observability";
+import { toActionFailure } from "@/server/platform/action-error";
+import { AuthenticationRequiredError } from "@/server/platform/auth";
 
 /**
  * Task 40 — the observability contract.
@@ -253,6 +256,38 @@ describe("build identity (AC-06)", () => {
 });
 
 describe("errors (AC-02, AC-04)", () => {
+  it("records an expected authentication denial without error telemetry or a stack", () => {
+    const exportedErrors: unknown[] = [];
+    registerErrorSink((error) => exportedErrors.push(error));
+
+    expect(toActionFailure(new AuthenticationRequiredError())).toMatchObject({
+      code: "E_UNAUTHENTICATED",
+      retryable: false,
+    });
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toMatchObject({
+      level: "info",
+      message: "request outcome",
+      fields: { reasonCode: "E_UNAUTHENTICATED" },
+    });
+    expect(captured[0]?.fields).not.toHaveProperty("stack");
+    expect(exportedErrors).toHaveLength(0);
+    expect(metricsSnapshot().counters).toEqual({});
+  });
+
+  it("classifies framework redirects and not-found responses without fault telemetry", () => {
+    expect(recordExpectedRequestOutcome({ digest: "NEXT_REDIRECT;replace;/sign-in;307;" })).toBe(true);
+    expect(recordExpectedRequestOutcome({ digest: "NEXT_HTTP_ERROR_FALLBACK;404" })).toBe(true);
+    expect(recordExpectedRequestOutcome(new Error("database unavailable"))).toBe(false);
+    expect(captured.map((record) => record.fields?.reasonCode)).toEqual([
+      "NEXT_REDIRECT",
+      "NEXT_NOT_FOUND",
+    ]);
+    expect(captured.every((record) => record.level === "info" && !("stack" in (record.fields ?? {})))).toBe(true);
+    expect(metricsSnapshot().counters).toEqual({});
+  });
+
   it("records what failed, with the correlation id of the request that caused it", () => {
     withRequestContext({ correlationId: "corr-err", tenantId: "t1", route: "/api/x" }, () => {
       captureError(new Error("upstream exploded"), { route: "/api/x" });

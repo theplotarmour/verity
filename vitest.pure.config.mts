@@ -19,6 +19,7 @@ export default defineConfig({
       "src/test/proxy.test.ts",
       "scripts/scheduler-time.test.mjs",
       "src/server/platform/pack-manifest.test.ts",
+      "src/test/agent-chat-route.test.ts",
     ],
     setupFiles: ["./src/test/setup-pure-env.ts"],
     fileParallelism: false,

@@ -1,8 +1,9 @@
 import "server-only";
 import { RateLimitError } from "./request-limits";
-import { captureError } from "./observability";
+import { captureError, recordExpectedRequestOutcome } from "./observability";
 import { ForbiddenError } from "./authorization";
 import { CapabilityError } from "./capability";
+import { AuthenticationRequiredError } from "./auth";
 import { ValidationError } from "./command";
 import { ConflictError, CustomFieldValidationError } from "./entity";
 import { GroundingError } from "./grounding";
@@ -23,6 +24,7 @@ import { GroundingError } from "./grounding";
 export type ActionFailure = {
   ok: false;
   code:
+    | "E_UNAUTHENTICATED"
     | "E_FORBIDDEN"
     | "E_VALIDATION"
     | "E_CONFLICT"
@@ -50,11 +52,17 @@ export type ActionResult<T> = { ok: true; data: T } | ActionFailure;
  * is told the details of.
  */
 export function toActionFailure(error: unknown): ActionFailure {
+  if (error instanceof AuthenticationRequiredError) {
+    recordExpectedRequestOutcome(error);
+    return { ok: false, code: error.code, message: error.message, retryable: false };
+  }
   if (error instanceof RateLimitError) return { ok: false, code: "E_RATE_LIMIT", message: error.message, retryable: true };
   if (error instanceof ForbiddenError) {
+    recordExpectedRequestOutcome(error);
     return { ok: false, code: "E_FORBIDDEN", message: error.message, retryable: false };
   }
   if (error instanceof CapabilityError) {
+    recordExpectedRequestOutcome(error);
     return { ok: false, code: error.code, message: error.message, retryable: false };
   }
   if (error instanceof CustomFieldValidationError) {
