@@ -284,6 +284,12 @@ Implemented in the first phase run:
 - added validators that reject mutable workflow actions or deployment base
   images. WP-08 remains partial until a real tagged release, signature refusal
   tests, image scan, and rebuild comparison produce archived evidence.
+- selected the signed declarative Industry Pack trust boundary in ADR-022 and
+  implemented its canonical schema/digest/Ed25519 verification layer, including
+  closed version-range grammar, stable-ID collision rejection, trusted publisher
+  lookup, platform compatibility, and tamper tests (138 pure tests);
+- kept WP-10 partial because tenant preview/approval/atomic apply/history and the
+  full sample-pack lifecycle still require implementation and live database proof.
 
 Local gates passed: clean dependency resolution, zero-advisory `npm audit`,
 workflow validation, deployment-invariant validation, Prisma validation/client

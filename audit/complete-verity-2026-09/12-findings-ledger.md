@@ -123,7 +123,7 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 
 - Severity: **P1**
 - Workstream: Modular completion
-- Status: Confirmed
+- Status: Partial — signed manifest trust boundary implemented; lifecycle pending
 - Surface: Client System / Pack plane
 - Authority: Bible V1 and `verity-spec/01_platform/packs.md`
 - Evidence: No pack manifest schema, registry, dependency solver, atomic activation, defaults/templates/roles payload, UI, CLI, or tests.
@@ -137,6 +137,7 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 - Detection and auditability: No pack instance/version record exists to compare desired and actual state.
 - Suggested direction: Implement minimal signed/versioned manifest and idempotent preview/apply transaction before marketing pack completeness.
 - Retest gate: Empty tenant -> pack preview -> atomic activation -> expected UI/data/roles -> idempotent reapply -> rollback/upgrade proof.
+- Corrective work (2026-09-16): ADR-022 and `pack-manifest.ts` now define and enforce a closed declarative manifest, canonical SHA-256 digest, Ed25519 trusted-publisher signature, platform/capability ranges, stable IDs, roles/config/contribution metadata, migration identifiers, rollback class, and collision/tamper rejection. No customer code is executable. Preview/approve/apply/history/upgrade/rollback and the acceptance scenario remain open, so the pack plane is not complete.
 
 ## VCA-008 — Capability version pinning has no upgrade or compatibility runtime
 
