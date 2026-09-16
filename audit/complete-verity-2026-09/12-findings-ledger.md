@@ -142,7 +142,7 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 
 - Severity: **P1**
 - Workstream: Modular completion
-- Status: Confirmed
+- Status: Partial — runtime pin enforcement implemented; upgrade lifecycle pending
 - Surface: `TenantActivation.pinnedVersion`, capability release lifecycle
 - Authority: `verity-spec/01_platform/versioning.md`
 - Evidence: Version stored/displayed at activation; no compatibility resolver, upgrade command, migration registry, dry-run, rollback, or mixed-version tests.
@@ -156,6 +156,7 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 - Detection and auditability: Version is visible but not compared, so mismatch is not reliably detected.
 - Suggested direction: Define supported version ranges, migration hooks, preflight, tenant upgrade state, audit events, rollback constraints.
 - Retest gate: Mixed tenants pinned to old/new versions survive upgrade, failure, rollback, and dependency compatibility tests.
+- Corrective work (2026-09-16): ADR-021 defines pins as exact contract/data versions for the single loaded handler artifact. The central capability guard denies missing or mismatched pins across every guarded execution plane, and readiness fails on any active tenant mismatch through a narrowly granted aggregate function. Durable upgrade states, migrations, supported mixed contract versions, and rollback remain open; therefore this finding is not closed.
 
 ## VCA-009 — Client extensions, dashboard composition, and operational templates are incomplete
 

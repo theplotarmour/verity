@@ -190,7 +190,7 @@ Certification remains serial even when implementation is parallel.
 | Phase 3 — Identity lifecycle | WP-05 | Complete selected browser identity and recovery profile | Implemented in code — fresh IdP browser lifecycle proof pending |
 | Phase 4 — On-prem operations | WP-06 | Install, configure, schedule, observe, and report readiness locally | Implemented in code — fresh Compose/provider proof pending |
 | Phase 5 — Recovery and certification | WP-07, WP-08, WP-09 | Fail-closed DR, immutable supply chain, exact-artifact certification | Partial — fail-closed DB recovery implemented; object restore, immutable release, and lab certification pending |
-| Phase 6 — Modular control plane | WP-10, WP-11A, WP-11B | Packs, enforced versions, constrained extensions and contributions | Pending Phase 2 and ADRs |
+| Phase 6 — Modular control plane | WP-10, WP-11A, WP-11B | Packs, enforced versions, constrained extensions and contributions | Partial — exact capability pin enforcement implemented; pack/upgrade/extension lifecycles pending |
 | Phase 7 — Authority and final verdict | WP-12 | Reconcile all claims and publish evidence-bound verdicts | Pending all claimed phases |
 
 Phase status is evidence-based. A phase becomes `Complete` only after every
@@ -258,6 +258,14 @@ Implemented in the first phase run:
   releasing traffic;
 - kept WP-07/Phase 5 partial because object-store export/restore and blind
   failure-injection evidence are not available, and kept WP-08/WP-09 open.
+- selected the honest single-artifact capability version model in ADR-021:
+  every command/query/page/job/agent surface now denies absent or mismatched
+  tenant pins through the existing central guard;
+- added a least-privilege deployment-wide compatibility readiness count so an
+  incompatible active tenant makes the artifact non-ready without exposing
+  tenant rows to the web role (133 pure tests after this slice);
+- kept Phase 6 partial because durable tenant upgrades/rollback, Industry Pack,
+  declarative extension, dashboard, and template lifecycles remain unbuilt.
 
 Local gates passed: clean dependency resolution, zero-advisory `npm audit`,
 workflow validation, deployment-invariant validation, Prisma validation/client

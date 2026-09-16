@@ -15,8 +15,14 @@ import { withTenant, type TenantScopedClient } from "./tenancy";
  */
 
 export class CapabilityError extends Error {
-  readonly code = "E_CAPABILITY_INACTIVE" as const;
-  constructor(message: string) {
+  constructor(
+    readonly code:
+      | "E_CAPABILITY_INACTIVE"
+      | "E_CAPABILITY_UNKNOWN"
+      | "E_CAPABILITY_DEPENDENCY_INACTIVE"
+      | "E_CAPABILITY_VERSION_INCOMPATIBLE",
+    message: string,
+  ) {
     super(message);
     this.name = "CapabilityError";
   }
@@ -71,6 +77,7 @@ export async function requireCapabilityActive(
 ): Promise<void> {
   if (!(await isCapabilityActive(tx, tenantId, capabilityId))) {
     throw new CapabilityError(
+      "E_CAPABILITY_INACTIVE",
       `E_CAPABILITY_INACTIVE: ${capabilityId} is not active for this tenant`,
     );
   }
@@ -91,21 +98,42 @@ export async function requireCapabilityReady(
   const active = activeCache.get(tenantId) ?? (await loadActive(tx, tenantId));
   if (!active.has(capabilityId)) {
     throw new CapabilityError(
+      "E_CAPABILITY_INACTIVE",
       `E_CAPABILITY_INACTIVE: ${capabilityId} is not active for this tenant`,
     );
   }
 
   const definition = await tx.capabilityDefinition.findUnique({
     where: { id: capabilityId },
-    select: { dependencies: true },
+    select: {
+      dependencies: true,
+      version: true,
+      activations: {
+        where: { tenantId, status: "Active" },
+        select: { pinnedVersion: true },
+        take: 1,
+      },
+    },
   });
   if (!definition) {
-    throw new CapabilityError(`E_CAPABILITY_UNKNOWN: ${capabilityId} is not registered`);
+    throw new CapabilityError(
+      "E_CAPABILITY_UNKNOWN",
+      `E_CAPABILITY_UNKNOWN: ${capabilityId} is not registered`,
+    );
+  }
+
+  const pinnedVersion = definition.activations[0]?.pinnedVersion;
+  if (pinnedVersion !== definition.version) {
+    throw new CapabilityError(
+      "E_CAPABILITY_VERSION_INCOMPATIBLE",
+      `E_CAPABILITY_VERSION_INCOMPATIBLE: ${capabilityId} is pinned to ${pinnedVersion ?? "none"}, but this build supports ${definition.version}`,
+    );
   }
 
   const missing = definition.dependencies.filter((dependency) => !active.has(dependency));
   if (missing.length > 0) {
     throw new CapabilityError(
+      "E_CAPABILITY_DEPENDENCY_INACTIVE",
       `E_CAPABILITY_DEPENDENCY_INACTIVE: ${capabilityId} requires ${missing.join(", ")}`,
     );
   }
@@ -125,7 +153,12 @@ export async function activateCapability(
   capabilityId: string,
 ): Promise<void> {
   const definition = await tx.capabilityDefinition.findUnique({ where: { id: capabilityId } });
-  if (!definition) throw new CapabilityError(`Unknown capability: ${capabilityId}`);
+  if (!definition) {
+    throw new CapabilityError(
+      "E_CAPABILITY_UNKNOWN",
+      `E_CAPABILITY_UNKNOWN: ${capabilityId} is not registered`,
+    );
+  }
 
   await tx.tenantActivation.upsert({
     where: { tenantId_capabilityId: { tenantId, capabilityId } },

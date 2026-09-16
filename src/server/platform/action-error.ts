@@ -27,6 +27,9 @@ export type ActionFailure = {
     | "E_VALIDATION"
     | "E_CONFLICT"
     | "E_CAPABILITY_INACTIVE"
+    | "E_CAPABILITY_UNKNOWN"
+    | "E_CAPABILITY_DEPENDENCY_INACTIVE"
+    | "E_CAPABILITY_VERSION_INCOMPATIBLE"
     | "E_UNGROUNDED"
     | "E_RATE_LIMIT"
     | "E_UNKNOWN";
@@ -52,7 +55,7 @@ export function toActionFailure(error: unknown): ActionFailure {
     return { ok: false, code: "E_FORBIDDEN", message: error.message, retryable: false };
   }
   if (error instanceof CapabilityError) {
-    return { ok: false, code: "E_CAPABILITY_INACTIVE", message: error.message, retryable: false };
+    return { ok: false, code: error.code, message: error.message, retryable: false };
   }
   if (error instanceof CustomFieldValidationError) {
     return { ok: false, code: "E_VALIDATION", message: error.message, issues: error.issues, retryable: false };

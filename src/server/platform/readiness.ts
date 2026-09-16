@@ -27,11 +27,13 @@ export async function probeDatabase(): Promise<void> {
 }
 
 export async function probeSchema(): Promise<void> {
-  const [row] = await prisma.$queryRaw<Array<{ present: boolean }>>`
+  const [row] = await prisma.$queryRaw<Array<{ present: boolean; incompatible: bigint }>>`
     SELECT to_regclass('public.scheduler_run') IS NOT NULL
-       AND to_regclass('public.deployment_state') IS NOT NULL AS present
+       AND to_regclass('public.deployment_state') IS NOT NULL AS present,
+       verity.incompatible_capability_activation_count() AS incompatible
   `;
   if (!row?.present) throw new Error("required schema revision is not deployed");
+  if (Number(row.incompatible) !== 0) throw new Error("one or more capability pins are incompatible");
 }
 
 export async function probeRls(): Promise<void> {

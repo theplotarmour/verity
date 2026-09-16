@@ -59,7 +59,7 @@ const CONNECTION_CREDENTIALS = /:\/\/[^\s/@]+:[^\s/@]+@/g;
  * Anyone who needs the full message has the tenant's own audit trail and the
  * application log, neither of which leaves the deployment.
  */
-const BUSINESS_ERROR = /\b(E_VALIDATION|E_FORBIDDEN|E_CONFLICT|E_CAPABILITY_INACTIVE):\s*[^\n]*/g;
+const BUSINESS_ERROR = /\b(E_VALIDATION|E_FORBIDDEN|E_CONFLICT|E_CAPABILITY_(?:INACTIVE|UNKNOWN|DEPENDENCY_INACTIVE|VERSION_INCOMPATIBLE)):\s*[^\n]*/g;
 
 /** Applies every rule, in an order where later ones cannot re-expose earlier. */
 export function scrubTelemetryText(text: string): string {

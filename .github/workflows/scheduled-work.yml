@@ -24,6 +24,8 @@
 # SETUP — two repository secrets:
 #   VERITY_BASE_URL   https://<your-deployment>.vercel.app
 #   CRON_SECRET       the same value as the Vercel environment variable
+# If Vercel Deployment Protection covers that URL, also set:
+#   VERCEL_AUTOMATION_BYPASS_SECRET   Project Settings -> Deployment Protection
 # Without them the job fails loudly rather than appearing to succeed.
 
 name: Scheduled work
@@ -69,6 +71,7 @@ jobs:
         env:
           BASE_URL: ${{ secrets.VERITY_BASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          VERCEL_BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           CADENCE: ${{ steps.cadence.outputs.value }}
         run: |
           set -euo pipefail
@@ -77,17 +80,27 @@ jobs:
             exit 1
           fi
 
-          # -f so a 401 or a 503 fails the job. A scheduler that reports success
-          # while the endpoint refuses it is worse than no scheduler at all.
-          #
           # The secret goes in a header, never in the URL: query strings are
           # logged by proxies and show up in browser history and analytics.
-          status=$(curl -sS -f -o response.json -w '%{http_code}' \
+          headers=(-H "authorization: Bearer ${CRON_SECRET}")
+          if [ -n "${VERCEL_BYPASS:-}" ]; then
+            headers+=(-H "x-vercel-protection-bypass: ${VERCEL_BYPASS}")
+          fi
+
+          status=$(curl -sS -o response.json -w '%{http_code}' \
             -X POST \
-            -H "authorization: Bearer ${CRON_SECRET}" \
+            "${headers[@]}" \
             "${BASE_URL}/api/scheduled?tenant=all&cadence=${CADENCE}")
 
           echo "HTTP ${status} for cadence ${CADENCE}"
+          if [[ ! "${status}" =~ ^2 ]]; then
+            # Print only the stable application error fields when JSON is
+            # available. Otherwise cap perimeter HTML/text so a protection
+            # failure is diagnosable without dumping an unbounded response.
+            jq -c '{error, cadence, correlationId}' response.json 2>/dev/null \
+              || { head -c 512 response.json; echo; }
+            exit 1
+          fi
           # Outcomes only. The response carries per-unit errors for the
           # scheduler, which is the only thing that can act on them.
           jq -r '"tenants=\(.tenants) ran=\(.ran)"' response.json
