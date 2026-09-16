@@ -87,6 +87,10 @@ model Tenant {
   notificationTemplates   NotificationTemplate[]
   notificationPreferences NotificationPreference[]
   notifications           Notification[]
+  packInstances           PackInstance[]
+  packOperations          PackOperation[]
+  packContributions       PackContribution[]
+  packEvents              PackEvent[]
 
   // Capability: dine-in. Back-relations only — Prisma requires the opposite
   // side of every relation, so a capability's tables show up here whether or not
@@ -194,6 +198,14 @@ model Tenant {
   outreachWeeklyReports         OutreachWeeklyReport[]
   outreachTeamWeeklyAssessments OutreachTeamWeeklyAssessment[]
   outreachDirections            OutreachDirection[]
+  outreachDomainGroups          OutreachDomainGroup[]
+  outreachDomains               OutreachDomain[]
+  outreachAttributionRecords    OutreachAttributionRecord[]
+  outreachEscalations           OutreachEscalation[]
+  outreachOpportunities         OutreachOpportunity[]
+  outreachProposals             OutreachProposal[]
+  outreachClosedClients         OutreachClosedClient[]
+  outreachAssignments           OutreachAssignment[]
 
   @@map("tenant")
 }
@@ -957,6 +969,160 @@ model TenantActivation {
   @@unique([tenantId, capabilityId])
   @@index([tenantId])
   @@map("tenant_activation")
+}
+
+/// Industry Pack control plane (Authority: Task 108 WP-10, VCA-007; ADR-022 for
+/// the signed manifest trust boundary this stores).
+///
+/// A pack release is GLOBAL, like CapabilityDefinition — the signed artifact's
+/// identity is a platform fact, written once when the release is imported and
+/// trusted. Which tenants run it, and what state that run is in, is answered by
+/// PackInstance/PackOperation below.
+model PackRelease {
+  id            String   @id @default(uuid()) @db.Uuid
+  key           String
+  version       String
+  /// `sha256:<hex>` of the canonicalized manifest (`packManifestDigest`).
+  digest        String   @unique
+  manifest      Json
+  publisher     String
+  keyId         String   @map("key_id")
+  platformRange String   @map("platform_range")
+  importedAt    DateTime @default(now()) @map("imported_at")
+
+  desiredByInstances PackInstance[]  @relation("PackInstanceDesired")
+  appliedByInstances PackInstance[]  @relation("PackInstanceApplied")
+  operations         PackOperation[]
+
+  @@unique([key, version])
+  @@index([key])
+  @@map("pack_release")
+}
+
+enum PackInstanceState {
+  /// No approved apply has ever completed for this tenant/pack pair.
+  Absent
+  Applying
+  Active
+  Suspended
+  Failed
+  /// An upgrade failed past its reversible boundary; only restore or a forward
+  /// fix may clear this state (WP-11A rollback contract).
+  RollbackRequired
+}
+
+/// One tenant's relationship to one pack key (Authority: WP-10 data model).
+model PackInstance {
+  id               String            @id @default(uuid()) @db.Uuid
+  tenantId         String            @map("tenant_id") @db.Uuid
+  packKey          String            @map("pack_key")
+  desiredReleaseId String?           @map("desired_release_id") @db.Uuid
+  appliedReleaseId String?           @map("applied_release_id") @db.Uuid
+  state            PackInstanceState @default(Absent)
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  desiredRelease PackRelease?       @relation("PackInstanceDesired", fields: [desiredReleaseId], references: [id])
+  appliedRelease PackRelease?       @relation("PackInstanceApplied", fields: [appliedReleaseId], references: [id])
+  operations     PackOperation[]
+  contributions  PackContribution[]
+  events         PackEvent[]
+
+  @@unique([tenantId, packKey])
+  @@index([tenantId])
+  @@map("pack_instance")
+}
+
+enum PackOperationKind {
+  Preview
+  Apply
+  Reapply
+  Upgrade
+  Rollback
+  Remove
+}
+
+enum PackOperationState {
+  Planned
+  Preflighted
+  Applying
+  Verifying
+  Completed
+  Failed
+  RolledBack
+}
+
+/// Immutable plan/execution record for one lifecycle transition (Authority:
+/// WP-10 §"Data model concepts" — `PackOperation`).
+model PackOperation {
+  id               String              @id @default(uuid()) @db.Uuid
+  tenantId         String              @map("tenant_id") @db.Uuid
+  instanceId       String              @map("instance_id") @db.Uuid
+  releaseId        String              @map("release_id") @db.Uuid
+  kind             PackOperationKind
+  state            PackOperationState  @default(Planned)
+  /// Digest of the deterministic preview diff this operation was approved
+  /// against (WP-10 §Lifecycle "Approve"), so apply cannot silently apply a
+  /// different plan than the one an operator reviewed.
+  planHash         String              @map("plan_hash")
+  diff             Json                @default("{}")
+  error            String?
+  approvedByUserId String?             @map("approved_by_user_id") @db.Uuid
+  correlationId    String?             @map("correlation_id") @db.Uuid
+  startedAt        DateTime            @default(now()) @map("started_at")
+  completedAt      DateTime?           @map("completed_at")
+
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  instance PackInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  release  PackRelease  @relation(fields: [releaseId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, instanceId])
+  @@map("pack_operation")
+}
+
+/// Applied contribution provenance, by stable ID (Authority: WP-10
+/// `PackContribution`). Dashboard/form/document/checklist/workflow/navigation
+/// *execution* is WP-11B's registry; this table only records which pack owns
+/// which stable contribution ID, for ownership and removal-safety checks.
+model PackContribution {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  instanceId      String   @map("instance_id") @db.Uuid
+  contributionId  String   @map("contribution_id")
+  kind            String
+  ownerCapability String?  @map("owner_capability")
+  config          Json     @default("{}")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  instance PackInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, contributionId])
+  @@index([tenantId, instanceId])
+  @@map("pack_contribution")
+}
+
+/// Append-only pack lifecycle ledger (Authority: WP-10 §"Data model concepts").
+/// Separate from Activity/SecurityAuditEvent because pack events are neither a
+/// generic entity field change nor a security stream row — they are the audit
+/// trail for a control-plane operation with its own retention shape.
+model PackEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  instanceId    String   @map("instance_id") @db.Uuid
+  operationId   String?  @map("operation_id") @db.Uuid
+  eventType     String   @map("event_type")
+  actorUserId   String?  @map("actor_user_id") @db.Uuid
+  payload       Json     @default("{}")
+  correlationId String?  @map("correlation_id") @db.Uuid
+  occurredAt    DateTime @default(now()) @map("occurred_at")
+
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  instance PackInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, instanceId, occurredAt])
+  @@map("pack_event")
 }
 
 /// Replay ledger for browser OIDC authorization transactions. Stores only a
@@ -4412,6 +4578,8 @@ model OutreachTeam {
   memberships       OutreachTeamMembership[]
   leads             OutreachLead[]
   weeklyAssessments OutreachTeamWeeklyAssessment[]
+  assignments       OutreachAssignment[]
+  opportunities     OutreachOpportunity[]
 
   @@unique([tenantId, name])
   @@map("outreach_team")
@@ -4445,7 +4613,13 @@ model OutreachLead {
 
   companyName String  @map("company_name")
   website     String?
+  /// Legacy free-text vertical, kept for leads created before Task 106
+  /// Phase A. New leads should carry `domainId` instead — see the module
+  /// doc's "DO NOT store industry only as arbitrary text" rule (master
+  /// prompt §6). Not backfilled: a leftover value here with no `domainId`
+  /// reads as "Unspecified" in vertical intelligence, same as before.
   industry    String?
+  domainId    String? @map("domain_id") @db.Uuid
   /// Closed set owned by the capability: Agency | Verity | Both | Undetermined.
   track       String  @default("Undetermined")
   whyRelevant String? @map("why_relevant")
@@ -4517,8 +4691,9 @@ model OutreachLead {
   updatedAt DateTime @updatedAt @map("updated_at")
   version   Int      @default(1)
 
-  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  team       OutreachTeam       @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  team       OutreachTeam        @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  domain     OutreachDomain?     @relation(fields: [domainId], references: [id], onDelete: SetNull)
   activities OutreachActivity[]
   contacts   OutreachContact[]
   research   OutreachResearchEntry[]
@@ -4526,10 +4701,16 @@ model OutreachLead {
   meetings   OutreachMeeting[]
   coachingNotes OutreachCoachingNote[]
   aiInsights    OutreachAiInsight[]
+  attributionRecords OutreachAttributionRecord[]
+  escalationRecords  OutreachEscalation[]
+  opportunity        OutreachOpportunity[]
+  proposals          OutreachProposal[]
+  closedClient       OutreachClosedClient[]
 
   @@index([tenantId, teamId, state])
   @@index([tenantId, opportunityOwnerId])
   @@index([tenantId, nextActionAt])
+  @@index([tenantId, domainId])
   @@map("outreach_lead")
 }
 
@@ -4918,4 +5099,191 @@ model OutreachAiInsight {
 
   @@index([tenantId, leadId, createdAt])
   @@map("outreach_ai_insight")
+}
+
+/// Task 106 Phase A: the domain taxonomy's top level (master prompt §6 —
+/// "DOMAIN GROUP -> DOMAIN", "must be database-driven", "do not hardcode").
+/// Seeded once per tenant from the master prompt's 9-group list; Core-level
+/// taxonomy management (add/rename/retire a group) is future work this
+/// migration does not build UI for — the table exists so that door is open
+/// without a schema change later.
+model OutreachDomainGroup {
+  id       String   @id @default(uuid()) @db.Uuid
+  tenantId String   @map("tenant_id") @db.Uuid
+  name     String
+  /// Display order — the seed's own list order, not alphabetical.
+  order    Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant  Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  domains OutreachDomain[]
+
+  @@unique([tenantId, name])
+  @@map("outreach_domain_group")
+}
+
+/// The taxonomy's leaf level — what `OutreachLead.domainId` points at.
+/// `industry` (free text) predates this and is kept for leads created
+/// before Phase A; new leads should carry a `domainId` instead.
+model OutreachDomain {
+  id       String   @id @default(uuid()) @db.Uuid
+  tenantId String   @map("tenant_id") @db.Uuid
+  groupId  String   @map("group_id") @db.Uuid
+  name     String
+  order    Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  group  OutreachDomainGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  leads  OutreachLead[]
+
+  @@unique([tenantId, groupId, name])
+  @@map("outreach_domain")
+}
+
+/// Task 106 Phase B (master prompt §60): APPEND-ONLY attribution history.
+/// Does not replace `OutreachLead.leadOriginatorId`/`opportunityOwnerId`/
+/// `closerId` — those stay the fast, current-value fields every query
+/// already reads. This is the queryable "how did we get here" trail Core
+/// needs for compensation-adjacent review (§60: "Core-level attribution
+/// decision is final ... Track attribution history").
+model OutreachAttributionRecord {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  leadId   String @map("lead_id") @db.Uuid
+
+  /// Closed set: Originator | Owner | Closer.
+  role            String
+  partyId         String   @map("party_id") @db.Uuid
+  changedByPartyId String  @map("changed_by_party_id") @db.Uuid
+  reason          String?
+  effectiveFrom   DateTime @default(now()) @map("effective_from")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   OutreachLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, leadId, effectiveFrom])
+  @@map("outreach_attribution_record")
+}
+
+/// Task 106 Phase C (master prompt §35): escalation promoted from fields on
+/// `OutreachLead` to its own lifecycle object with OPEN/IN REVIEW/RESOLVED
+/// states. The `OutreachLead.escalated*` fields are kept and still written
+/// (existing UI reads them) — this table is additive, not a replacement,
+/// so nothing already shipped breaks.
+model OutreachEscalation {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  leadId   String @map("lead_id") @db.Uuid
+
+  /// Closed set: Commercial | Technical | ClientIssue | Attribution | TeamIssue | Other.
+  type    String?
+  /// Closed set: Normal | High | Critical.
+  urgency String?
+  note    String
+
+  /// Closed set: Open | InReview | Resolved.
+  status String @default("Open")
+
+  raisedByPartyId   String    @map("raised_by_party_id") @db.Uuid
+  raisedAt          DateTime  @default(now()) @map("raised_at")
+  resolvedByPartyId String?   @map("resolved_by_party_id") @db.Uuid
+  resolvedAt        DateTime? @map("resolved_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   OutreachLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, leadId, status])
+  @@index([tenantId, status])
+  @@map("outreach_escalation")
+}
+
+/// Task 106 Phase D (master prompt §8-9, §63): OPPORTUNITY as a fact
+/// distinct from CLOSED CLIENT. Materialized once, from `advanceLeadStage`,
+/// the moment a lead first reaches the `opportunity` stage — append-only,
+/// never a second source of truth for pipeline stage (`OutreachLead.state`
+/// still drives that; this is the audit/reporting record).
+model OutreachOpportunity {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  leadId   String @map("lead_id") @db.Uuid
+  teamId   String @map("team_id") @db.Uuid
+
+  track              String
+  estimatedValueMinor Int?     @map("estimated_value_minor")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   OutreachLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  team   OutreachTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, leadId])
+  @@map("outreach_opportunity")
+}
+
+/// APPEND-ONLY: one row per proposal sent (master prompt §9). A lead can
+/// carry more than one across its life (revised terms), unlike Opportunity/
+/// ClosedClient which are 0-or-1.
+model OutreachProposal {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  leadId   String @map("lead_id") @db.Uuid
+
+  valueMinor Int?     @map("value_minor")
+  notes      String?
+  sentAt     DateTime @default(now()) @map("sent_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   OutreachLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, leadId, sentAt])
+  @@map("outreach_proposal")
+}
+
+/// Task 106 Phase D (master prompt §8): the ONLY record that means a client
+/// is closed for compensation/sales-reporting purposes. Created exclusively
+/// from `advanceLeadStage`'s existing advance-threshold check when a lead
+/// transitions to `closed_won` — the same gate that already exists, now
+/// also materializing this row instead of leaving "closed" as an inferred
+/// read over `OutreachLead.state`.
+model OutreachClosedClient {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  leadId   String @map("lead_id") @db.Uuid
+
+  closerId          String   @map("closer_id") @db.Uuid
+  advanceReceivedMinor Int   @map("advance_received_minor")
+  closedAt          DateTime @default(now()) @map("closed_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   OutreachLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, leadId])
+  @@map("outreach_closed_client")
+}
+
+/// Task 106 Phase E (master prompt §30): "Healthcare -> Shreya + Mehak" —
+/// a Team Leader assigning a domain/group/track/geography slice of work to
+/// a member. `value` holds whichever the scope names (a domain/group id as
+/// text, a track name, or a free-text geography) — one column instead of
+/// four mutually-exclusive nullable FKs.
+model OutreachAssignment {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  teamId   String @map("team_id") @db.Uuid
+  partyId  String @map("party_id") @db.Uuid
+
+  /// Closed set: Domain | DomainGroup | Track | Geography.
+  scope String
+  value String
+
+  assignedByPartyId String   @map("assigned_by_party_id") @db.Uuid
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  team   OutreachTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, teamId, partyId, active])
+  @@map("outreach_assignment")
 }

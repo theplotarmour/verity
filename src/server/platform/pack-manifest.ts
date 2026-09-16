@@ -33,7 +33,10 @@ export const packManifestSchema = z.object({
     key: stableKey,
     permissions: z.array(z.object({
       entity: stableKey,
-      verbs: z.array(z.enum(["Create", "Read", "Update", "Delete", "Transition", "Export"])).min(1),
+      // Matches Prisma `PermissionVerb` exactly (Spec PLA-AUT-003) — a pack role
+      // grants real permissions, so its vocabulary cannot diverge from the
+      // platform's.
+      verbs: z.array(z.enum(["Create", "Read", "Edit", "Delete", "ActionExecute"])).min(1),
     })),
   })).default([]),
   contributions: z.array(contribution).default([]),
