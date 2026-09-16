@@ -271,7 +271,7 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 
 - Severity: **P2**
 - Workstream: On-prem operations / Supply chain
-- Status: Confirmed
+- Status: Corrected in code; signed tagged-release evidence pending
 - Surface: Dockerfile/Compose/upgrade flow
 - Authority: repeatable enterprise deployment
 - Evidence: `node:20-bookworm-slim`, `postgres:16-alpine`, `minio:latest`; no digest, SBOM, signature, or scan gate.
@@ -283,6 +283,7 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 - Scope: all container deployments.
 - Suggested direction: pin digests, scan, sign, produce SBOM/attestation, document update cadence.
 - Retest gate: rebuild from recorded digests yields verified artifact and passes acceptance.
+- Corrective work (2026-09-16): Node, PostgreSQL, and MinIO references are digest-pinned and all external workflow actions are pinned to full commits. The tag release workflow generates application/container SBOMs, maximal BuildKit provenance, a registry attestation, keyless Sigstore signature, and a digest-bound release manifest. Closure still requires executing a real release, refusing unsigned/wrong-digest artifacts, scanning the final image, and reproducibility comparison.
 
 ## VCA-016 — Environment documentation and live operator configuration have drifted
 

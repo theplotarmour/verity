@@ -275,6 +275,15 @@ Implemented in the first phase run:
   production has not applied `20260916103000_onprem_scheduler` (`42P01` for
   `scheduler_lease`). The endpoint now returns a stable redacted 503 for that
   state. No production migration was run implicitly.
+- digest-pinned the Node 22, PostgreSQL 16, and MinIO base/service images and
+  pinned every GitHub Action to a reviewed full commit SHA;
+- added a tag-triggered release workflow that performs a clean lockfile install,
+  production audit, CycloneDX application SBOM, BuildKit container SBOM and
+  maximal provenance, registry attestation, keyless Sigstore signature of the
+  immutable image digest, and an archived release manifest;
+- added validators that reject mutable workflow actions or deployment base
+  images. WP-08 remains partial until a real tagged release, signature refusal
+  tests, image scan, and rebuild comparison produce archived evidence.
 
 Local gates passed: clean dependency resolution, zero-advisory `npm audit`,
 workflow validation, deployment-invariant validation, Prisma validation/client

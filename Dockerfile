@@ -9,7 +9,7 @@
 # the runner stage that executes it — building on the host and copying in a
 # host-built .next/standalone would NOT be portable (verified locally: a
 # Windows dev build produces `query_engine-windows.dll.node`, useless here).
-FROM node:22-bookworm-slim AS base
+FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS base
 
 # ---------------------------------------------------------------------------
 FROM base AS deps
