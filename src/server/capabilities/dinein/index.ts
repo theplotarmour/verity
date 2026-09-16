@@ -1753,16 +1753,14 @@ export function registerDineinCapability(): void {
         key: "verity.dinein.open_bills",
         label: "Bills awaiting payment",
         href: "/counter",
-        count: async ({ tenantId }) =>
-          withTenant(tenantId, (tx) => tx.bill.count({ where: { state: "open" } })),
+        count: async ({ tx }) => tx.bill.count({ where: { state: "open" } }),
         shells: ["platform", "operations"],
       },
       {
         key: "verity.dinein.tables_to_clean",
         label: "Tables to clean",
         href: "/floor",
-        count: async ({ tenantId }) =>
-          withTenant(tenantId, (tx) => tx.diningTable.count({ where: { state: "cleaning" } })),
+        count: async ({ tx }) => tx.diningTable.count({ where: { state: "cleaning" } }),
         shells: ["platform", "operations"],
       },
     ],

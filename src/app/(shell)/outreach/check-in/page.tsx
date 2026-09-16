@@ -2,7 +2,8 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { ENTITY_CHECK_IN } from "@/server/capabilities/outreach";
+import { OUTREACH_CAPABILITY, ENTITY_CHECK_IN } from "@/server/capabilities/outreach";
+import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import { PageHeader, Panel, PermissionDenied, RowList, Row, EmptyState, Stat, StatRow } from "@/components/ui/primitives";
 import { CheckInForm } from "./CheckInForm";
 
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic";
  * Daily check-in (master-context spec §20-23). Numeric activity is a live
  * query, never hand-typed — spec §21's own automatic-vs-manual split.
  */
-export default async function CheckInPage() {
+async function CheckInPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -101,3 +102,5 @@ export default async function CheckInPage() {
     </>
   );
 }
+
+export default withCapabilityPageAccess(OUTREACH_CAPABILITY, CheckInPage);

@@ -3,11 +3,13 @@ import { withTenant } from "@/server/platform/tenancy";
 import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
 import {
+  OUTREACH_CAPABILITY,
   ENTITY_DIRECTION,
   ENTITY_TEAM_WEEKLY_ASSESSMENT,
   ENTITY_WEEKLY_REPORT,
   detectBottleneck,
 } from "@/server/capabilities/outreach";
+import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import { EmptyState, PageHeader, Panel, PermissionDenied, Row, RowList, Stat, StatRow } from "@/components/ui/primitives";
 import { WeeklyReportForm } from "./WeeklyReportForm";
 import { TeamAssessmentForm } from "./TeamAssessmentForm";
@@ -22,7 +24,7 @@ const TERMINAL_STATES = ["not_a_fit", "unresponsive", "lost", "deferred", "disqu
  * separate live query — this screen only takes the qualitative fields a
  * person has to type by hand.
  */
-export default async function ReportsPage() {
+async function ReportsPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -162,3 +164,5 @@ export default async function ReportsPage() {
     </>
   );
 }
+
+export default withCapabilityPageAccess(OUTREACH_CAPABILITY, ReportsPage);

@@ -3,7 +3,8 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { hasTenantPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { ENTITY_ASSET } from "@/server/capabilities/asset";
+import { ASSET_CAPABILITY, ENTITY_ASSET } from "@/server/capabilities/asset";
+import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import { ENTITY_EVIDENCE } from "@/server/capabilities/evidence";
 import { entityHistory } from "@/server/platform/audit";
 import {
@@ -32,7 +33,7 @@ export const dynamic = "force-dynamic";
  * intersected with the actor's permissions. Nothing is offered that the command
  * pipeline would then refuse, and nothing is hidden that it would allow.
  */
-export default async function AssetDetailPage({ params }: { params: Promise<{ id: string }> }) {
+async function AssetDetailPage({ params }: { params: Promise<{ id: string }> }) {
   installCapabilities();
   const { id } = await params;
   const actor = await requireActor();
@@ -187,3 +188,5 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
     </>
   );
 }
+
+export default withCapabilityPageAccess(ASSET_CAPABILITY, AssetDetailPage);

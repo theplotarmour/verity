@@ -285,7 +285,12 @@ describeDb("future capability composition", () => {
       activeCapabilityIds: [HYPOTHETICAL[0].id], shell: "operations",
     });
     expect(queues).toHaveLength(1);
-    expect(await queues[0]!.count({ tenantId, roleId: null, userId: randomUUID() })).toBe(3);
+    expect(await withTenant(tenantId, (tx) => queues[0]!.count({
+      tx,
+      tenantId,
+      roleId: null,
+      userId: randomUUID(),
+    }))).toBe(3);
   });
 
   it("composed all four without a single platform source change", async () => {

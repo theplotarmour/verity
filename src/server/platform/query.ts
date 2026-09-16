@@ -2,7 +2,7 @@ import { recordExecutionFailure } from "./execution-failure";
 import { limitActorRequests } from "./request-limits";
 import { z } from "zod";
 import { redactFields, redactResult, scopeFilter } from "./authorization";
-import { capabilityForEntity, requireCapabilityActive } from "./capability";
+import { capabilityForEntity, requireCapabilityReady } from "./capability";
 import { withTenant, type TenantScopedClient } from "./tenancy";
 import { ValidationError, type ActorContext } from "./command";
 import { enforcePolicy, type PolicyChannel } from "./policy";
@@ -101,7 +101,7 @@ export async function executeQuery<TInput, TResult>(
       );
     }
     const capability = await capabilityForEntity(tx, def.entity);
-    if (capability) await requireCapabilityActive(tx, actor.tenantId, capability);
+    if (capability) await requireCapabilityReady(tx, actor.tenantId, capability);
     // Was a direct `authorize()` call (Layer 1 only, no channel). Routed
     // through the same decision point `executeCommand` uses instead —
     // `enforcePolicy` throws ForbiddenError on deny exactly like `authorize`

@@ -2,7 +2,8 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { hasTenantPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { ENTITY_ASSET } from "@/server/capabilities/asset";
+import { ASSET_CAPABILITY, ENTITY_ASSET } from "@/server/capabilities/asset";
+import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import { DataTable } from "@/components/ui/DataTable";
 import {
   DemoDataNotice,
@@ -18,7 +19,7 @@ type Row = Record<string, unknown> & {
   id: string; name: string; reference: string; location: string; state: string; category: string;
 };
 
-export default async function AssetsPage() {
+async function AssetsPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -80,3 +81,5 @@ export default async function AssetsPage() {
     </>
   );
 }
+
+export default withCapabilityPageAccess(ASSET_CAPABILITY, AssetsPage);

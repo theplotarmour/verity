@@ -2,7 +2,8 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { hasTenantPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { ENTITY_BOOKING } from "@/server/capabilities/scheduling";
+import { SCHEDULING_CAPABILITY, ENTITY_BOOKING } from "@/server/capabilities/scheduling";
+import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import {
   EmptyState,
   PageHeader,
@@ -29,7 +30,7 @@ export const dynamic = "force-dynamic";
  * local would misplace every booking by the offset. Stating the zone is honest;
  * guessing it is not. Recorded as a gap.
  */
-export default async function SchedulingPage() {
+async function SchedulingPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -118,3 +119,5 @@ export default async function SchedulingPage() {
     </>
   );
 }
+
+export default withCapabilityPageAccess(SCHEDULING_CAPABILITY, SchedulingPage);

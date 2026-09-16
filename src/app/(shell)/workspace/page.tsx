@@ -2,7 +2,10 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { resolvePermissions } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { workspaceContributionsFor } from "@/server/platform/contribution";
+import {
+  countWorkspaceContribution,
+  workspaceContributionsFor,
+} from "@/server/platform/contribution";
 import {
   EmptyState,
   PageHeader,
@@ -56,10 +59,11 @@ export default async function WorkspacePage() {
   const counted = await Promise.all(
     queues.map(async (queue) => ({
       ...queue,
-      value: await queue.count({
+      value: await countWorkspaceContribution({
         tenantId: actor.tenantId,
         roleId: actor.roleId,
         userId: actor.userId,
+        contribution: queue,
       }),
     })),
   );

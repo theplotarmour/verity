@@ -2,7 +2,8 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { scopeFilter } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { ENTITY_LOCATION } from "@/server/capabilities/location";
+import { LOCATION_CAPABILITY, ENTITY_LOCATION } from "@/server/capabilities/location";
+import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import { DataTable } from "@/components/ui/DataTable";
 import {
   DemoDataNotice,
@@ -28,7 +29,7 @@ type Row = Record<string, unknown> & {
  * than from a `where` clause written here, so this page cannot accidentally be
  * more permissive than the permission model.
  */
-export default async function LocationsPage() {
+async function LocationsPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -97,3 +98,5 @@ export default async function LocationsPage() {
     </>
   );
 }
+
+export default withCapabilityPageAccess(LOCATION_CAPABILITY, LocationsPage);

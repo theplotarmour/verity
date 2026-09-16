@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { PermissionVerb } from "@prisma/client";
 import { enforcePolicy, type PolicyChannel } from "./policy";
 import { withRequestContext } from "./observability";
-import { capabilityForEntity, requireCapabilityActive } from "./capability";
+import { capabilityForEntity, requireCapabilityReady } from "./capability";
 import { CustomFieldValidationError } from "./entity";
 import { withTenant, type TenantScopedClient } from "./tenancy";
 import { assertGrounded, type GroundingCache } from "./grounding";
@@ -241,7 +241,7 @@ export async function executeCommand<TInput, TResult>(
     //     not merely hidden in the UI. Checked before authorization so a tenant
     //     cannot probe permissions for a capability it does not have.
     const capability = await capabilityForEntity(tx, def.entity);
-    if (capability) await requireCapabilityActive(tx, actor.tenantId, capability);
+    if (capability) await requireCapabilityReady(tx, actor.tenantId, capability);
 
     // 2b. MET-ACT-002 — throws ForbiddenError, so a missing branch cannot permit.
     //

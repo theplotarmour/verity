@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { assertRowInScope, ForbiddenError } from "@/server/platform/authorization";
-import { ENTITY_LOCATION } from "@/server/capabilities/location";
+import { LOCATION_CAPABILITY, ENTITY_LOCATION } from "@/server/capabilities/location";
+import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { entityHistory } from "@/server/platform/audit";
 import {
@@ -31,7 +32,7 @@ export const dynamic = "force-dynamic";
  * A list filters, but a detail page can be reached by typing a URL, and the
  * platform must be the thing that says no.
  */
-export default async function LocationDetailPage({
+async function LocationDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -169,3 +170,5 @@ export default async function LocationDetailPage({
     </>
   );
 }
+
+export default withCapabilityPageAccess(LOCATION_CAPABILITY, LocationDetailPage);

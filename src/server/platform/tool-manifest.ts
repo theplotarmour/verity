@@ -2,7 +2,7 @@ import { z } from "zod";
 import { listCommands, type CommandDefinition } from "./command";
 import { listQueries, type QueryDefinition } from "./query";
 import { resolvePermissions } from "./authorization";
-import { isCapabilityActive, capabilityForEntity } from "./capability";
+import { CapabilityError, capabilityForEntity, requireCapabilityReady } from "./capability";
 import type { ActorContext } from "./command";
 import type { TenantScopedClient } from "./tenancy";
 
@@ -81,6 +81,7 @@ export async function buildToolManifest(
   }
 
   const capabilityByEntity = new Map<string, string | null>();
+  const usableCapabilities = new Map<string, boolean>();
   async function capabilityOf(entity: string): Promise<string | null> {
     if (!capabilityByEntity.has(entity)) {
       capabilityByEntity.set(entity, await capabilityForEntity(tx, entity));
@@ -91,7 +92,18 @@ export async function buildToolManifest(
   async function entityUsable(entity: string, verb: string): Promise<boolean> {
     if (!grantedVerbs.get(entity)?.has(verb)) return false;
     const capability = await capabilityOf(entity);
-    if (capability && !(await isCapabilityActive(tx, actor.tenantId, capability))) return false;
+    if (capability) {
+      if (!usableCapabilities.has(capability)) {
+        try {
+          await requireCapabilityReady(tx, actor.tenantId, capability);
+          usableCapabilities.set(capability, true);
+        } catch (error) {
+          if (!(error instanceof CapabilityError)) throw error;
+          usableCapabilities.set(capability, false);
+        }
+      }
+      if (!usableCapabilities.get(capability)) return false;
+    }
     return true;
   }
 

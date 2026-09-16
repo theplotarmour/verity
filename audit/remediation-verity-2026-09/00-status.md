@@ -2,16 +2,16 @@
 
 **Started:** 2026-09-16  
 **Baseline:** `main@2a71102e3489231227613d1b5c1115f82c55fec3`  
-**State:** local implementation in progress; no commit, push, deployment, or
-credential rotation performed.
+**State:** implementation in progress; Phase 0/1 commits are pushed to
+`origin/main` through `6534e2d`. No deployment or credential rotation performed.
 
 ## Phase status
 
 | Phase | Status | Evidence |
 |---|---|---|
 | 0 — containment/baseline | Partial | Audit snapshot preserved; external deployment inventory unavailable |
-| 1 — release/dependencies | Locally green | Clean install, exact versions, audit, validators, 73 pure tests, typecheck, lint, build, standalone smoke |
-| 2 — security boundaries | Partial | Web privilege removal and function ACL migration implemented; live PostgreSQL and capability-route proof pending |
+| 1 — release/dependencies | Implemented and pushed | Clean install, exact versions, audit, validators, 73 pure tests, typecheck, lint, build, standalone smoke |
+| 2 — security boundaries | Implemented in code | Web privilege removal, function ACL migration, uniform capability guards, 15-page inventory, and 91-test pure gate; live PostgreSQL/Compose proof pending |
 | 3–7 | Pending | Dependency and architecture gates not yet satisfied |
 
 ## Finding status changed by this run
@@ -24,6 +24,7 @@ credential rotation performed.
 | VCA-013 | Locally closed | Included in fresh required CI job |
 | VCA-014 | Locally closed | Included in exact release evidence |
 | VCA-019 | Migration implemented | Apply to fresh/upgraded PostgreSQL and run principal/function matrix |
+| VCA-006 | Execution planes guarded | Run full database state matrix on absent/active/suspended/dependency-inactive tenants |
 | VCA-018 | Response/log leakage reduced | Profile-aware identity/storage/scheduler/restore checks remain |
 
 ## Local evidence summary
@@ -33,7 +34,7 @@ credential rotation performed.
 - `npm run validate:workflow`: valid YAML with unique mapping keys.
 - `npm run validate:deployment-security`: all encoded invariants present.
 - `npx prisma validate`: valid schema; two pre-existing SetNull warnings remain.
-- `npm run test:pure`: 6 files, 73 tests passed.
+- `npm run test:pure`: 8 files, 91 tests passed after Phase 2 guard work.
 - `npm run typecheck`: passed.
 - `npm run lint`: passed with one pre-existing TanStack compiler warning.
 - `npm run build`: passed on Next 16.3.3; route manifest generated; Edge crypto warning removed.

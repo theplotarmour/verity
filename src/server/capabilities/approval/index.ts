@@ -197,23 +197,20 @@ export function registerApprovalCapability(): void {
         href: "/approvals",
         // A real count of chains whose *current* step names a role the actor
         // holds — never a placeholder, per the no-fake-metrics rule.
-        count: async ({ tenantId, roleId }) => {
+        count: async ({ tx, roleId }) => {
           if (!roleId) return 0;
-          const { withTenant } = await import("@/server/platform/tenancy");
-          return withTenant(tenantId, async (tx) => {
-            const steps = await tx.approvalStep.findMany({
-              where: { decision: "Pending", approverRoleId: roleId },
-            });
-            let due = 0;
-            for (const step of steps) {
-              const current = await tx.approvalStep.findFirst({
-                where: { requestId: step.requestId, decision: "Pending" },
-                orderBy: { sequence: "asc" },
-              });
-              if (current?.id === step.id) due++;
-            }
-            return due;
+          const steps = await tx.approvalStep.findMany({
+            where: { decision: "Pending", approverRoleId: roleId },
           });
+          let due = 0;
+          for (const step of steps) {
+            const current = await tx.approvalStep.findFirst({
+              where: { requestId: step.requestId, decision: "Pending" },
+              orderBy: { sequence: "asc" },
+            });
+            if (current?.id === step.id) due++;
+          }
+          return due;
         },
       },
     ],

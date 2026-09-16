@@ -12,6 +12,8 @@ export default defineConfig({
       "src/server/platform/telemetry-scrub.test.ts",
       "src/server/capabilities/trading/import.test.ts",
       "src/server/capabilities/trading/clock.test.ts",
+      "src/test/capability-page-guard.test.ts",
+      "src/server/platform/capability-ready.test.ts",
     ],
     setupFiles: ["./src/test/setup-pure-env.ts"],
     fileParallelism: false,

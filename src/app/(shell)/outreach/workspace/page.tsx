@@ -3,7 +3,8 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { ENTITY_LEAD } from "@/server/capabilities/outreach";
+import { OUTREACH_CAPABILITY, ENTITY_LEAD } from "@/server/capabilities/outreach";
+import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import { Badge, EmptyState, Panel, PermissionDenied, StateBadge } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,7 @@ const TERMINAL_STATES = ["not_a_fit", "unresponsive", "lost", "deferred", "disqu
  * what's active / have I checked in — read top to bottom like a daily
  * brief, not scanned like a BI grid (that's Team Command's job).
  */
-export default async function MyWorkspacePage() {
+async function MyWorkspacePage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -167,3 +168,5 @@ export default async function MyWorkspacePage() {
     </div>
   );
 }
+
+export default withCapabilityPageAccess(OUTREACH_CAPABILITY, MyWorkspacePage);

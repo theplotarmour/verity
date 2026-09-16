@@ -5,11 +5,13 @@ import { hasPermission } from "@/server/platform/authorization";
 import { executeQuery } from "@/server/platform/query";
 import { installCapabilities } from "@/server/capabilities/registry";
 import {
+  OUTREACH_CAPABILITY,
   ENTITY_DIRECTION,
   getChannelIntelligence,
   getConversionFunnel,
   getVerticalIntelligence,
 } from "@/server/capabilities/outreach";
+import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import { EmptyState, PageHeader, Panel, PermissionDenied } from "@/components/ui/primitives";
 import { RangeSwitch } from "../RangeSwitch";
 import { RANGE_LABEL, percent, rangeFromParam, windowFor } from "../range";
@@ -26,7 +28,7 @@ export const dynamic = "force-dynamic";
  * Outreach page uses for its Core view — a Senior reaches Team Command's
  * own per-team numbers instead, never a company-wide comparison.
  */
-export default async function IntelligencePage({
+async function IntelligencePage({
   searchParams,
 }: {
   searchParams: Promise<{ range?: string }>;
@@ -148,6 +150,8 @@ export default async function IntelligencePage({
     </>
   );
 }
+
+export default withCapabilityPageAccess(OUTREACH_CAPABILITY, IntelligencePage);
 
 function IntelligenceTable({
   title,

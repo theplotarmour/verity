@@ -4,6 +4,7 @@ import { withTenant } from "@/server/platform/tenancy";
 import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
 import {
+  OUTREACH_CAPABILITY,
   ENTITY_LEAD,
   ENTITY_CONTACT,
   ENTITY_RESEARCH,
@@ -13,6 +14,7 @@ import {
   assertTeamScopeAllowed,
   deriveLeadHealth,
 } from "@/server/capabilities/outreach";
+import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import { ForbiddenError } from "@/server/platform/authorization";
 import {
   Badge,
@@ -44,7 +46,7 @@ const TERMINAL_STATES = ["not_a_fit", "unresponsive", "lost", "deferred", "disqu
  * Lead detail — the chain handbook Ch. 02/master-context §112 asks for:
  * which company, who owns it, what was said, what happened, what's next.
  */
-export default async function OutreachLeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
+async function OutreachLeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   installCapabilities();
   const { id } = await params;
   const actor = await requireActor();
@@ -418,3 +420,5 @@ export default async function OutreachLeadDetailPage({ params }: { params: Promi
     </>
   );
 }
+
+export default withCapabilityPageAccess(OUTREACH_CAPABILITY, OutreachLeadDetailPage);

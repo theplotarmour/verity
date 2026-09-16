@@ -2,7 +2,8 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { hasTenantPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { ENTITY_APPROVAL } from "@/server/capabilities/approval";
+import { APPROVAL_CAPABILITY, ENTITY_APPROVAL } from "@/server/capabilities/approval";
+import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import {
   PageHeader,
   Panel,
@@ -25,7 +26,7 @@ export const dynamic = "force-dynamic";
  * belongs to someone else are listed separately and without controls, so it is
  * visible that they exist and clear that they are not actionable yet.
  */
-export default async function ApprovalsPage() {
+async function ApprovalsPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -154,3 +155,5 @@ export default async function ApprovalsPage() {
     </>
   );
 }
+
+export default withCapabilityPageAccess(APPROVAL_CAPABILITY, ApprovalsPage);

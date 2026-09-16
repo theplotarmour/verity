@@ -2,14 +2,15 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { ENTITY_TARGET } from "@/server/capabilities/outreach";
+import { OUTREACH_CAPABILITY, ENTITY_TARGET } from "@/server/capabilities/outreach";
+import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import { PageHeader, Panel, PermissionDenied, RowList, Row, EmptyState } from "@/components/ui/primitives";
 import { TargetForm } from "./TargetForm";
 
 export const dynamic = "force-dynamic";
 
 /** Targets — master-context spec §11-12. Progress is a separate live query (see /outreach's funnel); this screen only sets and lists the target rows themselves. */
-export default async function TargetsPage() {
+async function TargetsPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -98,3 +99,5 @@ export default async function TargetsPage() {
     </>
   );
 }
+
+export default withCapabilityPageAccess(OUTREACH_CAPABILITY, TargetsPage);

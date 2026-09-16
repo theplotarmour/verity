@@ -2,7 +2,8 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { ENTITY_LEAD } from "@/server/capabilities/outreach";
+import { OUTREACH_CAPABILITY, ENTITY_LEAD } from "@/server/capabilities/outreach";
+import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import { DataTable } from "@/components/ui/DataTable";
 import { EmptyState, PageHeader, Panel, PermissionDenied, Stat, StatRow } from "@/components/ui/primitives";
 import { RemoveMemberButton } from "./RemoveMemberButton";
@@ -28,7 +29,7 @@ function initials(name: string): string {
  * never another team's, per taskplan 105's Phase 3 fix — target, people,
  * pipeline, exceptions.
  */
-export default async function TeamCommandPage() {
+async function TeamCommandPage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -305,3 +306,5 @@ export default async function TeamCommandPage() {
     </>
   );
 }
+
+export default withCapabilityPageAccess(OUTREACH_CAPABILITY, TeamCommandPage);

@@ -2,6 +2,9 @@ import "server-only";
 import type { ReactNode } from "react";
 import { ForbiddenError } from "@/server/platform/authorization";
 import { CapabilityError } from "@/server/platform/capability";
+import { withCapabilityCheck } from "@/server/platform/capability";
+import { requireActor } from "@/server/platform/auth";
+import { recordExecutionFailure } from "@/server/platform/execution-failure";
 import { EmptyState, PermissionDenied } from "./primitives";
 
 export function withPageAccess<Args extends unknown[]>(page: (...args: Args) => Promise<ReactNode>) {
@@ -13,4 +16,21 @@ export function withPageAccess<Args extends unknown[]>(page: (...args: Args) => 
       throw error;
     }
   };
+}
+
+/** Guard a capability-owned page before any page-level data loader executes. */
+export function withCapabilityPageAccess<Args extends unknown[]>(
+  capabilityId: string,
+  page: (...args: Args) => Promise<ReactNode>,
+) {
+  return withPageAccess(async (...args: Args) => {
+    const actor = await requireActor();
+    try {
+      await withCapabilityCheck(actor.tenantId, capabilityId, async () => undefined);
+    } catch (error) {
+      await recordExecutionFailure(error, actor, `page:${capabilityId}`);
+      throw error;
+    }
+    return page(...args);
+  });
 }

@@ -1321,9 +1321,8 @@ export function registerPlywoodCapability(): void {
         key: "verity.plywood.low_stock",
         label: "Boards at or below reorder level",
         href: "/stock",
-        count: async ({ tenantId }) =>
-          withTenant(tenantId, async (tx) => {
-            const rows = await tx.$queryRaw<{ count: bigint }[]>`
+        count: async ({ tx }) => {
+          const rows = await tx.$queryRaw<{ count: bigint }[]>`
               SELECT count(*)::bigint AS count
                 FROM trading_product p
                WHERE p.active
@@ -1331,8 +1330,8 @@ export function registerPlywoodCapability(): void {
                  AND COALESCE((
                        SELECT sum(b.qty_units) FROM stock_balance b WHERE b.product_id = p.id
                      ), 0) <= p.reorder_level_units`;
-            return Number(rows[0]?.count ?? 0);
-          }),
+          return Number(rows[0]?.count ?? 0);
+        },
         shells: ["platform", "operations"],
       },
     ],

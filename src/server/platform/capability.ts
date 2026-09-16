@@ -77,6 +77,41 @@ export async function requireCapabilityActive(
 }
 
 /**
+ * Blocks work when the capability or any declared dependency is inactive.
+ *
+ * The activation trigger prevents ordinary writes from creating an invalid
+ * dependency graph, but execution must still fail closed if data was restored,
+ * repaired, or changed by a privileged operator outside that write path.
+ */
+export async function requireCapabilityReady(
+  tx: TenantScopedClient,
+  tenantId: string,
+  capabilityId: string,
+): Promise<void> {
+  const active = activeCache.get(tenantId) ?? (await loadActive(tx, tenantId));
+  if (!active.has(capabilityId)) {
+    throw new CapabilityError(
+      `E_CAPABILITY_INACTIVE: ${capabilityId} is not active for this tenant`,
+    );
+  }
+
+  const definition = await tx.capabilityDefinition.findUnique({
+    where: { id: capabilityId },
+    select: { dependencies: true },
+  });
+  if (!definition) {
+    throw new CapabilityError(`E_CAPABILITY_UNKNOWN: ${capabilityId} is not registered`);
+  }
+
+  const missing = definition.dependencies.filter((dependency) => !active.has(dependency));
+  if (missing.length > 0) {
+    throw new CapabilityError(
+      `E_CAPABILITY_DEPENDENCY_INACTIVE: ${capabilityId} requires ${missing.join(", ")}`,
+    );
+  }
+}
+
+/**
  * Activates a capability for the current tenant.
  *
  * Dependency validation (PLA-CAP-003) is enforced by a database trigger, not
@@ -184,7 +219,7 @@ export async function withCapabilityCheck<T>(
   fn: (tx: TenantScopedClient) => Promise<T>,
 ): Promise<T> {
   return withTenant(tenantId, async (tx) => {
-    await requireCapabilityActive(tx, tenantId, capabilityId);
+    await requireCapabilityReady(tx, tenantId, capabilityId);
     return fn(tx);
   });
 }

@@ -2,6 +2,8 @@ import { captureError } from "./observability";
 import "server-only";
 import type { PermissionVerb } from "@prisma/client";
 import { withTenant, type TenantScopedClient } from "./tenancy";
+import { CapabilityError, requireCapabilityReady } from "./capability";
+import { recordCapabilityDenial } from "./execution-failure";
 
 /**
  * Capability experience contributions.
@@ -122,7 +124,12 @@ export type WorkspaceContribution = {
   label: string;
   href: string;
   /** Must return a real count. Return 0, never a placeholder. */
-  count: (context: { tenantId: string; roleId: string | null; userId: string }) => Promise<number>;
+  count: (context: {
+    tx: TenantScopedClient;
+    tenantId: string;
+    roleId: string | null;
+    userId: string;
+  }) => Promise<number>;
   shells?: ShellKind[];
 };
 
@@ -276,6 +283,30 @@ export function workspaceContributionsFor(args: {
   return items;
 }
 
+/** Execute one workspace counter under the same capability guard and tenant transaction. */
+export async function countWorkspaceContribution(args: {
+  tenantId: string;
+  roleId: string | null;
+  userId: string;
+  contribution: WorkspaceContribution & { capabilityId: string };
+}): Promise<number> {
+  try {
+    return await withTenant(args.tenantId, async (tx) => {
+      await requireCapabilityReady(tx, args.tenantId, args.contribution.capabilityId);
+      return args.contribution.count({
+        tx,
+        tenantId: args.tenantId,
+        roleId: args.roleId,
+        userId: args.userId,
+      });
+    });
+  } catch (error) {
+    await recordCapabilityDenial(error, args.tenantId, `workspace:${args.contribution.key}`);
+    if (error instanceof CapabilityError) return 0;
+    throw error;
+  }
+}
+
 /** Recurring work declared by the active capabilities. Declaration only — this runs nothing. */
 export function schedulesFor(args: {
   activeCapabilityIds: string[];
@@ -336,9 +367,10 @@ export async function runDueWork(args: {
   for (const unit of due) {
     const started = Date.now();
     try {
-      const result = await withTenant(args.tenantId, (tx) =>
-        unit.run({ tx, tenantId: args.tenantId, now }),
-      );
+      const result = await withTenant(args.tenantId, async (tx) => {
+        await requireCapabilityReady(tx, args.tenantId, unit.capabilityId);
+        return unit.run({ tx, tenantId: args.tenantId, now });
+      });
       outcomes.push({
         capabilityId: unit.capabilityId,
         key: unit.key,
@@ -347,6 +379,7 @@ export async function runDueWork(args: {
         ms: Date.now() - started,
       });
     } catch (error) {
+      await recordCapabilityDenial(error, args.tenantId, `schedule:${unit.key}`);
       captureError(error);
       outcomes.push({
         capabilityId: unit.capabilityId,

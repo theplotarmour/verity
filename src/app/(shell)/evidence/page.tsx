@@ -2,7 +2,8 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { hasTenantPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { ENTITY_EVIDENCE } from "@/server/capabilities/evidence";
+import { EVIDENCE_CAPABILITY, ENTITY_EVIDENCE } from "@/server/capabilities/evidence";
+import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import { DataTable } from "@/components/ui/DataTable";
 import {
   PageHeader,
@@ -31,7 +32,7 @@ type Row = Record<string, unknown> & {
  * at trigger level even for a privileged role. Offering a control the backend
  * rejects teaches users to distrust the interface.
  */
-export default async function EvidencePage() {
+async function EvidencePage() {
   installCapabilities();
   const actor = await requireActor();
 
@@ -105,3 +106,5 @@ export default async function EvidencePage() {
     </>
   );
 }
+
+export default withCapabilityPageAccess(EVIDENCE_CAPABILITY, EvidencePage);

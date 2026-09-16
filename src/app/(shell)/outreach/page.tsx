@@ -4,6 +4,7 @@ import { withTenant } from "@/server/platform/tenancy";
 import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
 import {
+  OUTREACH_CAPABILITY,
   ENTITY_DIRECTION,
   ENTITY_LEAD,
   assertTeamScopeAllowed,
@@ -12,6 +13,7 @@ import {
   getCompanyPulse,
   getTeamComparison,
 } from "@/server/capabilities/outreach";
+import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import { ForbiddenError } from "@/server/platform/authorization";
 import { executeQuery } from "@/server/platform/query";
 import { DataTable } from "@/components/ui/DataTable";
@@ -54,7 +56,7 @@ type LeadRow = Record<string, unknown> & {
  * "My Workspace", Senior "Team Command") are a later slice; this is the
  * Company-Core-shaped read that proves the data end to end first.
  */
-export default async function OutreachPage({
+async function OutreachPage({
   searchParams,
 }: {
   searchParams: Promise<{ team?: string; state?: string; range?: string }>;
@@ -551,3 +553,5 @@ export default async function OutreachPage({
     </>
   );
 }
+
+export default withCapabilityPageAccess(OUTREACH_CAPABILITY, OutreachPage);

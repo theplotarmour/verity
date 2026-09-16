@@ -185,8 +185,8 @@ Certification remains serial even when implementation is parallel.
 | Phase | Work packages | Outcome | Status |
 |---|---|---|---|
 | Phase 0 — Containment and baseline | WP-00 | Preserve evidence, quarantine stale artifacts, establish closure records | Partial — repository baseline preserved; deployed-artifact/credential inventory requires environment access |
-| Phase 1 — Trustworthy release foundation | WP-01, WP-02 | Valid CI, current fixtures, clean dependency tree, bounded security upgrades | Locally implemented and green; exact GitHub/isolated-DB run pending |
-| Phase 2 — Core security boundaries | WP-03, WP-04 | Least-privilege database runtime and uniform capability enforcement | Partial — WP-03 code/migration implemented; DB proof and WP-04 remain |
+| Phase 1 — Trustworthy release foundation | WP-01, WP-02 | Valid CI, current fixtures, clean dependency tree, bounded security upgrades | Implemented and pushed; fresh GitHub/isolated-DB run pending |
+| Phase 2 — Core security boundaries | WP-03, WP-04 | Least-privilege database runtime and uniform capability enforcement | Implemented in code — DB/Compose proof remains unavailable on this host |
 | Phase 3 — Identity lifecycle | WP-05 | Complete selected browser identity and recovery profile | Pending identity ADR |
 | Phase 4 — On-prem operations | WP-06 | Install, configure, schedule, observe, and report readiness locally | Pending Phases 2–3 |
 | Phase 5 — Recovery and certification | WP-07, WP-08, WP-09 | Fail-closed DR, immutable supply chain, exact-artifact certification | Pending Phase 4 |
@@ -220,10 +220,17 @@ Implemented in the first phase run:
 - stopped readiness responses and structured logs from returning raw database
   driver details or connection credentials;
 - added workflow and deployment-security invariant validators.
+- added one active/dependency guard across registered commands, queries,
+  direct-read pages, workspace counters, scheduled contributions, and agent
+  tool visibility;
+- added a canonical inventory and static guard conformance checks for all 15
+  capability-owned pages that query through direct tenant-scoped clients;
+- record capability denials in the security stream for human and scheduler
+  execution paths.
 
 Local gates passed: clean dependency resolution, zero-advisory `npm audit`,
 workflow validation, deployment-invariant validation, Prisma validation/client
-generation, pure tests, typecheck, lint with one pre-existing TanStack compiler
+generation, 91 pure tests, typecheck, lint with one pre-existing TanStack compiler
 warning, production build, standalone health smoke, non-ready DB behavior, and
 hostile image-host rejection.
 
