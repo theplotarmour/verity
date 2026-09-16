@@ -11,7 +11,7 @@ const stubCtx = {} as QueryContext;
 describe("previewCustomerImport", () => {
   it("accepts a row matching the header contract, case-insensitively", async () => {
     const result = await previewCustomerImport.handler(stubCtx, {
-      rows: [{ DisplayName: "Ganesh Traders", GSTIN: "07AAACG2115R1Z1", StateCode: "07" }],
+      rows: [{ DisplayName: "Ganesh Traders", GSTIN: "07AAACG2115R1ZJ", StateCode: "07" }],
     });
     expect(result.invalid).toEqual([]);
     expect(result.valid).toHaveLength(1);

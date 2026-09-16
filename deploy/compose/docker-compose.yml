@@ -107,7 +107,6 @@ services:
       # application must never hold a BYPASSRLS connection, or INV-001 is
       # unenforced while every policy still exists and every test still passes.
       DATABASE_URL: postgresql://verity_app:${VERITY_APP_PASSWORD}@db:5432/${POSTGRES_DB:-verity}
-      DIRECT_URL: postgresql://postgres:${POSTGRES_SUPERUSER_PASSWORD}@db:5432/${POSTGRES_DB:-verity}
       TZ: UTC
 
       # Identity (Task 36). supabase | oidc.

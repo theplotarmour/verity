@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { isSensitiveField } from "./audit";
-import { redactMessage } from "./integration";
+import { redactMessage } from "./redaction";
 
 /**
  * The observability contract.

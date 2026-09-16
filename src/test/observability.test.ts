@@ -281,6 +281,8 @@ describe("errors (AC-02, AC-04)", () => {
 
     const rendered = JSON.stringify(captured[0]);
     expect(rendered).toContain("connect failed");
+    expect(rendered).not.toContain("user:pw");
+    expect(rendered).not.toContain("postgresql://user");
     expect(rendered).not.toContain("hunter2");
   });
 

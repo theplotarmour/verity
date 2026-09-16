@@ -2,14 +2,20 @@
   "name": "verity",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
     "db:sync": "prisma db push",
     "db:reset": "prisma db push --force-reset && npm run seed:plywood",
     "start": "next start",
+    "validate:workflow": "node scripts/validate-workflow.mjs",
+    "validate:deployment-security": "node scripts/validate-deployment-security.mjs",
     "lint": "eslint",
     "test": "vitest run",
+    "test:pure": "vitest run --config vitest.pure.config.mts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
@@ -71,10 +77,8 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.0",
     "typescript": "^5",
-    "vitest": "^4.1.10"
-  },
-  "prisma": {
-    "seed": "node prisma/run-seed.cjs seed-plywood-demo.ts"
+    "vitest": "4.1.11",
+    "yaml": "2.9.1"
   },
   "overrides": {
     "@prisma/config": {

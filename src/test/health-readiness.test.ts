@@ -88,10 +88,10 @@ describe("GET /api/ready — readiness", () => {
     const body = await response.json();
     expect(body.status).toBe("not_ready");
     expect(body.checks.db).toBe("error");
-    expect(body.checks.detail).toMatch(/Can't reach database server/);
+    expect(body.checks.code).toBe("database_unavailable");
   });
 
-  it("redacts credentials from the connection error before returning it", async () => {
+  it("never returns driver details or credentials from a connection error", async () => {
     vi.doMock("@/server/platform/db", () => ({
       prisma: {
         $queryRaw: vi.fn().mockRejectedValue(
@@ -106,9 +106,11 @@ describe("GET /api/ready — readiness", () => {
     const response = await GET();
     const body = await response.json();
 
-    expect(body.checks.detail).not.toContain("s3cr3t");
-    expect(body.checks.detail).not.toContain("verity_app:s3cr3t");
-    expect(body.checks.detail).toContain("<redacted>");
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain("s3cr3t");
+    expect(serialized).not.toContain("verity_app");
+    expect(serialized).not.toContain("db.example.com");
+    expect(body.checks.code).toBe("database_unavailable");
   });
 
   it("returns 503 with a clear message when the probe exceeds the timeout", async () => {
@@ -127,7 +129,7 @@ describe("GET /api/ready — readiness", () => {
     expect(response.status).toBe(503);
     const body = await response.json();
     expect(body.status).toBe("not_ready");
-    expect(body.checks.detail).toMatch(/timed out/);
+    expect(body.checks.code).toBe("database_timeout");
   });
 
   it("does not opt into static prerendering", async () => {

@@ -26,8 +26,19 @@ const eslintConfig = defineConfig([
   },
   globalIgnores([
     ".next/**",
+    "node_modules/**",
     "out/**",
     "build/**",
+    "dist/**",
+    "coverage/**",
+    "test-results/**",
+    "graphify-out/**",
+    "audit/**",
+    ".claude/worktrees/**",
+    ".worktrees/**",
+    "tmp_backup_verity/**",
+    "tmp-010-*.mjs",
+    "tmp-010-*.mts",
     "next-env.d.ts",
     // Design handoff bundle from claude.ai/design — HTML/CSS/JS prototypes kept as
     // visual authority, never compiled or shipped. Linting them reports defects in

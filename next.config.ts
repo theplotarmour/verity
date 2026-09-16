@@ -1,6 +1,29 @@
 import { withSentryConfig } from '@sentry/nextjs';
 import type { NextConfig } from 'next';
 
+function configuredSupabaseImagePattern(): NonNullable<NextConfig['images']>['remotePatterns'] {
+  const configuredUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  if (!configuredUrl) return [];
+
+  try {
+    const url = new URL(configuredUrl);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return [];
+
+    return [
+      {
+        protocol: url.protocol.slice(0, -1) as 'http' | 'https',
+        hostname: url.hostname,
+        port: url.port,
+        pathname: '/storage/v1/object/public/**',
+      },
+    ];
+  } catch {
+    // Runtime configuration reports malformed provider URLs. The build-time
+    // image allowlist remains closed rather than falling back to a wildcard.
+    return [];
+  }
+}
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   turbopack: {},
@@ -25,14 +48,7 @@ const nextConfig: NextConfig = {
     '*': ['node_modules/.prisma/client/**/*'],
   },
   images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '*.supabase.co',
-        port: '',
-        pathname: '/storage/v1/object/public/**',
-      },
-    ],
+    remotePatterns: configuredSupabaseImagePattern(),
   },
   experimental: {
     serverActions: {

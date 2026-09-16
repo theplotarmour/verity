@@ -14,13 +14,32 @@ for (const key of ["DATABASE_URL", "DIRECT_URL"] as const) {
   }
 }
 
+// Capture the explicitly supplied test URLs before Prisma Client is imported.
+// Generated Prisma code loads the repository .env as an import side effect;
+// using a static import here would therefore populate remote application
+// credentials before this guard can decide whether the test database is safe.
+const testDatabaseUrl = process.env.DATABASE_URL;
+const testDirectUrl = process.env.DIRECT_URL;
+
+// Keep generated Prisma Client's dotenv loader from back-filling the real
+// application .env later when a test module imports the shared DB singleton.
+// Empty strings are deliberate sentinels: production config treats them as
+// absent, while dotenv will not overwrite an already defined process value.
+if (!testDatabaseUrl) process.env.DATABASE_URL = "";
+if (!testDirectUrl) process.env.DIRECT_URL = "";
+
 // Business fixtures can execute hundreds of commands in a minute. Give each
 // test a fresh quota window without bypassing the production limiter itself.
 // The URLs above are validated before this privileged test-only connection.
-import { beforeEach, afterAll } from "vitest";
-import { PrismaClient } from "@prisma/client";
-const quotaAdmin = process.env.DATABASE_URL && process.env.DIRECT_URL
-  ? new PrismaClient({ datasourceUrl: process.env.DIRECT_URL }) : null;
+import { beforeAll, beforeEach, afterAll } from "vitest";
+import type { PrismaClient } from "@prisma/client";
+
+let quotaAdmin: PrismaClient | null = null;
+beforeAll(async () => {
+  if (!testDatabaseUrl || !testDirectUrl) return;
+  const { PrismaClient } = await import("@prisma/client");
+  quotaAdmin = new PrismaClient({ datasourceUrl: testDirectUrl });
+});
 beforeEach(async () => {
   if (quotaAdmin) await quotaAdmin.$executeRaw`DELETE FROM public.request_quota`;
 });

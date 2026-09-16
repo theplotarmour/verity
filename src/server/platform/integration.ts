@@ -1,5 +1,8 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { isSensitiveField } from "./audit";
+import { redactMessage } from "./redaction";
+
+export { redactMessage } from "./redaction";
 
 /**
  * The integration boundary.
@@ -266,12 +269,6 @@ export async function exchange<TPayload, TResult>(
  * text, so the patterns are the ones that appear in transport errors — an
  * `Authorization` header, a `token=` query parameter, a bearer value.
  */
-export function redactMessage(message: string): string {
-  return message
-    .replace(/(Bearer|Basic)\s+[A-Za-z0-9._\-+/=]+/gi, "$1 [redacted]")
-    .replace(/((?:api[-_]?key|access[-_]?token|token|secret|password|signature)["'\s:=]+)[^\s,;"'&]+/gi, "$1[redacted]");
-}
-
 /**
  * Strips credential-shaped entries from adapter metadata.
  *

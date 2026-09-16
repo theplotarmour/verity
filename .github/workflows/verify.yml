@@ -22,7 +22,9 @@ jobs:
       # files). That is deliberate — a skipped isolation test proves nothing, and
       # CI must never be the place where tenancy silently stops being verified.
       postgres:
-        image: postgres:17
+        # Match the first supported on-prem profile. A newer PostgreSQL major
+        # belongs in a separate compatibility lane, not as the only CI proof.
+        image: postgres:16-alpine
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: verity
@@ -38,8 +40,6 @@ jobs:
       #   DIRECT_URL  — privileged, migrations only
       #   DATABASE_URL — the runtime role, NOSUPERUSER NOBYPASSRLS
       VERITY_SESSION_SECRET: isolated-ci-signing-secret-not-for-production
-      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: test-anon-key
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/verity
       DATABASE_URL: postgresql://verity_app:verity_app@localhost:5432/verity
       # `config.ts`'s `loadConfig()` runs at module import time and throws
@@ -62,6 +62,18 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      - name: Validate workflow mappings
+        run: npm run validate:workflow
+
+      - name: Validate deployment security invariants
+        run: npm run validate:deployment-security
+
+      - name: Assert security-sensitive dependency versions
+        run: npm ls next@16.3.3 eslint-config-next@16.3.3 vitest@4.1.11 @vitest/mocker@4.1.11
+
+      - name: Generate the Prisma client
+        run: npm run prisma:generate
 
       # The runtime role must NOT be able to bypass RLS. Creating it as a
       # superuser here would make `assertRlsEnforceable` pass vacuously and every
@@ -89,9 +101,21 @@ jobs:
           GRANT USAGE ON SCHEMA verity TO verity_app;
           GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO verity_app;
           GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO verity_app;
-          GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA verity TO verity_app;
           REVOKE ALL ON TABLE public._prisma_migrations, public.request_quota FROM verity_app;
           SQL
+
+      - name: Prove SECURITY DEFINER functions are not public executable
+        run: |
+          count="$(psql "$DIRECT_URL" -v ON_ERROR_STOP=1 -tAc \
+            "SELECT count(*)
+               FROM pg_proc p
+               JOIN pg_namespace n ON n.oid = p.pronamespace
+               CROSS JOIN LATERAL aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+              WHERE n.nspname = 'verity'
+                AND p.prosecdef
+                AND a.grantee = 0
+                AND a.privilege_type = 'EXECUTE'")"
+          test "$count" = "0"
 
       - name: Prove the runtime role cannot bypass RLS
         run: |

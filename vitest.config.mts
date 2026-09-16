@@ -2,6 +2,11 @@ import { defineConfig } from "vitest/config";
 import path from "node:path";
 
 export default defineConfig({
+  // Vite loads .env files before setupFiles by default. That contradicts the
+  // fail-closed test contract in setup-env.ts and can expose a shared database
+  // to mutation before the guard runs. Only .env.test, loaded explicitly by
+  // setup-env.ts, may supply database credentials to tests.
+  envDir: false,
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],

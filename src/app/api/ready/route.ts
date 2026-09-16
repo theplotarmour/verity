@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/server/platform/db";
-import { buildIdentity, observeDuration } from "@/server/platform/observability";
+import { buildIdentity, captureError, observeDuration } from "@/server/platform/observability";
 
 /**
  * Readiness — "this instance can serve traffic because its required
@@ -26,18 +26,6 @@ import { buildIdentity, observeDuration } from "@/server/platform/observability"
 export const dynamic = "force-dynamic";
 
 const READY_TIMEOUT_MS = 3000;
-
-/**
- * Strips a credential-bearing connection string (`scheme://user:pass@host`)
- * out of an error message before it is ever returned to a caller. Prisma's
- * own connection-failure messages observed in this codebase's test runs
- * name only host:port ("Can't reach database server at
- * host.example.com:5432"), never credentials — this is defense in depth for
- * an error shape this project has not seen, not a fix for one it has.
- */
-function sanitize(message: string): string {
-  return message.replace(/:\/\/[^\s/@]+:[^\s/@]+@/g, "://<redacted>@");
-}
 
 /**
  * `SELECT 1` against the existing Prisma singleton, bounded to
@@ -93,9 +81,12 @@ export async function GET() {
       operation: "ready_probe",
       outcome: "error",
     });
-    const detail = sanitize(error instanceof Error ? error.message : String(error));
+    captureError(error, { route: "/api/ready", dependency: "database" });
+    const code = error instanceof Error && error.message.includes("timed out")
+      ? "database_timeout"
+      : "database_unavailable";
     return NextResponse.json(
-      { status: "not_ready", checks: { db: "error", detail }, durationMs, ...buildIdentity() },
+      { status: "not_ready", checks: { db: "error", code }, durationMs, ...buildIdentity() },
       { status: 503 },
     );
   }

@@ -22,7 +22,7 @@
  * independent scrubbers would drift, and the one that drifted would be
  * discovered by finding customer data in an incident tool.
  */
-import { redactMessage } from "./integration";
+import { redactMessage } from "./redaction";
 
 /**
  * A bare UUID identifies a tenant, a godown, a role or a record. On its own it

@@ -14,6 +14,7 @@ const REQUIRED_ENV = {
   DATABASE_URL: "postgresql://user:pass@localhost:5432/verity_test",
   NEXT_PUBLIC_SUPABASE_URL: "https://project-ref.supabase.co",
   NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-key-for-test",
+  VERITY_SESSION_SECRET: "private-test-session-signing-secret",
 };
 
 const SNAPSHOT_KEYS = [
