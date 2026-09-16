@@ -7,6 +7,7 @@ import { diffFields, recordActivity } from "@/server/platform/audit";
 import { ForbiddenError, hasPermission } from "@/server/platform/authorization";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
 import { reserveUpload, confirmUpload, readUrlFor } from "@/server/platform/files";
+import { notify } from "@/server/platform/notification";
 
 /**
  * CAPABILITY: OUTREACH — `verity.capability.outreach` (Task 105, P0 scope)
@@ -50,6 +51,14 @@ export const ENTITY_TASK = "verity.outreach.task";
 export const ENTITY_MEETING = "verity.outreach.meeting";
 export const ENTITY_COACHING_NOTE = "verity.outreach.coaching_note";
 export const ENTITY_AI_INSIGHT = "verity.outreach.ai_insight";
+export const ENTITY_DOMAIN_GROUP = "verity.outreach.domain_group";
+export const ENTITY_DOMAIN = "verity.outreach.domain";
+export const ENTITY_ATTRIBUTION_RECORD = "verity.outreach.attribution_record";
+export const ENTITY_ESCALATION = "verity.outreach.escalation";
+export const ENTITY_OPPORTUNITY = "verity.outreach.opportunity";
+export const ENTITY_PROPOSAL = "verity.outreach.proposal";
+export const ENTITY_CLOSED_CLIENT = "verity.outreach.closed_client";
+export const ENTITY_ASSIGNMENT = "verity.outreach.assignment";
 /**
  * Nav-gating markers (2026-09-14). Founder/Senior/Junior share broad
  * Read/Create/Edit grants on `ENTITY_LEAD` etc. at Tenant scope (a
@@ -182,6 +191,29 @@ export function deriveLeadHealth(lead: {
 async function actorPartyId(tx: TenantScopedClient, userId: string): Promise<string> {
   const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
   return user.partyId;
+}
+
+/**
+ * Task 106 Phase B: append one attribution-history row. Called alongside
+ * every write that already touches `leadOriginatorId`/`opportunityOwnerId`/
+ * `closerId` — never a replacement for those fields, just the queryable
+ * trail behind them (master prompt §60).
+ */
+async function recordAttribution(
+  ctx: Parameters<CommandDefinition<unknown, unknown>["handler"]>[0],
+  input: { leadId: string; role: "Originator" | "Owner" | "Closer"; partyId: string; reason?: string },
+): Promise<void> {
+  const changedByPartyId = await actorPartyId(ctx.tx, ctx.actor.userId);
+  await ctx.tx.outreachAttributionRecord.create({
+    data: {
+      tenantId: ctx.actor.tenantId,
+      leadId: input.leadId,
+      role: input.role,
+      partyId: input.partyId,
+      changedByPartyId,
+      reason: input.reason ?? null,
+    },
+  });
 }
 
 /**
@@ -432,6 +464,7 @@ export const createOutreachLead: CommandDefinition<
     companyName: string;
     website?: string;
     industry?: string;
+    domainId?: string;
     track?: (typeof TRACKS)[number];
     whyRelevant: string;
     opportunityOwnerId: string;
@@ -452,6 +485,11 @@ export const createOutreachLead: CommandDefinition<
     companyName: z.string().min(1),
     website: z.string().min(1).optional(),
     industry: z.string().min(1).optional(),
+    // Task 106 Phase A: the structured taxonomy leaf. `industry` stays
+    // accepted for continuity with pre-Phase-A callers/tests, but a new
+    // lead should carry this instead (module doc's "DO NOT store industry
+    // only as arbitrary text" rule).
+    domainId: z.string().uuid().optional(),
     track: z.enum(TRACKS).optional(),
     // Required-at-creation per master-context spec §73 — a bare company
     // name is not a qualified lead.
@@ -476,6 +514,7 @@ export const createOutreachLead: CommandDefinition<
         companyName: input.companyName,
         website: input.website ?? null,
         industry: input.industry ?? null,
+        domainId: input.domainId ?? null,
         track: input.track ?? "Undetermined",
         whyRelevant: input.whyRelevant,
         leadOriginatorId: originatorId,
@@ -488,6 +527,8 @@ export const createOutreachLead: CommandDefinition<
         qualityScore: input.qualityScore ?? null,
       },
     });
+    await recordAttribution(ctx, { leadId: lead.id, role: "Originator", partyId: originatorId, reason: "Lead created" });
+    await recordAttribution(ctx, { leadId: lead.id, role: "Owner", partyId: input.opportunityOwnerId, reason: "Lead created" });
     return { result: { id: lead.id }, events: [{ name: "verity.outreach.lead_created", entityId: lead.id }] };
   },
 };
@@ -554,6 +595,35 @@ export const advanceLeadStage: CommandDefinition<
       commandKey: "verity.outreach.advance_stage",
       changes: diffFields({ state: lead.state }, { state: updated.state }),
     });
+
+    // Task 106 Phase D: materialize the stage-transition fact. `onConflict`
+    // via the (tenantId, leadId) unique constraint makes each idempotent —
+    // a lead can only ever have one Opportunity/ClosedClient row.
+    if (input.toState === "opportunity") {
+      await ctx.tx.outreachOpportunity.upsert({
+        where: { tenantId_leadId: { tenantId: ctx.actor.tenantId, leadId: lead.id } },
+        create: { tenantId: ctx.actor.tenantId, leadId: lead.id, teamId: lead.teamId, track: lead.track },
+        update: {},
+      });
+    }
+    if (input.toState === "proposal") {
+      await ctx.tx.outreachProposal.create({
+        data: { tenantId: ctx.actor.tenantId, leadId: lead.id },
+      });
+    }
+    if (input.toState === "closed_won") {
+      await recordAttribution(ctx, { leadId: lead.id, role: "Closer", partyId: closerId!, reason: "Lead closed won" });
+      await ctx.tx.outreachClosedClient.upsert({
+        where: { tenantId_leadId: { tenantId: ctx.actor.tenantId, leadId: lead.id } },
+        create: {
+          tenantId: ctx.actor.tenantId,
+          leadId: lead.id,
+          closerId: closerId!,
+          advanceReceivedMinor: lead.advanceReceivedMinor,
+        },
+        update: {},
+      });
+    }
 
     return { result: { state: updated.state }, events: [moved.event] };
   },
@@ -624,6 +694,12 @@ export const reassignOpportunityOwner: CommandDefinition<{ leadId: string; newOw
       commandKey: "verity.outreach.reassign_owner",
       changes: diffFields({ opportunityOwnerId: before }, { opportunityOwnerId: updated.opportunityOwnerId }),
     });
+    await recordAttribution(ctx, {
+      leadId: lead.id,
+      role: "Owner",
+      partyId: updated.opportunityOwnerId,
+      reason: "Reassigned — 14-day inactivity rule",
+    });
 
     return { result: { opportunityOwnerId: updated.opportunityOwnerId }, events: [] };
   },
@@ -674,6 +750,13 @@ export const reactivateLead: CommandDefinition<
         reactivatedFromLeadId: dead.id,
       },
     });
+    await recordAttribution(ctx, {
+      leadId: fresh.id,
+      role: "Originator",
+      partyId: withinCreditWindow ? dead.leadOriginatorId : reactivatorId,
+      reason: withinCreditWindow ? "Reactivated within 90-day credit window" : "Reactivated outside credit window",
+    });
+    await recordAttribution(ctx, { leadId: fresh.id, role: "Owner", partyId: input.newOwnerId, reason: "Reactivated" });
 
     return { result: { id: fresh.id }, events: [{ name: "verity.outreach.lead_reactivated", entityId: fresh.id, payload: { from: dead.id } }] };
   },
@@ -681,6 +764,8 @@ export const reactivateLead: CommandDefinition<
 
 const ESCALATION_TYPES = ["Commercial", "Technical", "ClientIssue", "Attribution", "TeamIssue", "Other"] as const;
 const ESCALATION_URGENCIES = ["Normal", "High", "Critical"] as const;
+/** Task 106 Phase C — the OutreachEscalation lifecycle (master prompt §35). */
+const ESCALATION_STATUSES = ["Open", "InReview", "Resolved"] as const;
 
 /**
  * Escalation (2026-09-13 hierarchical-architecture doc §38-39) — typed,
@@ -715,7 +800,43 @@ export const flagForEscalation: CommandDefinition<
         version: { increment: 1 },
       },
     });
-    return { result: { id: lead.id }, events: [{ name: "verity.outreach.lead_escalated", entityId: lead.id }] };
+    // Task 106 Phase C: the structured OPEN/IN REVIEW/RESOLVED record,
+    // written alongside the lead's own flag fields (kept for existing UI).
+    const escalation = await ctx.tx.outreachEscalation.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        leadId: lead.id,
+        type: input.type ?? null,
+        urgency: input.urgency ?? null,
+        note: input.note,
+        raisedByPartyId: actorId,
+      },
+    });
+
+    // Task 106 Phase H: Junior -> Senior first (2026-09-13 doc §38-39), not
+    // straight to Core — the recipient is this lead's own team leader/
+    // co-leader, whoever that structurally is, never a role-name check.
+    const team = await ctx.tx.outreachTeam.findUnique({ where: { id: lead.teamId } });
+    const leaderPartyIds = team ? [team.leaderId, ...(team.coLeaderId ? [team.coLeaderId] : [])] : [];
+    const recipients = leaderPartyIds.length
+      ? await ctx.tx.user.findMany({ where: { partyId: { in: leaderPartyIds } }, select: { id: true } })
+      : [];
+    if (recipients.length > 0) {
+      await notify(ctx.tx, {
+        tenantId: ctx.actor.tenantId,
+        key: "verity.outreach.escalation_raised",
+        recipientIds: recipients.map((r) => r.id),
+        variables: { company: lead.companyName, note: input.note },
+        fallback: { subject: `Escalation: ${lead.companyName}`, body: input.note },
+      });
+    }
+
+    return {
+      result: { id: lead.id },
+      events: [
+        { name: "verity.outreach.lead_escalated", entityId: lead.id, payload: { escalationId: escalation.id } },
+      ],
+    };
   },
 };
 
@@ -730,7 +851,68 @@ export const resolveEscalation: CommandDefinition<{ leadId: string }, { id: stri
       where: { id: input.leadId },
       data: { escalated: false, version: { increment: 1 } },
     });
+    const actorId = await actorPartyId(ctx.tx, ctx.actor.userId);
+    const openOnes = await ctx.tx.outreachEscalation.findMany({
+      where: { leadId: lead.id, status: { in: ["Open", "InReview"] } },
+      select: { id: true, raisedByPartyId: true },
+    });
+    await ctx.tx.outreachEscalation.updateMany({
+      where: { leadId: lead.id, status: { in: ["Open", "InReview"] } },
+      data: { status: "Resolved", resolvedByPartyId: actorId, resolvedAt: new Date() },
+    });
+
+    // Task 106 Phase H: tell whoever raised it that it's been handled.
+    const raiserPartyIds = [...new Set(openOnes.map((e) => e.raisedByPartyId))];
+    const recipients = raiserPartyIds.length
+      ? await ctx.tx.user.findMany({ where: { partyId: { in: raiserPartyIds } }, select: { id: true } })
+      : [];
+    if (recipients.length > 0) {
+      await notify(ctx.tx, {
+        tenantId: ctx.actor.tenantId,
+        key: "verity.outreach.escalation_resolved",
+        recipientIds: recipients.map((r) => r.id),
+        variables: { company: lead.companyName },
+        fallback: { subject: `Escalation resolved: ${lead.companyName}`, body: "Your escalation has been handled." },
+      });
+    }
+
     return { result: { id: lead.id }, events: [{ name: "verity.outreach.escalation_resolved", entityId: lead.id }] };
+  },
+};
+
+/** Moves an escalation to IN REVIEW — the first-line Senior acknowledging it before Core sees it (2026-09-13 doc §38-39). */
+export const setEscalationInReview: CommandDefinition<{ escalationId: string }, { id: string }> = {
+  key: "verity.outreach.set_escalation_in_review",
+  entity: ENTITY_ESCALATION,
+  verb: "Edit",
+  input: z.object({ escalationId: z.string().uuid() }),
+  handler: async (ctx, input) => {
+    const escalation = await ctx.tx.outreachEscalation.update({
+      where: { id: input.escalationId },
+      data: { status: "InReview" },
+    });
+    return { result: { id: escalation.id }, events: [] };
+  },
+};
+
+/** The structured read: escalations by status, optionally scoped to a team via its leads. */
+export const listEscalations: QueryDefinition<
+  { teamId?: string; status?: (typeof ESCALATION_STATUSES)[number] },
+  Array<Record<string, unknown>>
+> = {
+  key: "verity.outreach.list_escalations",
+  entity: ENTITY_ESCALATION,
+  input: z.object({ teamId: z.string().uuid().optional(), status: z.enum(ESCALATION_STATUSES).optional() }),
+  handler: async (ctx, input) => {
+    await assertTeamScopeAllowed(ctx.tx, ctx.actor.userId, input.teamId);
+    return ctx.tx.outreachEscalation.findMany({
+      where: {
+        ...(input.status ? { status: input.status } : {}),
+        lead: input.teamId ? { teamId: input.teamId } : undefined,
+      },
+      include: { lead: { select: { id: true, companyName: true, teamId: true } } },
+      orderBy: { raisedAt: "desc" },
+    });
   },
 };
 
@@ -864,6 +1046,10 @@ export const listEscalatedLeads: QueryDefinition<{ teamId?: string }, Array<Reco
 const WINDOW_INPUT = z.object({
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
+  /** Task 106 Phase F (master prompt §60): Domain × Team / Domain × Channel
+   *  matrices are this same query shape filtered to one domain, not a new
+   *  primitive. Optional and additive — every existing caller is unaffected. */
+  domainId: z.string().uuid().optional(),
 });
 type WindowInput = z.infer<typeof WINDOW_INPUT>;
 function dateRange(input: WindowInput): { gte?: Date; lt?: Date } | undefined {
@@ -927,13 +1113,16 @@ export const getTeamComparison: QueryDefinition<
     const at = input.from ? new Date(input.from) : new Date();
     const [teams, allLeads] = await Promise.all([
       ctx.tx.outreachTeam.findMany({ where: { active: true }, include: { memberships: { where: { active: true } } } }),
-      ctx.tx.outreachLead.findMany(),
+      ctx.tx.outreachLead.findMany(input.domainId ? { where: { domainId: input.domainId } } : undefined),
     ]);
     const teamIds = teams.map((t) => t.id);
     const [activities, leaders, targets] = await Promise.all([
       teamIds.length
         ? ctx.tx.outreachActivity.findMany({
-            where: { lead: { teamId: { in: teamIds } }, ...(range ? { occurredAt: range } : {}) },
+            where: {
+              lead: { teamId: { in: teamIds }, ...(input.domainId ? { domainId: input.domainId } : {}) },
+              ...(range ? { occurredAt: range } : {}),
+            },
             include: { lead: true },
           })
         : Promise.resolve([]),
@@ -1044,7 +1233,13 @@ type IntelligenceRow = {
 };
 const THIN_SAMPLE_BELOW = 20;
 
-/** Performance by industry (master-context §52): "Which markets are actually converting?" */
+/**
+ * Performance by domain (master-context §52; Task 106 Phase A rekeys this
+ * off the structured taxonomy): "Which markets are actually converting?"
+ * A lead created before Phase A may have no `domainId` — its legacy
+ * free-text `industry` is used as the bucket key instead, so history isn't
+ * silently dropped into "Unspecified" the moment this shipped.
+ */
 export const getVerticalIntelligence: QueryDefinition<WindowInput, IntelligenceRow[]> = {
   key: "verity.outreach.vertical_intelligence",
   entity: ENTITY_LEAD,
@@ -1052,10 +1247,12 @@ export const getVerticalIntelligence: QueryDefinition<WindowInput, IntelligenceR
   handler: async (ctx, input) => {
     const range = dateRange(input);
     const [leads, activities] = await Promise.all([
-      ctx.tx.outreachLead.findMany({ select: { id: true, industry: true, state: true, createdAt: true, closedAt: true } }),
+      ctx.tx.outreachLead.findMany({
+        select: { id: true, industry: true, state: true, createdAt: true, closedAt: true, domain: { select: { name: true } } },
+      }),
       ctx.tx.outreachActivity.findMany({ where: range ? { occurredAt: range } : {}, select: { leadId: true, activityType: true } }),
     ]);
-    const industryOf = new Map(leads.map((l) => [l.id, l.industry?.trim() || "Unspecified"]));
+    const industryOf = new Map(leads.map((l) => [l.id, l.domain?.name || l.industry?.trim() || "Unspecified"]));
     const inWindow = (d: Date | null) => !range || (d != null && (!range.gte || d >= range.gte) && (!range.lt || d < range.lt));
     const rows = new Map<string, { leads: number; closed: number; acts: Array<{ activityType: string }> }>();
     const bucket = (key: string) => rows.get(key) ?? rows.set(key, { leads: 0, closed: 0, acts: [] }).get(key)!;
@@ -1098,7 +1295,10 @@ export const getChannelIntelligence: QueryDefinition<WindowInput, IntelligenceRo
   handler: async (ctx, input) => {
     const range = dateRange(input);
     const activities = await ctx.tx.outreachActivity.findMany({
-      where: range ? { occurredAt: range } : {},
+      where: {
+        ...(range ? { occurredAt: range } : {}),
+        ...(input.domainId ? { lead: { domainId: input.domainId } } : {}),
+      },
       select: { leadId: true, channel: true, activityType: true, lead: { select: { state: true } } },
     });
     const rows = new Map<string, { leads: Set<string>; closed: Set<string>; acts: Array<{ activityType: string }> }>();
@@ -1210,6 +1410,155 @@ export const getConversionFunnel: QueryDefinition<
         proposal: reachedAt("proposal"),
         closedWon: reachedAt("closed_won"),
       }),
+    };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// DOMAIN INTELLIGENCE WORKSPACE — Task 109 Phase F (master prompt §42-50):
+// "a genuine domain intelligence workspace, not domain as a table filter."
+// ---------------------------------------------------------------------------
+
+const DOMAIN_INPUT = z.object({ domainId: z.string().uuid(), from: z.string().datetime().optional(), to: z.string().datetime().optional() });
+
+/** Same shape as `getConversionFunnel`, filtered to one domain (Phase F). */
+export const getDomainFunnel: QueryDefinition<
+  z.infer<typeof DOMAIN_INPUT>,
+  { stages: Array<{ key: string; atStage: number; reached: number; conversionFromPrevious: number | null }>; bottleneck: string | null }
+> = {
+  key: "verity.outreach.domain_funnel",
+  entity: ENTITY_LEAD,
+  input: DOMAIN_INPUT,
+  handler: async (ctx, input) => {
+    const range = dateRange(input);
+    const leads = await ctx.tx.outreachLead.findMany({
+      where: { domainId: input.domainId, ...(range ? { createdAt: range } : {}) },
+      select: { state: true },
+    });
+    const index = new Map(LINEAR_STAGES.map((k, i) => [k, i]));
+    const rank = (state: string) => index.get(state as (typeof LINEAR_STAGES)[number]) ?? 0;
+    const stages = LINEAR_STAGES.map((key, i) => {
+      const reached = leads.filter((l) => rank(l.state) >= i).length;
+      const atStage = leads.filter((l) => l.state === key).length;
+      return { key, atStage, reached, conversionFromPrevious: null as number | null };
+    });
+    for (let i = 1; i < stages.length; i += 1) {
+      stages[i]!.conversionFromPrevious = rate(stages[i]!.reached, stages[i - 1]!.reached);
+    }
+    const reachedAt = (key: (typeof LINEAR_STAGES)[number]) => stages[index.get(key)!]!.reached;
+    return {
+      stages,
+      bottleneck: detectBottleneck({
+        prospected: reachedAt("prospect"),
+        contacted: reachedAt("contacted"),
+        responded: reachedAt("responded"),
+        qualifiedPlus: reachedAt("qualified"),
+        proposal: reachedAt("proposal"),
+        closedWon: reachedAt("closed_won"),
+      }),
+    };
+  },
+};
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1]! + sorted[mid]!) / 2 : sorted[mid]!;
+}
+function daysBetween(a: Date, b: Date): number {
+  return (b.getTime() - a.getTime()) / (24 * 60 * 60 * 1000);
+}
+function stat(values: number[]): { average: number | null; median: number | null; sampleSize: number } {
+  return {
+    average: values.length ? Math.round((values.reduce((s, v) => s + v, 0) / values.length) * 10) / 10 : null,
+    median: median(values) !== null ? Math.round(median(values)! * 10) / 10 : null,
+    sampleSize: values.length,
+  };
+}
+
+/**
+ * Days between the checkpoints Phase D actually materializes (Phase F).
+ *
+ * **Known gap, stated rather than papered over**: this is coarser than the
+ * master prompt's ideal Prospect→Contact→Response→Meeting→Proposal→Close
+ * breakdown — only Lead created, Opportunity created, Proposal sent, and
+ * Closed are timestamped facts today. Earlier stage transitions live only in
+ * `OutreachLead.state` plus the generic audit trail, not as their own
+ * timestamped rows (an open decision in `taskplans/109_*`, not resolved here).
+ */
+export const getDomainVelocity: QueryDefinition<
+  { domainId: string },
+  {
+    leadToOpportunity: { average: number | null; median: number | null; sampleSize: number };
+    opportunityToProposal: { average: number | null; median: number | null; sampleSize: number };
+    proposalToClosed: { average: number | null; median: number | null; sampleSize: number };
+    leadToClosed: { average: number | null; median: number | null; sampleSize: number };
+    coarserThanIdeal: true;
+  }
+> = {
+  key: "verity.outreach.domain_velocity",
+  entity: ENTITY_LEAD,
+  input: z.object({ domainId: z.string().uuid() }),
+  handler: async (ctx, input) => {
+    const leads = await ctx.tx.outreachLead.findMany({
+      where: { domainId: input.domainId },
+      select: {
+        id: true,
+        createdAt: true,
+        opportunity: { select: { createdAt: true } },
+        proposals: { select: { sentAt: true }, orderBy: { sentAt: "asc" }, take: 1 },
+        closedClient: { select: { closedAt: true } },
+      },
+    });
+    const leadToOpportunity: number[] = [];
+    const opportunityToProposal: number[] = [];
+    const proposalToClosed: number[] = [];
+    const leadToClosed: number[] = [];
+    for (const l of leads) {
+      const opp = l.opportunity[0]?.createdAt ?? null;
+      const firstProposal = l.proposals[0]?.sentAt ?? null;
+      const closed = l.closedClient[0]?.closedAt ?? null;
+      if (opp) leadToOpportunity.push(daysBetween(l.createdAt, opp));
+      if (opp && firstProposal) opportunityToProposal.push(daysBetween(opp, firstProposal));
+      if (firstProposal && closed) proposalToClosed.push(daysBetween(firstProposal, closed));
+      if (closed) leadToClosed.push(daysBetween(l.createdAt, closed));
+    }
+    return {
+      leadToOpportunity: stat(leadToOpportunity),
+      opportunityToProposal: stat(opportunityToProposal),
+      proposalToClosed: stat(proposalToClosed),
+      leadToClosed: stat(leadToClosed),
+      coarserThanIdeal: true,
+    };
+  },
+};
+
+/** Open leads bucketed by staleness, reusing `deriveLeadHealth`'s threshold shape (Phase F). Domain optional — omitted means company-wide. */
+export const getDomainAging: QueryDefinition<
+  { domainId?: string },
+  { within7d: number; over7d: number; over14d: number; over30d: number; leads: Array<{ id: string; companyName: string; daysIdle: number }> }
+> = {
+  key: "verity.outreach.domain_aging",
+  entity: ENTITY_LEAD,
+  input: z.object({ domainId: z.string().uuid().optional() }),
+  handler: async (ctx, input) => {
+    const leads = await ctx.tx.outreachLead.findMany({
+      where: { ...(input.domainId ? { domainId: input.domainId } : {}), state: { notIn: [...TERMINAL_STATES, "closed_won"] } },
+      select: { id: true, companyName: true, lastActivityAt: true, createdAt: true },
+    });
+    const now = Date.now();
+    const rows = leads.map((l) => ({
+      id: l.id,
+      companyName: l.companyName,
+      daysIdle: Math.floor((now - (l.lastActivityAt ?? l.createdAt).getTime()) / (24 * 60 * 60 * 1000)),
+    }));
+    return {
+      within7d: rows.filter((r) => r.daysIdle <= 7).length,
+      over7d: rows.filter((r) => r.daysIdle > 7 && r.daysIdle <= 14).length,
+      over14d: rows.filter((r) => r.daysIdle > 14 && r.daysIdle <= 30).length,
+      over30d: rows.filter((r) => r.daysIdle > 30).length,
+      leads: rows.filter((r) => r.daysIdle > 7).sort((a, b) => b.daysIdle - a.daysIdle),
     };
   },
 };
@@ -2517,6 +2866,141 @@ export const getAttentionExceptions: QueryDefinition<Record<string, never>, Atte
 };
 
 // ---------------------------------------------------------------------------
+// DOMAIN TAXONOMY — Task 106 Phase A (master prompt §6: "DOMAIN GROUP ->
+// DOMAIN", "must be database-driven", "do not hardcode"). Seeded once per
+// tenant by migration 20260917100000; these are the read/manage surface.
+// Create/Edit are Founders-only by grant (migration's own permission rows) —
+// "allow future Core-level taxonomy management" without overbuilding it.
+// ---------------------------------------------------------------------------
+
+/** Every group with its domains, ordered — the shape a picker needs in one read. */
+export const listDomainTaxonomy: QueryDefinition<
+  Record<string, never>,
+  Array<{ id: string; name: string; domains: Array<{ id: string; name: string }> }>
+> = {
+  key: "verity.outreach.list_domain_taxonomy",
+  entity: ENTITY_DOMAIN_GROUP,
+  input: z.object({}),
+  handler: async (ctx) => {
+    const groups = await ctx.tx.outreachDomainGroup.findMany({
+      orderBy: { order: "asc" },
+      include: { domains: { orderBy: { order: "asc" }, select: { id: true, name: true } } },
+    });
+    return groups.map((g) => ({ id: g.id, name: g.name, domains: g.domains }));
+  },
+};
+
+export const createOutreachDomainGroup: CommandDefinition<{ name: string; order?: number }, { id: string }> = {
+  key: "verity.outreach.create_domain_group",
+  entity: ENTITY_DOMAIN_GROUP,
+  verb: "Create",
+  input: z.object({ name: z.string().min(1), order: z.number().int().optional() }),
+  handler: async (ctx, input) => {
+    const group = await ctx.tx.outreachDomainGroup.create({
+      data: { tenantId: ctx.actor.tenantId, name: input.name, order: input.order ?? 0 },
+    });
+    return { result: { id: group.id }, events: [{ name: "verity.outreach.domain_group_created", entityId: group.id }] };
+  },
+};
+
+export const createOutreachDomain: CommandDefinition<{ groupId: string; name: string; order?: number }, { id: string }> = {
+  key: "verity.outreach.create_domain",
+  entity: ENTITY_DOMAIN,
+  verb: "Create",
+  input: z.object({ groupId: z.string().uuid(), name: z.string().min(1), order: z.number().int().optional() }),
+  handler: async (ctx, input) => {
+    const domain = await ctx.tx.outreachDomain.create({
+      data: { tenantId: ctx.actor.tenantId, groupId: input.groupId, name: input.name, order: input.order ?? 0 },
+    });
+    return { result: { id: domain.id }, events: [{ name: "verity.outreach.domain_created", entityId: domain.id }] };
+  },
+};
+
+/** Rename only — moving a domain to a different group is deliberately not offered here (would silently reclassify every lead that carries it). */
+export const renameOutreachDomain: CommandDefinition<{ domainId: string; name: string }, { id: string }> = {
+  key: "verity.outreach.rename_domain",
+  entity: ENTITY_DOMAIN,
+  verb: "Edit",
+  input: z.object({ domainId: z.string().uuid(), name: z.string().min(1) }),
+  handler: async (ctx, input) => {
+    const domain = await ctx.tx.outreachDomain.update({
+      where: { id: input.domainId },
+      data: { name: input.name },
+    });
+    return { result: { id: domain.id }, events: [{ name: "verity.outreach.domain_renamed", entityId: domain.id }] };
+  },
+};
+
+// ---------------------------------------------------------------------------
+// ASSIGNMENT — Task 106 Phase E (master prompt §30: "Healthcare -> Shreya +
+// Mehak"). A Team Leader (Founders included, per their company-wide reach)
+// hands a domain/domain-group/track/geography slice to a member.
+// ---------------------------------------------------------------------------
+
+const ASSIGNMENT_SCOPES = ["Domain", "DomainGroup", "Track", "Geography"] as const;
+
+export const createAssignment: CommandDefinition<
+  { teamId: string; partyId: string; scope: (typeof ASSIGNMENT_SCOPES)[number]; value: string },
+  { id: string }
+> = {
+  key: "verity.outreach.create_assignment",
+  entity: ENTITY_ASSIGNMENT,
+  verb: "Create",
+  input: z.object({
+    teamId: z.string().uuid(),
+    partyId: z.string().uuid(),
+    scope: z.enum(ASSIGNMENT_SCOPES),
+    value: z.string().min(1),
+  }),
+  handler: async (ctx, input) => {
+    await assertTeamScopeAllowed(ctx.tx, ctx.actor.userId, input.teamId);
+    const assignedByPartyId = await actorPartyId(ctx.tx, ctx.actor.userId);
+    const assignment = await ctx.tx.outreachAssignment.create({
+      data: {
+        tenantId: ctx.actor.tenantId,
+        teamId: input.teamId,
+        partyId: input.partyId,
+        scope: input.scope,
+        value: input.value,
+        assignedByPartyId,
+      },
+    });
+    return { result: { id: assignment.id }, events: [{ name: "verity.outreach.assignment_created", entityId: assignment.id }] };
+  },
+};
+
+/** Soft-removes — deactivates, never deletes, so "who was assigned what and when" stays intact. */
+export const deactivateAssignment: CommandDefinition<{ assignmentId: string }, { id: string }> = {
+  key: "verity.outreach.deactivate_assignment",
+  entity: ENTITY_ASSIGNMENT,
+  verb: "Edit",
+  input: z.object({ assignmentId: z.string().uuid() }),
+  handler: async (ctx, input) => {
+    const assignment = await ctx.tx.outreachAssignment.findUniqueOrThrow({ where: { id: input.assignmentId } });
+    await assertTeamScopeAllowed(ctx.tx, ctx.actor.userId, assignment.teamId);
+    await ctx.tx.outreachAssignment.update({ where: { id: assignment.id }, data: { active: false } });
+    return { result: { id: assignment.id }, events: [{ name: "verity.outreach.assignment_deactivated", entityId: assignment.id }] };
+  },
+};
+
+export const listTeamAssignments: QueryDefinition<{ teamId?: string; partyId?: string }, Array<Record<string, unknown>>> = {
+  key: "verity.outreach.list_assignments",
+  entity: ENTITY_ASSIGNMENT,
+  input: z.object({ teamId: z.string().uuid().optional(), partyId: z.string().uuid().optional() }),
+  handler: async (ctx, input) => {
+    await assertTeamScopeAllowed(ctx.tx, ctx.actor.userId, input.teamId);
+    return ctx.tx.outreachAssignment.findMany({
+      where: {
+        active: true,
+        ...(input.teamId ? { teamId: input.teamId } : {}),
+        ...(input.partyId ? { partyId: input.partyId } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  },
+};
+
+// ---------------------------------------------------------------------------
 // REGISTRATION
 // ---------------------------------------------------------------------------
 
@@ -2546,6 +3030,9 @@ export function registerOutreachCapability(): void {
       // Company Core only (Task 106 Phase 7, spec §90): Create on Direction
       // is the same structural "this is Core" signal the Outreach page uses.
       { href: "/outreach/intelligence", label: "Intelligence", group: "Overview", order: 34, icon: "overview",
+        requiresEntity: ENTITY_DIRECTION, requiresVerb: "Create", shells: ["platform", "operations"] },
+      // Task 109 Phase F: same Core-only structural signal as Intelligence above.
+      { href: "/outreach/domains", label: "Domains", group: "Overview", order: 35, icon: "overview",
         requiresEntity: ENTITY_DIRECTION, requiresVerb: "Create", shells: ["platform", "operations"] },
     ],
   });
@@ -2579,6 +3066,12 @@ export function registerOutreachCapability(): void {
   registerCommand(reviewCheckIn);
   registerCommand(createCoachingNote);
   registerCommand(recordAiInsight);
+  registerCommand(createOutreachDomainGroup);
+  registerCommand(createOutreachDomain);
+  registerCommand(renameOutreachDomain);
+  registerCommand(setEscalationInReview);
+  registerCommand(createAssignment);
+  registerCommand(deactivateAssignment);
 
   registerQuery(listOutreachTeams);
   registerQuery(listOutreachContacts);
@@ -2610,4 +3103,10 @@ export function registerOutreachCapability(): void {
   registerQuery(getChannelIntelligence);
   registerQuery(getConversionFunnel);
   registerQuery(listAiInsights);
+  registerQuery(listDomainTaxonomy);
+  registerQuery(listEscalations);
+  registerQuery(listTeamAssignments);
+  registerQuery(getDomainFunnel);
+  registerQuery(getDomainVelocity);
+  registerQuery(getDomainAging);
 }
