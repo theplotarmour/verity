@@ -88,7 +88,17 @@ async function dispatch(request: Request): Promise<NextResponse> {
 
   const ownerToken = randomUUID();
   const correlationId = correlationIdFor(request);
-  if (!(await acquireLease(cadence, ownerToken))) {
+  let acquired: boolean;
+  try {
+    acquired = await acquireLease(cadence, ownerToken);
+  } catch (error) {
+    captureError(error, { route: "scheduled", cadence, correlationId, operation: "acquire_lease" });
+    return NextResponse.json(
+      { error: "scheduler schema is unavailable", code: "scheduler_schema_unavailable", cadence, correlationId },
+      { status: 503 },
+    );
+  }
+  if (!acquired) {
     return NextResponse.json(
       { error: "cadence already running", cadence, correlationId },
       { status: 409 },

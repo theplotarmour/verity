@@ -266,6 +266,15 @@ Implemented in the first phase run:
   tenant rows to the web role (133 pure tests after this slice);
 - kept Phase 6 partial because durable tenant upgrades/rollback, Industry Pack,
   declarative extension, dashboard, and template lifecycles remain unbuilt.
+- diagnosed GitHub Scheduled work run 241: the initial HTTP 403 was Vercel
+  deployment protection/Cloudflare before the application. Added the existing
+  Vercel automation-bypass credential to the GitHub caller while retaining the
+  independent application `CRON_SECRET`, and changed the workflow to emit a
+  bounded stable HTTP error instead of opaque curl exit 22;
+- the follow-up call reached Verity and exposed the next truthful blocker:
+  production has not applied `20260916103000_onprem_scheduler` (`42P01` for
+  `scheduler_lease`). The endpoint now returns a stable redacted 503 for that
+  state. No production migration was run implicitly.
 
 Local gates passed: clean dependency resolution, zero-advisory `npm audit`,
 workflow validation, deployment-invariant validation, Prisma validation/client
