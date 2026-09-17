@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import type { MembershipOption } from "@/server/platform/auth";
 import { OrganizationSwitcher } from "./OrganizationSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
+import { ProfileMenu } from "./ProfileMenu";
 import { Button } from "@/components/ui/primitives";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { VerityLockup } from "@/components/brand/VerityMark";
@@ -49,6 +50,7 @@ export function ShellChrome({
   userLabel,
   userInitials,
   canAudit,
+  canConfigure,
   unreadCount = 0,
   children,
 }: {
@@ -62,6 +64,9 @@ export function ShellChrome({
    *  hit a bare permission-denied page with no warning. The sidebar's own
    *  Audit entry already gates on this; the bell didn't. */
   canAudit: boolean;
+  /** Gates the profile menu's Settings entry the same way — `Edit` on the
+   *  tenant, same test `/configuration/page.tsx` itself requires. */
+  canConfigure: boolean;
   /** Task 114 P1.5 item 1 — unread in-app notification count for the bell. */
   unreadCount?: number;
   children: ReactNode;
@@ -247,8 +252,9 @@ export function ShellChrome({
           <VerityLockup size={30} className="text-text" />
         </Link>
 
+        {/* Sign out moved to the header's ProfileMenu (desktop) — accountCard()
+            is now mobile-sheet-only, below, where there is no header dropdown. */}
         <div className="min-h-0 flex-1 overflow-y-auto">{navList()}</div>
-        <div className="shrink-0">{accountCard()}</div>
       </aside>
 
       {/* ------------------------------ main ------------------------------- */}
@@ -344,18 +350,10 @@ export function ShellChrome({
                 <span className="sr-only">Recent activity{unreadCount > 0 ? ` — ${unreadCount} unread` : ""}</span>
               </Link>
             )}
-            {/* Who the session belongs to. The initials alone say nothing to a
-                screen reader and little to anyone who has not seen the name
-                elsewhere, so the name rides along as the accessible label and
-                as the tooltip — which is where it went when the sidebar footer
-                became a plain Sign out. */}
-            <span
-              className="grid size-11 shrink-0 place-items-center rounded-full bg-accent-subtle text-[13px] font-medium text-accent-ink shadow-[var(--shadow-sm)] ring-1 ring-[var(--color-accent-line)]"
-              title={userLabel}
-            >
-              <span aria-hidden="true">{userInitials}</span>
-              <span className="sr-only">Signed in as {userLabel}</span>
-            </span>
+            {/* The one place Account, Settings and Sign out all live — was a
+                static, unclickable avatar with Sign out stranded in the
+                sidebar footer instead. */}
+            <ProfileMenu userLabel={userLabel} userInitials={userInitials} canConfigure={canConfigure} />
           </div>
         </div>
 

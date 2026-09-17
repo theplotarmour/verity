@@ -259,6 +259,7 @@ export default async function ShellLayout({
       userLabel={userLabel}
       userInitials={userInitials}
       canAudit={canAudit}
+      canConfigure={canConfigure}
       unreadCount={unreadCount}
     >
       <CommandAccessProvider commandKeys={commandKeys}>{children}</CommandAccessProvider>
