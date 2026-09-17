@@ -718,6 +718,81 @@ export const reassignOpportunityOwner: CommandDefinition<{ leadId: string; newOw
 };
 
 /**
+ * Task 114 P0.4 — the two-step add-prospect flow's Step 2. Patches a lead's
+ * own qualification fields after Step 1 already created the minimal record.
+ * Same shape as `reassignOpportunityOwner` above (findUniqueOrThrow,
+ * assertMutable, diff, update, recordActivity) — a single-entity field
+ * patch, no new entity or state transition, so no new command pattern is
+ * introduced here.
+ */
+export const updateLeadQualification: CommandDefinition<
+  {
+    leadId: string;
+    whatTheyDo?: string;
+    potentialNeed?: string;
+    salesHypothesis?: string;
+    qualityScore?: number;
+    industry?: string;
+    location?: string;
+  },
+  { leadId: string }
+> = {
+  key: "verity.outreach.update_qualification",
+  entity: ENTITY_LEAD,
+  verb: "Edit",
+  input: z.object({
+    leadId: z.string().uuid(),
+    whatTheyDo: z.string().optional(),
+    potentialNeed: z.string().optional(),
+    salesHypothesis: z.string().optional(),
+    qualityScore: z.number().int().min(1).max(10).optional(),
+    industry: z.string().optional(),
+    location: z.string().optional(),
+  }),
+  handler: async (ctx, input) => {
+    const lead = await ctx.tx.outreachLead.findUniqueOrThrow({ where: { id: input.leadId } });
+    await assertMutable(ctx.tx, ENTITY_LEAD, lead.state);
+
+    const patch: Record<string, unknown> = {};
+    if (input.whatTheyDo !== undefined) patch.whatTheyDo = input.whatTheyDo;
+    if (input.potentialNeed !== undefined) patch.potentialNeed = input.potentialNeed;
+    if (input.salesHypothesis !== undefined) patch.salesHypothesis = input.salesHypothesis;
+    if (input.qualityScore !== undefined) patch.qualityScore = input.qualityScore;
+    if (input.industry !== undefined) patch.industry = input.industry;
+    if (input.location !== undefined) patch.location = input.location;
+
+    const before = {
+      whatTheyDo: lead.whatTheyDo,
+      potentialNeed: lead.potentialNeed,
+      salesHypothesis: lead.salesHypothesis,
+      qualityScore: lead.qualityScore,
+      industry: lead.industry,
+      location: lead.location,
+    };
+    const updated = await ctx.tx.outreachLead.update({
+      where: { id: lead.id },
+      data: { ...patch, version: { increment: 1 } },
+    });
+
+    await recordActivity(ctx, {
+      entityKey: ENTITY_LEAD,
+      entityId: lead.id,
+      commandKey: "verity.outreach.update_qualification",
+      changes: diffFields(before, {
+        whatTheyDo: updated.whatTheyDo,
+        potentialNeed: updated.potentialNeed,
+        salesHypothesis: updated.salesHypothesis,
+        qualityScore: updated.qualityScore,
+        industry: updated.industry,
+        location: updated.location,
+      }),
+    });
+
+    return { result: { leadId: updated.id }, events: [] };
+  },
+};
+
+/**
  * INV-002: a terminal lead is never reopened. Reactivation spawns a new
  * `OutreachLead` row. Handbook Ch. 02: original origination credit is kept
  * only if reactivated within 90 days of the last logged activity.
@@ -3347,6 +3422,7 @@ export function registerOutreachCapability(): void {
   registerCommand(advanceLeadStage);
   registerCommand(recordAdvancePayment);
   registerCommand(reassignOpportunityOwner);
+  registerCommand(updateLeadQualification);
   registerCommand(reactivateLead);
   registerCommand(logOutreachActivity);
   registerCommand(setOutreachTarget);
