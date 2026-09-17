@@ -59,7 +59,8 @@ export type IconName =
   | "eye"
   | "eyeOff"
   | "plus"
-  | "eyedropper";
+  | "eyedropper"
+  | "moreHorizontal";
 
 const PATHS: Record<IconName, string> = {
   // Navigation — board nav geometry.
@@ -144,6 +145,9 @@ const PATHS: Record<IconName, string> = {
   // control, so it reads as a color instrument rather than a generic pointer.
   eyedropper:
     "M17.5 3.5a2.8 2.8 0 0 1 4 4L19 10 14 5zM14 5l-8.5 8.5-2 5.5 5.5-2z M9.5 15l-1.7-1.7",
+  // Three zero-length segments with the shared round linecap render as dots —
+  // no separate dot-drawing code needed for a stroke-based icon set.
+  moreHorizontal: "M5 12h.01M12 12h.01M19 12h.01",
 };
 
 export function Icon({

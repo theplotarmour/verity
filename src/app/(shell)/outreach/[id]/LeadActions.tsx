@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, Button, ErrorState, Field, Select } from "@/components/ui/primitives";
+import { OverflowMenu, OverflowMenuItem } from "@/components/ui/OverflowMenu";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -100,46 +101,52 @@ export function LeadActions({
             {logOpen ? "Close log form" : "Log activity"}
           </Button>
         )}
-        {canEdit && !isTerminal && (
-          <Button size="sm" variant="secondary" onClick={() => setReassignOpen((v) => !v)}>
-            {reassignOpen ? "Close reassign form" : "Reassign owner"}
-          </Button>
-        )}
-        {canEdit && !isTerminal && (
-          <Button size="sm" variant="secondary" onClick={() => setPaymentOpen((v) => !v)}>
-            {paymentOpen ? "Close payment form" : "Record payment"}
-          </Button>
-        )}
-        {canEdit && isTerminal && (
-          <Button size="sm" variant="secondary" onClick={() => setReactivateOpen((v) => !v)}>
-            {reactivateOpen ? "Close reactivate form" : "Reactivate"}
-          </Button>
-        )}
-        {canEdit && !isTerminal && !isEscalated && (
-          <Button size="sm" variant="secondary" onClick={() => setEscalateOpen((v) => !v)}>
-            {escalateOpen ? "Close escalation form" : "Escalate"}
-          </Button>
-        )}
         {isEscalated && <Badge tone="accent">Escalated</Badge>}
+        {/* Primary row (Task 114 P0.3): Log activity plus the normal,
+            non-terminal pipeline moves. Administrative and terminal actions
+            move to the overflow menu below — they're reachable, not the
+            first thing an operator sees. */}
         {canEdit &&
           !isTerminal &&
-          transitions.map((t) => {
-            const terminal = TERMINAL_STATES.includes(t.key);
-            const blocked = t.key === "closed_won" && closedWonBlocked;
-            return (
-              <Button
-                key={t.key}
-                size="sm"
-                variant="secondary"
-                className={terminal ? "text-danger" : undefined}
-                disabled={pending || blocked}
-                title={blocked ? "Cumulative advance received has not cleared the threshold yet" : undefined}
-                onClick={() => (terminal ? setPendingTerminal(t.key) : advance(t.key))}
-              >
-                {t.key.replace(/_/g, " ")}
-              </Button>
-            );
-          })}
+          transitions
+            .filter((t) => !TERMINAL_STATES.includes(t.key))
+            .map((t) => {
+              const blocked = t.key === "closed_won" && closedWonBlocked;
+              return (
+                <Button
+                  key={t.key}
+                  size="sm"
+                  variant="secondary"
+                  disabled={pending || blocked}
+                  title={blocked ? "Cumulative advance received has not cleared the threshold yet" : undefined}
+                  onClick={() => advance(t.key)}
+                >
+                  {t.key.replace(/_/g, " ")}
+                </Button>
+              );
+            })}
+        {canEdit && (
+          <OverflowMenu>
+            {!isTerminal && (
+              <OverflowMenuItem onClick={() => setReassignOpen((v) => !v)}>Reassign owner</OverflowMenuItem>
+            )}
+            {!isTerminal && (
+              <OverflowMenuItem onClick={() => setPaymentOpen((v) => !v)}>Record payment</OverflowMenuItem>
+            )}
+            {isTerminal && <OverflowMenuItem onClick={() => setReactivateOpen((v) => !v)}>Reactivate</OverflowMenuItem>}
+            {!isTerminal && !isEscalated && (
+              <OverflowMenuItem onClick={() => setEscalateOpen((v) => !v)}>Escalate</OverflowMenuItem>
+            )}
+            {!isTerminal &&
+              transitions
+                .filter((t) => TERMINAL_STATES.includes(t.key))
+                .map((t) => (
+                  <OverflowMenuItem key={t.key} danger onClick={() => setPendingTerminal(t.key)}>
+                    {t.key.replace(/_/g, " ")}
+                  </OverflowMenuItem>
+                ))}
+          </OverflowMenu>
+        )}
       </div>
 
       {pendingTerminal && (
@@ -190,6 +197,10 @@ export function LeadActions({
   );
 }
 
+// Task 114 P0.2 — next action is required on every activity log. No
+// terminal-state exception needed here: `LogActivityForm` is only ever
+// rendered when `!isTerminal` (see the primary button row above), so this
+// form is never reachable on an already-closed lead.
 function LogActivityForm({ leadId, onDone }: { leadId: string; onDone: () => void }) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
@@ -252,18 +263,20 @@ function LogActivityForm({ leadId, onDone }: { leadId: string; onDone: () => voi
         <textarea id="response" name="response" rows={2} className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text focus:outline-none focus:border-accent" />
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Next action" htmlFor="nextActionNote">
+        <Field label="Next action" htmlFor="nextActionNote" required>
           <input
             id="nextActionNote"
             name="nextActionNote"
+            required
             className="verity-solid border border-line h-11 w-full rounded-lg px-4 text-[14px] text-text focus:outline-none focus:border-accent"
           />
         </Field>
-        <Field label="Due" htmlFor="nextActionAt">
+        <Field label="Due" htmlFor="nextActionAt" required>
           <input
             id="nextActionAt"
             name="nextActionAt"
             type="date"
+            required
             className="verity-solid border border-line h-11 w-full rounded-lg px-4 text-[14px] text-text focus:outline-none focus:border-accent"
           />
         </Field>
