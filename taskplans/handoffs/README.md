@@ -11,7 +11,7 @@ line below matching recent commits), regenerate it from `git log` and the
 taskplans it points to before trusting it, same rule `00_STATUS_INDEX.md`
 already states for itself.
 
-**Last updated: 2026-09-17 (later same day)**
+**Last updated: 2026-09-17 (later same day — Task 114 P0/P1 + P1.5 item 1 landed)**
 
 ## How to use this folder
 
@@ -37,14 +37,16 @@ already states for itself.
 Handoff: [`outreach-p0-continuation.md`](./outreach-p0-continuation.md)
 Taskplan: `taskplans/114_pa_oms_outreach_execution_layer_redesign.md`
 
-Status: P0.6 DONE (Audit nav fix). P0.1/P0.2/P0.3/P0.4/P0.5-remainder next,
-in that order. Then P1 (dashboard restructure). Then Task 111 → Task 112
-(material pass, separate thread below) before P1.5 (nine re-audit gaps
-found 2026-09-17 — shell chrome, bulk actions, detail-page tabs, contact/
-timeline prominence, card verbosity, activity-entry UX, Intelligence
-filters, add-prospect sub-items, permission-denied recovery). P2
-(sequences, activity-type forms, enrichment) stays parked pending
-product-owner scoping — do not start it from the taskplan's text alone.
+Status: P0 (all six items) and P1 DONE 2026-09-17. P1.5 item 1 (shell
+chrome polish) DONE same day. **Next up: P1.5 items 2, 3, 4, 6, 7, 8, 9**
+(bulk-action system, detail-page tabs split, contact/timeline prominence,
+activity-entry UX details, Intelligence filters, add-prospect sub-items,
+permission-denied recovery flow) — each large enough to want its own
+focused pass; none started. Item 5 (card verbosity) is deliberately
+untouched per its own text now that the table view (part of P0.5) has
+shipped — look at real usage before touching the cards. P2 (sequences,
+activity-type forms, enrichment) stays parked pending product-owner
+scoping — do not start it from the taskplan's text alone.
 
 ### 2. Task 111 → Task 112 — structured-minimalism material rollout — DONE 2026-09-17
 

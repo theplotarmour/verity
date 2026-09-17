@@ -15,7 +15,45 @@ solid-material rollout) — see "Relationship to 111/112" below; this file is
 about interaction/workflow, not material/color, though one visual finding
 (low contrast, over-pale surfaces) is shared with 112's rollout.
 
-## Status: PENDING — proposed from review, nothing in this file built yet
+## Status: P0 + P1 DONE 2026-09-17 (commits 9a873cc..6775ec9); P1.5 item 1 DONE (69db7bb); P1.5 items 2-4/6-9 and P2 NOT YET BUILT — see note at file end
+
+All of P0 (P0.1-P0.6) and P1 are complete. Summary, newest work first:
+
+- **P1** — three-layer dashboard restructure (Today's execution / Pipeline
+  health / Management intelligence) + trend deltas (7d-equivalent period,
+  the taskplan's own suggested default) + confirmed the "current direction
+  inline-edit" concern was already satisfied by the existing `DirectionForm`
+  rendered directly under the banner. Funnel drill-through needed no work
+  (already built). `src/app/(shell)/outreach/page.tsx`.
+- **P0.4** — two-step add-prospect flow. New `verity.outreach.
+  update_qualification` command (Step 2's write path — none existed).
+  `NewLeadForm.tsx`.
+- **P0.3 + P0.2** — primary button row narrowed to Log activity + non-terminal
+  transitions; everything administrative/terminal moved to a new
+  `OverflowMenu` primitive (`src/components/ui/OverflowMenu.tsx`, no
+  dependency). Next-action fields now required on activity log.
+  `[id]/LeadActions.tsx`.
+- **P0.1** — universal work queue. `listLeadQueue` gained `Overdue`/
+  `DueToday`/`NoNextAction` kinds (no `Unassigned` — every lead has a
+  required owner at creation). New `WorkQueuePanel.tsx`, viewer-scoped
+  across every visible team, surfaced on `/outreach/prospects` and the
+  dashboard.
+- **P0.5 remainder** — Cards/Table view toggle (reuses `DataTable`) + three
+  saved filter chips (My leads / Needs action / At risk). Fixed the known
+  live `bg-glass-2` violation in the process. `prospects/page.tsx`,
+  `ProspectFilters.tsx`.
+
+Three explore passes before building corrected several of this file's own
+assumptions — recorded inline in the commits: the duplicate-check
+(`check_duplicate_prospect`) and task-creation (`create_task`) commands
+already existed before this session; only their UI wiring needed work (or,
+for tasks, nothing — `TaskPanel` already has its own create control on the
+same page as `LeadActions`, so P0.3 added no duplicate "Add task" entry).
+
+Verification: `npx tsc --noEmit` and `npx eslint --max-warnings=0` clean
+after every commit. No local Postgres in this environment — nothing here
+needed a live-DB check (no migration, pure query/command/UI layer), so
+that limitation doesn't apply to this batch of work.
 
 **Correction, 2026-09-17 (same day, later commit):** the Kanban board this
 paragraph originally cited as live was removed the same day by a
@@ -222,6 +260,25 @@ one. Status-badge semantic-color strengthening and general contrast fixes
 are Task 112's job per this file's own "Relationship to 111/112" section —
 listed here only as a reminder to confirm 112's rollout actually reaches
 Outreach's badges, not as new scope for this file.
+
+**P1.5 status, 2026-09-17 (session that finished P0/P1):** item 1 (shell
+chrome polish) is DONE — see the Status section above; icon size,
+active-nav contrast, and the workspace-switcher chevron were all already
+correct (re-checked against current code, not assumed from the review's
+older text), only the bell's unread count was a real gap and is now built.
+**Items 2-4 and 6-9 are NOT YET BUILT** — each is its own design surface
+(bulk-action system, detail-page tabs split, contact/timeline prominence,
+activity-entry UX details, Intelligence filters, add-prospect sub-items,
+permission-denied recovery flow) large enough to deserve its own focused
+pass rather than being rushed alongside P0/P1 in the same session. **Item
+5 (card verbosity) stays deliberately untouched** per its own text — now
+that the P0.5 table view has shipped, its own advice ("don't pre-emptively
+rewrite until the table ships and it's clear cards still need fixing")
+applies for real; whoever picks this up should look at real usage before
+touching the cards, not assume they still need it.
+
+**P2 status:** NOT STARTED, unchanged — still needs product-owner scoping
+before any of it is built, per this file's own text.
 
 ## P2 — sales-execution parity (Apollo/Outreach/Salesloft-shaped, largest scope)
 
