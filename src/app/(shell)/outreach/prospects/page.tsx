@@ -154,7 +154,7 @@ async function ProspectsPage({ searchParams }: { searchParams: Promise<Search> }
     const timeZone = tenant?.timeZone ?? "Asia/Kolkata";
     const fmt = (d: Date | null) =>
       d ? d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone }) : null;
-    const now = Date.now();
+    const now = new Date();
 
     let cards = leads.map((l) => {
       const cat = category.get(l.state) ?? "Draft";
@@ -189,7 +189,7 @@ async function ProspectsPage({ searchParams }: { searchParams: Promise<Search> }
         originator: partyName.get(l.leadOriginatorId) ?? "Unknown",
         nextActionNote: l.nextActionNote,
         nextActionAt: fmt(l.nextActionAt),
-        overdue: l.nextActionAt != null && l.nextActionAt.getTime() < now && !TERMINAL_STATES.includes(l.state),
+        overdue: l.nextActionAt != null && l.nextActionAt < now && !TERMINAL_STATES.includes(l.state),
         lastActivityAt: fmt(l.lastActivityAt),
         createdAt: fmt(l.createdAt),
         escalated: l.escalated,
