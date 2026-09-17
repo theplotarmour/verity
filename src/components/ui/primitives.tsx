@@ -41,18 +41,15 @@ function cx(...parts: Array<string | false | undefined>): string {
 export function Surface({
   children,
   bordered = true,
-  solid = false,
+  solid = true,
   className,
 }: {
   children: ReactNode;
   bordered?: boolean;
   /**
-   * Level 5 — an opaque surface.
-   *
-   * ADR-011 keeps dense tables, long-form text, high-density forms, semantic
-   * status and destructive confirmation off the glass, because translucency
-   * costs contrast exactly where legibility matters most. This is how a caller
-   * says so, rather than every screen re-deciding.
+   * ADR-023: structured minimalism, solid by default. Opaque fill, hairline
+   * border, soft shadow — the platform's one material. Pass `solid={false}`
+   * only to keep the deprecated ADR-011 glass on a surface not yet migrated.
    */
   solid?: boolean;
   className?: string;

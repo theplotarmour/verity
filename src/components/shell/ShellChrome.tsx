@@ -167,7 +167,7 @@ export function ShellChrome({
                       "transition-[background-color,color] duration-200 " +
                       (current
                         ? "bg-accent-subtle font-medium text-text shadow-[inset_0_1px_0_var(--color-accent-line)]"
-                        : "text-text-secondary hover:bg-glass-2 hover:text-text")
+                        : "text-text-secondary hover:bg-surface-sunken hover:text-text")
                     }
                   >
                     {item.icon && (
@@ -204,7 +204,7 @@ export function ShellChrome({
       <form action={signOut} className="mt-auto pt-4">
         <button
           type="submit"
-          className="flex w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 py-2.5 text-left text-[14px] text-text-secondary transition-colors hover:bg-glass-2 hover:text-text"
+          className="flex w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 py-2.5 text-left text-[14px] text-text-secondary transition-colors hover:bg-surface-sunken hover:text-text"
         >
           <Icon name="signOut" size={19} className="shrink-0" />
           <span className="min-w-0 flex-1 truncate">Sign out</span>
@@ -239,7 +239,7 @@ export function ShellChrome({
           why hiding it here isn't enough on its own (the grid/height chain
           this root sits in needs resetting too, or the sidebar's gone but
           the content still clips to one screen-height page). */}
-      <aside className="glass-shell hidden min-h-0 flex-col border-r border-line px-4 pb-5 pt-7 print:hidden lg:flex">
+      <aside className="verity-solid hidden min-h-0 flex-col rounded-none border-r border-line px-4 pb-5 pt-7 print:hidden lg:flex">
         <Link href="/" aria-label="Verity" className="mb-8 block shrink-0 px-2 no-underline">
           <VerityLockup size={30} className="text-text" />
         </Link>
@@ -252,7 +252,7 @@ export function ShellChrome({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Mobile bar. The mockups have no small-screen composition to copy, so
             this states the identity and offers the sheet, and nothing else. */}
-        <div className="glass-shell z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line px-4 print:hidden lg:hidden">
+        <div className="verity-solid z-30 flex h-14 shrink-0 items-center justify-between gap-3 rounded-none border-b border-line px-4 print:hidden lg:hidden">
           <Link href="/" aria-label="Verity" className="no-underline">
             <VerityLockup size={22} className="text-text" />
           </Link>
@@ -281,7 +281,7 @@ export function ShellChrome({
             />
             <div
               id="mobile-nav"
-              className="glass-overlay relative mt-14 flex max-h-[calc(100dvh-3.5rem)] flex-col gap-5 overflow-y-auto border-t border-line p-4"
+              className="verity-solid relative mt-14 flex max-h-[calc(100dvh-3.5rem)] flex-col gap-5 overflow-y-auto rounded-none border-t border-line p-4 shadow-lg"
             >
               <OrganizationSwitcher memberships={memberships} active={active} instanceId="sheet" />
               {navList()}
@@ -311,7 +311,7 @@ export function ShellChrome({
               id="shell-search"
               type="search"
               placeholder="Search this page"
-              className="glass-control h-12 w-full rounded-xl pl-12 pr-16 text-[14px] text-text shadow-[var(--shadow-sm)] placeholder:text-text-tertiary transition-[border-color,box-shadow] duration-200 hover:border-line-strong focus:border-accent focus:shadow-[var(--shadow-highlight),0_0_0_3px_var(--color-accent-subtle)] focus:outline-none"
+              className="verity-solid h-12 w-full rounded-xl border border-line pl-12 pr-16 text-[14px] text-text shadow-[var(--shadow-sm)] placeholder:text-text-tertiary transition-[border-color,box-shadow] duration-200 hover:border-line-strong focus:border-accent focus:shadow-[var(--shadow-highlight),0_0_0_3px_var(--color-accent-subtle)] focus:outline-none"
             />
             {/* Task 109 Phase G §2: a separate global command palette (Cmd/Ctrl+K),
                 not this per-page search box — see CommandPalette's own doc comment. */}
@@ -327,7 +327,7 @@ export function ShellChrome({
               <Link
                 href="/audit"
                 title="Recent activity"
-                className="glass-control grid size-11 place-items-center rounded-full text-text-secondary no-underline shadow-[var(--shadow-sm)] transition-[color,box-shadow,transform] duration-200 hover:-translate-y-px hover:text-text hover:shadow-[var(--shadow-md)]"
+                className="verity-solid grid size-11 place-items-center rounded-full border border-line text-text-secondary no-underline shadow-[var(--shadow-sm)] transition-[color,box-shadow,transform] duration-200 hover:-translate-y-px hover:text-text hover:shadow-[var(--shadow-md)]"
               >
                 <Icon name="bell" size={19} />
                 <span className="sr-only">Recent activity</span>

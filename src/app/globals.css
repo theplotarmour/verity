@@ -475,7 +475,12 @@
 }
 
 /**
- * LEVELS 1–4 — the glass materials.
+ * LEVELS 1–4 — the glass materials. DEPRECATED by ADR-023 (2026-09-17).
+ *
+ * ADR-023 retired glass as the default Experience System material in favor of
+ * structured minimalism (`.verity-solid` below). These four classes stay
+ * defined only until every remaining consumer is confirmed migrated — do not
+ * reach for them in new work, and do not delete them yet (Task 112 non-goal).
  *
  * Each pairs one ladder step with blur and the inner highlight. They are
  * classes rather than utilities because the three properties must travel
