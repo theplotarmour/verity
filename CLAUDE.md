@@ -103,57 +103,51 @@ Conflict resolution: **Safety > Truth > Coherence > Usefulness > Simplicity > Fl
 Every concrete technology choice must cite its authority using one of:
 `Authority: V2-ADR-[N]` | `Authority: Bible V2 [section]` | `Authority: Spec V2 [REQ-ID]` | `Authority: EXISTING INFRASTRUCTURE` | `Authority: IMPLEMENTATION DECISION REQUIRED`.
 
-## Experience System — approved visual direction (ADR-023, supersedes ADR-011's material system)
+## Experience System — approved visual direction (ADR-024, partially supersedes ADR-023/ADR-012)
 
-**Glass is no longer the default Verity Experience System material (ADR-023, 2026-09-17).**
-Verity's approved visual system is now **structured minimalism**: solid, opaque cards, thin
-hairline borders, generous whitespace, soft non-tinted shadow for elevation, warm-neutral light
-theme / navy-dark theme. Depth and hierarchy come from tonal contrast, spacing and shadow — not
-translucency. The product-owner-supplied reference screens (Settings/Appearance and Home
-dashboard, light and dark) are the visual target for this material; `verity-app-ui-mockups/`
-remains the identity authority for anything the new references don't cover.
+**Two-treatment material system (ADR-024, 2026-09-18).** Structural chrome (sidebar, top bar,
+command palette, modals, dropdowns/popovers, the mobile nav sheet) uses the glass classes —
+`.glass-shell` / `.glass-control` / `.glass-overlay` — reactivated from the token system ADR-023
+never deleted, only stopped defaulting to. Dense content (data tables, forms, record/prospect
+cards, `Panel`/`Surface` holding record content, `PermissionDenied`) stays exactly as ADR-023
+specified: `.verity-solid`, opaque, hairline border, soft non-tinted shadow. **Do not glass a
+table, a form, or long-form text — do not solid a floating/transient surface.** Depth on chrome
+comes from translucency + blur; depth on content comes from tonal contrast, spacing and shadow.
 
-- **Do not add blur or translucency to persistent surfaces.** `backdrop-filter` is removed from
-  the default system. The former failure mode ("do not flatten into generic opaque enterprise
-  SaaS") is retired — opaque, hairline-bordered cards are now the *correct* default, not the
-  thing to avoid. What still must be avoided is generic, structureless flatness: whitespace as
-  structure (Bible V4 §1.A) and a real material choice (radius, shadow, tonal warmth) still apply
-  — see ADR-023's "what this does not license" clause.
-- **Brand and accent are separate systems.** The Verity mark is a fixed asset, monochrome, and is
-  never recoloured by the interface — including in the favicon and app icon. The Experience
-  *accent* is configurable — ten approved presets (Verity Mint, Warm Sand Gold, Champagne, Ocean
-  Blue, Slate Blue, Indigo, Violet, Emerald, Rose, Graphite) plus custom hex — and **defaults to
-  Verity Mint `#00D1B2`**, the swatch `design/verity asthetics.png` labels Primary (ADR-012).
-  Warm Sand Gold `#D4A017` remains a preset. Semantic colours are independent of the accent:
-  accent is theme, semantic is meaning, and with a teal accent that separation is load-bearing —
-  success is a leaf green, deliberately not the accent hue. **None of this changed with ADR-023**
-  — accent/mark/semantic mechanics apply identically to solid surfaces.
-- **The brand sheet is the palette authority.** Neutrals are `#F7F8FA` · `#0F1115` · `#1C1F24` ·
-  `#2A2E33` · `#E6E8EB`; type is Inter (Thin / Light / Regular / Medium); icons are thin outline.
+- **Default accent is Gold `#D4A017`** (ADR-024, reverting ADR-012's Verity Mint default) — one
+  of the ten existing presets (Verity Mint, Warm Sand Gold, Champagne, Ocean Blue, Slate Blue,
+  Indigo, Violet, Emerald, Rose, Graphite) plus custom hex, unchanged otherwise. `design/verity
+  asthetics.png` (repo, mint-primary) is now stale on the default-accent question specifically —
+  the current gold-primary board lives outside the repo pending the follow-up ADR-024 flags (copy
+  it into `design/`); do not treat the repo file as current for accent until that's done.
+- **Accent governs small/interactive surfaces only — never a large filled background** (new
+  ADR-024 constraint ADR-012 lacked). Buttons, links, focus rings, active nav state, badges as a
+  tint/outline: yes. A card or banner filled edge-to-edge with accent color: no — rebuild it as a
+  bordered surface with a small accent touch (icon, label, edge) instead. The Outreach "Current
+  Direction" banner's old full-fill treatment is the concrete defect this constraint targets.
+- **Brand and accent are separate systems, unchanged.** The Verity mark is a fixed asset,
+  monochrome, never recoloured by the interface — including in the favicon and app icon. Semantic
+  colours stay independent of accent: accent is theme, semantic is meaning — success stays a leaf
+  green regardless of accent hue.
+- **The brand sheet is the palette authority for neutrals/type**, unaffected by the accent-default
+  change. Neutrals are `#F7F8FA` · `#0F1115` · `#1C1F24` · `#2A2E33` · `#E6E8EB`; type is Inter
+  (Thin / Light / Regular / Medium) — no font swap, size-specific tracking/leading discipline
+  applies per ADR-024's typography clause; icons are thin outline.
 - **Never hard-code an accent.** Everything derives from `--accent-seed` through `color-mix` in
-  `globals.css`. Adding a component needs no accent work; changing the accent needs no component
-  work. Contrast is computed in `src/server/platform/accent.ts`, never assumed — white does not
-  work on every accent.
-- **Cards and panels use `.verity-solid` (or its successor), not the four glass classes.**
-  `.glass-shell`, `.glass-card`, `.glass-control`, `.glass-overlay` are deprecated for new work.
-  One material, one treatment: opaque fill, `1px` hairline border, soft ambient shadow (never
-  accent-tinted), consistent corner radius.
-- **Never trade accessibility for appearance.** Text contrast against the solid surface must meet
-  WCAG AA — this constraint carried forward from ADR-011 unchanged, just applied to a different
-  material.
+  `globals.css`. Contrast is computed in `src/server/platform/accent.ts`, never assumed.
+- **Motion is spring-based on interactive/transient surfaces** (new, ADR-024): critically damped
+  (`damping 1.0`, `response ~0.35`) by default, slight bounce (`damping ~0.8`) only for genuinely
+  gesture-driven interactions. `framer-motion` is the library (already a dependency). Respect
+  `prefers-reduced-motion` (cross-fade, no spring/scale) the same way `prefers-reduced-
+  transparency` already flattens glass to solid.
+- **Never trade accessibility for appearance.** WCAG AA on both materials, both themes — carried
+  forward unchanged through ADR-011 → ADR-023 → ADR-024.
 - **Light and dark are two material interpretations of one system**, not two designs.
-- When implementation conflicts with the approved reference, preserve the reference's material
-  choice (solid, hairline, shadow-based depth) unless doing so violates accessibility,
-  performance, or an explicit higher-order product rule.
 
-Anti-regression: do not reintroduce `backdrop-filter`/blur on persistent surfaces without a new
-ADR, do not hard-code any accent value into a component, do not recolour the mark with the
-accent, do not collapse semantic success into the accent hue, do not reintroduce scarlet, do not
-turn the shell into generic, structureless flat SaaS with no material point of view (radius,
-shadow and warmth are still a considered choice, not an absence of one).
-
-The earlier rule "do not replace gold with teal" is **withdrawn by ADR-012** — the brand sheet
-names `#00D1B2` Primary, and gold is now one preset among ten.
+Anti-regression: do not glass a content surface or solid a chrome surface without checking
+ADR-024's table first, do not hard-code any accent value into a component, do not recolour the
+mark with the accent, do not collapse semantic success into the accent hue, do not fill a large
+surface with flat accent color, do not reintroduce scarlet.
 
 ## Constitutional invariants (non-negotiable)
 
@@ -221,11 +215,13 @@ workflows, routes, or terminology, and never add a compatibility layer for them.
 5. `SpecRefTarget` enum: `VEHICLE_BRAND`, `VEHICLE_MODEL`, `VEHICLE_GENERATION`, `DESIGN`, `COLOR`
 6. `SystemRole` enum: `OWNER`, `CO_OWNER`, `MANAGER`, `SUPERVISOR`, `WORKER`, `STORE_MANAGER` — use dynamic Verb+Entity+Scope permissions
 7. Entities `ProductionBatch`, `BomMode`, `QCTemplate`
-8. `backdrop-filter`/blur on persistent surfaces (`.glass-shell`, `.glass-card`,
-   `.glass-control`, `.glass-overlay`) as the default card/panel material — **ADR-023**
-   (2026-09-17) retired glass as the default entirely; `.verity-solid` is now the one
-   material for cards and panels. (`.verity-glass` as a bare class name remains forbidden
-   under the original rule, now for a simpler reason: it isn't the pattern in force at all.)
+8. `backdrop-filter`/blur (`.glass-shell`/`.glass-control`/`.glass-overlay`) on a **dense
+   content** surface (tables, forms, record/prospect cards, long-form text) — **ADR-024**
+   (2026-09-18) reactivated glass for structural chrome only (sidebar, top bar, command
+   palette, modals, dropdowns), keeping ADR-023's solid-on-content call in force. The inverse
+   is equally forbidden: `.verity-solid` on chrome that should read as a floating material
+   layer. Check ADR-024's surface table before choosing either. (`.verity-glass` as a bare
+   class name remains forbidden as before — it was never the pattern in force.)
 9. Routes `/owner`, `/worker`, `/inspector`, `/supervisor`, `/verity` (legacy role-based routing)
 10. `@@map` to VEDA schema naming
 
@@ -251,28 +247,39 @@ any requirement written because it is "common in ERP/SaaS" rather than traced to
   semantic status and destructive confirmation stay solid. Supersedes the *interpretation* of
   Bible V4 §1.B recorded in `globals.css` and the shell audits — not §1.B's text. Its accent-default
   clause alone is superseded by ADR-012; the material system stands in full.
-- **ADR-012** The brand sheet `design/verity asthetics.png` is the palette authority. Default accent
-  becomes `#00D1B2`; neutrals are reconciled to the sheet; semantic success is retuned away from the
-  accent hue so status and theme cannot read as one signal; the mark is monochrome everywhere,
-  including favicon and app icon. Supersedes ADR-011 in part — accent default only.
+- **ADR-012** The brand sheet `design/verity asthetics.png` is the palette authority. Neutrals
+  are reconciled to the sheet; semantic success is retuned away from the accent hue so status and
+  theme cannot read as one signal; the mark is monochrome everywhere, including favicon and app
+  icon. Supersedes ADR-011 in part — accent default only. **Its own default-accent clause
+  (`#00D1B2`) is in turn superseded by ADR-024** (Gold `#D4A017`); every other ADR-012 mechanic
+  (ten-preset system, monochrome mark, semantic independence) is unaffected.
 - **ADR-023** (2026-09-17) Structured minimalism replaces glass as the default Experience
   System material — supersedes ADR-011's five-level glass hierarchy and four glass surface
   classes **in full**. Solid opaque cards, hairline borders, soft shadow-based elevation,
-  warm-neutral light / navy dark themes, per new product-owner reference screens (Settings/
-  Appearance + Home dashboard). ADR-012's accent/mark/semantic mechanics are unaffected — they
-  now apply to solid surfaces instead of glass ones. Full text:
-  `verity-spec/17_decisions/adr/adr-023.md`.
+  warm-neutral light / navy dark themes, per then-current product-owner reference screens
+  (Settings/Appearance + Home dashboard). **Partially superseded by ADR-024** — its solid-on-
+  dense-content call stands; its "in full" claim over structural chrome does not.
+- **ADR-024** (2026-09-18) Scoped glass returns for structural chrome (sidebar, top bar,
+  command palette, modals, dropdowns/popovers) — reactivating the glass token system ADR-023
+  stopped defaulting to but never deleted. Dense content stays solid, exactly as ADR-023
+  specified. Default accent reverts Mint → Gold `#D4A017` (existing preset, not new), with a
+  new constraint: accent is tint/interactive-only, never a large filled background. Adds a
+  spring-based motion system (`framer-motion`, already a dependency) for interactive/transient
+  surfaces. Full text: `verity-spec/17_decisions/adr/adr-024.md`. Evidence for the new default
+  accent is a board supplied outside the repo this session — see the ADR's own "follow-up
+  required" note; the repo's `design/verity asthetics.png` is stale on this one question until
+  that's resolved.
 
   **This list is a curated highlight reel, not the complete register, and is stale beyond what
   it explicitly names.** The canonical ADR register is `verity-spec/17_decisions/adr/`
-  (`adr-001.md`…`adr-023.md` as of 2026-09-17) — ADR-013 (Global HQ Operator Security Model),
+  (`adr-001.md`…`adr-024.md` as of 2026-09-18) — ADR-013 (Global HQ Operator Security Model),
   ADR-014 (DEC-001 scope), ADR-015 (scheduled work trigger), ADR-016 (the scheduler may enumerate
   tenants), ADR-017 (below), ADR-018 (extract a generic Trading capability out of plywood),
   ADR-019 (below), ADR-020 (OIDC browser identity), ADR-021 (capability pins), and ADR-022
-  (Industry Packs as signed artifacts) are all ACCEPTED there and are not summarized here. ADR-023
-  (above) is summarized because it directly overrides this section's own Experience System
-  content. Check the register before assuming an ADR number is unused, the mistake that made
-  ADR-017 necessary as a correction to begin with.
+  (Industry Packs as signed artifacts) are all ACCEPTED there and are not summarized here.
+  ADR-023/024 (above) are summarized because they directly override this section's own
+  Experience System content. Check the register before assuming an ADR number is unused, the
+  mistake that made ADR-017 necessary as a correction to begin with.
 - **ADR-017** The AI/assistant channel (`PolicyChannel: "agent"` in `policy.ts`) executes every
   action as the calling human's own `ActorContext` — same tenant, same membership, same role, same
   grants, same `enforcePolicy()` gate every other caller passes through. `channel` is recorded on

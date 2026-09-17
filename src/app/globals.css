@@ -93,7 +93,8 @@
    * below it. Deriving it here rather than in JavaScript means an accent change
    * is a single custom property, and no component has to know it happened.
    * ------------------------------------------------------------------- */
-  --accent-seed: #00d1b2;
+  /* ADR-024: default reverted from Verity Mint to Warm Sand Gold. */
+  --accent-seed: #d4a017;
 
   --accent-50: color-mix(in srgb, #ffffff 94%, var(--accent-seed));
   --accent-100: color-mix(in srgb, #ffffff 86%, var(--accent-seed));
@@ -111,8 +112,11 @@
      stepping darker (light) or lighter (dark) when the first step does not.
      Three of the ten presets need that step; Emerald needs two. Defaults below
      are the brand-sheet Primary's, so the stylesheet is correct with no cookie. */
-  --accent-fill-light: #02b99e;
-  --accent-fill-dark: #6be4d2;
+  /* ADR-024 gold default — recomputed via accent.ts's own pairFor() logic
+     (light: mix toward #0D0D0F at .12/.26/.42 until AA clears; dark: toward
+     #FFFFFF at .42/.7/.86). Both themes land on dark ink. */
+  --accent-fill-light: #bc8e16;
+  --accent-fill-dark: #e6c878;
   --accent-ink-light: #191a1c;
   --accent-ink-dark: #191a1c;
 

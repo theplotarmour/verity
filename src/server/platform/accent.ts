@@ -7,9 +7,9 @@ import "server-only";
  * (which value is the default, and the preset list corrected to the brand sheet).
  *
  * BRAND IS NOT ACCENT. The Verity mark and wordmark are fixed assets and are
- * never recoloured by this. `#00D1B2` is the DEFAULT accent because the brand
- * sheet names it Primary, but a tenant choosing Ocean Blue changes the
- * interface, not the identity.
+ * never recoloured by this. `#D4A017` (Warm Sand Gold) is the DEFAULT accent
+ * per ADR-024, which reverted ADR-012's Mint default — but a tenant choosing
+ * Ocean Blue changes the interface, not the identity.
  *
  * Only two things are computed here rather than in CSS. The 50→900 tonal ladder
  * is derived by `color-mix` in `globals.css`, because a stylesheet that can
@@ -37,10 +37,10 @@ export const ACCENT_PRESETS = [
 ] as const;
 
 /**
- * The brand sheet's Primary swatch. ADR-012 makes it the default accent; the
- * earlier gold default is retained as an ordinary preset rather than removed.
+ * ADR-024's default (reverted from ADR-012's Mint). Mint is retained as an
+ * ordinary preset rather than removed.
  */
-export const DEFAULT_ACCENT = "#00D1B2";
+export const DEFAULT_ACCENT = "#D4A017";
 
 /**
  * The two candidates for text ON the accent.
