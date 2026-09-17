@@ -201,10 +201,18 @@ export function LeadActions({
 // terminal-state exception needed here: `LogActivityForm` is only ever
 // rendered when `!isTerminal` (see the primary button row above), so this
 // form is never reachable on an already-closed lead.
+/** yyyy-mm-dd `days` from now, for the quick-default buttons below. */
+function dateInNDays(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 function LogActivityForm({ leadId, onDone }: { leadId: string; onDone: () => void }) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [pending, startTransition] = useTransition();
+  const [nextActionAt, setNextActionAt] = useState("");
 
   return (
     <form
@@ -277,9 +285,27 @@ function LogActivityForm({ leadId, onDone }: { leadId: string; onDone: () => voi
             name="nextActionAt"
             type="date"
             required
+            value={nextActionAt}
+            onChange={(e) => setNextActionAt(e.target.value)}
             className="verity-solid border border-line h-11 w-full rounded-lg px-4 text-[14px] text-text focus:outline-none focus:border-accent"
           />
         </Field>
+      </div>
+      <div className="-mt-1 flex flex-wrap gap-1.5">
+        {[
+          { label: "Tomorrow", days: 1 },
+          { label: "3 days", days: 3 },
+          { label: "Next week", days: 7 },
+        ].map((preset) => (
+          <button
+            key={preset.label}
+            type="button"
+            onClick={() => setNextActionAt(dateInNDays(preset.days))}
+            className="rounded-pill border border-line px-2.5 py-1 text-[11.5px] font-medium text-text-secondary transition-colors hover:bg-surface-sunken hover:text-text"
+          >
+            {preset.label}
+          </button>
+        ))}
       </div>
       {failure && <ErrorState title="Could not log activity" message={failure.message} issues={failure.issues} retryable={failure.retryable} />}
       <div className="flex gap-2">
