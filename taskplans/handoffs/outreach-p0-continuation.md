@@ -13,11 +13,18 @@ re-deriving what's already been read this session. Read 114 first for the
 
 **Update 2026-09-17 (later same day):** re-checking the original review
 against this file surfaced nine items it did not cover — see Task 114's own
-new "P1.5 — re-audit gaps" section (shell chrome polish, bulk-action system,
+"P1.5 — re-audit gaps" section (shell chrome polish, bulk-action system,
 detail-page tabs split, contact/timeline prominence, card verbosity, activity-
 entry UX details, Intelligence filters, add-prospect sub-items, permission-
-denied recovery flow). None of P1.5 is started; it comes after P0/P1 in
-sequence, per Task 114's own text.
+denied recovery flow).
+
+**Update 2026-09-17 (same day, later still):** items 1-4 and 6-9 are now
+DONE — see Task 114's own P1.5 status section for the full breakdown
+(commits e6006ce..8e038f7). Item 5 (card verbosity) stays deliberately
+untouched per its own text. Remaining open work is Task 114 P2 (sequences,
+activity-type-aware forms, enrichment), which explicitly needs
+product-owner scoping before starting — do not begin it from this file's
+text alone.
 
 ## Done already (commits `929c79e`, `124c407`, `02b88c2`, `4a999e7`)
 

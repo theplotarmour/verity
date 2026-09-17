@@ -15,7 +15,7 @@ solid-material rollout) — see "Relationship to 111/112" below; this file is
 about interaction/workflow, not material/color, though one visual finding
 (low contrast, over-pale surfaces) is shared with 112's rollout.
 
-## Status: P0 + P1 DONE 2026-09-17 (commits 9a873cc..6775ec9); P1.5 item 1 DONE (69db7bb); P1.5 items 2-4/6-9 and P2 NOT YET BUILT — see note at file end
+## Status: P0 + P1 DONE 2026-09-17 (commits 9a873cc..6775ec9); P1.5 items 1-4/6-9 DONE 2026-09-17 (commits e6006ce..8e038f7, items 6 and 9 partial — see each item's own note); P2 NOT YET BUILT — see note at file end
 
 All of P0 (P0.1-P0.6) and P1 are complete. Summary, newest work first:
 
@@ -266,16 +266,56 @@ chrome polish) is DONE — see the Status section above; icon size,
 active-nav contrast, and the workspace-switcher chevron were all already
 correct (re-checked against current code, not assumed from the review's
 older text), only the bell's unread count was a real gap and is now built.
-**Items 2-4 and 6-9 are NOT YET BUILT** — each is its own design surface
-(bulk-action system, detail-page tabs split, contact/timeline prominence,
-activity-entry UX details, Intelligence filters, add-prospect sub-items,
-permission-denied recovery flow) large enough to deserve its own focused
-pass rather than being rushed alongside P0/P1 in the same session. **Item
-5 (card verbosity) stays deliberately untouched** per its own text — now
+
+**Items 2-4 and 6-9 DONE, same day, later session (commits e6006ce..8e038f7):**
+- **Item 2** (bulk-action system) — `DataTable` gained a `bulkActions`
+  render-prop; prospects table wires it to a new `BulkActionBar`: bulk
+  reassign-owner, bulk add-task, CSV export. Bulk stage-move and bulk
+  health-update deliberately omitted (transitions are lead-state-dependent;
+  health is derived, never stored — nothing to bulk-write).
+- **Item 3** (detail-page tabs split) — new `Tabs` primitive
+  (`src/components/ui/Tabs.tsx`); `[id]/page.tsx` restructured into
+  Overview / Activity / Contacts / Tasks / Meetings / Research /
+  Commercial, per-tab counts on the strip.
+- **Item 4** (contact prominence + timeline filters) — Contacts tab's
+  empty state is now an accent-bordered CTA box; new `ActivityTimeline`
+  component adds a per-activity-type filter chip row. Payments/stage-
+  changes/tasks stay on their own tabs — separate entities, not activity
+  rows.
+- **Item 6** (activity-entry UX) — **partial**. Due-date quick-defaults
+  (Tomorrow/3 days/Next week) added to `LogActivityForm`. Panel was
+  already inline/anchored, not floating, so no layout change needed
+  there. Follow-up recommendation based on stage/touch history NOT
+  built — needs a heuristic decision (what history, what threshold) the
+  review didn't specify.
+- **Item 7** (Intelligence filters) — `WINDOW_INPUT` gained optional
+  `teamId`/`ownerId` (additive, same pattern as the existing `domainId`),
+  threaded into all three Intelligence queries via a shared `leadScope()`
+  helper; new `IntelligenceFilters` bar (URL-state). "Source" filter not
+  added as a separate axis — channel is already the page's own breakdown
+  table.
+- **Item 8** (add-prospect sub-items) — Domain field is now a searchable
+  `FormCombobox` (reused, not rebuilt); Step 1 gained a "Save as draft"
+  action distinct from "Next: qualify"; fit-score field now shows the
+  rubric inline (1-3 weak / 4-6 plausible / 7-8 strong / 9-10 priority).
+- **Item 9** (permission-denied recovery) — **partial**. `PermissionDenied`
+  now renders a "Go to dashboard" link instead of prose alone. A real
+  "Request access" flow (Request access / Contact administrator / Switch
+  workspace, per the review's specific ask) is NOT built — no command or
+  notification pattern for "request access to X" exists anywhere in the
+  codebase to model one on, and this needs a product-owner decision
+  before inventing one.
+
+**Item 5 (card verbosity) stays deliberately untouched** per its own text — now
 that the P0.5 table view has shipped, its own advice ("don't pre-emptively
 rewrite until the table ships and it's clear cards still need fixing")
 applies for real; whoever picks this up should look at real usage before
 touching the cards, not assume they still need it.
+
+`npx tsc --noEmit` and `npx eslint --max-warnings=0` clean after every
+commit in this batch. No local Postgres in this environment — none of
+this batch needed a live-DB check (pure query/command/UI layer, one
+additive zod field, no migration).
 
 **P2 status:** NOT STARTED, unchanged — still needs product-owner scoping
 before any of it is built, per this file's own text.
