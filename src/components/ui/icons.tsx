@@ -58,7 +58,8 @@ export type IconName =
   | "lock"
   | "eye"
   | "eyeOff"
-  | "plus";
+  | "plus"
+  | "eyedropper";
 
 const PATHS: Record<IconName, string> = {
   // Navigation — board nav geometry.
@@ -138,6 +139,11 @@ const PATHS: Record<IconName, string> = {
   eyeOff:
     "M3 3l18 18M10.6 10.6a3 3 0 0 0 4.2 4.2M6.5 6.9C4 8.6 2.5 12 2.5 12s3.5 6.5 9.5 6.5c1.6 0 3-.4 4.2-1.1M17.6 17.5C19.9 15.9 21.5 12 21.5 12S18 5.5 12 5.5c-.7 0-1.5.1-2.1.3",
   plus: "M12 5v14M5 12h14",
+  // eyedropper: the sampling tool's own silhouette — an angled pen tip picking
+  // a point off the canvas. Used only by the accent picker's sample-from-screen
+  // control, so it reads as a color instrument rather than a generic pointer.
+  eyedropper:
+    "M17.5 3.5a2.8 2.8 0 0 1 4 4L19 10 14 5zM14 5l-8.5 8.5-2 5.5 5.5-2z M9.5 15l-1.7-1.7",
 };
 
 export function Icon({

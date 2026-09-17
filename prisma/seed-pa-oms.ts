@@ -89,7 +89,12 @@ const COMPANY_CORE: Person[] = [
   { displayName: "Shubhankar", email: "shubhankar.rakshit@plotarmour.in" },
 ];
 
-const TEAM_1_LEADER: Person = { displayName: "Kulsoom", email: "kulsoom@plotarmour.verity.app" };
+// 2026-09-17: corrected from a synthesized `@plotarmour.verity.app` placeholder
+// (this file's own outdated comment) to the real address — Supabase Auth
+// already has a `kulsoom@plotarmour.in` account, same pattern as Company
+// Core's real addresses. Using the placeholder here would have created a
+// second, wrong-address account instead of linking the real one.
+const TEAM_1_LEADER: Person = { displayName: "Kulsoom", email: "kulsoom@plotarmour.in" };
 const TEAM_1_JUNIORS: Person[] = [
   { displayName: "Shreya Bansal", email: "shreyabansal2806@gmail.com", phone: "8383014672", location: "Dehradun, Uttarakhand, India" },
   { displayName: "Prakhar Maheshwari", email: "prakharm385@gmail.com", phone: "9981146588" },
@@ -100,7 +105,8 @@ const TEAM_1_JUNIORS: Person[] = [
   { displayName: "Khushboo", email: "khushbooyadav6675@gmail.com", phone: "8750074191", location: "Faridabad, Haryana, India" },
 ];
 
-const TEAM_2_LEADER: Person = { displayName: "Radhika", email: "radhika@plotarmour.verity.app" };
+// 2026-09-17: same correction as Kulsoom above — real registered address.
+const TEAM_2_LEADER: Person = { displayName: "Radhika", email: "radhika@plotarmour.in" };
 const TEAM_2_JUNIORS: Person[] = [
   { displayName: "Ananya Sree Pentakota", email: "ananyasree1677@gmail.com", phone: "9490185801" },
   { displayName: "Gaurav Thakur", email: "gaurax.3@gmail.com", phone: "8219636135" },
@@ -135,7 +141,26 @@ async function main() {
 
   const createdAuthUserIds: string[] = [];
 
+  // 2026-09-17: this Supabase project already had real Auth accounts for
+  // most of the 19 people (a prior attempt's Auth-side succeeded before its
+  // Postgres side did, or was reset separately — Auth and this database are
+  // independent systems). Linking to an existing account by email, rather
+  // than erroring or creating a duplicate, is what turns this script from
+  // "run once on a clean project" into "safe to run against this project's
+  // actual current state" — existing people keep their existing password.
+  async function findExistingAuthUserId(email: string): Promise<string | null> {
+    const rows = await admin.$queryRaw<Array<{ id: string }>>`
+      SELECT id::text AS id FROM auth.users WHERE email = ${email} LIMIT 1
+    `;
+    return rows[0]?.id ?? null;
+  }
+
   async function createLogin(person: Person): Promise<string> {
+    const existingId = await findExistingAuthUserId(person.email);
+    if (existingId) {
+      console.log(`  ${person.displayName.padEnd(24)} ${person.email.padEnd(34)} (existing account — password unchanged)`);
+      return existingId;
+    }
     const password = suggestPassword();
     const created = await supabaseAdmin.auth.admin.createUser({
       email: person.email,
@@ -276,8 +301,35 @@ async function main() {
       const byPartyId = new Map<string, { userId: string; membershipId: string }>();
       const byEmail = new Map<string, string>(); // email -> partyId
 
+      // 2026-09-17: this Supabase Auth user may already have a global
+      // Party/User from an earlier, differently-completed attempt (the
+      // `auth_user_id` unique constraint is what surfaces this — Party/User
+      // are global tables per identity.ts's own doc). `provisionIdentity`
+      // has no de-dup path by design (its own comment: "do not paper over
+      // it here" — that rule is about NOT guessing whether two different
+      // logins are the same human). This IS the same login, so it is not
+      // that ambiguous case: the correct move is a new TenantMembership on
+      // the existing identity, exactly what a second tenant does for one
+      // real person (Bible V2 Primitive 2 §2).
+      async function findExistingIdentity(authUserId: string): Promise<{ partyId: string; userId: string } | null> {
+        const rows = await admin.$queryRaw<Array<{ user_id: string; party_id: string }>>`
+          SELECT id::text AS user_id, party_id::text AS party_id FROM public."user" WHERE auth_user_id = ${authUserId}::uuid LIMIT 1
+        `;
+        const row = rows[0];
+        return row ? { userId: row.user_id, partyId: row.party_id } : null;
+      }
+
       async function provision(person: Person, roleId: string) {
         const authUserId = authUserIds.get(person.email)!;
+        const existing = await findExistingIdentity(authUserId);
+        if (existing) {
+          const membership = await tx.tenantMembership.create({
+            data: { tenantId, organizationId: rootOrg.id, userId: existing.userId, roleId },
+          });
+          byPartyId.set(person.email, { userId: existing.userId, membershipId: membership.id });
+          byEmail.set(person.email, existing.partyId);
+          return;
+        }
         const identity = await provisionIdentity(tx, {
           organizationId: rootOrg.id,
           authUserId,

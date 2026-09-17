@@ -28,9 +28,12 @@ Read these, in this order, before writing a line of capability code:
    accounting/`, `inventory/`, `hr/`, `billing/` (each a real MVP slice),
    `src/server/capabilities/asset/` or `location/` (smallest, cleanest
    skeleton to copy the shape of a brand-new capability from).
-6. Relevant client design docs (`plywood.md`, `KentsRestaurant.md`,
-   `clinic.md`, `salon.md`, `coaching.md`) and `erpclaw-prd/`, if the
-   capability traces to one of them.
+6. Relevant client design docs (`docs/reference/verticals/plywood.md`,
+   `docs/reference/verticals/KentsRestaurant.md`,
+   `docs/reference/verticals/clinic.md`, `docs/reference/verticals/salon.md`,
+   `docs/reference/verticals/coaching.md`) and `docs/reference/erpclaw-prd/`,
+   if the capability traces to one of them. (Moved from repo root
+   2026-09-17 — Task 110's cleanup.)
 
 ## Before writing code: state the lifecycle, not the commands
 

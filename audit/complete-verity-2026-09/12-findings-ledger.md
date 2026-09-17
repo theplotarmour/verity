@@ -39,6 +39,7 @@ Snapshot for every finding: `main@2a71102e3489231227613d1b5c1115f82c55fec3`, aud
 - Detection and auditability: Database logs may show postgres activity but cannot distinguish stolen legitimate credentials without dedicated monitoring.
 - Suggested direction: Remove `DIRECT_URL` from web; run migrations through a separately invoked, non-running tools job; rotate exposed DB superuser secrets.
 - Retest gate: Container inspection proves web cannot read `DIRECT_URL`; app works; migrations work only in tools; hostile app-role RLS tests pass.
+- Corrective work (2026-09-17): `web` (`deploy/compose/docker-compose.yml`) now carries only `DATABASE_URL` (the `verity_app` NOBYPASSRLS role) — no `DIRECT_URL` anywhere in its environment block. `DIRECT_URL` exists only under the `tools` profile, which `docker compose` never starts as a running service (`restart: "no"`, `profiles: ["tools"]`) and which only `deploy/scripts/migrate.sh`'s one-shot `compose --profile tools run --rm tools npx prisma migrate deploy` invokes. This session verified the current file has no `DIRECT_URL` reference under `web` and confirmed `migrate.sh` is the only caller of the privileged connection. Live container-inspection and hostile-RLS retest gate still not executed (no Docker available in this session) — closure still requires that run, but the code-level separation the finding describes is in place.
 
 ## VCA-003 — OIDC is a verifier, not a usable browser authentication replacement
 

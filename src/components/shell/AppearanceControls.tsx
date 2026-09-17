@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/ui/icons";
+import { AccentPicker } from "@/components/shell/AccentPicker";
 
 type Preference = "light" | "dark" | "system";
 
@@ -52,17 +53,13 @@ export function AppearanceControls({
   const router = useRouter();
   const [theme, setTheme] = useState<Preference>("system");
   const [accent, setAccent] = useState(defaultAccent);
-  const [draft, setDraft] = useState(defaultAccent);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     const t = readCookie("verity-theme");
     if (t === "light" || t === "dark" || t === "system") setTheme(t);
     const a = readCookie("verity-accent");
-    if (a && HEX.test(a)) {
-      setAccent(a.toUpperCase());
-      setDraft(a.toUpperCase());
-    }
+    if (a && HEX.test(a)) setAccent(a.toUpperCase());
     setMounted(true);
   }, []);
 
@@ -73,17 +70,26 @@ export function AppearanceControls({
     else document.documentElement.setAttribute("data-theme", next);
   }
 
-  function chooseAccent(hex: string) {
+  /**
+   * Live preview during a drag — a direct style write only. No cookie, no
+   * `router.refresh()`, because the picker fires this on every pointer-move
+   * and a server round trip per pixel would stutter.
+   */
+  function previewAccent(hex: string) {
     const value = hex.toUpperCase();
-    setAccent(value);
-    setDraft(value);
-    write("verity-accent", value);
-
     const root = document.documentElement;
     root.style.setProperty("--accent-seed", value);
     // Same rule as the server's `onAccentFor`: whichever candidate contrasts
     // better wins. Assuming white would fail on every light accent.
     root.style.setProperty("--color-accent-on", onAccentFor(value));
+  }
+
+  /** Commit on release/blur/quick-pick — writes the cookie and reloads server data. */
+  function commitAccent(hex: string) {
+    const value = hex.toUpperCase();
+    setAccent(value);
+    write("verity-accent", value);
+    previewAccent(value);
     router.refresh();
   }
 
@@ -121,60 +127,13 @@ export function AppearanceControls({
           separate systems.
         </p>
 
-        <div className="flex flex-wrap gap-2">
-          {presets.map((p) => {
-            const selected = accent.toUpperCase() === p.hex.toUpperCase();
-            return (
-              <button
-                key={p.hex}
-                type="button"
-                onClick={() => chooseAccent(p.hex)}
-                aria-pressed={selected}
-                title={p.hex}
-                className={
-                  "inline-flex h-11 cursor-pointer items-center gap-2.5 rounded-lg px-3.5 text-[13.5px] transition-colors " +
-                  (selected
-                    ? "bg-accent-subtle font-medium text-text ring-1 ring-[var(--color-accent-line)]"
-                    : "glass-control text-text-secondary hover:text-text")
-                }
-              >
-                <span
-                  aria-hidden="true"
-                  className="size-4 shrink-0 rounded-full ring-1 ring-[var(--color-line-strong)]"
-                  style={{ background: p.hex }}
-                />
-                {p.name}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2.5">
-          <label htmlFor="accent-custom" className="text-[13px] text-text-secondary">
-            Custom
-          </label>
-          <input
-            id="accent-custom"
-            type="color"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value.toUpperCase())}
-            onBlur={() => chooseAccent(draft)}
-            className="glass-control h-11 w-16 cursor-pointer rounded-lg p-1"
-          />
-          <input
-            aria-label="Custom accent hex"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={() => HEX.test(draft) && chooseAccent(draft)}
-            spellCheck={false}
-            className="glass-control h-11 w-[8.5rem] rounded-lg px-3 font-mono text-[13px] text-text"
-          />
-          {!HEX.test(draft) && (
-            <span role="alert" className="text-[12px] text-danger">
-              Six-digit hex, e.g. #D4A017
-            </span>
-          )}
-        </div>
+        <AccentPicker
+          key={accent}
+          initialHex={accent}
+          presets={presets}
+          onPreview={previewAccent}
+          onCommit={commitAccent}
+        />
       </fieldset>
     </div>
   );
