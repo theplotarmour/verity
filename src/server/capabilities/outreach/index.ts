@@ -144,7 +144,19 @@ const COACHING_NOTE_VISIBILITIES = ["JuniorVisible", "LeaderPrivate"] as const;
  * list. `StaleLeads` and `HighPriority` reuse `deriveLeadHealth`/
  * `qualityScore` rather than inventing a second scoring concept.
  */
-const LEAD_QUEUES = ["New", "NeedsResearch", "Stale", "HighPriority", "AdvancePending"] as const;
+const LEAD_QUEUES = [
+  "New",
+  "NeedsResearch",
+  "Stale",
+  "HighPriority",
+  "AdvancePending",
+  // Task 114 P0.1 — the "what do I do next" queues. No "Unassigned" kind:
+  // `opportunityOwnerId` is required at creation (`createOutreachLead`), so
+  // no lead is ever unassigned.
+  "Overdue",
+  "DueToday",
+  "NoNextAction",
+] as const;
 
 /** Closed set (Task 106 Phase 8, master-context §85's permitted list). */
 export const INSIGHT_KINDS = ["Summary", "NextStep", "Qualification"] as const;
@@ -2269,6 +2281,23 @@ export const listLeadQueue: QueryDefinition<{ teamId: string; queue: (typeof LEA
         return ctx.tx.outreachLead.findMany({ where: { ...active, qualityScore: { gte: 8 } }, orderBy: { qualityScore: "desc" } });
       case "AdvancePending":
         return ctx.tx.outreachLead.findMany({ where: { ...active, state: { in: ["invoice_requested", "advance_received"] } } });
+      case "Overdue":
+        return ctx.tx.outreachLead.findMany({
+          where: { ...active, nextActionAt: { lt: new Date() } },
+          orderBy: { nextActionAt: "asc" },
+        });
+      case "DueToday": {
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        const end = new Date();
+        end.setHours(23, 59, 59, 999);
+        return ctx.tx.outreachLead.findMany({
+          where: { ...active, nextActionAt: { gte: start, lte: end } },
+          orderBy: { nextActionAt: "asc" },
+        });
+      }
+      case "NoNextAction":
+        return ctx.tx.outreachLead.findMany({ where: { ...active, nextActionAt: null }, orderBy: { createdAt: "desc" } });
     }
   },
 };

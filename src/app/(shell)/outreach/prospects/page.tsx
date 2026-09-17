@@ -13,6 +13,7 @@ import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import { Badge, EmptyState, HealthBadge, PageHeader, PermissionDenied, StateBadge } from "@/components/ui/primitives";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { NewLeadForm } from "../NewLeadForm";
+import { WorkQueuePanel } from "../WorkQueuePanel";
 import { ProspectFilters, type ProspectFilterOptions } from "./ProspectFilters";
 
 export const dynamic = "force-dynamic";
@@ -276,6 +277,10 @@ async function ProspectsPage({ searchParams }: { searchParams: Promise<Search> }
   return (
     <>
       <PageHeader title="Prospects" description={description} />
+
+      <div className="mb-6">
+        <WorkQueuePanel teamIds={data.formTeams.map((t) => t.id)} />
+      </div>
 
       {data.canCreate && (
         <NewLeadForm
