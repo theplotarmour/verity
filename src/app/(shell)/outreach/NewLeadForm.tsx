@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, ErrorState, Field, Input, Panel, Select } from "@/components/ui/primitives";
+import { FormCombobox } from "@/components/ui/Combobox";
 import { runCommand, runQuery } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -137,7 +138,7 @@ export function NewLeadForm({
           <Field label="Potential need" htmlFor="potentialNeed" hint="What service/opportunity this points to">
             <Input id="potentialNeed" name="potentialNeed" />
           </Field>
-          <Field label="Fit score" htmlFor="qualityScore" hint="1 weak – 10 priority">
+          <Field label="Fit score" htmlFor="qualityScore" hint="1-3 weak · 4-6 plausible · 7-8 strong · 9-10 priority">
             <Input id="qualityScore" name="qualityScore" type="number" min={1} max={10} />
           </Field>
           <div className="sm:col-span-2">
@@ -170,36 +171,46 @@ export function NewLeadForm({
     );
   }
 
+  function submitStep1(form: FormData, andQualify: boolean) {
+    setFailure(null);
+    startTransition(async () => {
+      const result = await runCommand<{ id: string }>(
+        "verity.outreach.create_lead",
+        {
+          teamId,
+          companyName: String(form.get("companyName") ?? ""),
+          website: String(form.get("website") ?? "") || undefined,
+          domainId: String(form.get("domainId") ?? "") || undefined,
+          track: String(form.get("track") ?? "Undetermined"),
+          whyRelevant: String(form.get("whyRelevant") ?? ""),
+          opportunityOwnerId: String(form.get("opportunityOwnerId") ?? ""),
+          linkedinUrl: String(form.get("linkedinUrl") ?? "") || undefined,
+        },
+        revalidatePath,
+      );
+      if (!result.ok) {
+        setFailure(result);
+        return;
+      }
+      if (andQualify) {
+        setCreatedLead({ id: result.data.id, companyName: String(form.get("companyName") ?? "") });
+        setStep(2);
+      } else {
+        // Task 114 P1.5 item 8: a draft path distinct from the qualified
+        // flow. The record is already minimal-and-complete after Step 1 —
+        // this just skips straight to `finish()` instead of opening Step 2.
+        finish();
+      }
+    });
+  }
+
   return (
     <Panel title="Add prospect — step 1 of 2" className="mb-6">
       <form
         className="grid gap-4 sm:grid-cols-2"
         onSubmit={(e) => {
           e.preventDefault();
-          const form = new FormData(e.currentTarget);
-          setFailure(null);
-          startTransition(async () => {
-            const result = await runCommand<{ id: string }>(
-              "verity.outreach.create_lead",
-              {
-                teamId,
-                companyName: String(form.get("companyName") ?? ""),
-                website: String(form.get("website") ?? "") || undefined,
-                domainId: String(form.get("domainId") ?? "") || undefined,
-                track: String(form.get("track") ?? "Undetermined"),
-                whyRelevant: String(form.get("whyRelevant") ?? ""),
-                opportunityOwnerId: String(form.get("opportunityOwnerId") ?? ""),
-                linkedinUrl: String(form.get("linkedinUrl") ?? "") || undefined,
-              },
-              revalidatePath,
-            );
-            if (result.ok) {
-              setCreatedLead({ id: result.data.id, companyName: String(form.get("companyName") ?? "") });
-              setStep(2);
-            } else {
-              setFailure(result);
-            }
-          });
+          submitStep1(new FormData(e.currentTarget), true);
         }}
       >
         <Field label="Company" htmlFor="companyName" required>
@@ -246,21 +257,13 @@ export function NewLeadForm({
           </div>
         )}
         {domains.length > 0 && (
-          <Field label="Domain" htmlFor="domainId">
-            <Select id="domainId" name="domainId" defaultValue="">
-              <option value="">Unspecified</option>
-              {[...new Set(domains.map((d) => d.group))].map((group) => (
-                <optgroup key={group} label={group}>
-                  {domains
-                    .filter((d) => d.group === group)
-                    .map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
-                      </option>
-                    ))}
-                </optgroup>
-              ))}
-            </Select>
+          <Field label="Domain" htmlFor="domainId" hint="Type to search — group shown beneath each match">
+            <FormCombobox
+              id="domainId"
+              name="domainId"
+              placeholder="Unspecified"
+              options={domains.map((d) => ({ value: d.id, label: d.name, note: d.group }))}
+            />
           </Field>
         )}
         <Field label="Decision maker's LinkedIn" htmlFor="linkedinUrl">
@@ -320,6 +323,14 @@ export function NewLeadForm({
         <div className="flex items-center gap-2 sm:col-span-2">
           <Button type="submit" disabled={pending}>
             {pending ? "Saving…" : "Next: qualify"}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={pending}
+            onClick={(e) => submitStep1(new FormData(e.currentTarget.closest("form")!), false)}
+          >
+            Save as draft
           </Button>
           <Button type="button" variant="secondary" onClick={reset}>
             Cancel
