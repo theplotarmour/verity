@@ -29,6 +29,17 @@ export const packManifestSchema = z.object({
   conflicts: z.array(stableKey).default([]),
   configSchemaVersion: semver,
   configDefaults: z.record(stableKey, z.unknown()).default({}),
+  /**
+   * WP-11B's "Extension package contract" §"CSP/resource declaration for any
+   * reviewed client asset". A narrowly-scoped pack (empty `roles`, one or two
+   * `contributions`) IS the extension package WP-11B describes — see that
+   * work package's own instruction to reuse existing activation/contribution
+   * records rather than build a second, near-duplicate control plane. This
+   * field is the one piece a pack didn't already need: exact resource URLs
+   * an extension's client-side contribution may load, enforced by the
+   * shell's CSP, never a wildcard or inline-script allowance.
+   */
+  cspAssets: z.array(z.string().url()).max(20).default([]),
   roles: z.array(z.object({
     key: stableKey,
     permissions: z.array(z.object({

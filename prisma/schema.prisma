@@ -92,6 +92,8 @@ model Tenant {
   packContributions       PackContribution[]
   packEvents              PackEvent[]
   capabilityUpgradeOperations CapabilityUpgradeOperation[]
+  templateDefinitions     TemplateDefinition[]
+  templateInstances       TemplateInstance[]
 
   // Capability: dine-in. Back-relations only — Prisma requires the opposite
   // side of every relation, so a capability's tables show up here whether or not
@@ -1169,6 +1171,82 @@ model PackEvent {
 
   @@index([tenantId, instanceId, occurredAt])
   @@map("pack_event")
+}
+
+enum TemplateKind {
+  Form
+  Document
+  Checklist
+}
+
+/// Versioned template registry (Authority: Task 108 WP-11B, VCA-009,
+/// §"Dynamic forms and configuration" + §"Document and checklist templates").
+/// One row per version — never edited in place, so an in-flight
+/// `TemplateInstance` keeps an immutable reference to the exact version it
+/// was created against (WP-11B §"immutable reference to the template
+/// version used").
+///
+/// `schema` is interpreted per `kind`:
+///   Form       — `{ fields: [{ key, label, type, required, options? }] }`,
+///                `type` matching `CustomFieldType` so a form field and a
+///                custom field never diverge in vocabulary.
+///   Document   — `{ body: string, placeholders: string[] }`; `body` may
+///                reference only keys in `placeholders`, substituted
+///                literally at render — no expression language (WP-11B
+///                §"no arbitrary expression or server execution").
+///   Checklist  — `{ steps: [{ key, label }] }`.
+model TemplateDefinition {
+  id             String       @id @default(uuid()) @db.Uuid
+  tenantId       String       @map("tenant_id") @db.Uuid
+  /// Stable identity across versions — matches a `PackContribution.contributionId`
+  /// when owned by a pack/extension, but is not required to (a tenant may
+  /// also author its own templates directly).
+  contributionId String       @map("contribution_id")
+  kind           TemplateKind
+  version        Int          @default(1)
+  name           String
+  schema         Json
+  ownerCapability String?     @map("owner_capability")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  instances TemplateInstance[]
+
+  @@unique([tenantId, contributionId, version])
+  @@index([tenantId, contributionId])
+  @@map("template_definition")
+}
+
+/// One rendered/submitted instance, pinned to the exact `TemplateDefinition`
+/// version used (WP-11B §"immutable reference to the template version").
+/// `status` and `data` shape follow `kind`:
+///   Form/Document — `data` holds submitted field/placeholder values;
+///                   `status` is `Draft` or `Submitted`.
+///   Checklist     — `data` holds `{ steps: { [key]: { completed,
+///                   completedByPartyId, completedAt, evidenceNote } } }`;
+///                   `status` is `InProgress` or `Completed`.
+model TemplateInstance {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  definitionId   String   @map("definition_id") @db.Uuid
+  /// Optional anchor to the record this instance belongs to (e.g. a Work
+  /// order's inspection checklist). Free string + uuid, like `Activity`'s
+  /// `entityKey`/`entityId` — not a hard FK, since the anchored entity can be
+  /// any capability's table.
+  entityKey      String?  @map("entity_key")
+  entityId       String?  @map("entity_id") @db.Uuid
+  status         String   @default("Draft")
+  data           Json     @default("{}")
+  submittedByPartyId String? @map("submitted_by_party_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  definition TemplateDefinition @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, definitionId])
+  @@index([tenantId, entityKey, entityId])
+  @@map("template_instance")
 }
 
 /// Replay ledger for browser OIDC authorization transactions. Stores only a
