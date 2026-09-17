@@ -11,7 +11,7 @@ line below matching recent commits), regenerate it from `git log` and the
 taskplans it points to before trusting it, same rule `00_STATUS_INDEX.md`
 already states for itself.
 
-**Last updated: 2026-09-17 (later same day — Task 114 P0/P1 + P1.5 item 1 landed)**
+**Last updated: 2026-09-18 (Task 114 P1.5 fully landed; Experience System v2 / ADR-024 started)**
 
 ## How to use this folder
 
@@ -32,23 +32,40 @@ already states for itself.
 
 ## Active work, in order
 
-### 1. Task 114 — Outreach execution-layer UX redesign
+### 1. Verity Experience System v2 — ADR-024 rollout (glass chrome, gold accent, motion)
+
+Handoff: [`experience-system-v2-adr024.md`](./experience-system-v2-adr024.md)
+Authority: `verity-spec/17_decisions/adr/adr-024.md`
+
+Status: Foundation + proof surface + step 3 (CommandPalette/AgentChatDock/
+Button press/motion presets) DONE 2026-09-18 (commits `b95296d`..
+`233463f`). **A real, found-but-unfixed bug is blocking full visual
+completion**: `backdrop-filter` is stripped from all four glass classes
+somewhere in the CSS build — confirmed via live CSSOM inspection, not yet
+root-caused (dev-vs-prod build, Lightning CSS defaults, and `@layer`
+placement are the untried leads). Read the handoff's own "open bug"
+section before touching `globals.css` again. Remaining rollout (motion
+wired into actual transitions, typography pass, per-capability sweep,
+copying the gold board into `design/`) is intentionally deferred per the
+plan's own phasing — none of it started.
+
+### 2. Task 114 — Outreach execution-layer UX redesign — P1.5 fully DONE 2026-09-18
 
 Handoff: [`outreach-p0-continuation.md`](./outreach-p0-continuation.md)
 Taskplan: `taskplans/114_pa_oms_outreach_execution_layer_redesign.md`
 
-Status: P0 (all six items) and P1 DONE 2026-09-17. P1.5 item 1 (shell
-chrome polish) DONE same day. **Next up: P1.5 items 2, 3, 4, 6, 7, 8, 9**
-(bulk-action system, detail-page tabs split, contact/timeline prominence,
-activity-entry UX details, Intelligence filters, add-prospect sub-items,
-permission-denied recovery flow) — each large enough to want its own
-focused pass; none started. Item 5 (card verbosity) is deliberately
-untouched per its own text now that the table view (part of P0.5) has
-shipped — look at real usage before touching the cards. P2 (sequences,
-activity-type forms, enrichment) stays parked pending product-owner
-scoping — do not start it from the taskplan's text alone.
+Status: P0, P1, and **all of P1.5 (items 1-9)** DONE. Items 6 and 9 are
+partial by design — see the taskplan's own per-item notes for exactly
+what each stops short of and why (both need product-owner-level business
+decisions the review never specified). Item 5 (card verbosity) is now
+also DONE — trimmed to one qualification field + 3 footer items instead
+of four/five. **Only P2 remains** (sequences/cadences, activity-type-
+aware forms, enrichment) — still parked pending product-owner scoping;
+do not start it from the taskplan's text alone. If asked to scope just
+the activity-type-aware forms slice, propose the exact field set per
+type before writing code (per this file's own prior discipline).
 
-### 2. Task 111 → Task 112 — structured-minimalism material rollout — DONE 2026-09-17
+### 3. Task 111 → Task 112 — structured-minimalism material rollout — DONE 2026-09-17
 
 Full sweep complete: `Surface`'s `solid` default flipped to `true`
 (ADR-023), every remaining `.glass-*` class and `bg-glass-N` token in
@@ -60,7 +77,7 @@ Status section for the full file list and verification notes. The known
 114's P1.5 (which depended on this landing first per its own note) can
 now proceed.
 
-### 3. Task 113 — AI implementation audit
+### 4. Task 113 — AI implementation audit
 
 No handoff file — small enough that the taskplan itself
 (`taskplans/113_ai_implementation_audit_all_clients_and_global_agent.md`)
@@ -70,7 +87,7 @@ carries its own findings inline. Status: items 1/2/4/5 DONE 2026-09-17
 unresolved). Item 3 (per-tenant reality check) needs live-DB access this
 environment doesn't have — flagged, not silently skipped.
 
-### 4. Task 90 — Attention platform concept (watching, not active)
+### 5. Task 90 — Attention platform concept (watching, not active)
 
 Not active work — a trigger watch. `taskplans/90_attention_platform_
 concept.md`'s 2026-09-17 note records that Task 114's Outreach work queue

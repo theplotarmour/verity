@@ -15,7 +15,7 @@ solid-material rollout) — see "Relationship to 111/112" below; this file is
 about interaction/workflow, not material/color, though one visual finding
 (low contrast, over-pale surfaces) is shared with 112's rollout.
 
-## Status: P0 + P1 DONE 2026-09-17 (commits 9a873cc..6775ec9); P1.5 items 1-4/6-9 DONE 2026-09-17 (commits e6006ce..8e038f7, items 6 and 9 partial — see each item's own note); P2 NOT YET BUILT — see note at file end
+## Status: P0 + P1 DONE 2026-09-17 (commits 9a873cc..6775ec9); P1.5 items 1-9 ALL DONE (commits e6006ce..e05a790, items 6 and 9 partial — see each item's own note); P2 NOT YET BUILT — see note at file end
 
 All of P0 (P0.1-P0.6) and P1 are complete. Summary, newest work first:
 
@@ -306,11 +306,13 @@ older text), only the bell's unread count was a real gap and is now built.
   codebase to model one on, and this needs a product-owner decision
   before inventing one.
 
-**Item 5 (card verbosity) stays deliberately untouched** per its own text — now
-that the P0.5 table view has shipped, its own advice ("don't pre-emptively
-rewrite until the table ships and it's clear cards still need fixing")
-applies for real; whoever picks this up should look at real usage before
-touching the cards, not assume they still need it.
+**Item 5 (card verbosity) DONE 2026-09-18** (commit `e05a790`), overriding
+its own earlier "wait for real usage" advice on explicit user instruction
+to finish P1.5 outright — the card body was trimmed from four
+qualification fields to one ("Why relevant", 2-line clamp), and the
+footer from five meta items to three (Assigned to / Team / Last
+activity), matching `[id]/page.tsx`'s Overview tab which already carries
+the fuller detail.
 
 `npx tsc --noEmit` and `npx eslint --max-warnings=0` clean after every
 commit in this batch. No local Postgres in this environment — none of
