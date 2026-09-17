@@ -1,0 +1,52 @@
+# CI-only overlay for the WP-09 isolated enterprise lab (Task 108). Adds a
+# real local IdP (Dex) and points `web` at it. NEVER referenced by
+# deploy/scripts/*.sh — those stay production-only and untouched. Compose
+# with:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.lab-oidc.yml \
+#     --env-file <lab env file> up -d
+#
+# The lab also needs the database port reachable from the CI runner (the
+# production compose file deliberately publishes none — see its own
+# comment), so this overlay publishes it too. Never do this outside a
+# throwaway CI database.
+
+name: verity
+
+services:
+  dex:
+    image: ghcr.io/dexidp/dex:v2.41.1
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5556:5556"
+    volumes:
+      - ../lab/dex-config.yaml:/etc/dex/config.yaml:ro
+    command: ["dex", "serve", "/etc/dex/config.yaml"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5556/dex/.well-known/openid-configuration"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  db:
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  web:
+    depends_on:
+      dex:
+        condition: service_healthy
+    environment:
+      VERITY_AUTH_PROVIDER: oidc
+      VERITY_OIDC_ISSUER: http://dex:5556/dex
+      VERITY_OIDC_CLIENT_ID: verity-web
+      VERITY_OIDC_CLIENT_SECRET: lab-oidc-client-secret-not-for-production
+      VERITY_OIDC_REDIRECT_URI: http://localhost:3000/api/auth/oidc/callback
+      VERITY_OIDC_AUDIENCE: verity-web
+      VERITY_OIDC_JWKS_URI: http://dex:5556/dex/keys
+      VERITY_OIDC_PRINCIPAL_CLAIM: sub
+      VERITY_OIDC_EMAIL_CLAIM: email
+      VERITY_OIDC_SCOPES: "openid profile email"

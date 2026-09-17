@@ -1,0 +1,36 @@
+# Dex static config for the WP-09 isolated enterprise lab
+# (Task 108 taskplans/108_complete_audit_remediation_and_upgrade_program.md).
+#
+# LAB-ONLY. Never a supported production identity profile — ADR-020 already
+# chose the real one. This exists so CI can prove the OIDC browser lifecycle
+# (WP-05's exit criterion) against a REAL IdP speaking authorization-code +
+# PKCE, rather than only the in-process pure tests `oidc-provider.test.ts`
+# already covers by design.
+#
+# Templated by the CI workflow (envsubst) — DEX_PASSWORD_HASH and
+# DEX_TEST_USER_ID are generated per run, never committed as real values.
+
+issuer: http://dex:5556/dex
+
+storage:
+  type: sqlite3
+  config:
+    file: /var/dex/dex.db
+
+web:
+  http: 0.0.0.0:5556
+
+staticClients:
+  - id: verity-web
+    name: "Verity Web (lab)"
+    secret: lab-oidc-client-secret-not-for-production
+    public: false
+    redirectURIs:
+      - "http://localhost:3000/api/auth/oidc/callback"
+
+enablePasswordDB: true
+staticPasswords:
+  - email: "operator@verity-lab.test"
+    username: "operator"
+    userID: "${DEX_TEST_USER_ID}"
+    hash: "${DEX_PASSWORD_HASH}"
