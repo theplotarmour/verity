@@ -33,6 +33,7 @@ import {
 import { LeadActions } from "./LeadActions";
 import { ContactForm } from "./ContactForm";
 import { ResearchForm, ViewFileLink } from "./ResearchForm";
+import { FileShelf } from "./FileShelf";
 import { TaskPanel } from "./TaskPanel";
 import { MeetingPanel } from "./MeetingPanel";
 import { AiInsightPanel } from "./AiInsightPanel";
@@ -246,6 +247,7 @@ async function OutreachLeadDetailPage({ params }: { params: Promise<{ id: string
           </Panel>
 
           <Panel title="Research">
+            <FileShelf entries={data.researchEntries as unknown as Array<{ id: string; title: string; type: string; fileId: string | null; createdAt: Date }>} />
             {data.researchEntries.length === 0 ? (
               <p className="text-[13px] text-text-tertiary">No research recorded yet.</p>
             ) : (
