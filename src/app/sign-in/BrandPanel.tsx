@@ -4,7 +4,7 @@ import { VerityLockup } from "@/components/brand/VerityMark";
 /**
  * The sign-in page's left marketing panel — reference board, matched
  * structurally: headline, subcopy, and a floating "product preview" made of
- * real Verity material (`.glass-card`/`.glass-shell`, the actual nav
+ * real Verity material (`.verity-solid`, ADR-023, the actual nav
  * vocabulary) rather than a generic dashboard illustration. Purely
  * decorative — no live data, no query, same as the reference's own mockup —
  * so every figure here is placeholder content per the reference-image rule,
@@ -78,11 +78,11 @@ export function BrandPanel() {
             "screen tilted back into the scene" composition. */}
         <div className="relative mt-12 flex-1" style={{ perspective: "2400px" }}>
           <div
-            className="glass-shell absolute inset-x-0 top-0 mx-auto flex h-[420px] w-full max-w-[640px] overflow-hidden rounded-2xl"
+            className="verity-solid absolute inset-x-0 top-0 mx-auto flex h-[420px] w-full max-w-[640px] overflow-hidden rounded-2xl shadow-lg"
             style={{ transform: "rotateX(8deg) rotateY(-6deg)", transformOrigin: "center top" }}
           >
             {/* Mini sidebar — the real nav vocabulary, not placeholder labels. */}
-            <div className="glass-card flex w-[132px] shrink-0 flex-col gap-1 rounded-none border-y-0 border-l-0 p-3">
+            <div className="verity-solid flex w-[132px] shrink-0 flex-col gap-1 rounded-none border-y-0 border-l-0 border-r border-line p-3">
               <VerityLockup collapsed size={16} className="mb-3 px-1 text-text" />
               {NAV.map((item) => (
                 <div
@@ -125,7 +125,7 @@ export function BrandPanel() {
                 />
               ))}
 
-              <div className="glass-card absolute left-4 top-2 w-[190px] rounded-xl p-3">
+              <div className="verity-solid absolute left-4 top-2 w-[190px] rounded-xl border border-line p-3 shadow-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] text-text-secondary">Global Operations</span>
                   <span className="flex items-center gap-1 text-[10px] text-accent-ink">
@@ -148,7 +148,7 @@ export function BrandPanel() {
                 </div>
               </div>
 
-              <div className="glass-card absolute right-2 top-16 w-[170px] rounded-xl p-3">
+              <div className="verity-solid absolute right-2 top-16 w-[170px] rounded-xl border border-line p-3 shadow-sm">
                 <p className="m-0 text-[11px] text-text-secondary">Recent Activity</p>
                 <ul className="m-0 mt-2 flex list-none flex-col gap-1.5 p-0">
                   {ACTIVITY.map((row) => (
@@ -163,13 +163,13 @@ export function BrandPanel() {
                 </ul>
               </div>
 
-              <div className="glass-card absolute bottom-3 left-4 w-[150px] rounded-xl p-3">
+              <div className="verity-solid absolute bottom-3 left-4 w-[150px] rounded-xl border border-line p-3 shadow-sm">
                 <p className="m-0 text-[11px] text-text-secondary">Active Workflows</p>
                 <p className="tabular m-0 mt-1 text-[22px] leading-none text-text">28</p>
                 <p className="m-0 mt-1 text-[10px] text-success">↑ +12%</p>
               </div>
 
-              <div className="glass-card absolute bottom-3 right-3 w-[160px] rounded-xl p-3">
+              <div className="verity-solid absolute bottom-3 right-3 w-[160px] rounded-xl border border-line p-3 shadow-sm">
                 <p className="m-0 text-[11px] text-text-secondary">Task Completion</p>
                 <p className="tabular m-0 mt-1 text-[22px] leading-none text-text">94%</p>
               </div>
