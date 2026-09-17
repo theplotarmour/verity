@@ -72,7 +72,7 @@ export const ENTITY_TEAM_LEADERSHIP = "verity.outreach.team_leadership";
 export const ENTITY_JUNIOR_WORKSPACE = "verity.outreach.junior_workspace";
 
 /** The 5 terminal/negative lead states (handbook Ch. 22). */
-const TERMINAL_STATES = ["not_a_fit", "unresponsive", "lost", "deferred", "disqualified"] as const;
+export const TERMINAL_STATES = ["not_a_fit", "unresponsive", "lost", "deferred", "disqualified"] as const;
 
 /** Handbook Ch. 20's 9-value rejection taxonomy — closed set owned by this capability. */
 const REJECTION_REASONS = [
@@ -1356,7 +1356,7 @@ export function detectBottleneck(counts: {
  * beyond" is what makes stage-to-stage conversion a ratio of the same
  * population, not of whoever happens to sit at each stage right now.
  */
-const LINEAR_STAGES = [
+export const LINEAR_STAGES = [
   "research",
   "prospect",
   "contacted",
@@ -3016,6 +3016,9 @@ export function registerOutreachCapability(): void {
       // set yet — "sales" is the closest existing shape rather than inventing
       // a new one for a single nav item.
       { href: "/outreach", label: "Outreach", group: "Overview", order: 30, icon: "sales",
+        requiresEntity: ENTITY_LEAD, shells: ["platform", "operations"] },
+      // Task 109 Phase G §1: same audience as the Outreach page itself.
+      { href: "/outreach/board", label: "Pipeline board", group: "Overview", order: 30.5, icon: "sales",
         requiresEntity: ENTITY_LEAD, shells: ["platform", "operations"] },
       { href: "/outreach/workspace", label: "My Workspace", group: "Overview", order: 29, icon: "workspace",
         requiresEntity: ENTITY_JUNIOR_WORKSPACE, shells: ["platform", "operations"] },
