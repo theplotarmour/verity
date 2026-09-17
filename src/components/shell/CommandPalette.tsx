@@ -80,7 +80,7 @@ export function CommandPalette() {
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
-        className="verity-solid relative flex w-full max-w-[560px] flex-col overflow-hidden rounded-2xl border border-line shadow-[var(--shadow-lg)]"
+        className="glass-overlay relative flex w-full max-w-[560px] flex-col overflow-hidden rounded-2xl"
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") {
             e.preventDefault();

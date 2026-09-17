@@ -273,9 +273,13 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
  * loud, on a screen an operator uses all day.
  */
 export function Button({ variant = "secondary", size = "md", className, ...rest }: ButtonProps) {
+  // ADR-024 motion: press feedback on pointer-down territory, not click —
+  // apple-design skill §1. A 3% scale is small enough that reduced-motion
+  // doesn't need a guard (it's not the vestibular kind of motion §14 warns
+  // about), and it's the exact value the skill's own CSS example ships.
   const base =
-    "inline-flex items-center justify-center gap-2 rounded-lg transition-colors " +
-    "disabled:cursor-not-allowed disabled:opacity-45 whitespace-nowrap cursor-pointer";
+    "inline-flex items-center justify-center gap-2 rounded-lg transition-[color,background-color,border-color,transform] duration-150 active:scale-[0.97] " +
+    "disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100 whitespace-nowrap cursor-pointer";
 
   // 44px minimum on touch; Bible V4 §2.3 requires large tap targets for
   // deskless users and WCAG asks for the same. On a pointer device they tighten
