@@ -134,9 +134,9 @@ export function Modal({
       aria-labelledby={titleId}
       aria-describedby={description ? descriptionId : undefined}
       className={
-        // `glass-overlay` rather than a solid fill: a dialog is the densest
-        // material in the ladder, not an opaque box dropped on the page.
-        "glass-overlay m-auto w-[calc(100vw-2rem)] rounded-2xl border border-line p-0 " +
+        // ADR-023: solid, same as every other surface — the glass ladder this
+        // comment used to justify is deprecated.
+        "verity-solid m-auto w-[calc(100vw-2rem)] rounded-2xl border border-line p-0 shadow-lg " +
         "text-text backdrop:bg-[rgba(15,17,21,0.32)] " +
         "backdrop:backdrop-blur-[3px] open:animate-none " +
         (width === "sm"
@@ -166,7 +166,7 @@ export function Modal({
           aria-label="Close"
           className={
             "-mr-1 -mt-1 grid size-8 shrink-0 place-items-center rounded-lg text-text-tertiary " +
-            "transition-colors duration-150 hover:bg-glass-2 hover:text-text " +
+            "transition-colors duration-150 hover:bg-surface-sunken hover:text-text " +
             "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-subtle)]"
           }
         >

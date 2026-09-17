@@ -9,9 +9,10 @@ import { Button } from "@/components/ui/primitives";
  *
  * Authority: `Verity_Component_Specification.md` §3.A, `Verity_Motion_Architecture.md`
  * §3.A. Reuses the exact scrim/overlay pattern already established in
- * `ShellChrome.tsx`'s mobile navigation sheet (`verity-scrim` + `glass-overlay`,
- * ADR-011 elevated glass) rather than inventing a second overlay language —
- * this is the platform's second consumer of that pattern, not a new one.
+ * `ShellChrome.tsx`'s mobile navigation sheet (`verity-scrim` + `verity-solid`,
+ * ADR-023 structured minimalism) rather than inventing a second overlay
+ * language — this is the platform's second consumer of that pattern, not a
+ * new one.
  *
  * Content is passed as `children` so the next Smart Table call site reuses
  * this panel without a redesign.
@@ -91,7 +92,7 @@ export function ContextPanel({
             aria-modal="true"
             aria-labelledby={titleId}
             tabIndex={-1}
-            className="glass-overlay relative flex h-full w-full max-w-[420px] flex-col gap-5 overflow-y-auto border-l border-line p-6 outline-none"
+            className="verity-solid relative flex h-full w-full max-w-[420px] flex-col gap-5 overflow-y-auto border-l border-line p-6 shadow-lg outline-none"
             initial={reducedMotion ? { opacity: 0 } : { x: "100%" }}
             animate={reducedMotion ? { opacity: 1 } : { x: 0 }}
             exit={reducedMotion ? { opacity: 0 } : { x: "100%" }}

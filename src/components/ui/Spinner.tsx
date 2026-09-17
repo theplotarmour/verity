@@ -53,9 +53,9 @@ export function RouteLoading() {
 /**
  * One shimmering placeholder rectangle — the building block for a route
  * skeleton that mimics the final page's actual shape (a stat row, a panel)
- * instead of a centred spinner. `bg-glass-2` is already theme-aware (every
- * accent preset, light/dark), so this needs no color work of its own.
+ * instead of a centred spinner. `bg-surface-sunken` is already theme-aware
+ * (every accent preset, light/dark), so this needs no color work of its own.
  */
 export function SkeletonBlock({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded-lg bg-glass-2 motion-reduce:animate-none ${className}`} />;
+  return <div className={`animate-pulse rounded-lg bg-surface-sunken motion-reduce:animate-none ${className}`} />;
 }

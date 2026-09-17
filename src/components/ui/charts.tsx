@@ -217,8 +217,8 @@ export function FeatureCard({
         : "bg-accent";
 
   return (
-    <div className="glass-control flex h-full flex-col justify-end rounded-lg p-5">
-      <span className="mb-auto inline-flex w-fit items-center gap-2 rounded-pill bg-glass-4 px-3 py-1.5 text-[12.5px] text-text-secondary">
+    <div className="verity-solid flex h-full flex-col justify-end rounded-lg border border-line p-5">
+      <span className="mb-auto inline-flex w-fit items-center gap-2 rounded-pill bg-surface-sunken px-3 py-1.5 text-[12.5px] text-text-secondary">
         <span aria-hidden="true" className={"size-[7px] shrink-0 rounded-full " + dot} />
         {pill}
       </span>

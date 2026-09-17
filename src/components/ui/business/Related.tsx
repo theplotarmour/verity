@@ -28,7 +28,7 @@ export function Related({
           <li key={`${link.href}-${link.label}`}>
             <Link
               href={link.href}
-              className="flex items-center justify-between gap-4 px-5 py-3 text-[14px] text-text no-underline transition-colors hover:bg-glass-2"
+              className="flex items-center justify-between gap-4 px-5 py-3 text-[14px] text-text no-underline transition-colors hover:bg-surface-sunken"
             >
               <span>{link.label}</span>
               {link.note && (

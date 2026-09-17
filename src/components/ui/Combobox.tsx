@@ -238,7 +238,7 @@ export function Combobox({
   }
 
   const controlClass =
-    "glass-control flex h-11 w-full items-center gap-2 rounded-lg px-4 text-[14px] " +
+    "verity-solid flex h-11 w-full items-center gap-2 rounded-lg border border-line px-4 text-[14px] " +
     "transition-[border-color,box-shadow] duration-200 hover:border-line-strong " +
     "focus-within:border-accent " +
     "focus-within:shadow-[var(--shadow-highlight),0_0_0_3px_var(--color-accent-subtle)] " +
@@ -350,7 +350,7 @@ export function Combobox({
                 : { top: anchor.top }),
             }}
             className={
-              "glass-overlay z-[100] m-0 list-none overflow-y-auto overscroll-contain " +
+              "verity-solid z-[100] m-0 list-none overflow-y-auto overscroll-contain " +
               "rounded-lg border border-line p-1 shadow-[var(--shadow-lg)]"
             }
           >
