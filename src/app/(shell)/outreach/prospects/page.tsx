@@ -11,6 +11,7 @@ import {
 } from "@/server/capabilities/outreach";
 import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import { Badge, EmptyState, HealthBadge, PageHeader, PermissionDenied, StateBadge } from "@/components/ui/primitives";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import { NewLeadForm } from "../NewLeadForm";
 import { ProspectFilters, type ProspectFilterOptions } from "./ProspectFilters";
 
@@ -27,6 +28,16 @@ const HEALTHS = [
 const TERMINAL_STATES = ["not_a_fit", "unresponsive", "lost", "deferred", "disqualified", "closed_won"];
 const LIMIT = 300;
 
+const PROSPECT_COLUMNS: Column[] = [
+  { key: "companyName", header: "Prospect", variant: "link", href: "/outreach/{id}", subKey: "domainLabel" },
+  { key: "state", header: "Stage", variant: "state", categoryKey: "category" },
+  { key: "health", header: "Health", variant: "health" },
+  { key: "owner", header: "Owner", sortable: true },
+  { key: "nextActionDisplay", header: "Next action", sortable: true },
+  { key: "lastActivityAt", header: "Last touch", sortable: true },
+  { key: "fitDisplay", header: "Fit", numeric: true },
+];
+
 type Search = {
   q?: string;
   status?: string;
@@ -36,6 +47,8 @@ type Search = {
   team?: string;
   owner?: string;
   sort?: string;
+  needsAction?: string;
+  view?: string;
 };
 
 type Viewer = "founder" | "senior" | "junior";
@@ -97,25 +110,36 @@ async function ProspectsPage({ searchParams }: { searchParams: Promise<Search> }
           ? { OR: [{ teamId: { in: scopeTeams.map((t) => t.id) } }, { opportunityOwnerId: me }, { leadOriginatorId: me }] }
           : { OR: [{ opportunityOwnerId: me }, { leadOriginatorId: me }] };
 
+    const now = new Date();
     const q = filters.q?.trim();
-    const narrowing = {
-      ...(filters.status ? { state: filters.status } : {}),
-      ...(filters.domain === "none" ? { domainId: null } : filters.domain ? { domainId: filters.domain } : {}),
-      ...(filters.track ? { track: filters.track } : {}),
-      ...(viewer !== "junior" && filters.team ? { teamId: filters.team } : {}),
-      ...(viewer !== "junior" && filters.owner ? { opportunityOwnerId: filters.owner } : {}),
-      ...(q
-        ? {
-            OR: [
-              { companyName: { contains: q, mode: "insensitive" as const } },
-              { contactName: { contains: q, mode: "insensitive" as const } },
-              { location: { contains: q, mode: "insensitive" as const } },
-              { industry: { contains: q, mode: "insensitive" as const } },
-              { website: { contains: q, mode: "insensitive" as const } },
-            ],
-          }
-        : {}),
-    };
+    // An AND-array of independent clauses, not a single flat object — a flat
+    // object can only hold one `OR` key, and the free-text search clause and
+    // the "needs action" chip clause each need their own `OR`. Combining them
+    // into one object would silently drop whichever was spread in first.
+    const clauses: Array<Record<string, unknown>> = [];
+    if (filters.status) clauses.push({ state: filters.status });
+    if (filters.domain === "none") clauses.push({ domainId: null });
+    else if (filters.domain) clauses.push({ domainId: filters.domain });
+    if (filters.track) clauses.push({ track: filters.track });
+    if (viewer !== "junior" && filters.team) clauses.push({ teamId: filters.team });
+    if (viewer !== "junior" && filters.owner) clauses.push({ opportunityOwnerId: filters.owner });
+    if (q) {
+      clauses.push({
+        OR: [
+          { companyName: { contains: q, mode: "insensitive" as const } },
+          { contactName: { contains: q, mode: "insensitive" as const } },
+          { location: { contains: q, mode: "insensitive" as const } },
+          { industry: { contains: q, mode: "insensitive" as const } },
+          { website: { contains: q, mode: "insensitive" as const } },
+        ],
+      });
+    }
+    if (filters.needsAction === "1") {
+      clauses.push({
+        state: { notIn: TERMINAL_STATES },
+        OR: [{ nextActionAt: null }, { nextActionAt: { lt: now } }],
+      });
+    }
 
     const orderBy =
       filters.sort === "created"
@@ -129,7 +153,7 @@ async function ProspectsPage({ searchParams }: { searchParams: Promise<Search> }
               : [{ updatedAt: "desc" as const }];
 
     const [leads, totalInScope] = await Promise.all([
-      tx.outreachLead.findMany({ where: { AND: [scope, narrowing] }, orderBy, take: LIMIT }),
+      tx.outreachLead.findMany({ where: { AND: [scope, ...clauses] }, orderBy, take: LIMIT }),
       tx.outreachLead.count({ where: scope }),
     ]);
 
@@ -154,7 +178,6 @@ async function ProspectsPage({ searchParams }: { searchParams: Promise<Search> }
     const timeZone = tenant?.timeZone ?? "Asia/Kolkata";
     const fmt = (d: Date | null) =>
       d ? d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone }) : null;
-    const now = new Date();
 
     let cards = leads.map((l) => {
       const cat = category.get(l.state) ?? "Draft";
@@ -197,6 +220,13 @@ async function ProspectsPage({ searchParams }: { searchParams: Promise<Search> }
     });
     // Health is derived, not stored — so it can only filter after the read.
     if (filters.health) cards = cards.filter((c) => c.health === filters.health);
+    // Table-view-only derived text — the card view composes these inline in
+    // JSX instead, so this stays out of the shared card object above.
+    const rows = cards.map((c) => ({
+      ...c,
+      nextActionDisplay: c.nextActionAt ? `${c.overdue ? "Overdue" : "Due"} ${c.nextActionAt}` : "None set",
+      fitDisplay: c.qualityScore != null ? `${c.qualityScore}/10` : "—",
+    }));
 
     const options: ProspectFilterOptions = {
       statuses: states.map((s) => ({ value: s.key, label: s.key.replace(/_/g, " ") })),
@@ -220,6 +250,7 @@ async function ProspectsPage({ searchParams }: { searchParams: Promise<Search> }
       viewer,
       me,
       cards,
+      rows,
       totalInScope,
       truncated: leads.length === LIMIT,
       options,
@@ -256,7 +287,7 @@ async function ProspectsPage({ searchParams }: { searchParams: Promise<Search> }
         />
       )}
 
-      <ProspectFilters options={data.options} />
+      <ProspectFilters options={data.options} viewerId={data.me} />
 
       <p className="mb-4 text-[13px] text-text-tertiary">
         Showing <span className="tabular text-text">{data.cards.length}</span> of{" "}
@@ -272,6 +303,13 @@ async function ProspectsPage({ searchParams }: { searchParams: Promise<Search> }
               ? "A prospect is a researched company with a stated reason it's relevant. Add the first one above."
               : "Clear or change a filter to widen the view."
           }
+        />
+      ) : filters.view === "table" ? (
+        <DataTable
+          caption="Prospects"
+          rows={data.rows}
+          columns={PROSPECT_COLUMNS}
+          filterable={false}
         />
       ) : (
         <ul className="m-0 grid list-none gap-4 p-0 md:grid-cols-2 2xl:grid-cols-3">

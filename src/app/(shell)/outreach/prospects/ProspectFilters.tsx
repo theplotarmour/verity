@@ -24,14 +24,14 @@ const SORTS: Option[] = [
   { value: "name", label: "Company A–Z" },
 ];
 
-const FILTER_KEYS = ["q", "status", "domain", "track", "health", "team", "owner"] as const;
+const FILTER_KEYS = ["q", "status", "domain", "track", "health", "team", "owner", "needsAction"] as const;
 
 /**
  * The prospect list's filter/sort bar. State lives in the URL, never in
  * component state, so a filtered view is shareable and the server page
  * applies every narrowing inside the actor's own scope.
  */
-export function ProspectFilters({ options }: { options: ProspectFilterOptions }) {
+export function ProspectFilters({ options, viewerId }: { options: ProspectFilterOptions; viewerId: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -46,6 +46,27 @@ export function ProspectFilters({ options }: { options: ProspectFilterOptions })
   }
 
   const active = FILTER_KEYS.some((k) => params.get(k));
+  const view = params.get("view") === "table" ? "table" : "cards";
+
+  function setView(v: "cards" | "table") {
+    const next = new URLSearchParams(params.toString());
+    if (v === "table") next.set("view", "table");
+    else next.delete("view");
+    const query = next.toString();
+    startTransition(() => router.replace(query ? `${pathname}?${query}` : pathname));
+  }
+
+  function setChip(patch: Record<string, string>) {
+    const next = new URLSearchParams(params.toString());
+    for (const k of FILTER_KEYS) next.delete(k);
+    for (const [k, v] of Object.entries(patch)) next.set(k, v);
+    const query = next.toString();
+    startTransition(() => router.replace(query ? `${pathname}?${query}` : pathname));
+  }
+
+  const chipActive = (patch: Record<string, string>) =>
+    Object.entries(patch).every(([k, v]) => (params.get(k) ?? "") === v) &&
+    FILTER_KEYS.every((k) => !(k in patch) || (params.get(k) ?? "") === (patch[k] ?? ""));
 
   const select = (key: string, label: string, opts: Option[], allLabel: string) => (
     <label className="flex min-w-[150px] flex-1 flex-col gap-1">
@@ -75,6 +96,52 @@ export function ProspectFilters({ options }: { options: ProspectFilterOptions })
 
   return (
     <div className="verity-solid border border-line mb-6 rounded-xl px-4 py-4" aria-busy={pending}>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {(
+            [
+              { label: "My leads", patch: { owner: viewerId } as Record<string, string> },
+              { label: "Needs action", patch: { needsAction: "1" } as Record<string, string> },
+              { label: "At risk", patch: { health: "AtRisk" } as Record<string, string> },
+            ]
+          ).map((chip) => {
+            const isActive = chipActive(chip.patch);
+            return (
+              <button
+                key={chip.label}
+                type="button"
+                onClick={() => setChip(isActive ? {} : chip.patch)}
+                aria-pressed={isActive}
+                className={
+                  "rounded-pill border px-3 py-1 text-[12.5px] font-medium transition-colors " +
+                  (isActive
+                    ? "border-transparent bg-accent-subtle text-accent-ink"
+                    : "border-line text-text-secondary hover:bg-surface-sunken hover:text-text")
+                }
+              >
+                {chip.label}
+              </button>
+            );
+          })}
+        </div>
+        <div role="radiogroup" aria-label="View" className="verity-solid flex items-center gap-1 rounded-full border border-line p-1">
+          {(["cards", "table"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              role="radio"
+              aria-checked={view === v}
+              onClick={() => setView(v)}
+              className={
+                "rounded-full px-3 py-1 text-[12.5px] font-medium capitalize transition-colors " +
+                (view === v ? "bg-accent-subtle text-accent-ink" : "text-text-secondary hover:text-text")
+              }
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+      </div>
       <form
         className="mb-3"
         role="search"
