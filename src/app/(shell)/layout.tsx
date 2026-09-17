@@ -253,6 +253,7 @@ export default async function ShellLayout({
       active={active}
       userLabel={userLabel}
       userInitials={userInitials}
+      canAudit={canAudit}
     >
       <CommandAccessProvider commandKeys={commandKeys}>{children}</CommandAccessProvider>
     </ShellChrome>

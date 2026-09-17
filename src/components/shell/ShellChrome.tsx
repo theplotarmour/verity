@@ -48,6 +48,7 @@ export function ShellChrome({
   active,
   userLabel,
   userInitials,
+  canAudit,
   children,
 }: {
   areas: NavArea[];
@@ -55,6 +56,11 @@ export function ShellChrome({
   active: MembershipOption;
   userLabel: string;
   userInitials: string;
+  /** Task 114 P0.6 — the top-bar "Recent activity" bell link to `/audit` was
+   *  unconditional, so an actor without `Read` on `verity.platform.activity`
+   *  hit a bare permission-denied page with no warning. The sidebar's own
+   *  Audit entry already gates on this; the bell didn't. */
+  canAudit: boolean;
   children: ReactNode;
 }) {
   const [navOpen, setNavOpen] = useState(false);
@@ -317,14 +323,16 @@ export function ShellChrome({
           <div className="flex shrink-0 items-center gap-3">
             <OrganizationSwitcher memberships={memberships} active={active} instanceId="header" />
             <ThemeToggle />
-            <Link
-              href="/audit"
-              title="Recent activity"
-              className="glass-control grid size-11 place-items-center rounded-full text-text-secondary no-underline shadow-[var(--shadow-sm)] transition-[color,box-shadow,transform] duration-200 hover:-translate-y-px hover:text-text hover:shadow-[var(--shadow-md)]"
-            >
-              <Icon name="bell" size={19} />
-              <span className="sr-only">Recent activity</span>
-            </Link>
+            {canAudit && (
+              <Link
+                href="/audit"
+                title="Recent activity"
+                className="glass-control grid size-11 place-items-center rounded-full text-text-secondary no-underline shadow-[var(--shadow-sm)] transition-[color,box-shadow,transform] duration-200 hover:-translate-y-px hover:text-text hover:shadow-[var(--shadow-md)]"
+              >
+                <Icon name="bell" size={19} />
+                <span className="sr-only">Recent activity</span>
+              </Link>
+            )}
             {/* Who the session belongs to. The initials alone say nothing to a
                 screen reader and little to anyone who has not seen the name
                 elsewhere, so the name rides along as the accessible label and
