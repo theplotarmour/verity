@@ -2416,7 +2416,7 @@ export const reviewCheckIn: CommandDefinition<
     leaderFeedback: z.string().min(1).optional(),
   }),
   handler: async (ctx, input) => {
-    await ctx.tx.outreachCheckIn.findUniqueOrThrow({ where: { id: input.checkInId } });
+    const checkIn = await ctx.tx.outreachCheckIn.findUniqueOrThrow({ where: { id: input.checkInId } });
     const reviewer = await actorPartyId(ctx.tx, ctx.actor.userId);
     const review = await ctx.tx.outreachCheckInReview.create({
       data: {
@@ -2427,6 +2427,22 @@ export const reviewCheckIn: CommandDefinition<
         leaderFeedback: input.leaderFeedback ?? null,
       },
     });
+
+    // Task 109 Phase H: tell the check-in's own author their leader responded.
+    const author = await ctx.tx.user.findFirst({ where: { partyId: checkIn.partyId }, select: { id: true } });
+    if (author) {
+      await notify(ctx.tx, {
+        tenantId: ctx.actor.tenantId,
+        key: "verity.outreach.check_in_reviewed",
+        recipientIds: [author.id],
+        variables: { reviewStatus: input.reviewStatus },
+        fallback: {
+          subject: input.reviewStatus === "NeedsClarification" ? "Your daily log needs clarification" : "Your daily log was reviewed",
+          body: input.leaderFeedback ?? "",
+        },
+      });
+    }
+
     return {
       result: { id: review.id, reviewStatus: review.reviewStatus },
       events: [{ name: "verity.outreach.check_in_reviewed", entityId: input.checkInId, payload: { reviewStatus: input.reviewStatus } }],
@@ -2554,6 +2570,26 @@ export const submitWeeklyReport: CommandDefinition<
         nextWeekTargetValue: input.nextWeekTargetValue ?? null,
       },
     });
+
+    // Task 109 Phase H: tell Company Core a weekly report landed. "Founders'
+    // Office" is this tenant's Core role (see `seed-pa-oms.ts`) — resolved by
+    // name, the same structural signal the rest of this file uses for role
+    // lookups, since ENTITY_LEAD-style permission grants don't distinguish
+    // Core from the other two roles (module note at the top of this file).
+    const coreRole = await ctx.tx.role.findFirst({ where: { tenantId: ctx.actor.tenantId, name: "Founders' Office" } });
+    const coreMembers = coreRole
+      ? await ctx.tx.tenantMembership.findMany({ where: { tenantId: ctx.actor.tenantId, roleId: coreRole.id }, select: { userId: true } })
+      : [];
+    if (coreMembers.length > 0) {
+      await notify(ctx.tx, {
+        tenantId: ctx.actor.tenantId,
+        key: "verity.outreach.weekly_report_submitted",
+        recipientIds: coreMembers.map((m) => m.userId),
+        variables: { weekStart: input.weekStart },
+        fallback: { subject: "Weekly report submitted", body: "A weekly report was just submitted." },
+      });
+    }
+
     return { result: { id: report.id }, events: [{ name: "verity.outreach.weekly_report_submitted", entityId: report.id }] };
   },
 };
@@ -3033,6 +3069,20 @@ export const createAssignment: CommandDefinition<
         assignedByPartyId,
       },
     });
+
+    // Task 109 Phase H: tell the assignee — the one on-write trigger this
+    // phase's own scope note names for Phase E's assignment entity.
+    const assignee = await ctx.tx.user.findFirst({ where: { partyId: input.partyId }, select: { id: true } });
+    if (assignee) {
+      await notify(ctx.tx, {
+        tenantId: ctx.actor.tenantId,
+        key: "verity.outreach.assignment_made",
+        recipientIds: [assignee.id],
+        variables: { scope: input.scope, value: input.value },
+        fallback: { subject: `New assignment: ${input.value}`, body: `You've been assigned ${input.scope} — ${input.value}.` },
+      });
+    }
+
     return { result: { id: assignment.id }, events: [{ name: "verity.outreach.assignment_created", entityId: assignment.id }] };
   },
 };
@@ -3105,6 +3155,180 @@ export function registerOutreachCapability(): void {
       // Task 109 Phase F: same Core-only structural signal as Intelligence above.
       { href: "/outreach/domains", label: "Domains", group: "Overview", order: 35, icon: "overview",
         requiresEntity: ENTITY_DIRECTION, requiresVerb: "Create", shells: ["platform", "operations"] },
+    ],
+    // Task 109 Phase H: the scheduler-shaped triggers the taskplan flagged as
+    // needing an implementation decision ("same scheduler as ADR-015/016's
+    // cron binding, or a separate mechanism?"). Answered here: the existing
+    // ScheduleContribution mechanism IS that binding (WP-06 already derives
+    // its cadence inventory from exactly this field) — no second mechanism.
+    // "Unusual pipeline movement" is deliberately not built: no threshold is
+    // defined, and inventing one was explicitly declined.
+    schedules: [
+      {
+        key: "verity.outreach.daily_notification_sweep",
+        label: "Missing daily logs, due/overdue follow-ups, stalled prospects",
+        cadence: "daily",
+        run: async ({ tx, tenantId, now }) => {
+          const dayStart = new Date(now);
+          dayStart.setUTCHours(0, 0, 0, 0);
+          const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+
+          const [teams, todaysCheckIns, states, leads] = await Promise.all([
+            tx.outreachTeam.findMany({ where: { active: true }, include: { memberships: { where: { active: true } } } }),
+            tx.outreachCheckIn.findMany({ where: { checkInDate: { gte: dayStart } }, select: { partyId: true } }),
+            tx.stateDefinition.findMany({ where: { entityKey: ENTITY_LEAD } }),
+            tx.outreachLead.findMany({ where: { state: { notIn: [...TERMINAL_STATES, "closed_won"] } } }),
+          ]);
+          const checkedIn = new Set(todaysCheckIns.map((c) => c.partyId));
+          const category = new Map(states.map((s) => [s.key, s.category]));
+
+          for (const team of teams) {
+            const leaderPartyIds = [team.leaderId, ...(team.coLeaderId ? [team.coLeaderId] : [])];
+            const leaderUsers = await tx.user.findMany({ where: { partyId: { in: leaderPartyIds } }, select: { id: true } });
+            const memberPartyIds = team.memberships.map((m) => m.partyId);
+            const missing = memberPartyIds.filter((id) => !checkedIn.has(id));
+
+            if (missing.length > 0 && leaderUsers.length > 0) {
+              await notify(tx, {
+                tenantId,
+                key: "verity.outreach.missing_daily_log",
+                recipientIds: leaderUsers.map((u) => u.id),
+                variables: { team: team.name, count: String(missing.length) },
+                fallback: { subject: `${team.name}: ${missing.length} missing today's log`, body: "Some members haven't checked in today." },
+              });
+            }
+            if (missing.length > 0) {
+              const missingUsers = await tx.user.findMany({ where: { partyId: { in: missing } }, select: { id: true } });
+              for (const u of missingUsers) {
+                await notify(tx, {
+                  tenantId,
+                  key: "verity.outreach.daily_log_reminder",
+                  recipientIds: [u.id],
+                  fallback: { subject: "Submit today's daily log", body: "You haven't submitted today's check-in yet." },
+                });
+              }
+            }
+
+            const teamLeads = leads.filter((l) => l.teamId === team.id);
+            const overdue = teamLeads.filter((l) => l.nextActionAt && l.nextActionAt < now);
+            if (overdue.length > 0 && leaderUsers.length > 0) {
+              await notify(tx, {
+                tenantId,
+                key: "verity.outreach.overdue_follow_up",
+                recipientIds: leaderUsers.map((u) => u.id),
+                variables: { team: team.name, count: String(overdue.length) },
+                fallback: {
+                  subject: `${team.name}: ${overdue.length} overdue follow-up${overdue.length === 1 ? "" : "s"}`,
+                  body: overdue.map((l) => l.companyName).join(", "),
+                },
+              });
+            }
+
+            const stalled = teamLeads.filter(
+              (l) =>
+                deriveLeadHealth({
+                  category: category.get(l.state) ?? "Draft",
+                  lastActivityAt: l.lastActivityAt,
+                  nextActionAt: l.nextActionAt,
+                  createdAt: l.createdAt,
+                }) === "Stale",
+            );
+            if (stalled.length > 0 && leaderUsers.length > 0) {
+              await notify(tx, {
+                tenantId,
+                key: "verity.outreach.stalled_prospect",
+                recipientIds: leaderUsers.map((u) => u.id),
+                variables: { team: team.name, count: String(stalled.length) },
+                fallback: {
+                  subject: `${team.name}: ${stalled.length} stalled prospect${stalled.length === 1 ? "" : "s"}`,
+                  body: stalled.map((l) => l.companyName).join(", "),
+                },
+              });
+            }
+          }
+
+          const dueToday = leads.filter((l) => l.nextActionAt && l.nextActionAt >= dayStart && l.nextActionAt < dayEnd);
+          const ownerPartyIds = [...new Set(dueToday.map((l) => l.opportunityOwnerId))];
+          if (ownerPartyIds.length > 0) {
+            const owners = await tx.user.findMany({ where: { partyId: { in: ownerPartyIds } }, select: { id: true, partyId: true } });
+            for (const owner of owners) {
+              const mine = dueToday.filter((l) => l.opportunityOwnerId === owner.partyId);
+              if (mine.length === 0) continue;
+              await notify(tx, {
+                tenantId,
+                key: "verity.outreach.follow_up_due",
+                recipientIds: [owner.id],
+                variables: { count: String(mine.length) },
+                fallback: {
+                  subject: `${mine.length} follow-up${mine.length === 1 ? "" : "s"} due today`,
+                  body: mine.map((l) => l.companyName).join(", "),
+                },
+              });
+            }
+          }
+
+          return {};
+        },
+      },
+      {
+        key: "verity.outreach.meeting_approaching_sweep",
+        label: "Notify the organizer of meetings starting within 2 hours",
+        cadence: "hourly",
+        run: async ({ tx, tenantId, now }) => {
+          const soon = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+          const meetings = await tx.outreachMeeting.findMany({
+            where: { status: "Scheduled", scheduledAt: { gte: now, lte: soon } },
+            include: { lead: { select: { companyName: true } } },
+          });
+          for (const m of meetings) {
+            const organizer = await tx.user.findFirst({ where: { partyId: m.organizerPartyId }, select: { id: true } });
+            if (!organizer) continue;
+            await notify(tx, {
+              tenantId,
+              key: "verity.outreach.meeting_approaching",
+              recipientIds: [organizer.id],
+              variables: { company: m.lead.companyName, scheduledAt: m.scheduledAt.toISOString() },
+              fallback: { subject: `Meeting soon: ${m.lead.companyName}`, body: `Scheduled at ${m.scheduledAt.toISOString()}` },
+            });
+          }
+          return {};
+        },
+      },
+      {
+        key: "verity.outreach.weekly_report_due_sweep",
+        label: "Remind team leaders who haven't submitted this week's report",
+        cadence: "weekly",
+        run: async ({ tx, tenantId, now }) => {
+          const day = now.getUTCDay();
+          const mondayOffset = (day + 6) % 7;
+          const weekStart = new Date(now);
+          weekStart.setUTCHours(0, 0, 0, 0);
+          weekStart.setUTCDate(weekStart.getUTCDate() - mondayOffset);
+
+          const teams = await tx.outreachTeam.findMany({ where: { active: true } });
+          const leaderPartyIds = [...new Set(teams.flatMap((t) => [t.leaderId, ...(t.coLeaderId ? [t.coLeaderId] : [])]))];
+          if (leaderPartyIds.length === 0) return {};
+
+          const submitted = await tx.outreachWeeklyReport.findMany({
+            where: { partyId: { in: leaderPartyIds }, weekStart: { gte: weekStart } },
+            select: { partyId: true },
+          });
+          const submittedPartyIds = new Set(submitted.map((s) => s.partyId));
+          const missingPartyIds = leaderPartyIds.filter((id) => !submittedPartyIds.has(id));
+          if (missingPartyIds.length === 0) return {};
+
+          const missingUsers = await tx.user.findMany({ where: { partyId: { in: missingPartyIds } }, select: { id: true } });
+          if (missingUsers.length > 0) {
+            await notify(tx, {
+              tenantId,
+              key: "verity.outreach.weekly_report_due",
+              recipientIds: missingUsers.map((u) => u.id),
+              fallback: { subject: "Weekly report due", body: "Your weekly report for this week hasn't been submitted yet." },
+            });
+          }
+          return {};
+        },
+      },
     ],
   });
 
