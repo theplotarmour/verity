@@ -1,11 +1,23 @@
 # Handoff — finish Task 114's queue (Outreach execution-layer redesign)
 
+**Moved 2026-09-17** from `taskplans/00_OUTREACH_P0_CONTINUATION_HANDOFF.md`
+into this folder — see `taskplans/handoffs/README.md` for the always-current
+index of every active work thread and where this file fits in the order.
+
 Authority: `taskplans/114_pa_oms_outreach_execution_layer_redesign.md` (the
 plan), `taskplans/101_remaining_work_master_plan.md`'s 2026-09-17 addendum
 (the sequencing). This file is not new scope — it's a concrete, file-level
 continuation checklist so a fresh session can pick up mid-queue without
 re-deriving what's already been read this session. Read 114 first for the
 *why*; this file is the *where exactly*.
+
+**Update 2026-09-17 (later same day):** re-checking the original review
+against this file surfaced nine items it did not cover — see Task 114's own
+new "P1.5 — re-audit gaps" section (shell chrome polish, bulk-action system,
+detail-page tabs split, contact/timeline prominence, card verbosity, activity-
+entry UX details, Intelligence filters, add-prospect sub-items, permission-
+denied recovery flow). None of P1.5 is started; it comes after P0/P1 in
+sequence, per Task 114's own text.
 
 ## Done already (commits `929c79e`, `124c407`, `02b88c2`, `4a999e7`)
 
@@ -148,13 +160,18 @@ first, and re-check its current shape against 114 P1's three items
 since `ec31890` changed what's on this page too (removed check-in/
 targets/reports panels from it).
 
-### Then: Task 111 → Task 112 → Task 114 P2
+### Then: Task 111 → Task 112 → Task 114 P1.5 → Task 114 P2
 
 Per 114's own "Relationship to 111/112" section — material pass
 (structured minimalism) before structural pass on shared surfaces
 (Outreach dashboard, prospect cards). Note `bg-glass-2` still appears in
 `prospects/page.tsx` line ~345 — a live ADR-023 violation Task 112's
 rollout should catch.
+
+P1.5 (nine re-audit gaps — see Task 114's own section) comes after 111/112
+and before P2, since several P1.5 items (shell chrome, badge/contrast
+adjacent work) are cheaper once 112's material pass has already landed on
+the same surfaces.
 
 ## Verification checklist for every item above
 

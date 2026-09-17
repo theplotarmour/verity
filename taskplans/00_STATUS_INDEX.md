@@ -1,5 +1,10 @@
 # Taskplans status index
 
+**For "what's being worked on right now, in what order," read
+[`taskplans/handoffs/README.md`](./handoffs/README.md) instead — this file
+is the full historical register (every taskplan, Done and Pending), not a
+live work order.**
+
 Classification of every file in `taskplans/`, regenerated 2026-09-08
 (previously 2026-09-04, originally 2026-09-02) against current `git log`,
 `src/`, `prisma/schema.prisma`, and each file's own closing/status

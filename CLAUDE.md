@@ -1,5 +1,11 @@
 # Verity — Claude Code Project Memory
 
+**Before anything else: read `taskplans/handoffs/README.md`.** It's the
+always-current index of what's actively being worked on and in what order —
+kept updated on every change to active work. `taskplans/00_STATUS_INDEX.md`
+is the full historical register (every taskplan ever written); the handoffs
+folder is the live work order.
+
 ## What this is
 
 Verity is a **module-driven business operating platform** for service-driven organizations.

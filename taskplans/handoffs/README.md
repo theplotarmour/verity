@@ -1,0 +1,98 @@
+# Handoffs — what's in flight, right now, in order
+
+**This file is the entry point.** Anyone opening this repo who wants to know
+"what's actively being worked on and in what order" should read this file
+first — not `00_STATUS_INDEX.md` (that's the full historical register of
+every taskplan ever written, Done and Pending both) and not any single
+taskplan (each one only knows its own scope). This file is kept current
+every time active work state changes — a new item starts, an item finishes,
+or the order changes. If it looks stale (no update in the "Last updated"
+line below matching recent commits), regenerate it from `git log` and the
+taskplans it points to before trusting it, same rule `00_STATUS_INDEX.md`
+already states for itself.
+
+**Last updated: 2026-09-17**
+
+## How to use this folder
+
+- Each file here is a **file-level, concrete continuation checklist** for
+  one active thread of work — exact paths, function names, what's already
+  built vs. still needed, discovered nuances that would otherwise be
+  re-derived from scratch. It answers "where exactly," not "why" — the
+  "why" lives in the taskplan it's paired with (cited at the top of each
+  handoff file).
+- A handoff file is **not** a taskplan. It doesn't invent scope, doesn't get
+  a taskplan number, and doesn't replace the taskplan it's paired with —
+  it's a working note that stays in sync with that taskplan's own status
+  markers (DONE/PENDING per item) as code actually lands.
+- When a thread finishes entirely, its handoff file moves to
+  `taskplans/handoffs/done/` (create that subfolder when the first one
+  finishes) rather than being deleted — same "don't destroy history"
+  posture as the rest of `taskplans/`.
+
+## Active work, in order
+
+### 1. Task 114 — Outreach execution-layer UX redesign
+
+Handoff: [`outreach-p0-continuation.md`](./outreach-p0-continuation.md)
+Taskplan: `taskplans/114_pa_oms_outreach_execution_layer_redesign.md`
+
+Status: P0.6 DONE (Audit nav fix). P0.1/P0.2/P0.3/P0.4/P0.5-remainder next,
+in that order. Then P1 (dashboard restructure). Then Task 111 → Task 112
+(material pass, separate thread below) before P1.5 (nine re-audit gaps
+found 2026-09-17 — shell chrome, bulk actions, detail-page tabs, contact/
+timeline prominence, card verbosity, activity-entry UX, Intelligence
+filters, add-prospect sub-items, permission-denied recovery). P2
+(sequences, activity-type forms, enrichment) stays parked pending
+product-owner scoping — do not start it from the taskplan's text alone.
+
+### 2. Task 111 → Task 112 — structured-minimalism material rollout
+
+No dedicated handoff file yet (not yet started this pass) — see the
+taskplans directly: `taskplans/111_global_settings_and_shell_ux_pattern.md`
+(pattern, resolved by ADR-023) and
+`taskplans/112_complete_ui_ux_upgrade_to_structured_minimalism.md`
+(platform-wide rollout, land incrementally per capability). Outreach's
+dashboard and prospect cards (`bg-glass-2` still present,
+`prospects/page.tsx` ~line 345) are a known live target. Sequence: this
+before Task 114's P1.5, per that section's own note.
+
+### 3. Task 113 — AI implementation audit
+
+No handoff file — small enough that the taskplan itself
+(`taskplans/113_ai_implementation_audit_all_clients_and_global_agent.md`)
+carries its own findings inline. Status: items 1/2/4/5 DONE 2026-09-17
+(model swap applied, `openai/gpt-oss-120b`; surfaced a second bug —
+`generateLeadInsight` still doesn't persist after a successful tool call,
+unresolved). Item 3 (per-tenant reality check) needs live-DB access this
+environment doesn't have — flagged, not silently skipped.
+
+### 4. Task 90 — Attention platform concept (watching, not active)
+
+Not active work — a trigger watch. `taskplans/90_attention_platform_
+concept.md`'s 2026-09-17 note records that Task 114's Outreach work queue
+(P0.1) is a capability-local build, not the platform-primitive trigger
+firing (still one real instance, not two independently-arrived-at ones).
+Listed here so nobody re-derives this question mid-P0.1.
+
+## Closed loops (no longer active, recorded so they aren't re-opened)
+
+- **Task 97 Finding 1/6 + Task 100's metric-snapshot migration** — both
+  were already done 2026-09-04 (commit `e92dbee`), just undocumented until
+  2026-09-17. No handoff needed; corrected directly in
+  `taskplans/97_deep_codebase_cleanup.md`, `taskplans/100_dashboard_
+  intelligence_direction.md`, and `taskplans/00_STATUS_INDEX.md`.
+- **Task 109 Phase G's Kanban board** — built 2026-09-17, removed the same
+  day by a concurrent session (`ec31890`) in favor of `/outreach/
+  prospects`. Not a regression to fix — see Task 109's own correction
+  note. Do not rebuild it.
+
+## When you finish something in a handoff file
+
+1. Update the taskplan it's paired with (status markers, DONE + date +
+   files touched) in the same commit as the code — not a separate pass.
+2. Update the relevant section of *this* README (status line under
+   "Active work, in order") in the same commit.
+3. If the whole thread is done, move its handoff file to `./done/` and
+   remove its "Active work" entry above, replacing it with a one-line
+   pointer under "Closed loops."

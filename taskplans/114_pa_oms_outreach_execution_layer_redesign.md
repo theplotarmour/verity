@@ -146,6 +146,83 @@ polish, because polish on a non-actionable surface doesn't move the needle.
    cheaply or need a comparison-aware variant. Flag as an open decision if
    the query cost is non-trivial.
 
+## P1.5 — re-audit gaps (2026-09-17, found re-checking the review against this file)
+
+Re-reading the original review against everything above surfaced nine items
+the review raised that P0/P1/P2 did **not** actually cover — recorded here so
+they don't quietly fall off. None of these are started.
+
+1. **Shell chrome polish.** Sidebar icon size (18-20px, currently smaller),
+   active-nav-state contrast (currently low, beige-on-off-white), a
+   collapsible icon-rail mode for desktop, workspace-switcher chevron
+   (currently a plain label), bell/notification unread count. File:
+   `src/components/shell/ShellChrome.tsx`. Overlaps Task 112 (contrast is
+   a material concern) but icon sizing/rail/chevron/unread-count are
+   interaction changes, not material ones — this file's job, not 112's.
+2. **Bulk-action system on the prospect list.** Row/card checkboxes with a
+   contextual action bar (assign, stage-move, health update, task
+   creation, export) once 2+ are selected. Not mentioned in P0.5's original
+   text — genuinely missing, not implicit in the table-view toggle.
+3. **Prospect-detail tabs split.** Review asks for Overview / Activity /
+   Contacts / Tasks / Meetings / Research / Commercial as separate tabs.
+   P0.3 above only consolidates *buttons* (primary vs. overflow) — it does
+   not restructure the page's long-scroll layout into tabs. Bigger change
+   than P0.3; needs its own pass over `[id]/page.tsx`'s current section
+   order before committing to a tab boundary that matches the data's
+   actual shape.
+4. **Contact-management prominence + timeline event filters.** "No
+   contacts added yet" is currently a low-emphasis empty state despite
+   being a sales blocker; the activity timeline has no per-type filter
+   (outreach/replies/meetings/payments/stage-changes/notes/tasks). Neither
+   is in P0.3 or P1 — needs its own item once the tabs split (item 3
+   above) gives contacts/timeline their own surface to be prominent on.
+5. **Card verbosity reduction on the existing card view.** P0.5 only adds
+   a *table* alternative; it does nothing to shorten the cards themselves,
+   which the review separately flagged as too dense for scanning. If the
+   table view becomes the default for daily pipeline work (likely, per
+   the review's own framing — "tables are better for daily pipeline
+   work"), this may resolve itself without touching the cards; don't
+   pre-emptively rewrite the card layout until the table ships and it's
+   clear whether cards still need fixing.
+6. **Activity-entry UX details**: anchored panel instead of a floating
+   right-aligned one, due-date quick-defaults (tomorrow / 3 days / next
+   week), a follow-up recommendation based on stage/touch history. None of
+   these are in P0.2 (P0.2 only makes next-action *required*, not easier
+   to fill in) or P2 (P2's activity-type-aware forms are a bigger,
+   deferred item — these three are small enough to ship without waiting
+   for that scoping).
+7. **Intelligence cohort/date/owner/source filters.** P1.2 only makes the
+   existing funnel/domain views clickable (drill-through); it adds no new
+   filter axes. The review's ask for cohort/date-window/owner/source
+   filtering on `/outreach/intelligence` is separate scope.
+8. **Add-prospect flow sub-items not in P0.4's text**: a searchable
+   hierarchical combobox for Domain (currently a flat select, per the
+   review — confirm current control before assuming), a "Save draft" path
+   distinct from "Create qualified prospect," and a fit-score rubric
+   explainer (1-3 weak / 4-6 plausible / 7-8 strong / 9-10 priority) shown
+   next to the score input. P0.4 only covers the two-step split and
+   duplicate detection.
+9. **Permission-denied recovery flow.** P0.6 (done) *hides* the Audit nav
+   entry for actors who lack the permission — a different fix than the
+   review's ask, which was a recovery action (`Request access` / `Contact
+   administrator` / `Switch workspace`) on the denied page itself. Hiding
+   the entry means most actors never see the denial at all, which resolves
+   the "dead end" complaint, but does **not** build the recovery flow the
+   review describes for the cases where a denial is still reached (e.g. a
+   bookmarked `/audit` URL). If a real "request access" flow is wanted,
+   it needs a product-owner decision — Verity has a notification substrate
+   (`notification.ts`) that could carry the request, but no existing
+   "request access to X" command/flow exists anywhere in the codebase to
+   model it on.
+
+**Explicitly out of this taskplan, noted so it isn't confused for a gap
+here:** Account profile/photo/session controls (review §8) is not
+Outreach-specific — it belongs to a platform/Account taskplan, not this
+one. Status-badge semantic-color strengthening and general contrast fixes
+are Task 112's job per this file's own "Relationship to 111/112" section —
+listed here only as a reminder to confirm 112's rollout actually reaches
+Outreach's badges, not as new scope for this file.
+
 ## P2 — sales-execution parity (Apollo/Outreach/Salesloft-shaped, largest scope)
 
 Explicitly larger scope, explicitly not committed yet — list here so it's
