@@ -15,6 +15,7 @@ import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import { EmptyState, PageHeader, Panel, PermissionDenied } from "@/components/ui/primitives";
 import { RangeSwitch } from "../RangeSwitch";
 import { RANGE_LABEL, percent, rangeFromParam, windowFor } from "../range";
+import { IntelligenceFilters } from "./IntelligenceFilters";
 
 export const dynamic = "force-dynamic";
 
@@ -31,22 +32,46 @@ export const dynamic = "force-dynamic";
 async function IntelligencePage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string }>;
+  searchParams: Promise<{ range?: string; team?: string; owner?: string }>;
 }) {
   installCapabilities();
   const actor = await requireActor();
-  const range = rangeFromParam((await searchParams).range, "month");
+  const sp = await searchParams;
+  const range = rangeFromParam(sp.range, "month");
+  const teamId = sp.team || undefined;
+  const ownerId = sp.owner || undefined;
 
   const data = await withTenant(actor.tenantId, async (tx) => {
     if (!(await hasPermission(tx, actor.roleId, "Create", ENTITY_DIRECTION))) return null;
-    const tenant = await tx.tenant.findUnique({ where: { id: actor.tenantId }, select: { timeZone: true } });
-    const window = windowFor(range, tenant?.timeZone ?? "Asia/Kolkata");
+    const [tenant, teams] = await Promise.all([
+      tx.tenant.findUnique({ where: { id: actor.tenantId }, select: { timeZone: true } }),
+      tx.outreachTeam.findMany({
+        where: { active: true },
+        include: { memberships: { where: { active: true } } },
+        orderBy: { name: "asc" },
+      }),
+    ]);
+    const memberPartyIds = [
+      ...new Set(teams.flatMap((t) => [t.leaderId, ...(t.coLeaderId ? [t.coLeaderId] : []), ...t.memberships.map((m) => m.partyId)])),
+    ];
+    const parties = memberPartyIds.length ? await tx.party.findMany({ where: { id: { in: memberPartyIds } } }) : [];
+    const partyName = new Map(parties.map((p) => [p.id, p.displayName]));
+
+    const window = { ...windowFor(range, tenant?.timeZone ?? "Asia/Kolkata"), teamId, ownerId };
     const [funnel, verticals, channels] = await Promise.all([
       executeQuery(actor, getConversionFunnel, window),
       executeQuery(actor, getVerticalIntelligence, window),
       executeQuery(actor, getChannelIntelligence, window),
     ]);
-    return { funnel, verticals, channels };
+    return {
+      funnel,
+      verticals,
+      channels,
+      teamOptions: teams.map((t) => ({ value: t.id, label: t.name })),
+      ownerOptions: memberPartyIds
+        .map((id) => ({ value: id, label: partyName.get(id) ?? "Unknown" }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    };
   });
 
   if (!data) return <PermissionDenied what="reading company intelligence" />;
@@ -71,6 +96,8 @@ async function IntelligencePage({
           </>
         }
       />
+
+      <IntelligenceFilters teams={data.teamOptions} owners={data.ownerOptions} />
 
       {/* Funnel first: the one reading that answers "where do we lose them"
           before "who". Reach-or-beyond bars, so each stage is a share of the

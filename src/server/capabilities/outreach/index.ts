@@ -1137,8 +1137,20 @@ const WINDOW_INPUT = z.object({
    *  matrices are this same query shape filtered to one domain, not a new
    *  primitive. Optional and additive — every existing caller is unaffected. */
   domainId: z.string().uuid().optional(),
+  /** Task 114 P1.5 item 7 (Intelligence cohort filters): both additive,
+   *  same reasoning as domainId above — narrows the same read, no new
+   *  query shape. */
+  teamId: z.string().uuid().optional(),
+  ownerId: z.string().uuid().optional(),
 });
 type WindowInput = z.infer<typeof WINDOW_INPUT>;
+/** Shared lead-scoping clause for teamId/ownerId — every Intelligence query filters the same two fields the same way. */
+function leadScope(input: WindowInput): Record<string, unknown> {
+  return {
+    ...(input.teamId ? { teamId: input.teamId } : {}),
+    ...(input.ownerId ? { opportunityOwnerId: input.ownerId } : {}),
+  };
+}
 function dateRange(input: WindowInput): { gte?: Date; lt?: Date } | undefined {
   if (!input.from && !input.to) return undefined;
   return { ...(input.from ? { gte: new Date(input.from) } : {}), ...(input.to ? { lt: new Date(input.to) } : {}) };
@@ -1333,11 +1345,16 @@ export const getVerticalIntelligence: QueryDefinition<WindowInput, IntelligenceR
   input: WINDOW_INPUT,
   handler: async (ctx, input) => {
     const range = dateRange(input);
+    const scope = leadScope(input);
     const [leads, activities] = await Promise.all([
       ctx.tx.outreachLead.findMany({
+        where: scope,
         select: { id: true, industry: true, state: true, createdAt: true, closedAt: true, domain: { select: { name: true } } },
       }),
-      ctx.tx.outreachActivity.findMany({ where: range ? { occurredAt: range } : {}, select: { leadId: true, activityType: true } }),
+      ctx.tx.outreachActivity.findMany({
+        where: { ...(range ? { occurredAt: range } : {}), ...(Object.keys(scope).length ? { lead: scope } : {}) },
+        select: { leadId: true, activityType: true },
+      }),
     ]);
     const industryOf = new Map(leads.map((l) => [l.id, l.domain?.name || l.industry?.trim() || "Unspecified"]));
     const inWindow = (d: Date | null) => !range || (d != null && (!range.gte || d >= range.gte) && (!range.lt || d < range.lt));
@@ -1381,10 +1398,11 @@ export const getChannelIntelligence: QueryDefinition<WindowInput, IntelligenceRo
   input: WINDOW_INPUT,
   handler: async (ctx, input) => {
     const range = dateRange(input);
+    const scope = leadScope(input);
     const activities = await ctx.tx.outreachActivity.findMany({
       where: {
         ...(range ? { occurredAt: range } : {}),
-        ...(input.domainId ? { lead: { domainId: input.domainId } } : {}),
+        ...(input.domainId || Object.keys(scope).length ? { lead: { ...(input.domainId ? { domainId: input.domainId } : {}), ...scope } } : {}),
       },
       select: { leadId: true, channel: true, activityType: true, lead: { select: { state: true } } },
     });
@@ -1471,7 +1489,7 @@ export const getConversionFunnel: QueryDefinition<
   handler: async (ctx, input) => {
     const range = dateRange(input);
     const leads = await ctx.tx.outreachLead.findMany({
-      where: range ? { createdAt: range } : {},
+      where: { ...(range ? { createdAt: range } : {}), ...leadScope(input) },
       select: { state: true },
     });
     const index = new Map(LINEAR_STAGES.map((k, i) => [k, i]));
