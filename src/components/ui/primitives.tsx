@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
+import Link from "next/link";
 import { VeritySymbol } from "@/components/brand/VerityMark";
 
 /**
@@ -784,6 +785,19 @@ export function PermissionDenied({ what }: { what: string }) {
       <EmptyState
         title="You do not have access to this"
         description={`Your current role does not permit ${what}. Switching organization in the header may change what you can see.`}
+        action={
+          // Task 114 P1.5 item 9: a real recovery action, not just prose,
+          // for the reached-a-denial case (e.g. a bookmarked URL). A full
+          // "Request access" flow needs a product-owner decision and a new
+          // command — nothing today models it — so this is the honest
+          // subset: somewhere to go that isn't a dead end.
+          <Link
+            href="/"
+            className="inline-flex items-center rounded-md border border-line px-3 py-1.5 text-[13px] text-text no-underline transition-colors hover:bg-surface-sunken"
+          >
+            Go to dashboard
+          </Link>
+        }
       />
     </Surface>
   );
