@@ -292,8 +292,8 @@ export function Button({ variant = "secondary", size = "md", className, ...rest 
     primary:
       "bg-accent text-accent-on font-medium hover:bg-accent-hover " +
       "shadow-[var(--shadow-highlight),0_8px_22px_-8px_var(--color-accent-line)]",
-    secondary: "glass-control text-text font-medium hover:border-line-strong",
-    ghost: "bg-transparent text-text-secondary font-medium hover:bg-glass-2 hover:text-text",
+    secondary: "verity-solid border border-line text-text font-medium hover:border-line-strong",
+    ghost: "bg-transparent text-text-secondary font-medium hover:bg-surface-sunken hover:text-text",
     danger: "border border-danger/40 bg-danger-subtle text-danger font-medium hover:border-danger/60",
   };
 
@@ -320,9 +320,9 @@ export function IconButton({
   tone?: "default" | "accent" | "bare";
 }) {
   const tones = {
-    default: "glass-control text-text-secondary hover:text-text",
+    default: "verity-solid border border-line text-text-secondary hover:text-text",
     accent: "border border-transparent bg-accent text-accent-on hover:bg-accent-hover",
-    bare: "border border-transparent bg-transparent text-text-secondary hover:text-text hover:bg-glass-2",
+    bare: "border border-transparent bg-transparent text-text-secondary hover:text-text hover:bg-surface-sunken",
   };
   return (
     <button
@@ -493,7 +493,7 @@ export function Field({
  * as unfinished without anyone being able to say why.
  */
 const controlClass =
-  "glass-control w-full h-11 px-4 rounded-lg text-text text-[14px] " +
+  "verity-solid border border-line w-full h-11 px-4 rounded-lg text-text text-[14px] " +
   "placeholder:text-text-tertiary transition-[border-color,box-shadow] duration-200 " +
   "hover:border-line-strong " +
   "focus:outline-none focus:border-accent " +
@@ -656,7 +656,7 @@ export function Badge({ children, tone = "neutral" }: { children: ReactNode; ton
         "inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-medium",
         tone === "accent"
           ? "bg-accent-subtle text-accent-ink"
-          : "bg-glass-2 text-text-tertiary",
+          : "bg-surface-sunken text-text-tertiary",
       )}
     >
       {children}
