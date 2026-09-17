@@ -111,13 +111,13 @@ polish, because polish on a non-actionable surface doesn't move the needle.
    chips (`My leads`, `Needs action`, `At risk`) built from the existing
    filter fields (status/domain/track/health/team/assignee) rather than a
    new filter model.
-6. **Fix the Audit navigation dead end.** `Recent activity` currently leads
-   to an access-denied page with no recovery path. Either hide the nav
-   entry when the viewer lacks the permission (check via existing
-   permission-resolution, same pattern used elsewhere in the shell), or add
-   `Request access` / explain-required-role on the denied page. This is a
-   pre-existing bug, not a new feature — treat as P0 regardless of the rest
-   of this taskplan's sequencing.
+6. **Fix the Audit navigation dead end. DONE 2026-09-17.** `ShellChrome`'s
+   top-bar bell (`/audit`) is now gated on the same `canAudit` boolean the
+   sidebar's own Audit entry already used — an actor without `Read` on
+   `verity.platform.activity` no longer sees the bell at all, so the dead
+   end is gone rather than explained. `npx tsc --noEmit` and `eslint`
+   clean on both changed files (`ShellChrome.tsx`,
+   `app/(shell)/layout.tsx`).
 
 ## P1 — dashboard restructure and analytics drill-through
 
