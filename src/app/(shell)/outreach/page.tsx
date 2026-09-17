@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireActor } from "@/server/platform/auth";
@@ -32,6 +33,7 @@ import {
 } from "@/components/ui/primitives";
 import { NewLeadForm } from "./NewLeadForm";
 import { DirectionForm } from "./DirectionForm";
+import { WorkQueuePanel } from "./WorkQueuePanel";
 import { ResolveEscalationButton } from "./ResolveEscalationButton";
 import { Donut, Legend } from "@/components/ui/charts";
 import { RangeSwitch } from "./RangeSwitch";
@@ -40,6 +42,21 @@ import { RANGE_LABEL, percent, rangeFromParam, windowFor } from "./range";
 export const dynamic = "force-dynamic";
 
 const TERMINAL_STATES = ["not_a_fit", "unresponsive", "lost", "deferred", "disqualified"];
+
+/** Task 114 P1.3 — a short "vs last period" hint appended to a Stat. */
+function deltaLabel(curr: number, prev: number | null | undefined): string | undefined {
+  if (prev == null) return undefined;
+  if (prev === 0) return curr === 0 ? "flat vs last period" : "new this period";
+  const pct = Math.round(((curr - prev) / prev) * 100);
+  if (pct === 0) return "flat vs last period";
+  return `${pct > 0 ? "+" : ""}${pct}% vs last period`;
+}
+
+/** Task 114 P1's three-layer dashboard hierarchy — a label, not a Panel, so
+ *  it groups existing sections without adding another nested card. */
+function SectionLabel({ children }: { children: ReactNode }) {
+  return <h2 className="mb-3 text-[12px] font-medium uppercase tracking-[0.08em] text-text-tertiary">{children}</h2>;
+}
 
 type LeadRow = Record<string, unknown> & {
   id: string;
@@ -127,6 +144,21 @@ async function OutreachPage({
           executeQuery(actor, getTeamComparison, window),
         ])
       : [[], null, []];
+
+    // Task 114 P1.3 — trend deltas. Period default is the range picker's own
+    // current selection, windowed a second time for the immediately
+    // preceding period of equal length, per the taskplan's own suggested
+    // default; "all time" has no meaningful previous period, so it's
+    // skipped rather than showing a nonsensical comparison.
+    const previousPulse =
+      isCoreView && window.from && window.to
+        ? await executeQuery(actor, getCompanyPulse, {
+            from: new Date(
+              new Date(window.from).getTime() - (new Date(window.to).getTime() - new Date(window.from).getTime()),
+            ).toISOString(),
+            to: window.from,
+          })
+        : null;
 
     const category = new Map(states.map((s) => [s.key, s.category]));
     const teamName = new Map(teams.map((t) => [t.id, t.name]));
@@ -218,6 +250,7 @@ async function OutreachPage({
       directionHistory: isCoreView ? directionHistory : [],
       exceptions,
       pulse,
+      previousPulse,
       teamComparison,
       escalations,
     };
@@ -360,37 +393,14 @@ async function OutreachPage({
         </div>
       )}
 
-      {data.pulse ? (
-        /* Company pulse (2026-09-13 doc §4): the organisation's own numbers
-           for the chosen window, read live — never a stored aggregate. Two
-           bands, not ten framed cards; the window's name sits on the first
-           so a reader knows which week a "47" belongs to. */
-        <div className="mb-6">
-          <p className="mb-2 text-[11px] uppercase tracking-wide text-text-tertiary">
-            {RANGE_LABEL[range]} · {data.pulse.activeTeams} active team{data.pulse.activeTeams === 1 ? "" : "s"} ·{" "}
-            {data.pulse.activeMembers} member{data.pulse.activeMembers === 1 ? "" : "s"}
-          </p>
-          <StatRow cols={4}>
-            <Stat label="Leads added" value={data.pulse.leads} />
-            <Stat label="Outreach" value={data.pulse.outreach} />
-            <Stat label="Follow-ups" value={data.pulse.followUps} />
-            <Stat label="Responses" value={data.pulse.responses} hint={`${percent(data.pulse.responseRate)} response rate`} />
-          </StatRow>
-          <StatRow cols={4} className="mt-3">
-            <Stat label="Meetings" value={data.pulse.meetings} />
-            <Stat label="Proposals" value={data.pulse.proposals} />
-            <Stat label="Active pipeline" value={data.pulse.activePipeline} hint="Open now, not windowed" />
-            <Stat label="Closed won" value={data.pulse.closed} hint={`${data.overdue} follow-up${data.overdue === 1 ? "" : "s"} overdue`} />
-          </StatRow>
-        </div>
-      ) : (
-        <StatRow cols={4} className="mb-6">
-          <Stat label="Teams" value={data.teams.length} />
-          <Stat label="Active leads" value={data.activeLeads} />
-          <Stat label="Closed Won" value={data.closedWon} />
-          <Stat label="Follow-ups overdue" value={data.overdue} />
-        </StatRow>
-      )}
+      {/* Task 114 P1 — three-layer dashboard hierarchy. Direction stays above
+          this (Spec §105's "first thing on the screen" framing predates and
+          outranks this restructure — everything below still executes
+          against it, so it isn't re-parented into a layer). */}
+      <SectionLabel>Today's execution</SectionLabel>
+      <div className="mb-6">
+        <WorkQueuePanel teamIds={data.teams.map((t) => t.id)} />
+      </div>
 
       {data.canPostDirection && (
         <div className="mb-6">
@@ -432,6 +442,54 @@ async function OutreachPage({
         </div>
       )}
 
+      <SectionLabel>Pipeline health</SectionLabel>
+      {data.pulse ? (
+        /* Company pulse (2026-09-13 doc §4): the organisation's own numbers
+           for the chosen window, read live — never a stored aggregate. Two
+           bands, not ten framed cards; the window's name sits on the first
+           so a reader knows which week a "47" belongs to. Hints carry a
+           trend delta (Task 114 P1.3) against the immediately preceding
+           period of equal length. */
+        <div className="mb-6">
+          <p className="mb-2 text-[11px] uppercase tracking-wide text-text-tertiary">
+            {RANGE_LABEL[range]} · {data.pulse.activeTeams} active team{data.pulse.activeTeams === 1 ? "" : "s"} ·{" "}
+            {data.pulse.activeMembers} member{data.pulse.activeMembers === 1 ? "" : "s"}
+          </p>
+          <StatRow cols={4}>
+            <Stat label="Leads added" value={data.pulse.leads} hint={deltaLabel(data.pulse.leads, data.previousPulse?.leads)} />
+            <Stat label="Outreach" value={data.pulse.outreach} hint={deltaLabel(data.pulse.outreach, data.previousPulse?.outreach)} />
+            <Stat
+              label="Follow-ups"
+              value={data.pulse.followUps}
+              hint={deltaLabel(data.pulse.followUps, data.previousPulse?.followUps)}
+            />
+            <Stat label="Responses" value={data.pulse.responses} hint={`${percent(data.pulse.responseRate)} response rate`} />
+          </StatRow>
+          <StatRow cols={4} className="mt-3">
+            <Stat label="Meetings" value={data.pulse.meetings} hint={deltaLabel(data.pulse.meetings, data.previousPulse?.meetings)} />
+            <Stat
+              label="Proposals"
+              value={data.pulse.proposals}
+              hint={deltaLabel(data.pulse.proposals, data.previousPulse?.proposals)}
+            />
+            <Stat
+              label="Active pipeline"
+              value={data.pulse.activePipeline}
+              hint={deltaLabel(data.pulse.activePipeline, data.previousPulse?.activePipeline) ?? "Open now, not windowed"}
+            />
+            <Stat label="Closed won" value={data.pulse.closed} hint={`${data.overdue} follow-up${data.overdue === 1 ? "" : "s"} overdue`} />
+          </StatRow>
+        </div>
+      ) : (
+        <StatRow cols={4} className="mb-6">
+          <Stat label="Teams" value={data.teams.length} />
+          <Stat label="Active leads" value={data.activeLeads} />
+          <Stat label="Closed Won" value={data.closedWon} />
+          <Stat label="Follow-ups overdue" value={data.overdue} />
+        </StatRow>
+      )}
+
+      <SectionLabel>Management intelligence</SectionLabel>
       {data.teamComparison.length > 0 && (
         <div className="mb-6">
           <Panel title={`Team performance · ${RANGE_LABEL[range].toLowerCase()}`} flush>
