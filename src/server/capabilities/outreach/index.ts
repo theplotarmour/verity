@@ -1564,6 +1564,74 @@ export const getDomainAging: QueryDefinition<
 };
 
 // ---------------------------------------------------------------------------
+// COMMAND PALETTE — Task 109 Phase G §2 (master prompt §72-74): global
+// search over company name / decision-maker / domain / track / team. Reused
+// by the generic `CommandPalette` shell component via `runQuery` by string
+// key, so the platform shell never imports this capability directly (the
+// same decoupling `contribution.ts` already enforces for navigation).
+// Server-side `contains` filtering — a dedicated full-text index is a fine
+// v2 upgrade, not required to ship (the taskplan's own scope note).
+// ---------------------------------------------------------------------------
+
+export type CommandPaletteResult = { id: string; type: "lead" | "domain" | "team"; label: string; sublabel: string; href: string };
+
+export const commandPaletteSearch: QueryDefinition<{ q: string }, CommandPaletteResult[]> = {
+  key: "verity.outreach.command_palette_search",
+  entity: ENTITY_LEAD,
+  input: z.object({ q: z.string().min(2).max(100) }),
+  handler: async (ctx, input) => {
+    const q = input.q;
+    const [leads, domains, teams] = await Promise.all([
+      ctx.tx.outreachLead.findMany({
+        where: {
+          OR: [
+            { companyName: { contains: q, mode: "insensitive" } },
+            { contactName: { contains: q, mode: "insensitive" } },
+            { track: { contains: q, mode: "insensitive" } },
+          ],
+        },
+        select: { id: true, companyName: true, contactName: true, state: true },
+        take: 10,
+      }),
+      ctx.tx.outreachDomain.findMany({
+        where: { name: { contains: q, mode: "insensitive" } },
+        select: { id: true, name: true, group: { select: { name: true } } },
+        take: 5,
+      }),
+      ctx.tx.outreachTeam.findMany({
+        where: { active: true, name: { contains: q, mode: "insensitive" } },
+        select: { id: true, name: true },
+        take: 5,
+      }),
+    ]);
+    const results: CommandPaletteResult[] = [
+      ...leads.map((l): CommandPaletteResult => ({
+        id: l.id,
+        type: "lead",
+        label: l.companyName,
+        sublabel: l.contactName ? `${l.contactName} · ${l.state.replace(/_/g, " ")}` : l.state.replace(/_/g, " "),
+        href: `/outreach/${l.id}`,
+      })),
+      ...domains.map((d): CommandPaletteResult => ({
+        id: d.id,
+        type: "domain",
+        label: d.name,
+        sublabel: d.group.name,
+        href: `/outreach/domains/${d.id}`,
+      })),
+      ...teams.map((t): CommandPaletteResult => ({
+        id: t.id,
+        type: "team",
+        label: t.name,
+        sublabel: "Team",
+        href: `/outreach/team`,
+      })),
+    ];
+    return results;
+  },
+};
+
+// ---------------------------------------------------------------------------
 // ACTIVITY LOG
 // ---------------------------------------------------------------------------
 
@@ -3112,4 +3180,5 @@ export function registerOutreachCapability(): void {
   registerQuery(getDomainFunnel);
   registerQuery(getDomainVelocity);
   registerQuery(getDomainAging);
+  registerQuery(commandPaletteSearch);
 }

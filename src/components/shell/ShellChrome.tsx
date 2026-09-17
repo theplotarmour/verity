@@ -11,6 +11,7 @@ import { Icon, type IconName } from "@/components/ui/icons";
 import { VerityLockup } from "@/components/brand/VerityMark";
 import { signOut } from "@/server/actions/platform";
 import { AgentChatDock } from "./AgentChatDock";
+import { CommandPalette } from "./CommandPalette";
 
 export type NavItem = { href: string; label: string; icon?: IconName };
 export type NavArea = { group: string; items: NavItem[] };
@@ -304,8 +305,13 @@ export function ShellChrome({
               id="shell-search"
               type="search"
               placeholder="Search this page"
-              className="glass-control h-12 w-full rounded-xl pl-12 pr-4 text-[14px] text-text shadow-[var(--shadow-sm)] placeholder:text-text-tertiary transition-[border-color,box-shadow] duration-200 hover:border-line-strong focus:border-accent focus:shadow-[var(--shadow-highlight),0_0_0_3px_var(--color-accent-subtle)] focus:outline-none"
+              className="glass-control h-12 w-full rounded-xl pl-12 pr-16 text-[14px] text-text shadow-[var(--shadow-sm)] placeholder:text-text-tertiary transition-[border-color,box-shadow] duration-200 hover:border-line-strong focus:border-accent focus:shadow-[var(--shadow-highlight),0_0_0_3px_var(--color-accent-subtle)] focus:outline-none"
             />
+            {/* Task 109 Phase G §2: a separate global command palette (Cmd/Ctrl+K),
+                not this per-page search box — see CommandPalette's own doc comment. */}
+            <kbd className="pointer-events-none absolute right-4 rounded border border-line px-1.5 py-0.5 text-[11px] text-text-tertiary">
+              ⌘K
+            </kbd>
           </div>
 
           <div className="flex shrink-0 items-center gap-3">
@@ -350,6 +356,7 @@ export function ShellChrome({
       </div>
 
       <AgentChatDock />
+      <CommandPalette />
     </div>
   );
 }
