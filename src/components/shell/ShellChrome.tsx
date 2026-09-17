@@ -50,7 +50,6 @@ export function ShellChrome({
   userLabel,
   userInitials,
   canAudit,
-  canConfigure,
   unreadCount = 0,
   children,
 }: {
@@ -64,9 +63,6 @@ export function ShellChrome({
    *  hit a bare permission-denied page with no warning. The sidebar's own
    *  Audit entry already gates on this; the bell didn't. */
   canAudit: boolean;
-  /** Gates the profile menu's Settings entry the same way — `Edit` on the
-   *  tenant, same test `/configuration/page.tsx` itself requires. */
-  canConfigure: boolean;
   /** Task 114 P1.5 item 1 — unread in-app notification count for the bell. */
   unreadCount?: number;
   children: ReactNode;
@@ -353,7 +349,7 @@ export function ShellChrome({
             {/* The one place Account, Settings and Sign out all live — was a
                 static, unclickable avatar with Sign out stranded in the
                 sidebar footer instead. */}
-            <ProfileMenu userLabel={userLabel} userInitials={userInitials} canConfigure={canConfigure} />
+            <ProfileMenu userLabel={userLabel} userInitials={userInitials} />
           </div>
         </div>
 

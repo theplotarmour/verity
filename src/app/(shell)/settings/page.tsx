@@ -1,0 +1,64 @@
+import Link from "next/link";
+import { PageHeader, Panel } from "@/components/ui/primitives";
+import { AppearanceControls } from "@/components/shell/AppearanceControls";
+import { ACCENT_PRESETS, DEFAULT_ACCENT } from "@/server/platform/accent";
+import { Icon, type IconName } from "@/components/ui/icons";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Settings — the one global entry point, reachable from the profile menu by
+ * every signed-in actor regardless of role.
+ *
+ * Appearance renders directly here, ungated: theme and accent are per-user
+ * cookie preferences (`AppearanceControls`'s own doc comment), never tenant
+ * policy, so gating them behind tenant-admin permission — which is where
+ * they lived before, colocated on `/configuration` — was excluding every
+ * non-admin actor from changing their own theme. That was the actual bug;
+ * this page is the fix.
+ *
+ * The other sections (Business, Tax, Advanced configuration) ARE genuinely
+ * tenant-admin-scoped, so they stay as links rather than embedded panels —
+ * each destination gates itself (`PermissionDenied`, which now carries a
+ * real recovery action) exactly as it did before. This page does not
+ * pre-check those permissions to decide what to show: that would need a
+ * second permission read per section for a purely cosmetic filter, and an
+ * actor who lacks access already gets a clear, non-dead-end answer at the
+ * destination.
+ */
+export default function SettingsPage() {
+  const links: Array<{ href: string; icon: IconName; label: string; description: string }> = [
+    { href: "/account", icon: "parties", label: "Account", description: "Your identity, email and password." },
+    { href: "/settings/business", icon: "building", label: "Business", description: "Legal name, registration and tax identity." },
+    { href: "/settings/tax", icon: "tax", label: "Tax", description: "Tax rates and calculation rules." },
+    { href: "/configuration", icon: "configuration", label: "Advanced configuration", description: "Raw platform configuration values. Tenant-admin only." },
+  ];
+
+  return (
+    <>
+      <PageHeader title="Settings" description="Customize your workspace, preferences and account." />
+
+      <Panel title="Appearance" className="mb-6">
+        <AppearanceControls presets={ACCENT_PRESETS} defaultAccent={DEFAULT_ACCENT} />
+      </Panel>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {links.map((l) => (
+          <Link
+            key={l.href}
+            href={l.href}
+            className="verity-solid flex items-start gap-3 rounded-xl border border-line p-4 no-underline shadow-[var(--shadow-sm)] transition-[box-shadow,transform] duration-150 hover:-translate-y-px hover:shadow-[var(--shadow-md)]"
+          >
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-subtle text-accent-ink">
+              <Icon name={l.icon} size={18} />
+            </span>
+            <span className="flex flex-col gap-0.5">
+              <span className="text-[14px] font-medium text-text">{l.label}</span>
+              <span className="text-[12.5px] text-text-tertiary">{l.description}</span>
+            </span>
+          </Link>
+        ))}
+      </div>
+    </>
+  );
+}

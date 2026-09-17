@@ -10,20 +10,19 @@ import { signOut } from "@/server/actions/platform";
  * only in the desktop sidebar's own footer (overlapping the assistant dock at
  * small viewport heights) and there was no single reachable "Settings" entry
  * point at all. This replaces the avatar with the actual menu: Account
- * (`/account`, every role, no gate — same page `/account/page.tsx` already
- * documents as "not capability-gated"), Settings (`/configuration`, gated on
- * `canConfigure` the same way the sidebar's own Configuration nav entry is —
- * hidden rather than a dead click, same reasoning as the P0.6 Audit-bell fix),
- * and Sign out.
+ * (`/account`, every role, no gate) and Settings (`/settings`) — also
+ * ungated, deliberately: `/settings`'s own Appearance section is a per-user
+ * cookie preference (theme/accent), not tenant policy, so every actor needs
+ * to reach it. Sections inside `/settings` that ARE tenant-admin-only
+ * (Business, Tax, Advanced configuration) gate themselves at that page, the
+ * same pattern `PermissionDenied` already covers elsewhere on this platform.
  */
 export function ProfileMenu({
   userLabel,
   userInitials,
-  canConfigure,
 }: {
   userLabel: string;
   userInitials: string;
-  canConfigure: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -74,17 +73,15 @@ export function ProfileMenu({
             <Icon name="parties" size={17} className="shrink-0 text-text-tertiary" />
             Account
           </Link>
-          {canConfigure && (
-            <Link
-              href="/configuration"
-              role="menuitem"
-              onClick={() => setOpen(false)}
-              className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] text-text no-underline transition-colors hover:bg-surface-sunken"
-            >
-              <Icon name="configuration" size={17} className="shrink-0 text-text-tertiary" />
-              Settings
-            </Link>
-          )}
+          <Link
+            href="/settings"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14px] text-text no-underline transition-colors hover:bg-surface-sunken"
+          >
+            <Icon name="configuration" size={17} className="shrink-0 text-text-tertiary" />
+            Settings
+          </Link>
           <div className="my-1.5 border-t border-line" />
           <form action={signOut}>
             <button
