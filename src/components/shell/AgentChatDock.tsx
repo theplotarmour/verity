@@ -104,7 +104,7 @@ export function AgentChatDock() {
         aria-expanded={open}
         aria-controls="agent-chat-panel"
         title="Assistant"
-        className="glass-control fixed bottom-6 right-6 z-40 grid size-12 place-items-center rounded-full text-text-secondary shadow-lg transition-colors hover:text-text print:hidden"
+        className="verity-solid fixed bottom-6 right-6 z-40 grid size-12 place-items-center rounded-full border border-line text-text-secondary shadow-lg transition-colors hover:text-text print:hidden"
       >
         <Icon name={open ? "close" : "assistant"} size={20} />
         <span className="sr-only">{open ? "Close assistant" : "Open assistant"}</span>
@@ -115,7 +115,7 @@ export function AgentChatDock() {
           id="agent-chat-panel"
           role="complementary"
           aria-label="Assistant"
-          className="glass-overlay fixed bottom-24 right-6 z-40 flex h-[min(560px,70dvh)] w-[min(380px,calc(100vw-3rem))] flex-col overflow-hidden rounded-2xl print:hidden"
+          className="verity-solid fixed bottom-24 right-6 z-40 flex h-[min(560px,70dvh)] w-[min(380px,calc(100vw-3rem))] flex-col overflow-hidden rounded-2xl border border-line shadow-lg print:hidden"
         >
           <div className="flex shrink-0 items-center justify-between border-b border-line px-4 py-3.5">
             <span className="text-[14px] font-medium text-text">Assistant</span>
@@ -157,7 +157,7 @@ export function AgentChatDock() {
                     type="button"
                     onClick={cancelPreview}
                     disabled={pending}
-                    className="glass-control rounded-lg px-3 py-1.5 text-[13px] font-medium text-text-secondary transition-colors hover:text-text disabled:cursor-not-allowed disabled:opacity-45"
+                    className="verity-solid rounded-lg border border-line px-3 py-1.5 text-[13px] font-medium text-text-secondary transition-colors hover:text-text disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     Cancel
                   </button>
@@ -189,7 +189,7 @@ export function AgentChatDock() {
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask the assistant…"
               disabled={pending}
-              className="glass-control h-11 flex-1 rounded-lg px-3.5 text-[13.5px] text-text placeholder:text-text-tertiary focus:border-accent focus:outline-none"
+              className="verity-solid h-11 flex-1 rounded-lg border border-line px-3.5 text-[13.5px] text-text placeholder:text-text-tertiary focus:border-accent focus:outline-none"
             />
             <button
               type="submit"

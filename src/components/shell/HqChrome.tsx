@@ -50,7 +50,7 @@ export function HqChrome({
       className="flex h-dvh flex-col overflow-hidden lg:grid"
       style={{ gridTemplateColumns: "234px 1fr" }}
     >
-      <aside className="glass-shell hidden min-h-0 flex-col border-r border-line px-4 pb-5 pt-7 lg:flex">
+      <aside className="verity-solid hidden min-h-0 flex-col rounded-none border-r border-line px-4 pb-5 pt-7 lg:flex">
         <div className="mb-8 shrink-0 px-2">
           <Link href="/hq" aria-label="Verity HQ" className="block no-underline">
             <VerityLockup size={30} />
@@ -74,7 +74,7 @@ export function HqChrome({
                     "transition-[background-color,color] duration-200 " +
                     (current
                       ? "bg-accent-subtle font-medium text-text shadow-[inset_0_1px_0_var(--color-accent-line)]"
-                      : "text-text-secondary hover:bg-glass-2 hover:text-text")
+                      : "text-text-secondary hover:bg-surface-sunken hover:text-text")
                   }
                 >
                   <Icon
@@ -92,7 +92,7 @@ export function HqChrome({
         <form action={signOut} className="shrink-0 pt-4">
           <button
             type="submit"
-            className="flex w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-2 py-2 text-left transition-colors hover:bg-glass-2"
+            className="flex w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-2 py-2 text-left transition-colors hover:bg-surface-sunken"
           >
             <span
               className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-subtle text-[13px] font-medium text-accent-ink"
@@ -113,7 +113,7 @@ export function HqChrome({
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="glass-shell z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line px-4 lg:hidden">
+        <div className="verity-solid z-30 flex h-14 shrink-0 items-center justify-between gap-3 rounded-none border-b border-line px-4 lg:hidden">
           <Link href="/hq" aria-label="Verity HQ" className="no-underline">
             <VerityLockup size={22} />
           </Link>

@@ -80,7 +80,7 @@ export function CommandPalette() {
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
-        className="glass-overlay relative flex w-full max-w-[560px] flex-col overflow-hidden rounded-2xl border border-line shadow-[var(--shadow-lg)]"
+        className="verity-solid relative flex w-full max-w-[560px] flex-col overflow-hidden rounded-2xl border border-line shadow-[var(--shadow-lg)]"
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") {
             e.preventDefault();
@@ -119,7 +119,7 @@ export function CommandPalette() {
                     onClick={() => go(r.href)}
                     onMouseEnter={() => setActiveIndex(i)}
                     className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-[13px] ${
-                      i === activeIndex ? "bg-accent-subtle text-text" : "text-text-secondary hover:bg-glass-2"
+                      i === activeIndex ? "bg-accent-subtle text-text" : "text-text-secondary hover:bg-surface-sunken"
                     }`}
                   >
                     <span className="min-w-0 flex-1 truncate">

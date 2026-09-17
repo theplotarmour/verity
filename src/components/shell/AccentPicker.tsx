@@ -306,7 +306,7 @@ export function AccentPicker({
               onBlur={() => commitHexDraft(hexDraft)}
               onKeyDown={(e) => e.key === "Enter" && commitHexDraft(hexDraft)}
               spellCheck={false}
-              className="glass-control h-10 flex-1 rounded-lg px-3 font-mono text-[13px] text-text"
+              className="verity-solid h-10 flex-1 rounded-lg border border-line px-3 font-mono text-[13px] text-text"
             />
             {supportsEyedropper && (
               <button
@@ -315,7 +315,7 @@ export function AccentPicker({
                 disabled={pickingScreen}
                 title="Sample a color from your screen"
                 aria-label="Sample a color from your screen"
-                className="glass-control inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg text-text-secondary transition-colors hover:text-text disabled:cursor-wait disabled:opacity-60"
+                className="verity-solid inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-line text-text-secondary transition-colors hover:text-text disabled:cursor-wait disabled:opacity-60"
               >
                 <Icon name="eyedropper" size={17} />
               </button>
