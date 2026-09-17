@@ -146,6 +146,7 @@ export function DataTable({
   emptyAction,
   filterable = true,
   toolbar,
+  bulkActions,
 }: {
   columns: Column[];
   rows: Array<Record<string, unknown>>;
@@ -158,6 +159,13 @@ export function DataTable({
   filterable?: boolean;
   /** Extra controls in the toolbar, right-aligned beside the filter. */
   toolbar?: React.ReactNode;
+  /**
+   * Renders in place of the row-count line once 1+ rows are checked (Task
+   * 114 P1.5 item 2). Given the selected keys and a callback to clear the
+   * selection — the caller owns what "assign" or "add task" actually does,
+   * this component only owns which keys are checked.
+   */
+  bulkActions?: (selectedKeys: string[], clear: () => void) => React.ReactNode;
 }) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
@@ -394,11 +402,27 @@ export function DataTable({
           </ul>
 
           <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
-            <p className="m-0 text-[13px] text-text-tertiary" aria-live="polite">
-              {selected.size > 0
-                ? `${selected.size} selected`
-                : `Showing ${current * PAGE + 1} to ${current * PAGE + shown.length} of ${visible.length} ${visible.length === 1 ? "record" : "records"}`}
-            </p>
+            {selected.size > 0 && bulkActions ? (
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-accent/30 bg-accent-subtle px-3 py-2">
+                <p className="m-0 text-[13px] font-medium text-accent-ink" aria-live="polite">
+                  {selected.size} selected
+                </p>
+                {bulkActions([...selected], () => setSelected(new Set()))}
+                <button
+                  type="button"
+                  onClick={() => setSelected(new Set())}
+                  className="rounded-md px-2 py-1 text-[12px] text-text-tertiary transition-colors hover:text-text"
+                >
+                  Clear
+                </button>
+              </div>
+            ) : (
+              <p className="m-0 text-[13px] text-text-tertiary" aria-live="polite">
+                {selected.size > 0
+                  ? `${selected.size} selected`
+                  : `Showing ${current * PAGE + 1} to ${current * PAGE + shown.length} of ${visible.length} ${visible.length === 1 ? "record" : "records"}`}
+              </p>
+            )}
 
             {/* The mockup's numbered pager. It is only drawn when there is more
                 than one page — a pager showing a lone "1" is chrome that tells

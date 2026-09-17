@@ -15,6 +15,7 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { NewLeadForm } from "../NewLeadForm";
 import { WorkQueuePanel } from "../WorkQueuePanel";
 import { ProspectFilters, type ProspectFilterOptions } from "./ProspectFilters";
+import { BulkActionBar } from "./BulkActionBar";
 
 export const dynamic = "force-dynamic";
 
@@ -209,6 +210,8 @@ async function ProspectsPage({ searchParams }: { searchParams: Promise<Search> }
         contactPhone: l.contactPhone,
         linkedinUrl: l.linkedinUrl,
         team: teamName.get(l.teamId) ?? "—",
+        teamId: l.teamId,
+        ownerId: l.opportunityOwnerId,
         owner: partyName.get(l.opportunityOwnerId) ?? "Unknown",
         originator: partyName.get(l.leadOriginatorId) ?? "Unknown",
         nextActionNote: l.nextActionNote,
@@ -315,6 +318,14 @@ async function ProspectsPage({ searchParams }: { searchParams: Promise<Search> }
           rows={data.rows}
           columns={PROSPECT_COLUMNS}
           filterable={false}
+          bulkActions={(selectedIds, clear) => (
+            <BulkActionBar
+              selectedIds={selectedIds}
+              rows={data.rows.map((r) => ({ id: String(r.id), companyName: r.companyName, teamId: r.teamId, ownerId: r.ownerId }))}
+              owners={(data.options.owners ?? []).map((o) => ({ id: o.value, name: o.label }))}
+              clear={clear}
+            />
+          )}
         />
       ) : (
         <ul className="m-0 grid list-none gap-4 p-0 md:grid-cols-2 2xl:grid-cols-3">
