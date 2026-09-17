@@ -160,18 +160,15 @@ first, and re-check its current shape against 114 P1's three items
 since `ec31890` changed what's on this page too (removed check-in/
 targets/reports panels from it).
 
-### Then: Task 111 → Task 112 → Task 114 P1.5 → Task 114 P2
+### Task 111 → Task 112 — DONE 2026-09-17. Next: Task 114 P1.5 → Task 114 P2
 
-Per 114's own "Relationship to 111/112" section — material pass
-(structured minimalism) before structural pass on shared surfaces
-(Outreach dashboard, prospect cards). Note `bg-glass-2` still appears in
-`prospects/page.tsx` line ~345 — a live ADR-023 violation Task 112's
-rollout should catch.
+The material pass (structured minimalism) is complete — see
+`taskplans/112_...md`'s Status section. The `bg-glass-2` violation in
+`prospects/page.tsx` line ~345 flagged below is fixed.
 
-P1.5 (nine re-audit gaps — see Task 114's own section) comes after 111/112
-and before P2, since several P1.5 items (shell chrome, badge/contrast
-adjacent work) are cheaper once 112's material pass has already landed on
-the same surfaces.
+P1.5 (nine re-audit gaps — see Task 114's own section) is next, now that
+112's material pass has landed on the shared surfaces several P1.5 items
+(shell chrome, badge/contrast adjacent work) depend on.
 
 ## Verification checklist for every item above
 

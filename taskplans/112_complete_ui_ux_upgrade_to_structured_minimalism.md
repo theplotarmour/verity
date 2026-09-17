@@ -4,7 +4,39 @@ Authority: ADR-023 (`verity-spec/17_decisions/adr/adr-023.md`) + Task 111
 (pattern definition, Settings/Home scope). This taskplan is the platform-wide
 rollout Task 111 explicitly scoped out ("shell and settings pattern only").
 
-## Status: PENDING — nothing migrated yet
+## Status: DONE 2026-09-17 — full sweep complete
+
+`Surface`'s `solid` default flipped `false`→`true` (ADR-023 lever, cascades
+to every screen composing `Surface`/`Panel` with zero per-file edits). Every
+remaining literal `.glass-shell/-card/-control/-overlay` usage and every
+`bg-glass-N` token usage swept from `src/` — 6 commits, ~40 files
+(`fb7f3b9`, `255ad42`, `59de3bc`, `3ae807e`, `8f88a9e`, `604ff05`,
+`3ad2b89`): shell chrome (`ShellChrome`/`HqChrome`/`CommandPalette`/
+`AppearanceControls`/`AccentPicker`/`AgentChatDock`), shared UI primitives
+(`Modal`/`Combobox`/`charts`/`ContextPanel`/`Related`/`PeriodSwitch`/
+`Spinner`, plus `Button`/`IconButton`/`Input`/`Badge` in `primitives.tsx`
+itself), sign-in surface, the full Outreach capability (17 files, including
+the known `bg-glass-2` violation in `prospects/page.tsx`'s overdue chip),
+and every remaining desk/admin screen (RolesAdmin, ConfigurationEditor,
+CatalogueAdmin, FloorPlan/Editor, MenuAdmin, SetupChecklist, RolesDesk,
+SalesDesk, StockBoard, ItcView, ImportWizard). `hover:bg-glass-2/-3` and
+`bg-glass-2/-4` tokens standardized to the already-established
+`bg-surface-sunken` pattern (confirmed live in `DataTable`/`SmartTable`/
+`ThemeToggle` before the sweep started).
+
+Verified: `npx tsc --noEmit` and `npx eslint --max-warnings=0` clean after
+every batch; `impeccable`'s `detect.mjs` clean on a representative sample;
+sign-in page (the only DB-free authenticated surface reachable in this
+environment) screenshotted light+dark — solid cards, hairline borders,
+correct contrast, no visual regression. Every other screen's live
+verification is blocked on the same no-local-Postgres limitation already
+recorded elsewhere in this repo (Task 113 item 3, the outreach handoff) —
+not silently skipped, flagged here too.
+
+Deliberately NOT done, per this file's own non-goals: the four `.glass-*`
+CSS classes stay defined in `globals.css` (marked deprecated with an
+ADR-023 pointer, not deleted) until a future pass confirms zero consumers
+remain including `Surface`'s intentional `solid={false}` opt-out path.
 
 ## Trigger
 

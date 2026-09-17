@@ -11,7 +11,7 @@ line below matching recent commits), regenerate it from `git log` and the
 taskplans it points to before trusting it, same rule `00_STATUS_INDEX.md`
 already states for itself.
 
-**Last updated: 2026-09-17**
+**Last updated: 2026-09-17 (later same day)**
 
 ## How to use this folder
 
@@ -46,16 +46,17 @@ filters, add-prospect sub-items, permission-denied recovery). P2
 (sequences, activity-type forms, enrichment) stays parked pending
 product-owner scoping — do not start it from the taskplan's text alone.
 
-### 2. Task 111 → Task 112 — structured-minimalism material rollout
+### 2. Task 111 → Task 112 — structured-minimalism material rollout — DONE 2026-09-17
 
-No dedicated handoff file yet (not yet started this pass) — see the
-taskplans directly: `taskplans/111_global_settings_and_shell_ux_pattern.md`
-(pattern, resolved by ADR-023) and
-`taskplans/112_complete_ui_ux_upgrade_to_structured_minimalism.md`
-(platform-wide rollout, land incrementally per capability). Outreach's
-dashboard and prospect cards (`bg-glass-2` still present,
-`prospects/page.tsx` ~line 345) are a known live target. Sequence: this
-before Task 114's P1.5, per that section's own note.
+Full sweep complete: `Surface`'s `solid` default flipped to `true`
+(ADR-023), every remaining `.glass-*` class and `bg-glass-N` token in
+`src/` migrated to `verity-solid`/`bg-surface-sunken` across ~40 files in
+7 commits (`fb7f3b9`..`3ad2b89`). See
+`taskplans/112_complete_ui_ux_upgrade_to_structured_minimalism.md`'s own
+Status section for the full file list and verification notes. The known
+`bg-glass-2` violation in `prospects/page.tsx` (~line 345) is fixed. Task
+114's P1.5 (which depended on this landing first per its own note) can
+now proceed.
 
 ### 3. Task 113 — AI implementation audit
 
