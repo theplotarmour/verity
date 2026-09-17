@@ -95,7 +95,7 @@ async function DomainDetailPage({
           <>
             <Link
               href="/outreach/domains"
-              className="rounded-md border border-line px-3 py-1 text-[13px] text-text no-underline transition-colors hover:bg-glass-2"
+              className="rounded-md border border-line px-3 py-1 text-[13px] text-text no-underline transition-colors hover:bg-surface-sunken"
             >
               Back to Domains
             </Link>

@@ -33,7 +33,7 @@ export function RangeSwitch({
               "rounded-md px-3 py-1 text-[13px] no-underline transition-colors " +
               (on
                 ? "bg-accent-subtle font-medium text-accent-ink"
-                : "text-text-secondary hover:bg-glass-2 hover:text-text")
+                : "text-text-secondary hover:bg-surface-sunken hover:text-text")
             }
           >
             {RANGE_LABEL[key]}

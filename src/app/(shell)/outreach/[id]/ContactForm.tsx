@@ -95,7 +95,7 @@ export function ContactForm({ leadId }: { leadId: string }) {
               id="notes"
               name="notes"
               rows={2}
-              className="glass-control w-full rounded-lg px-4 py-2.5 text-[14px] text-text placeholder:text-text-tertiary focus:outline-none focus:border-accent"
+              className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text placeholder:text-text-tertiary focus:outline-none focus:border-accent"
             />
           </Field>
         </div>

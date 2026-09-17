@@ -342,7 +342,7 @@ async function ProspectsPage({ searchParams }: { searchParams: Promise<Search> }
                     </span>
                   </div>
 
-                  <div className={`rounded-lg px-3 py-2 text-[12px] ${c.overdue ? "bg-danger-subtle" : "bg-glass-2"}`}>
+                  <div className={`rounded-lg px-3 py-2 text-[12px] ${c.overdue ? "bg-danger-subtle" : "bg-surface-sunken"}`}>
                     <span className={c.overdue ? "font-medium text-danger" : "text-text-secondary"}>
                       {c.nextActionAt ? `${c.overdue ? "Overdue" : "Next action"} · ${c.nextActionAt}` : "No next action set"}
                     </span>

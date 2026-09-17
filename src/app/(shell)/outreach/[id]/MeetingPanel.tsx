@@ -83,7 +83,7 @@ export function MeetingPanel({ leadId, meetings, canCreate }: { leadId: string; 
                     name="outcomeNotes"
                     rows={2}
                     placeholder="What happened?"
-                    className="glass-control w-full rounded-lg px-3 py-2 text-[13px] text-text placeholder:text-text-tertiary focus:outline-none focus:border-accent"
+                    className="verity-solid border border-line w-full rounded-lg px-3 py-2 text-[13px] text-text placeholder:text-text-tertiary focus:outline-none focus:border-accent"
                   />
                   <div className="flex gap-1.5">
                     <Button size="sm" type="submit" disabled={pending}>

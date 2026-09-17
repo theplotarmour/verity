@@ -74,7 +74,7 @@ export function ProspectFilters({ options }: { options: ProspectFilterOptions })
   );
 
   return (
-    <div className="glass-control mb-6 rounded-xl px-4 py-4" aria-busy={pending}>
+    <div className="verity-solid border border-line mb-6 rounded-xl px-4 py-4" aria-busy={pending}>
       <form
         className="mb-3"
         role="search"

@@ -77,7 +77,7 @@ export function CoachingNotePanel({ teamId, aboutPartyId, aboutName }: { teamId:
               name="content"
               rows={2}
               placeholder={`Add a note about ${aboutName}…`}
-              className="glass-control w-full rounded-lg px-3 py-2 text-[13px] text-text placeholder:text-text-tertiary focus:outline-none focus:border-accent"
+              className="verity-solid border border-line w-full rounded-lg px-3 py-2 text-[13px] text-text placeholder:text-text-tertiary focus:outline-none focus:border-accent"
             />
             <div className="flex items-center gap-2">
               <Select name="visibility" defaultValue="JuniorVisible" className="w-auto">

@@ -102,7 +102,7 @@ export function DirectionForm() {
             id="strategicNote"
             name="strategicNote"
             rows={2}
-            className="glass-control w-full rounded-lg px-4 py-2.5 text-[14px] text-text focus:outline-none focus:border-accent"
+            className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text focus:outline-none focus:border-accent"
           />
         </Field>
       </div>

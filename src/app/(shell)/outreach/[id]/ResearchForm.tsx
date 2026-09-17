@@ -160,7 +160,7 @@ export function ResearchForm({ leadId }: { leadId: string }) {
               id="content"
               name="content"
               rows={3}
-              className="glass-control w-full rounded-lg px-4 py-2.5 text-[14px] text-text placeholder:text-text-tertiary focus:outline-none focus:border-accent"
+              className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text placeholder:text-text-tertiary focus:outline-none focus:border-accent"
             />
           </Field>
           {failure && (
@@ -189,7 +189,7 @@ export function ResearchForm({ leadId }: { leadId: string }) {
               ref={fileInputRef}
               id="researchFile"
               type="file"
-              className="glass-control w-full rounded-lg px-4 py-2.5 text-[14px] text-text"
+              className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text"
             />
           </Field>
           <Field label="Title" htmlFor="title" required>

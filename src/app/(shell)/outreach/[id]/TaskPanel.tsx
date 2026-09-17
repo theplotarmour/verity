@@ -160,7 +160,7 @@ export function TaskPanel({
               id="taskDescription"
               name="description"
               rows={2}
-              className="glass-control w-full rounded-lg px-4 py-2.5 text-[14px] text-text placeholder:text-text-tertiary focus:outline-none focus:border-accent"
+              className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text placeholder:text-text-tertiary focus:outline-none focus:border-accent"
             />
           </Field>
           {failure && <ErrorState title="Could not create task" message={failure.message} issues={failure.issues} retryable={failure.retryable} />}

@@ -36,7 +36,7 @@ async function DomainsPage() {
         actions={
           <Link
             href="/outreach/intelligence"
-            className="rounded-md border border-line px-3 py-1 text-[13px] text-text no-underline transition-colors hover:bg-glass-2"
+            className="rounded-md border border-line px-3 py-1 text-[13px] text-text no-underline transition-colors hover:bg-surface-sunken"
           >
             Company intelligence
           </Link>
@@ -60,7 +60,7 @@ async function DomainsPage() {
                     <li key={domain.id}>
                       <Link
                         href={`/outreach/domains/${domain.id}`}
-                        className="flex items-center justify-between px-3 py-2.5 text-[13px] text-text no-underline transition-colors hover:bg-glass-2"
+                        className="flex items-center justify-between px-3 py-2.5 text-[13px] text-text no-underline transition-colors hover:bg-surface-sunken"
                       >
                         <span>{domain.name}</span>
                         <span aria-hidden className="text-text-tertiary">

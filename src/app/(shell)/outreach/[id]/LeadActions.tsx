@@ -246,17 +246,17 @@ function LogActivityForm({ leadId, onDone }: { leadId: string; onDone: () => voi
         </Field>
       </div>
       <Field label="Message" htmlFor="message" hint="What was sent">
-        <textarea id="message" name="message" rows={2} className="glass-control w-full rounded-lg px-4 py-2.5 text-[14px] text-text focus:outline-none focus:border-accent" />
+        <textarea id="message" name="message" rows={2} className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text focus:outline-none focus:border-accent" />
       </Field>
       <Field label="Response" htmlFor="response" hint="What they said, if anything">
-        <textarea id="response" name="response" rows={2} className="glass-control w-full rounded-lg px-4 py-2.5 text-[14px] text-text focus:outline-none focus:border-accent" />
+        <textarea id="response" name="response" rows={2} className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text focus:outline-none focus:border-accent" />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Next action" htmlFor="nextActionNote">
           <input
             id="nextActionNote"
             name="nextActionNote"
-            className="glass-control h-11 w-full rounded-lg px-4 text-[14px] text-text focus:outline-none focus:border-accent"
+            className="verity-solid border border-line h-11 w-full rounded-lg px-4 text-[14px] text-text focus:outline-none focus:border-accent"
           />
         </Field>
         <Field label="Due" htmlFor="nextActionAt">
@@ -264,7 +264,7 @@ function LogActivityForm({ leadId, onDone }: { leadId: string; onDone: () => voi
             id="nextActionAt"
             name="nextActionAt"
             type="date"
-            className="glass-control h-11 w-full rounded-lg px-4 text-[14px] text-text focus:outline-none focus:border-accent"
+            className="verity-solid border border-line h-11 w-full rounded-lg px-4 text-[14px] text-text focus:outline-none focus:border-accent"
           />
         </Field>
       </div>
@@ -385,7 +385,7 @@ function RecordPaymentForm({ leadId, onDone }: { leadId: string; onDone: () => v
           min="0.01"
           step="0.01"
           required
-          className="glass-control h-11 w-36 rounded-lg px-4 text-[14px] text-text focus:outline-none focus:border-accent"
+          className="verity-solid border border-line h-11 w-36 rounded-lg px-4 text-[14px] text-text focus:outline-none focus:border-accent"
         />
       </Field>
       <Field label="Set threshold" htmlFor="threshold" hint="Optional — leave blank to keep the current one">
@@ -395,7 +395,7 @@ function RecordPaymentForm({ leadId, onDone }: { leadId: string; onDone: () => v
           type="number"
           min="0.01"
           step="0.01"
-          className="glass-control h-11 w-36 rounded-lg px-4 text-[14px] text-text focus:outline-none focus:border-accent"
+          className="verity-solid border border-line h-11 w-36 rounded-lg px-4 text-[14px] text-text focus:outline-none focus:border-accent"
         />
       </Field>
       {failure && (
@@ -467,7 +467,7 @@ function ReactivateForm({
           name="whyRelevant"
           required
           rows={2}
-          className="glass-control w-full rounded-lg px-4 py-2.5 text-[14px] text-text focus:outline-none focus:border-accent"
+          className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text focus:outline-none focus:border-accent"
         />
       </Field>
       {failure && <ErrorState title="Could not reactivate" message={failure.message} issues={failure.issues} retryable={failure.retryable} />}
@@ -560,7 +560,7 @@ function EscalateForm({ leadId, onDone }: { leadId: string; onDone: () => void }
           name="note"
           required
           rows={2}
-          className="glass-control w-full rounded-lg px-4 py-2.5 text-[14px] text-text focus:outline-none focus:border-accent"
+          className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text focus:outline-none focus:border-accent"
         />
       </Field>
       {failure && <ErrorState title="Could not escalate" message={failure.message} issues={failure.issues} retryable={failure.retryable} />}

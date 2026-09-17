@@ -105,7 +105,7 @@ async function MyWorkspacePage() {
             <li key={l.id}>
               <Link
                 href={`/outreach/${l.id}`}
-                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-text no-underline hover:bg-glass-2"
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-text no-underline hover:bg-surface-sunken"
               >
                 <span
                   aria-hidden="true"
