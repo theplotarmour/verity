@@ -91,6 +91,7 @@ model Tenant {
   packOperations          PackOperation[]
   packContributions       PackContribution[]
   packEvents              PackEvent[]
+  capabilityUpgradeOperations CapabilityUpgradeOperation[]
 
   // Capability: dine-in. Back-relations only — Prisma requires the opposite
   // side of every relation, so a capability's tables show up here whether or not
@@ -944,8 +945,53 @@ model CapabilityDefinition {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   activations TenantActivation[]
+  upgradeOperations CapabilityUpgradeOperation[]
 
   @@map("capability_definition")
+}
+
+enum CapabilityUpgradeState {
+  Planned
+  Preflighted
+  Applying
+  Verifying
+  Completed
+  Failed
+  RolledBack
+}
+
+/// Durable per-tenant capability version-upgrade lifecycle (Authority: Task
+/// 108 WP-11A, VCA-008). `TenantActivation.pinnedVersion` is the enforced
+/// contract (ADR-021); this is the audited state machine that walks it
+/// forward, one operation per attempt, so an upgrade failure can never
+/// silently strand a tenant in a false "Active at the new version" state.
+///
+/// `reversible` is asserted by the operator at plan time, never inferred:
+/// this codebase ships one deployed artifact per capability (ADR-021's
+/// "honest single-artifact model"), so whether the OLD contract can still be
+/// served after the code moved on is a judgement about the deployment, not
+/// something the platform can verify from the version string alone.
+model CapabilityUpgradeOperation {
+  id               String                  @id @default(uuid()) @db.Uuid
+  tenantId         String                  @map("tenant_id") @db.Uuid
+  capabilityId     String                  @map("capability_id")
+  kind             String                  @default("Upgrade")
+  fromVersion      String?                 @map("from_version")
+  toVersion        String                  @map("to_version")
+  state            CapabilityUpgradeState  @default(Planned)
+  reversible       Boolean                 @default(false)
+  diff             Json                    @default("{}")
+  error            String?
+  approvedByUserId String?                 @map("approved_by_user_id") @db.Uuid
+  correlationId    String?                 @map("correlation_id") @db.Uuid
+  startedAt        DateTime                @default(now()) @map("started_at")
+  completedAt      DateTime?               @map("completed_at")
+
+  tenant     Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  capability CapabilityDefinition @relation(fields: [capabilityId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, capabilityId, startedAt])
+  @@map("capability_upgrade_operation")
 }
 
 /// Per-tenant activation (Authority: Spec PLA-CAP-002, PLA-CAP-003).
