@@ -134,9 +134,8 @@ export function Modal({
       aria-labelledby={titleId}
       aria-describedby={description ? descriptionId : undefined}
       className={
-        // ADR-023: solid, same as every other surface — the glass ladder this
-        // comment used to justify is deprecated.
-        "verity-solid m-auto w-[calc(100vw-2rem)] rounded-2xl border border-line p-0 shadow-lg " +
+        // ADR-024: modal is a transient overlay, not dense content — glass.
+        "glass-overlay m-auto w-[calc(100vw-2rem)] rounded-2xl p-0 " +
         "text-text backdrop:bg-[rgba(15,17,21,0.32)] " +
         "backdrop:backdrop-blur-[3px] open:animate-none " +
         (width === "sm"

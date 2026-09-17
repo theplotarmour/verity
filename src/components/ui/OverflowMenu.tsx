@@ -43,7 +43,7 @@ export function OverflowMenu({ children, label = "More actions" }: { children: R
         <div
           role="menu"
           aria-label={label}
-          className="verity-solid absolute right-0 top-full z-20 mt-2 min-w-[200px] rounded-lg border border-line p-1 shadow-lg"
+          className="glass-overlay absolute right-0 top-full z-20 mt-2 min-w-[200px] rounded-lg p-1"
         >
           {children}
         </div>

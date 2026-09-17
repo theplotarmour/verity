@@ -350,8 +350,7 @@ export function Combobox({
                 : { top: anchor.top }),
             }}
             className={
-              "verity-solid z-[100] m-0 list-none overflow-y-auto overscroll-contain " +
-              "rounded-lg border border-line p-1 shadow-[var(--shadow-lg)]"
+              "glass-overlay z-[100] m-0 list-none overflow-y-auto overscroll-contain rounded-lg p-1"
             }
           >
             {matches.length === 0 && (

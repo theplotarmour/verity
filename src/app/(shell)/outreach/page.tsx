@@ -285,11 +285,15 @@ async function OutreachPage({
           panel among panels — because everything below exists to execute
           against it. Accent-tinted per ADR-011/012's existing token, never a
           new color. */}
+      {/* ADR-024: accent is tint/interactive-only, never a large filled
+          background — this banner was the concrete defect the constraint
+          names. Solid surface (dense content, not chrome), accent moved to
+          a left edge stripe instead of the whole fill. */}
       {data.canPostDirection && (
         <div
           className={
             data.currentDirection
-              ? "mb-6 rounded-xl border border-accent-line bg-accent-subtle px-6 py-5"
+              ? "mb-6 rounded-xl border border-line border-l-[3px] border-l-accent bg-surface px-6 py-5"
               : "mb-6 rounded-xl border border-line bg-surface px-6 py-5"
           }
         >

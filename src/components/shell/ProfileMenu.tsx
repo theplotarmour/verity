@@ -61,7 +61,7 @@ export function ProfileMenu({
         <div
           role="menu"
           aria-label="Account"
-          className="verity-solid absolute right-0 top-[calc(100%+8px)] z-50 w-56 rounded-xl border border-line p-1.5 shadow-[var(--shadow-lg)]"
+          className="glass-overlay absolute right-0 top-[calc(100%+8px)] z-50 w-56 rounded-xl p-1.5"
         >
           <div className="truncate px-3 py-2 text-[12.5px] text-text-tertiary">{userLabel}</div>
           <Link
