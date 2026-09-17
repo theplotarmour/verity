@@ -49,6 +49,7 @@ export function ShellChrome({
   userLabel,
   userInitials,
   canAudit,
+  unreadCount = 0,
   children,
 }: {
   areas: NavArea[];
@@ -61,6 +62,8 @@ export function ShellChrome({
    *  hit a bare permission-denied page with no warning. The sidebar's own
    *  Audit entry already gates on this; the bell didn't. */
   canAudit: boolean;
+  /** Task 114 P1.5 item 1 — unread in-app notification count for the bell. */
+  unreadCount?: number;
   children: ReactNode;
 }) {
   const [navOpen, setNavOpen] = useState(false);
@@ -327,10 +330,18 @@ export function ShellChrome({
               <Link
                 href="/audit"
                 title="Recent activity"
-                className="verity-solid grid size-11 place-items-center rounded-full border border-line text-text-secondary no-underline shadow-[var(--shadow-sm)] transition-[color,box-shadow,transform] duration-200 hover:-translate-y-px hover:text-text hover:shadow-[var(--shadow-md)]"
+                className="verity-solid relative grid size-11 place-items-center rounded-full border border-line text-text-secondary no-underline shadow-[var(--shadow-sm)] transition-[color,box-shadow,transform] duration-200 hover:-translate-y-px hover:text-text hover:shadow-[var(--shadow-md)]"
               >
                 <Icon name="bell" size={19} />
-                <span className="sr-only">Recent activity</span>
+                {unreadCount > 0 && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute -right-0.5 -top-0.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-accent px-1 text-[10px] font-medium leading-none text-accent-on"
+                  >
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+                <span className="sr-only">Recent activity{unreadCount > 0 ? ` — ${unreadCount} unread` : ""}</span>
               </Link>
             )}
             {/* Who the session belongs to. The initials alone say nothing to a

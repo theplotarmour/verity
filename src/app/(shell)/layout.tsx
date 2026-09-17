@@ -11,6 +11,7 @@ import { withTenant } from "@/server/platform/tenancy";
 import { resolvePermissions } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { installAdministration } from "@/server/platform/administration";
+import { unreadFor } from "@/server/platform/notification";
 import { navigationFor } from "@/server/platform/contribution";
 import { PLYWOOD_CAPABILITY } from "@/server/capabilities/plywood/keys";
 import {
@@ -55,7 +56,7 @@ export default async function ShellLayout({
     memberships.find((m) => m.membershipId === actor.membershipId) ??
     memberships[0]!;
 
-  const { capabilities, canAudit, canConfigure, grants, commandKeys } = await withTenant(
+  const { capabilities, canAudit, canConfigure, grants, commandKeys, unreadCount } = await withTenant(
     actor.tenantId,
     async (tx) => {
       const activations = actor.roleId ? await tx.tenantActivation.findMany({
@@ -65,6 +66,9 @@ export default async function ShellLayout({
       const permissions = actor.roleId
         ? await resolvePermissions(tx, actor.roleId)
         : [];
+      // Task 114 P1.5 item 1 — the bell's unread count. Reuses the existing
+      // notification substrate's own `unreadFor` rather than a second query.
+      const unread = await unreadFor(tx, actor.userId);
 
 
       return {
@@ -89,6 +93,7 @@ export default async function ShellLayout({
         canConfigure: permissions.some(
           (p) => p.verb === "Edit" && p.entity === "verity.platform.tenant" && p.scope === "Tenant",
         ),
+        unreadCount: unread.length,
       };
     },
   );
@@ -254,6 +259,7 @@ export default async function ShellLayout({
       userLabel={userLabel}
       userInitials={userInitials}
       canAudit={canAudit}
+      unreadCount={unreadCount}
     >
       <CommandAccessProvider commandKeys={commandKeys}>{children}</CommandAccessProvider>
     </ShellChrome>
