@@ -150,6 +150,15 @@ infrastructure, just triage which command needs which trigger):
   excluded, not deferred.
 - Experiments (§51) and Domain Learnings (§52) — deferred, not this phase.
 
+## Follow-up
+
+`taskplans/114_pa_oms_outreach_execution_layer_redesign.md` (2026-09-17) is an
+external UX review of this capability done after F/G/H shipped — it does not
+change anything in this file, but addresses workflow/execution gaps (no work
+queue, too many equal-weight record actions, dashboard is report-first not
+action-first) found once the domain intelligence and frontend UX here were in
+production.
+
 ## Open decisions for whoever picks this up
 
 - Domain velocity's coarser-than-ideal checkpoint set (see Phase F) — ship

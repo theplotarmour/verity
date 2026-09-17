@@ -38,6 +38,23 @@ wanting this (plywood likely already has 3+ candidate attention sources:
 overdue receivables, pending goods issue, low stock) is the trigger to
 write that ADR.
 
+## Trigger watch (2026-09-17)
+
+`taskplans/114_pa_oms_outreach_execution_layer_redesign.md` P0.1 adds a
+capability-local "work queue" (overdue/due-today/no-next-action/unassigned/
+at-risk) to Outreach. Decision made there: build it Outreach-local, not as
+a platform primitive — per this project's own "standardize the foundation,
+not every behavior" principle and the anti-pattern against premature
+generalization. This is **not** the trigger firing yet (inventory's
+`reorderLevel` field still has no surfacing query, so the count of real
+capabilities independently building their own exceptions feed is one, not
+two — Outreach's queue is functionally similar but this is the first
+capability to actually *build* one, not a second independently-arrived-at
+instance in the sense this file means). Recorded here so whoever next
+touches either Outreach's queue or a second capability's own exceptions
+list checks this note before re-deriving the trigger question from
+scratch.
+
 ## Non-goals
 
 - Not a new notification/alerting delivery mechanism — Verity's

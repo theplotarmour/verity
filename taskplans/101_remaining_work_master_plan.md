@@ -232,3 +232,76 @@ two decisions above.
   ADR or decision each explicitly requires.
 - Not a claim that Category 3's triggers won't fire soon — only that they
   haven't, as of 2026-09-04.
+
+## Addendum, 2026-09-17 — Tasks 102–114, current sequencing
+
+This file predates thirteen taskplans (102–114). Rather than a full
+rewrite, this addendum extends the same four-category method above to
+everything new, and records what's actually been done since 2026-09-04.
+
+**Since 2026-09-04, resolved from the body above:** Task 86 (dashboard/
+panel state model) and Task 92's remaining coverage are done (see
+`00_STATUS_INDEX.md` Done table). Task 90's trigger is still **not**
+fired — see its own file's 2026-09-17 "Trigger watch" note, added today
+after Task 114 raised the question directly; still one real instance, now
+explicitly including Outreach's capability-local work queue as a
+considered-and-rejected generalization candidate, not a second instance.
+Category 3/4 items (74-76, 79, 80, 87, 88, 89, Task 100's two decisions)
+remain exactly as this file's body describes — nothing has fired.
+
+**New Category 1 (buildable now, zero dependency):**
+- Task 113 item 2 (AI model/deployment config) — **done 2026-09-17**:
+  confirmed `groq/compound` rejects tool calls, swapped `OPENAI_MODEL` to
+  `openai/gpt-oss-120b` (confirmed via live probe), but this uncovered a
+  *second* bug — the real integration test still fails to persist an
+  insight after a successful tool call. Task 113 items 1/3/4/5 (global
+  agent regression check, per-tenant BUILT-vs-PROVEN, `toolKeys`
+  generalization, Task 95 reality gap) are unrun — do these next, cheap,
+  before any more AI-surface work, same reasoning this file already
+  applied to Task 81's compliance audit.
+- Task 114 P0 (Outreach work queue, record-action consolidation,
+  two-step create, list table view, Audit-nav dead-end fix) — buildable
+  now, no ADR/decision/trigger gate. Highest-value item in this addendum.
+- Task 111 (global settings/shell UX pattern) — resolved same day by
+  ADR-023, buildable now.
+- Task 112 (structured-minimalism platform rollout) — buildable now,
+  land incrementally; sequence after 111 per 111's own status note.
+- Task 100's non-blocked remainder (asymmetric layout, intelligent cards,
+  per-role views, sparkline UI construction over already-existing
+  metrics-history data) — buildable now. **Correction, 2026-09-17: the
+  schema migration and shadcn decision are NOT gated** — both were
+  actually resolved 2026-09-04 (commit `e92dbee`) and just never marked
+  in this file or the index; confirmed live 2026-09-17.
+- Task 97 Findings 1/6 (`rm .eslintrc.json`, `rm -rf tmp_backup_verity...`)
+  — **correction, 2026-09-17: already done 2026-09-04, same commit
+  `e92dbee`.** This file's body above and the index both had this wrong;
+  fixed in both places today.
+
+**New Category 4 (needs an explicit yes/no):**
+- ~~Task 97 Finding 1/6 and Task 100's migration~~ — **resolved
+  2026-09-17: both already done 2026-09-04, nothing left to ask.**
+- Task 114 P2 (activity-type field sets, sequences/cadences scope,
+  enrichment-assisted creation) — needs product-owner scoping before any
+  code, per Task 114's own text; do not start from that file's prose
+  alone.
+- Task 99 Skill 6 (`verity-capability-boundary-check`) — needs real design
+  work, not a yes/no exactly, but explicitly "not before two developers
+  work in parallel" per Task 99 — recorded here so it isn't picked up
+  early by mistake.
+
+**Recommended order for 102-114, appended to the body's own order (revised
+2026-09-17 after Task 97/100 turned out to need no permission ask):**
+1. Task 113 items 1/3/4/5 — **DONE 2026-09-17** except item 3 (needs live
+   DB access this environment lacks).
+2. ~~Ask for Task 97/100 permission~~ — **not needed, already done
+   2026-09-04.**
+3. Task 114 P0 (highest buildable-now value) — next up.
+4. Task 111 → Task 112 (pattern, then rollout) — sequence with 114 P0/P1
+   on shared surfaces (Outreach dashboard) per Task 114's own
+   "Relationship to 111/112" section, material pass before structural
+   pass.
+5. Task 100's sparkline UI + non-conflicting remainder, interleaved with
+   112's rollout since both touch Overview/dashboard surfaces.
+6. Task 114 P1 (dashboard restructure, drill-through, trend deltas).
+7. Task 114 P2 and Task 99 Skill 6 — park until their respective
+   scoping/parallel-dev conditions are met.

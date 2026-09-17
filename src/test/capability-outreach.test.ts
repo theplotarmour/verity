@@ -21,7 +21,10 @@ vi.mock("@/server/platform/agent-chat", async (importOriginal) => {
   return { ...original, runAgentTurn: agentTurn };
 });
 const realAgentTurn = vi.hoisted(() => ({ value: null as unknown }));
-vi.mock("@/server/platform/auth", () => ({ requireActor: async () => currentActor.value }));
+vi.mock("@/server/platform/auth", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/server/platform/auth")>()),
+  requireActor: async () => currentActor.value,
+}));
 vi.mock("@/server/platform/request-limits", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/server/platform/request-limits")>()),
   limitActorRequests: async () => undefined,
@@ -1433,6 +1436,7 @@ describeDb("capability: Outreach", () => {
       });
       agentTurn.mockImplementationOnce(realAgentTurn.value as typeof agentTurn);
       const result = await generateLeadInsight({ leadId, kind: "Summary" });
+      console.log("LIVE result:", result);
       expect(result.ok).toBe(true);
       const rows = await executeQuery(founder, listAiInsights, { leadId });
       const row = rows.find((r) => r.kind === "Summary" && r.model !== "test-model")!;

@@ -57,6 +57,19 @@ elasticity, static edge-bend only) would be far cheaper than the full
 package and might be the more honest version of "use this" for a single
 static surface.
 
+## Update (2026-09-17) — checked against ADR-023, still no dependency added
+
+Confirmed: `liquid-glass-react` is not an installed dependency and no
+`LiquidGlass` component exists anywhere in `src/`. The only reference is a
+code comment in `globals.css` (~line 531) describing the CSS-only static
+approximation this file already recommended instead of the library. Since
+ADR-023 (2026-09-17) retires glass as the default material platform-wide —
+`.glass-shell`/`.glass-overlay` themselves are now migration targets under
+Task 112, not just candidates for a future technique — this file's
+"one signature-moment surface" candidate is even less likely to be picked
+up soon than when written. Nothing to change in scope; still correctly
+PENDING/reference-only, not actionable.
+
 ## Non-goals
 
 - Not a dependency to add now. Nothing currently needs it.

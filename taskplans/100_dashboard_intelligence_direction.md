@@ -7,25 +7,27 @@ session's nav-loading work.
 
 ## Status: Both flagged decisions made 2026-09-04.
 
-**Metrics-history capability: BUILT.** `PlywoodMetricSnapshot` table +
-daily capture job (`verity.plywood.capture_metric_snapshot`) + a
+**Metrics-history capability: BUILT AND APPLIED (confirmed 2026-09-17).**
+Table + daily capture job (`verity.plywood.capture_metric_snapshot`) + a
 `metricsHistory` query, reusing the exact SQL expressions `ownerConsole`
 already uses for stock value/receivables/payables (source-of-truth
 discipline) at whole-tenant scope. This is the actual unblocking
 prerequisite this file itself identified as missing from the original
-writeup. **Not yet applied to the live database** — schema-changing SQL,
-same permission boundary as every migration this session; run `npx prisma
-db execute --file pending-metric-snapshot-migration.sql --url
-"%DIRECT_URL%"` (file at the repo root) to apply it, then move its content
-into a proper `prisma/migrations/<timestamp>_.../migration.sql` and
-`prisma migrate resolve --applied` it, same as every other migration this
-session — not done yet because resolving it before the SQL is actually
-applied would desync `migrate status` again. **Sparklines/
-trend charts themselves are still NOT built** — a real trend needs real
-elapsed days of accumulated history, which no build session can
+writeup. Migration `20260904150000_plywood_metric_snapshot` was applied
+and `prisma migrate resolve --applied`'d the same day (commit `e92dbee`,
+"table exists, RLS enabled+forced, entity_definition row present... migrate
+status clean") — this file's earlier "not yet applied" note was stale,
+corrected 2026-09-17. **The model itself was later renamed
+`TradingMetricSnapshot`** as part of ADR-018's generic plywood→Trading
+extraction — same table, same data, just no longer plywood-specific in
+name. `pending-metric-snapshot-migration.sql` no longer exists at the repo
+root; its content is what's now in the proper `prisma/migrations/` entry.
+**Sparklines/trend charts themselves are still NOT built** — a real trend
+needs real elapsed days of accumulated history, which no build session can
 manufacture without violating `charts.tsx`'s own "no sample data, no
 smoothing, no projected series" rule. That part waits on time passing with
-the capture job running, not on more code.
+the capture job running (now confirmed actually running against real
+data since 2026-09-04), not on more code.
 
 **shadcn/ui adoption: decided NO.** Verity keeps its existing hand-built
 component layer as the only one. Reasoning: the file's own analysis

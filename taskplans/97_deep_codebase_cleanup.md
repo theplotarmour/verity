@@ -5,7 +5,18 @@ listing, `git ls-files`, `.gitignore`, `eslint --version`, greps for
 TODO/console.log/eslint-disable across `src/`). Every finding below is
 cited to what was actually checked, not assumed.
 
-## Status: PENDING — a plan, nothing executed
+## Status: Findings 1/6 DONE (2026-09-04, commit `e92dbee`), Finding 3 DONE
+(2026-09-04), rest still PENDING as a plan
+
+**Confirmed 2026-09-17** (this was recorded as still-blocked in
+`00_STATUS_INDEX.md`'s Pending table and Task 101's body — both stale):
+`.eslintrc.json` no longer exists at the repo root, and
+`tmp_backup_verity`/`tmp-010-*` are gone from disk. `git log --oneline
+--all | grep -i metric` surfaces `e92dbee` ("finalize metric-snapshot
+migration, delete dead .eslintrc.json"), whose own message confirms both
+deletions plus the local scratch-file removal in the same pass. Nothing
+new needed for Findings 1 or 6 — they were done same day as Task 100's
+migration, just never marked here.
 
 ## Headline: the codebase itself is clean. The mess is at the root.
 
