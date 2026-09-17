@@ -19,12 +19,9 @@ import { ForbiddenError } from "@/server/platform/authorization";
 import {
   Badge,
   DefinitionList,
-  EmptyState,
   PageHeader,
   Panel,
   PermissionDenied,
-  Row,
-  RowList,
   Stat,
   StatRow,
   StateBadge,
@@ -37,6 +34,8 @@ import { FileShelf } from "./FileShelf";
 import { TaskPanel } from "./TaskPanel";
 import { MeetingPanel } from "./MeetingPanel";
 import { AiInsightPanel } from "./AiInsightPanel";
+import { ActivityTimeline } from "./ActivityTimeline";
+import { Tabs } from "@/components/ui/Tabs";
 import { readAgentProviderConfig } from "@/server/platform/config";
 
 export const dynamic = "force-dynamic";
@@ -208,217 +207,256 @@ async function OutreachLeadDetailPage({ params }: { params: Promise<{ id: string
         />
       </StatRow>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[1.2fr_1fr]">
-        <div className="flex flex-col gap-6">
-          <Panel title="Identity">
-            <DefinitionList
-              items={[
-                { term: "Track", value: lead.track },
-                { term: "Website", value: lead.website ?? "—" },
-                { term: "Industry", value: lead.industry ?? "—" },
-                { term: "Location", value: lead.location ?? "—" },
-                { term: "Contact", value: lead.contactName ?? "—" },
-                { term: "Designation", value: lead.contactDesignation ?? "—" },
-                { term: "Email", value: lead.contactEmail ?? "—" },
-                { term: "Phone", value: lead.contactPhone ?? "—" },
-                {
-                  term: "LinkedIn",
-                  value: lead.linkedinUrl ? (
-                    <a href={lead.linkedinUrl} target="_blank" rel="noreferrer" className="text-accent-ink no-underline hover:underline">
-                      {lead.linkedinUrl}
-                    </a>
-                  ) : (
-                    "—"
-                  ),
-                },
-              ]}
-            />
-          </Panel>
-
-          <Panel title="Qualification">
-            <DefinitionList
-              items={[
-                { term: "What they do", value: lead.whatTheyDo ?? "—" },
-                { term: "Potential need", value: lead.potentialNeed ?? "—" },
-                { term: "Sales hypothesis", value: lead.salesHypothesis ?? "—" },
-                { term: "Fit score", value: lead.qualityScore != null ? `${lead.qualityScore} / 10` : "—" },
-              ]}
-            />
-          </Panel>
-
-          <Panel title="Research">
-            <FileShelf entries={data.researchEntries as unknown as Array<{ id: string; title: string; type: string; fileId: string | null; createdAt: Date }>} />
-            {data.researchEntries.length === 0 ? (
-              <p className="text-[13px] text-text-tertiary">No research recorded yet.</p>
-            ) : (
-              <ul className="m-0 flex list-none flex-col gap-3 p-0">
-                {data.researchEntries.map((r) => (
-                  <li key={r.id} className="flex flex-col gap-1 border-b border-line pb-3 last:border-none last:pb-0">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-[14px] text-text">{r.title}</span>
-                      <span className="flex shrink-0 items-center gap-2">
-                        <Badge>{r.type}</Badge>
-                        <span className="text-[11px] text-text-tertiary">
-                          {r.createdAt.toISOString().slice(0, 16).replace("T", " ")}
-                        </span>
-                      </span>
-                    </div>
-                    {r.content && <p className="m-0 text-[13px] text-text-secondary">{r.content}</p>}
-                    {r.sourceUrl && (
-                      <a href={r.sourceUrl} target="_blank" rel="noreferrer" className="text-[12px] text-accent-ink no-underline hover:underline">
-                        {r.sourceUrl}
-                      </a>
-                    )}
-                    {r.fileId && <ViewFileLink entryId={r.id} />}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {data.canCreateResearch && (
-              <div className="mt-4">
-                <ResearchForm leadId={lead.id} />
-              </div>
-            )}
-          </Panel>
-
-          <Panel title="Contacts">
-            {data.contacts.length === 0 ? (
-              <p className="text-[13px] text-text-tertiary">No contacts added yet.</p>
-            ) : (
-              <ul className="m-0 flex list-none flex-col gap-3 p-0">
-                {data.contacts.map((c) => (
-                  <li key={c.id} className="flex flex-col gap-1 border-b border-line pb-3 last:border-none last:pb-0">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="text-[14px] text-text">{c.fullName}</span>
-                      {c.classification !== "Unknown" && (
-                        <Badge>{c.classification.replace(/([A-Z])/g, " $1").trim()}</Badge>
-                      )}
-                    </div>
-                    {(c.designation || c.department) && (
-                      <span className="text-[12px] text-text-secondary">
-                        {[c.designation, c.department].filter(Boolean).join(" · ")}
-                      </span>
-                    )}
-                    <span className="text-[12px] text-text-tertiary">
-                      {[c.email, c.phone].filter(Boolean).join(" · ") || "No contact details on file"}
-                    </span>
-                    {c.linkedinUrl && (
-                      <a href={c.linkedinUrl} target="_blank" rel="noreferrer" className="text-[12px] text-accent-ink no-underline hover:underline">
-                        {c.linkedinUrl}
-                      </a>
-                    )}
-                    {c.notes && <span className="text-[12px] text-text-tertiary">{c.notes}</span>}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {data.canCreateContact && (
-              <div className="mt-4">
-                <ContactForm leadId={lead.id} />
-              </div>
-            )}
-          </Panel>
-
-          <Panel title="Attribution">
-            <DefinitionList
-              items={[
-                { term: "Lead originator", value: data.partyName.get(lead.leadOriginatorId) ?? "—" },
-                { term: "Opportunity owner", value: data.partyName.get(lead.opportunityOwnerId) ?? "—" },
-                { term: "Closer", value: lead.closerId ? data.partyName.get(lead.closerId) ?? "—" : "—" },
-                {
-                  term: "Advance received",
-                  value: `${(lead.advanceReceivedMinor / 100).toFixed(2)} / ${
-                    lead.advanceThresholdMinor != null ? (lead.advanceThresholdMinor / 100).toFixed(2) : "no threshold set"
-                  }`,
-                },
-                ...(lead.rejectionReason
-                  ? [
+      <Tabs
+        tabs={[
+          {
+            id: "overview",
+            label: "Overview",
+            content: (
+              <div className="grid items-start gap-6 lg:grid-cols-2">
+                <Panel title="Identity">
+                  <DefinitionList
+                    items={[
+                      { term: "Track", value: lead.track },
+                      { term: "Website", value: lead.website ?? "—" },
+                      { term: "Industry", value: lead.industry ?? "—" },
+                      { term: "Location", value: lead.location ?? "—" },
+                      { term: "Contact", value: lead.contactName ?? "—" },
+                      { term: "Designation", value: lead.contactDesignation ?? "—" },
+                      { term: "Email", value: lead.contactEmail ?? "—" },
+                      { term: "Phone", value: lead.contactPhone ?? "—" },
                       {
-                        term: "Rejection reason",
-                        value: <Badge>{lead.rejectionReason.replace(/([A-Z])/g, " $1").trim()}</Badge>,
+                        term: "LinkedIn",
+                        value: lead.linkedinUrl ? (
+                          <a href={lead.linkedinUrl} target="_blank" rel="noreferrer" className="text-accent-ink no-underline hover:underline">
+                            {lead.linkedinUrl}
+                          </a>
+                        ) : (
+                          "—"
+                        ),
                       },
-                    ]
-                  : []),
-              ]}
-            />
-          </Panel>
-        </div>
+                    ]}
+                  />
+                </Panel>
 
-        <div className="flex flex-col gap-6">
-          <Panel title="Timeline" flush>
-            {data.activities.length === 0 ? (
-              <EmptyState
-                title="No activity logged"
-                description="Nothing has been recorded against this lead yet. Field rule: if it isn't recorded, it didn't happen."
+                <Panel title="Qualification">
+                  <DefinitionList
+                    items={[
+                      { term: "What they do", value: lead.whatTheyDo ?? "—" },
+                      { term: "Potential need", value: lead.potentialNeed ?? "—" },
+                      { term: "Sales hypothesis", value: lead.salesHypothesis ?? "—" },
+                      { term: "Fit score", value: lead.qualityScore != null ? `${lead.qualityScore} / 10` : "—" },
+                    ]}
+                  />
+                </Panel>
+
+                <div className="lg:col-span-2">
+                  <AiInsightPanel
+                    leadId={lead.id}
+                    canRequest={data.canRequestInsight}
+                    configured={readAgentProviderConfig() !== undefined}
+                    insights={data.aiInsights.map((i) => ({
+                      id: i.id,
+                      kind: i.kind,
+                      content: i.content,
+                      model: i.model,
+                      sourceReads: i.sourceReads,
+                      requestedBy: data.partyName.get(i.requestedByPartyId) ?? "Unknown",
+                      createdAt: i.createdAt.toISOString(),
+                    }))}
+                  />
+                </div>
+              </div>
+            ),
+          },
+          {
+            id: "activity",
+            label: "Activity",
+            count: data.activities.length,
+            content: (
+              <Panel title="Timeline" flush>
+                <ActivityTimeline
+                  activities={data.activities.map((a) => ({
+                    id: a.id,
+                    activityType: a.activityType,
+                    channel: a.channel,
+                    message: a.message,
+                    response: a.response,
+                    actorPartyId: a.actorPartyId,
+                    occurredAt: a.occurredAt.toISOString(),
+                  }))}
+                  partyName={data.partyName}
+                />
+              </Panel>
+            ),
+          },
+          {
+            id: "contacts",
+            label: "Contacts",
+            count: data.contacts.length,
+            content: (
+              <Panel title="Contacts">
+                {data.contacts.length === 0 ? (
+                  // Task 114 P1.5 item 4: contacts is a sales blocker when
+                  // empty, not a routine empty list — an accent-bordered box
+                  // with the form open by default, not a grey one-liner.
+                  <div className="rounded-lg border border-dashed border-accent/40 bg-accent-subtle/40 p-5 text-center">
+                    <p className="m-0 text-[14px] font-medium text-text">No contacts added yet</p>
+                    <p className="m-0 mt-1 text-[13px] text-text-secondary">
+                      A prospect with no named contact has no one to reach — add the decision maker below.
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="m-0 flex list-none flex-col gap-3 p-0">
+                    {data.contacts.map((c) => (
+                      <li key={c.id} className="flex flex-col gap-1 border-b border-line pb-3 last:border-none last:pb-0">
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span className="text-[14px] text-text">{c.fullName}</span>
+                          {c.classification !== "Unknown" && (
+                            <Badge>{c.classification.replace(/([A-Z])/g, " $1").trim()}</Badge>
+                          )}
+                        </div>
+                        {(c.designation || c.department) && (
+                          <span className="text-[12px] text-text-secondary">
+                            {[c.designation, c.department].filter(Boolean).join(" · ")}
+                          </span>
+                        )}
+                        <span className="text-[12px] text-text-tertiary">
+                          {[c.email, c.phone].filter(Boolean).join(" · ") || "No contact details on file"}
+                        </span>
+                        {c.linkedinUrl && (
+                          <a href={c.linkedinUrl} target="_blank" rel="noreferrer" className="text-[12px] text-accent-ink no-underline hover:underline">
+                            {c.linkedinUrl}
+                          </a>
+                        )}
+                        {c.notes && <span className="text-[12px] text-text-tertiary">{c.notes}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {data.canCreateContact && (
+                  <div className="mt-4">
+                    <ContactForm leadId={lead.id} />
+                  </div>
+                )}
+              </Panel>
+            ),
+          },
+          {
+            id: "tasks",
+            label: "Tasks",
+            count: data.tasks.length,
+            content: (
+              <TaskPanel
+                leadId={lead.id}
+                teamId={lead.teamId}
+                tasks={data.tasks.map((t) => ({
+                  id: t.id,
+                  title: t.title,
+                  description: t.description,
+                  priority: t.priority,
+                  status: t.status,
+                  origin: t.origin,
+                  dueAt: t.dueAt ? t.dueAt.toISOString() : null,
+                  assignedToPartyId: t.assignedToPartyId,
+                }))}
+                teamMembers={data.teamMembers}
+                partyName={data.partyName}
+                canCreate={data.canCreateTask}
               />
-            ) : (
-              <RowList>
-                {data.activities.map((a) => (
-                  <Row key={a.id}>
-                    <span className="flex flex-col gap-0.5">
-                      <span className="text-[14px] text-text">
-                        {a.activityType.replace(/([A-Z])/g, " $1").trim()} · {a.channel}
-                      </span>
-                      {a.message && <span className="text-[12px] text-text-secondary">{a.message}</span>}
-                      {a.response && <span className="text-[12px] text-text-tertiary">Response: {a.response}</span>}
-                      <span className="text-[11px] text-text-tertiary">{data.partyName.get(a.actorPartyId) ?? "—"}</span>
-                    </span>
-                    <span className="tabular shrink-0 text-[12px] text-text-tertiary">
-                      {a.occurredAt.toISOString().slice(0, 16).replace("T", " ")}
-                    </span>
-                  </Row>
-                ))}
-              </RowList>
-            )}
-          </Panel>
-
-          <TaskPanel
-            leadId={lead.id}
-            teamId={lead.teamId}
-            tasks={data.tasks.map((t) => ({
-              id: t.id,
-              title: t.title,
-              description: t.description,
-              priority: t.priority,
-              status: t.status,
-              origin: t.origin,
-              dueAt: t.dueAt ? t.dueAt.toISOString() : null,
-              assignedToPartyId: t.assignedToPartyId,
-            }))}
-            teamMembers={data.teamMembers}
-            partyName={data.partyName}
-            canCreate={data.canCreateTask}
-          />
-
-          <MeetingPanel
-            leadId={lead.id}
-            meetings={data.meetings.map((m) => ({
-              id: m.id,
-              scheduledAt: m.scheduledAt.toISOString(),
-              purpose: m.purpose,
-              locationOrUrl: m.locationOrUrl,
-              status: m.status,
-              outcomeNotes: m.outcomeNotes,
-            }))}
-            canCreate={data.canCreateMeeting}
-          />
-
-          <AiInsightPanel
-            leadId={lead.id}
-            canRequest={data.canRequestInsight}
-            configured={readAgentProviderConfig() !== undefined}
-            insights={data.aiInsights.map((i) => ({
-              id: i.id,
-              kind: i.kind,
-              content: i.content,
-              model: i.model,
-              sourceReads: i.sourceReads,
-              requestedBy: data.partyName.get(i.requestedByPartyId) ?? "Unknown",
-              createdAt: i.createdAt.toISOString(),
-            }))}
-          />
-        </div>
-      </div>
+            ),
+          },
+          {
+            id: "meetings",
+            label: "Meetings",
+            count: data.meetings.length,
+            content: (
+              <MeetingPanel
+                leadId={lead.id}
+                meetings={data.meetings.map((m) => ({
+                  id: m.id,
+                  scheduledAt: m.scheduledAt.toISOString(),
+                  purpose: m.purpose,
+                  locationOrUrl: m.locationOrUrl,
+                  status: m.status,
+                  outcomeNotes: m.outcomeNotes,
+                }))}
+                canCreate={data.canCreateMeeting}
+              />
+            ),
+          },
+          {
+            id: "research",
+            label: "Research",
+            count: data.researchEntries.length,
+            content: (
+              <Panel title="Research">
+                <FileShelf entries={data.researchEntries as unknown as Array<{ id: string; title: string; type: string; fileId: string | null; createdAt: Date }>} />
+                {data.researchEntries.length === 0 ? (
+                  <p className="text-[13px] text-text-tertiary">No research recorded yet.</p>
+                ) : (
+                  <ul className="m-0 flex list-none flex-col gap-3 p-0">
+                    {data.researchEntries.map((r) => (
+                      <li key={r.id} className="flex flex-col gap-1 border-b border-line pb-3 last:border-none last:pb-0">
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span className="text-[14px] text-text">{r.title}</span>
+                          <span className="flex shrink-0 items-center gap-2">
+                            <Badge>{r.type}</Badge>
+                            <span className="text-[11px] text-text-tertiary">
+                              {r.createdAt.toISOString().slice(0, 16).replace("T", " ")}
+                            </span>
+                          </span>
+                        </div>
+                        {r.content && <p className="m-0 text-[13px] text-text-secondary">{r.content}</p>}
+                        {r.sourceUrl && (
+                          <a href={r.sourceUrl} target="_blank" rel="noreferrer" className="text-[12px] text-accent-ink no-underline hover:underline">
+                            {r.sourceUrl}
+                          </a>
+                        )}
+                        {r.fileId && <ViewFileLink entryId={r.id} />}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {data.canCreateResearch && (
+                  <div className="mt-4">
+                    <ResearchForm leadId={lead.id} />
+                  </div>
+                )}
+              </Panel>
+            ),
+          },
+          {
+            id: "commercial",
+            label: "Commercial",
+            content: (
+              <Panel title="Attribution">
+                <DefinitionList
+                  items={[
+                    { term: "Lead originator", value: data.partyName.get(lead.leadOriginatorId) ?? "—" },
+                    { term: "Opportunity owner", value: data.partyName.get(lead.opportunityOwnerId) ?? "—" },
+                    { term: "Closer", value: lead.closerId ? data.partyName.get(lead.closerId) ?? "—" : "—" },
+                    {
+                      term: "Advance received",
+                      value: `${(lead.advanceReceivedMinor / 100).toFixed(2)} / ${
+                        lead.advanceThresholdMinor != null ? (lead.advanceThresholdMinor / 100).toFixed(2) : "no threshold set"
+                      }`,
+                    },
+                    ...(lead.rejectionReason
+                      ? [
+                          {
+                            term: "Rejection reason",
+                            value: <Badge>{lead.rejectionReason.replace(/([A-Z])/g, " $1").trim()}</Badge>,
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+              </Panel>
+            ),
+          },
+        ]}
+      />
     </>
   );
 }
