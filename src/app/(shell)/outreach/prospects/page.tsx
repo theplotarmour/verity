@@ -366,12 +366,14 @@ async function ProspectsPage({ searchParams }: { searchParams: Promise<Search> }
                     {c.escalated && <span className="text-[12px] font-medium text-danger">Escalated</span>}
                   </div>
 
-                  {(c.whatTheyDo || c.whyRelevant || c.potentialNeed || c.salesHypothesis) && (
-                    <dl className="m-0 flex flex-col gap-2 text-[13px]">
-                      {c.whatTheyDo && <Detail term="What they do" value={c.whatTheyDo} />}
-                      {c.whyRelevant && <Detail term="Why relevant" value={c.whyRelevant} />}
-                      {c.potentialNeed && <Detail term="Potential need" value={c.potentialNeed} />}
-                      {c.salesHypothesis && <Detail term="Sales angle" value={c.salesHypothesis} />}
+                  {/* Task 114 P1.5 item 5 (card verbosity): was four detail
+                      fields at up to 3 lines each — every one of them is
+                      already on the record's own Overview tab. A scanning
+                      card needs the one field that answers "why does this
+                      matter", not the full qualification writeup. */}
+                  {c.whyRelevant && (
+                    <dl className="m-0 text-[13px]">
+                      <Detail term="Why relevant" value={c.whyRelevant} clamp={2} />
                     </dl>
                   )}
 
@@ -403,11 +405,13 @@ async function ProspectsPage({ searchParams }: { searchParams: Promise<Search> }
                     {c.nextActionNote && <span className="text-text"> — {c.nextActionNote}</span>}
                   </div>
 
-                  <footer className="mt-auto grid grid-cols-2 gap-x-4 gap-y-1 text-[12px]">
+                  {/* Added/Added by dropped from the card — still on the
+                      record's own Attribution/Commercial tab; a scanning
+                      card needs who owns it and how stale it is, not
+                      provenance. */}
+                  <footer className="mt-auto grid grid-cols-3 gap-x-4 gap-y-1 text-[12px]">
                     <Meta term="Assigned to" value={c.owner} />
                     <Meta term="Team" value={c.team} />
-                    <Meta term="Added by" value={c.originator} />
-                    <Meta term="Added" value={c.createdAt ?? "—"} />
                     <Meta term="Last activity" value={c.lastActivityAt ?? "None yet"} />
                   </footer>
                 </article>
@@ -420,11 +424,12 @@ async function ProspectsPage({ searchParams }: { searchParams: Promise<Search> }
   );
 }
 
-function Detail({ term, value }: { term: string; value: string }) {
+function Detail({ term, value, clamp = 3 }: { term: string; value: string; clamp?: 1 | 2 | 3 }) {
+  const clampClass = clamp === 1 ? "line-clamp-1" : clamp === 2 ? "line-clamp-2" : "line-clamp-3";
   return (
     <div>
       <dt className="text-[11px] uppercase tracking-wide text-text-tertiary">{term}</dt>
-      <dd className="m-0 mt-0.5 line-clamp-3 text-text">{value}</dd>
+      <dd className={`m-0 mt-0.5 text-text ${clampClass}`}>{value}</dd>
     </div>
   );
 }

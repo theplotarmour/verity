@@ -208,11 +208,33 @@ function dateInNDays(days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Task 114 P1.5 item 6 (follow-up suggestion): a next-action default per
+ * activity type, not a "based on stage/touch history" model — the review
+ * didn't specify what history or threshold that would use, and inventing
+ * one unasked is exactly what this taskplan's own text says not to do. This
+ * is the smaller, honestly-scoped version: what a reasonable follow-up gap
+ * looks like for the activity just logged, editable via the same quick-set
+ * buttons or by hand — never submitted without the operator seeing it first.
+ */
+const FOLLOWUP_SUGGESTION_DAYS: Record<(typeof ACTIVITY_TYPES)[number], number> = {
+  FirstOutreach: 3,
+  FollowUp: 3,
+  Response: 1,
+  MeetingBooked: 1,
+  MeetingCompleted: 2,
+  ProposalSent: 3,
+  PitchDeck: 3,
+  BusinessResearch: 7,
+  Other: 3,
+};
+
 function LogActivityForm({ leadId, onDone }: { leadId: string; onDone: () => void }) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [pending, startTransition] = useTransition();
-  const [nextActionAt, setNextActionAt] = useState("");
+  const [nextActionAt, setNextActionAt] = useState(dateInNDays(FOLLOWUP_SUGGESTION_DAYS.FirstOutreach));
+  const [dateTouched, setDateTouched] = useState(false);
 
   return (
     <form
@@ -255,7 +277,16 @@ function LogActivityForm({ leadId, onDone }: { leadId: string; onDone: () => voi
           </Select>
         </Field>
         <Field label="Type" htmlFor="activityType">
-          <Select id="activityType" name="activityType" defaultValue="FirstOutreach">
+          <Select
+            id="activityType"
+            name="activityType"
+            defaultValue="FirstOutreach"
+            onChange={(e) => {
+              if (dateTouched) return;
+              const type = e.target.value as (typeof ACTIVITY_TYPES)[number];
+              setNextActionAt(dateInNDays(FOLLOWUP_SUGGESTION_DAYS[type] ?? 3));
+            }}
+          >
             {ACTIVITY_TYPES.map((t) => (
               <option key={t} value={t}>
                 {t.replace(/([A-Z])/g, " $1").trim()}
@@ -279,14 +310,17 @@ function LogActivityForm({ leadId, onDone }: { leadId: string; onDone: () => voi
             className="verity-solid border border-line h-11 w-full rounded-lg px-4 text-[14px] text-text focus:outline-none focus:border-accent"
           />
         </Field>
-        <Field label="Due" htmlFor="nextActionAt" required>
+        <Field label="Due" htmlFor="nextActionAt" required hint="Suggested from the activity type — change freely">
           <input
             id="nextActionAt"
             name="nextActionAt"
             type="date"
             required
             value={nextActionAt}
-            onChange={(e) => setNextActionAt(e.target.value)}
+            onChange={(e) => {
+              setDateTouched(true);
+              setNextActionAt(e.target.value);
+            }}
             className="verity-solid border border-line h-11 w-full rounded-lg px-4 text-[14px] text-text focus:outline-none focus:border-accent"
           />
         </Field>
@@ -300,7 +334,10 @@ function LogActivityForm({ leadId, onDone }: { leadId: string; onDone: () => voi
           <button
             key={preset.label}
             type="button"
-            onClick={() => setNextActionAt(dateInNDays(preset.days))}
+            onClick={() => {
+              setDateTouched(true);
+              setNextActionAt(dateInNDays(preset.days));
+            }}
             className="rounded-pill border border-line px-2.5 py-1 text-[11.5px] font-medium text-text-secondary transition-colors hover:bg-surface-sunken hover:text-text"
           >
             {preset.label}
