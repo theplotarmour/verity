@@ -3133,21 +3133,22 @@ export function registerOutreachCapability(): void {
       // No dedicated pipeline icon exists in `icons.tsx`'s closed `IconName`
       // set yet — "sales" is the closest existing shape rather than inventing
       // a new one for a single nav item.
+      // 2026-09-17: the summary overview is Senior + Founders' Office only.
+      // Edit on Team is the structural signal both hold and a Junior never
+      // does (Junior gets Read on Team only) — same grant-not-role-name idea
+      // as Intelligence's Create-on-Direction gate below.
       { href: "/outreach", label: "Outreach", group: "Overview", order: 30, icon: "sales",
-        requiresEntity: ENTITY_LEAD, shells: ["platform", "operations"] },
-      // Task 109 Phase G §1: same audience as the Outreach page itself.
-      { href: "/outreach/board", label: "Pipeline board", group: "Overview", order: 30.5, icon: "sales",
+        requiresEntity: ENTITY_TEAM, requiresVerb: "Edit", shells: ["platform", "operations"] },
+      // Every role: the card-based prospect list, scoped per role on the page.
+      { href: "/outreach/prospects", label: "Prospects", group: "Overview", order: 30.5, icon: "people",
         requiresEntity: ENTITY_LEAD, shells: ["platform", "operations"] },
       { href: "/outreach/workspace", label: "My Workspace", group: "Overview", order: 29, icon: "workspace",
         requiresEntity: ENTITY_JUNIOR_WORKSPACE, shells: ["platform", "operations"] },
       { href: "/outreach/team", label: "Team Command", group: "Overview", order: 29, icon: "people",
         requiresEntity: ENTITY_TEAM_LEADERSHIP, shells: ["platform", "operations"] },
-      { href: "/outreach/check-in", label: "Daily check-in", group: "Overview", order: 31, icon: "check",
-        requiresEntity: ENTITY_CHECK_IN, requiresVerb: "Create", shells: ["platform", "operations"] },
-      { href: "/outreach/targets", label: "Targets", group: "Overview", order: 32, icon: "overview",
-        requiresEntity: ENTITY_TARGET, shells: ["platform", "operations"] },
-      { href: "/outreach/reports", label: "Reports", group: "Overview", order: 33, icon: "ledger",
-        requiresEntity: ENTITY_WEEKLY_REPORT, requiresVerb: "Create", shells: ["platform", "operations"] },
+      // 2026-09-17: Pipeline board, Daily check-in, Targets and Reports were
+      // removed for every role. Their entities and commands stay registered
+      // (existing rows and grants are untouched); only the surfaces are gone.
       // Company Core only (Task 106 Phase 7, spec §90): Create on Direction
       // is the same structural "this is Core" signal the Outreach page uses.
       { href: "/outreach/intelligence", label: "Intelligence", group: "Overview", order: 34, icon: "overview",
@@ -3166,48 +3167,26 @@ export function registerOutreachCapability(): void {
     schedules: [
       {
         key: "verity.outreach.daily_notification_sweep",
-        label: "Missing daily logs, due/overdue follow-ups, stalled prospects",
+        label: "Due/overdue follow-ups, stalled prospects",
         cadence: "daily",
         run: async ({ tx, tenantId, now }) => {
           const dayStart = new Date(now);
           dayStart.setUTCHours(0, 0, 0, 0);
           const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
 
-          const [teams, todaysCheckIns, states, leads] = await Promise.all([
-            tx.outreachTeam.findMany({ where: { active: true }, include: { memberships: { where: { active: true } } } }),
-            tx.outreachCheckIn.findMany({ where: { checkInDate: { gte: dayStart } }, select: { partyId: true } }),
+          // 2026-09-17: the daily check-in surface was removed from the
+          // outreach UI, so the missing-daily-log reminders it fed are gone
+          // too — they would nag people about a screen they can't reach.
+          const [teams, states, leads] = await Promise.all([
+            tx.outreachTeam.findMany({ where: { active: true } }),
             tx.stateDefinition.findMany({ where: { entityKey: ENTITY_LEAD } }),
             tx.outreachLead.findMany({ where: { state: { notIn: [...TERMINAL_STATES, "closed_won"] } } }),
           ]);
-          const checkedIn = new Set(todaysCheckIns.map((c) => c.partyId));
           const category = new Map(states.map((s) => [s.key, s.category]));
 
           for (const team of teams) {
             const leaderPartyIds = [team.leaderId, ...(team.coLeaderId ? [team.coLeaderId] : [])];
             const leaderUsers = await tx.user.findMany({ where: { partyId: { in: leaderPartyIds } }, select: { id: true } });
-            const memberPartyIds = team.memberships.map((m) => m.partyId);
-            const missing = memberPartyIds.filter((id) => !checkedIn.has(id));
-
-            if (missing.length > 0 && leaderUsers.length > 0) {
-              await notify(tx, {
-                tenantId,
-                key: "verity.outreach.missing_daily_log",
-                recipientIds: leaderUsers.map((u) => u.id),
-                variables: { team: team.name, count: String(missing.length) },
-                fallback: { subject: `${team.name}: ${missing.length} missing today's log`, body: "Some members haven't checked in today." },
-              });
-            }
-            if (missing.length > 0) {
-              const missingUsers = await tx.user.findMany({ where: { partyId: { in: missing } }, select: { id: true } });
-              for (const u of missingUsers) {
-                await notify(tx, {
-                  tenantId,
-                  key: "verity.outreach.daily_log_reminder",
-                  recipientIds: [u.id],
-                  fallback: { subject: "Submit today's daily log", body: "You haven't submitted today's check-in yet." },
-                });
-              }
-            }
 
             const teamLeads = leads.filter((l) => l.teamId === team.id);
             const overdue = teamLeads.filter((l) => l.nextActionAt && l.nextActionAt < now);
