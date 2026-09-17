@@ -5,7 +5,7 @@ import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { OUTREACH_CAPABILITY, ENTITY_LEAD } from "@/server/capabilities/outreach";
 import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
-import { Badge, EmptyState, Panel, PermissionDenied, StateBadge } from "@/components/ui/primitives";
+import { EmptyState, PermissionDenied, StateBadge } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +14,12 @@ const TERMINAL_STATES = ["not_a_fit", "unresponsive", "lost", "deferred", "disqu
 /**
  * "My Workspace" — the Junior Outreach Officer's daily work console
  * (master-context spec §17-19, §101, §107). Deliberately NOT a dashboard:
- * a single-column, checklist-shaped console that answers, in the spec's
- * own order, what's my target / what do I need to do / who's overdue /
- * what's active / have I checked in — read top to bottom like a daily
+ * a single-column, checklist-shaped console that answers what do I need to
+ * do / who's overdue / what's active — read top to bottom like a daily
  * brief, not scanned like a BI grid (that's Team Command's job).
+ *
+ * 2026-09-17: the daily check-in and targets surfaces were removed from
+ * outreach for every role, so this console no longer reads either.
  */
 async function MyWorkspacePage() {
   installCapabilities();
@@ -32,11 +34,9 @@ async function MyWorkspacePage() {
     const dayEnd = new Date(dayStart);
     dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
-    const [myLeads, todaysActivities, checkedInToday, myTargets, states] = await Promise.all([
+    const [myLeads, todaysActivities, states] = await Promise.all([
       tx.outreachLead.findMany({ where: { opportunityOwnerId: user.partyId }, orderBy: { updatedAt: "desc" } }),
       tx.outreachActivity.findMany({ where: { actorPartyId: user.partyId, occurredAt: { gte: dayStart, lt: dayEnd } } }),
-      tx.outreachCheckIn.findFirst({ where: { partyId: user.partyId, checkInDate: { gte: dayStart, lt: dayEnd } } }),
-      tx.outreachTarget.findMany({ where: { scope: "Individual", partyId: user.partyId }, orderBy: { periodStart: "desc" }, take: 3 }),
       tx.stateDefinition.findMany({ where: { entityKey: ENTITY_LEAD } }),
     ]);
 
@@ -45,8 +45,6 @@ async function MyWorkspacePage() {
       (l) => l.nextActionAt != null && l.nextActionAt < new Date() && !TERMINAL_STATES.includes(l.state) && l.state !== "closed_won",
     );
     const active = myLeads.filter((l) => !TERMINAL_STATES.includes(l.state) && l.state !== "closed_won");
-    const outreachToday = todaysActivities.filter((a) => a.activityType === "FirstOutreach").length;
-    const outreachTarget = myTargets.find((t) => t.metric === "Outreach" && t.period === "Daily");
 
     const toItem = (l: (typeof myLeads)[number]) => ({
       id: l.id,
@@ -58,23 +56,16 @@ async function MyWorkspacePage() {
 
     return {
       firstName: user.party.displayName.split(" ")[0]!,
-      checkedInToday: Boolean(checkedInToday),
       leadsToday: myLeads.filter((l) => l.createdAt >= dayStart && l.createdAt < dayEnd).length,
-      outreachToday,
-      outreachTargetValue: outreachTarget?.targetValue ?? null,
       followUpsToday: todaysActivities.filter((a) => a.activityType === "FollowUp").length,
       overdue: overdue.map(toItem),
       active: active.filter((l) => !overdue.some((o) => o.id === l.id)).map(toItem),
-      myTargets: myTargets.map((t) => ({ id: t.id, metric: t.metric, period: t.period, targetValue: t.targetValue })),
     };
   });
 
   if (!data) return <PermissionDenied what="viewing your workspace" />;
 
   const today = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
-  const progressPct = data.outreachTargetValue
-    ? Math.min(100, Math.round((data.outreachToday / data.outreachTargetValue) * 100))
-    : null;
 
   return (
     <div className="mx-auto max-w-[640px]">
@@ -82,30 +73,7 @@ async function MyWorkspacePage() {
       <header className="mb-8">
         <p className="m-0 text-[13px] text-text-tertiary">{today}</p>
         <h1 className="mt-1">Hi, {data.firstName}.</h1>
-        <div className="mt-4">
-          {data.checkedInToday ? (
-            <Badge tone="accent">Checked in today</Badge>
-          ) : (
-            <Link href="/outreach/check-in" className="no-underline">
-              <Badge>Not checked in yet — tap to check in</Badge>
-            </Link>
-          )}
-        </div>
       </header>
-
-      {progressPct != null && (
-        <div className="mb-8">
-          <div className="mb-2 flex items-baseline justify-between">
-            <span className="text-[13px] text-text-secondary">Today's outreach target</span>
-            <span className="text-[13px] tabular text-text">
-              {data.outreachToday} / {data.outreachTargetValue}
-            </span>
-          </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-glass-2">
-            <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${progressPct}%` }} />
-          </div>
-        </div>
-      )}
 
       <div className="mb-8 flex gap-8">
         <div>
@@ -128,8 +96,8 @@ async function MyWorkspacePage() {
       {data.overdue.length === 0 && data.active.length === 0 ? (
         <EmptyState
           title="Nothing on your list"
-          description="Research a prospect and add it from the Outreach overview."
-          action={<Link href="/outreach" className="text-[13px] text-accent-ink no-underline hover:underline">Go to Outreach</Link>}
+          description="Research a prospect and add it from Prospects."
+          action={<Link href="/outreach/prospects" className="text-[13px] text-accent-ink no-underline hover:underline">Go to Prospects</Link>}
         />
       ) : (
         <ol className="m-0 mb-8 flex list-none flex-col gap-1 p-0">
@@ -152,18 +120,6 @@ async function MyWorkspacePage() {
             </li>
           ))}
         </ol>
-      )}
-
-      {data.myTargets.length > 1 && (
-        <Panel title="My targets">
-          <div className="flex flex-wrap gap-4">
-            {data.myTargets.map((t) => (
-              <span key={t.id} className="text-[13px] text-text-secondary">
-                {t.metric.replace(/([A-Z])/g, " $1").trim()}: <b className="text-text">{t.targetValue}</b> / {t.period}
-              </span>
-            ))}
-          </div>
-        </Panel>
       )}
     </div>
   );

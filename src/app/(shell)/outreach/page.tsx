@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { hasPermission } from "@/server/platform/authorization";
@@ -7,6 +8,7 @@ import {
   OUTREACH_CAPABILITY,
   ENTITY_DIRECTION,
   ENTITY_LEAD,
+  ENTITY_TEAM,
   assertTeamScopeAllowed,
   deriveLeadHealth,
   getAttentionExceptions,
@@ -68,6 +70,11 @@ async function OutreachPage({
 
   const data = await withTenant(actor.tenantId, async (tx) => {
     if (!(await hasPermission(tx, actor.roleId, "Read", ENTITY_LEAD))) return null;
+    // 2026-09-17: the summary overview is Senior + Founders' Office only.
+    // Edit on Team is the structural signal both hold and a Junior never
+    // does — same gate as this page's nav entry. A Junior's home for
+    // prospects is /outreach/prospects.
+    if (!(await hasPermission(tx, actor.roleId, "Edit", ENTITY_TEAM))) return "junior" as const;
 
     // Phase 3 fix (taskplan 105): a Senior may only view a `?team=` scope
     // they actually lead — see `assertTeamScopeAllowed`'s own doc comment
@@ -217,6 +224,7 @@ async function OutreachPage({
   });
 
   if (!data) return <PermissionDenied what="reading the outreach pipeline" />;
+  if (data === "junior") redirect("/outreach/prospects");
   if (data === "forbidden") return <PermissionDenied what="viewing another team's pipeline" />;
 
   return (

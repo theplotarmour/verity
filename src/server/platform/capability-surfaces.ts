@@ -13,10 +13,8 @@ export const CAPABILITY_PAGE_SURFACES = [
   { capabilityId: "verity.capability.scheduling", route: "/scheduling", file: "src/app/(shell)/scheduling/page.tsx" },
   { capabilityId: "verity.capability.outreach", route: "/outreach", file: "src/app/(shell)/outreach/page.tsx" },
   { capabilityId: "verity.capability.outreach", route: "/outreach/[id]", file: "src/app/(shell)/outreach/[id]/page.tsx" },
-  { capabilityId: "verity.capability.outreach", route: "/outreach/check-in", file: "src/app/(shell)/outreach/check-in/page.tsx" },
   { capabilityId: "verity.capability.outreach", route: "/outreach/intelligence", file: "src/app/(shell)/outreach/intelligence/page.tsx" },
-  { capabilityId: "verity.capability.outreach", route: "/outreach/reports", file: "src/app/(shell)/outreach/reports/page.tsx" },
-  { capabilityId: "verity.capability.outreach", route: "/outreach/targets", file: "src/app/(shell)/outreach/targets/page.tsx" },
+  { capabilityId: "verity.capability.outreach", route: "/outreach/prospects", file: "src/app/(shell)/outreach/prospects/page.tsx" },
   { capabilityId: "verity.capability.outreach", route: "/outreach/team", file: "src/app/(shell)/outreach/team/page.tsx" },
   { capabilityId: "verity.capability.outreach", route: "/outreach/workspace", file: "src/app/(shell)/outreach/workspace/page.tsx" },
 ] as const;

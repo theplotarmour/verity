@@ -17,10 +17,18 @@ export function NewLeadForm({
   teams,
   members,
   defaultTeamId,
+  domains = [],
+  revalidatePath = "/outreach",
+  defaultOwnerId,
 }: {
   teams: Array<{ id: string; name: string }>;
   members: Array<{ id: string; name: string; teamId: string }>;
   defaultTeamId?: string;
+  /** Structured taxonomy leaves; when given, the form offers a Domain picker. */
+  domains?: Array<{ id: string; name: string; group: string }>;
+  revalidatePath?: string;
+  /** Pre-selected assignee when present in the chosen team (e.g. the actor themselves). */
+  defaultOwnerId?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -74,6 +82,7 @@ export function NewLeadForm({
                 companyName: String(form.get("companyName") ?? ""),
                 website: String(form.get("website") ?? "") || undefined,
                 industry: String(form.get("industry") ?? "") || undefined,
+                domainId: String(form.get("domainId") ?? "") || undefined,
                 track: String(form.get("track") ?? "Undetermined"),
                 whyRelevant: String(form.get("whyRelevant") ?? ""),
                 opportunityOwnerId: String(form.get("opportunityOwnerId") ?? ""),
@@ -84,7 +93,7 @@ export function NewLeadForm({
                 linkedinUrl: String(form.get("linkedinUrl") ?? "") || undefined,
                 qualityScore: form.get("qualityScore") ? Number(form.get("qualityScore")) : undefined,
               },
-              "/outreach",
+              revalidatePath,
             );
             if (result.ok) {
               setOpen(false);
@@ -138,6 +147,24 @@ export function NewLeadForm({
             </div>
           </div>
         )}
+        {domains.length > 0 && (
+          <Field label="Domain" htmlFor="domainId">
+            <Select id="domainId" name="domainId" defaultValue="">
+              <option value="">Unspecified</option>
+              {[...new Set(domains.map((d) => d.group))].map((group) => (
+                <optgroup key={group} label={group}>
+                  {domains
+                    .filter((d) => d.group === group)
+                    .map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                </optgroup>
+              ))}
+            </Select>
+          </Field>
+        )}
         <Field label="Industry" htmlFor="industry">
           <Input id="industry" name="industry" />
         </Field>
@@ -168,8 +195,14 @@ export function NewLeadForm({
             ))}
           </Select>
         </Field>
-        <Field label="Owner" htmlFor="opportunityOwnerId" required>
-          <Select id="opportunityOwnerId" name="opportunityOwnerId" required>
+        <Field label="Assign to" htmlFor="opportunityOwnerId" required>
+          <Select
+            key={teamId}
+            id="opportunityOwnerId"
+            name="opportunityOwnerId"
+            required
+            defaultValue={teamMembers.some((m) => m.id === defaultOwnerId) ? defaultOwnerId : undefined}
+          >
             {teamMembers.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
