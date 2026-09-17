@@ -6,7 +6,21 @@ this continues under the same Phase A-Z lettering the product owner used when
 briefing the full outreach master prompt). Phases A-E of that lettering are
 BUILT — this file picks up at F.
 
-## Status: BUILT 2026-09-17 — F, G, H complete except one deliberately-skipped item
+## Status: BUILT 2026-09-17, then PARTIALLY REVERTED same day — see correction below
+
+**Correction (2026-09-17, later same day, commit `ec31890`):** a
+different session removed the Kanban board
+(`outreach/board/KanbanBoard.tsx`, `outreach/board/page.tsx`), Daily
+check-in, Targets, and Reports surfaces entirely, replacing the board with
+a new `/outreach/prospects` role-scoped card view. **Phase G's Kanban
+board item no longer exists in `src/` — confirmed via `git log --oneline
+--all -- "*Kanban*"` and a direct file check.** The command palette
+(`components/shell/CommandPalette.tsx`) and file-shelf grid
+(`[id]/FileShelf.tsx`) from the same phase are still present, unaffected.
+Entities/commands/existing rows for check-in/targets/reports were left in
+place per that commit's own message — only the UI surfaces were removed.
+Do not cite this file's "BUILT" status for the Kanban board without
+checking `src/` directly; the rest of Phase G/H stands.
 
 F, G, and H are all implemented (see each section below for exact
 files/queries/commands). The one exception: Phase H's "Core: unusual pipeline

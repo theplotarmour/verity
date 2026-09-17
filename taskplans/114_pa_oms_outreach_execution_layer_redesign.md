@@ -17,12 +17,25 @@ about interaction/workflow, not material/color, though one visual finding
 
 ## Status: PENDING — proposed from review, nothing in this file built yet
 
-`/outreach/board` (Kanban), the command palette, and file-shelf polish from
-Task 109 Phase G are already live — this taskplan's P0 items build *on* that
-Kanban/palette work, they do not duplicate it. Everything else below (work
-queue, record-detail primary-action consolidation, two-step create flow,
-dashboard restructure, table view for the prospect list, activity-type-aware
-forms) is net-new scope, not yet started.
+**Correction, 2026-09-17 (same day, later commit):** the Kanban board this
+paragraph originally cited as live was removed the same day by a
+concurrent session (`ec31890` — Kanban, Daily check-in, Targets, and
+Reports surfaces all dropped; see Task 109's own correction note). It no
+longer exists in `src/`. The command palette and file-shelf polish from
+Task 109 Phase G are still live and unaffected. That same commit also
+shipped `/outreach/prospects` — a role-scoped card view with the exact
+filter set (status/domain/track/health/team/owner + search/sort) this
+review's Section 3 describes; **P0.5 below is now partially done** — the
+card view and filter bar exist, only a table-view toggle and saved-filter
+chips remain. Everything else below (work queue, record-detail
+primary-action consolidation, two-step create flow, dashboard restructure,
+activity-type-aware forms) is still net-new scope, not yet started.
+**That commit's own message flagged typecheck/tests/browser-check as
+unverified** ("blocked by insufficient disk space") — checked 2026-09-17:
+`npx tsc --noEmit` and `eslint` on `outreach/` are both clean after
+clearing a stale `.next/` type-cache directory that still referenced the
+deleted check-in/reports/targets pages (not a real source error). The
+commit itself is sound.
 
 ## Non-goals
 
