@@ -58,7 +58,7 @@ export function SetupChecklist({
                   "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-[12px] " +
                   (step.done
                     ? "bg-accent-subtle text-accent-ink"
-                    : "bg-glass-2 text-text-tertiary")
+                    : "bg-surface-sunken text-text-tertiary")
                 }
               >
                 {step.done ? "✓" : index + 1}

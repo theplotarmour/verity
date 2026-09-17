@@ -188,7 +188,7 @@ export function RolesAdmin({
                           {role.directGrants.map((grant) => (
                             <li
                               key={grant.id}
-                              className="flex items-center justify-between gap-3 rounded-md bg-glass-2 px-3 py-2 text-[13px]"
+                              className="flex items-center justify-between gap-3 rounded-md bg-surface-sunken px-3 py-2 text-[13px]"
                             >
                               <span className="text-text">
                                 <span className="font-medium">{grant.verb}</span> {grant.entity}{" "}
@@ -243,7 +243,7 @@ export function RolesAdmin({
                               <div className="overflow-hidden rounded-lg border border-line">
                                 <table className="w-full border-collapse text-[13px]">
                                   <thead>
-                                    <tr className="bg-glass-2 text-left text-[11px] uppercase tracking-wide text-text-tertiary">
+                                    <tr className="bg-surface-sunken text-left text-[11px] uppercase tracking-wide text-text-tertiary">
                                       <th className="px-3 py-2 font-medium">Entity</th>
                                       <th className="w-[90px] px-3 py-2 font-medium">View</th>
                                       <th className="w-[90px] px-3 py-2 font-medium">Manage</th>

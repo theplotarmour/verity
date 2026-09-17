@@ -155,7 +155,7 @@ export function ConfigurationEditor({ parameters }: { parameters: Parameter[] })
                       "block w-full cursor-pointer rounded-md px-3 py-2 text-left text-[13px] transition-colors duration-150 " +
                       (label === active?.[0]
                         ? "bg-accent-subtle font-medium text-accent-ink"
-                        : "text-text-secondary hover:bg-glass-2 hover:text-text")
+                        : "text-text-secondary hover:bg-surface-sunken hover:text-text")
                     }
                   >
                     {label}
@@ -214,7 +214,7 @@ function ConfigRow({
 
   return (
     <form
-      className="flex flex-wrap items-end gap-3 rounded-lg bg-glass-2 p-3"
+      className="flex flex-wrap items-end gap-3 rounded-lg bg-surface-sunken p-3"
       action={(formData) => {
         const typed = String(formData.get("value") ?? "");
         const value = parameter.isBasisPoints

@@ -36,7 +36,7 @@ const KIND_TEMPLATE: Record<ImportKind, string> = {
  *  `controlClass` is private to it), for the one control this page needs
  *  that the shared primitives don't offer — a multi-line paste target. */
 const textareaClass =
-  "glass-control w-full min-h-40 resize-y rounded-lg px-4 py-3 text-[13px] font-mono text-text " +
+  "verity-solid border border-line w-full min-h-40 resize-y rounded-lg px-4 py-3 text-[13px] font-mono text-text " +
   "placeholder:text-text-tertiary placeholder:font-sans transition-[border-color,box-shadow] duration-200 " +
   "hover:border-line-strong focus:outline-none focus:border-accent " +
   "focus:shadow-[var(--shadow-highlight),0_0_0_3px_var(--color-accent-subtle)]";
@@ -166,7 +166,7 @@ export function ImportWizard() {
                   const file = event.target.files?.[0];
                   if (file) onFile(file);
                 }}
-                className="block w-full text-[13px] text-text-secondary file:mr-3 file:rounded-lg file:border-0 file:bg-glass-2 file:px-3 file:py-2 file:text-[13px] file:text-text hover:file:bg-glass-3"
+                className="block w-full text-[13px] text-text-secondary file:mr-3 file:rounded-lg file:border-0 file:bg-surface-sunken file:px-3 file:py-2 file:text-[13px] file:text-text hover:file:bg-surface-sunken"
               />
             </Field>
 

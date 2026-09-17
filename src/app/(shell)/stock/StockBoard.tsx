@@ -253,7 +253,7 @@ export function StockBoard({
                     "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-subtle)] " +
                     (current
                       ? "bg-accent-subtle font-medium text-text"
-                      : "text-text-secondary hover:bg-glass-2 hover:text-text")
+                      : "text-text-secondary hover:bg-surface-sunken hover:text-text")
                   }
                 >
                   {entry.label}

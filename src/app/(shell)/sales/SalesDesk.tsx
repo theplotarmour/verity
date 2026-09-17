@@ -467,7 +467,7 @@ export function SalesDesk({
 
           {cancelling && (
             <form
-              className="mt-4 flex flex-wrap items-end gap-3 rounded-lg bg-glass-2 p-3"
+              className="mt-4 flex flex-wrap items-end gap-3 rounded-lg bg-surface-sunken p-3"
               action={(formData) =>
                 run(
                   "verity.trading.cancel_sales_order",

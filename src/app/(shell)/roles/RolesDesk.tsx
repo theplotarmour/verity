@@ -135,7 +135,7 @@ export function RolesDesk({ roles, activities }: { roles: Role[]; activities: Ac
                     aria-current={role.id === selectedId ? "true" : undefined}
                     className={
                       "flex w-full items-center justify-between gap-4 px-5 py-3.5 text-left transition-colors " +
-                      (role.id === selectedId ? "bg-glass-2" : "hover:bg-glass-2")
+                      (role.id === selectedId ? "bg-surface-sunken" : "hover:bg-surface-sunken")
                     }
                   >
                     <span className="min-w-0">

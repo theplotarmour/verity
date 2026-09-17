@@ -126,7 +126,7 @@ export function MenuAdmin({ menu }: { menu: MenuCategory[] }) {
             >
               {addingTo === category.categoryId && (
                 <form
-                  className="mb-4 flex flex-wrap items-end gap-3 rounded-lg bg-glass-2 p-3"
+                  className="mb-4 flex flex-wrap items-end gap-3 rounded-lg bg-surface-sunken p-3"
                   action={(formData) =>
                     run(
                       "verity.dinein.create_menu_item",

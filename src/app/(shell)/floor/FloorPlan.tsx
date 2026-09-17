@@ -141,7 +141,7 @@ export function FloorPlan({ tables }: { tables: FloorTable[] }) {
           <Panel title={zone.name}>
             {/* The plan. Positions are the ones a manager dragged; the grid is
                 a fallback for anything that has never been positioned. */}
-            <div className="relative min-h-[280px] w-full overflow-x-auto rounded-lg bg-glass-2 p-4">
+            <div className="relative min-h-[280px] w-full overflow-x-auto rounded-lg bg-surface-sunken p-4">
               <div className="relative" style={{ minWidth: 640, minHeight: 240 }}>
                 {zone.tables.map((table, index) => {
                   const style = STATE_STYLE[table.state] ?? STATE_STYLE.available!;

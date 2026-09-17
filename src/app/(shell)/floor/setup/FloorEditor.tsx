@@ -221,7 +221,7 @@ export function FloorEditor({ tables }: { tables: FloorTable[] }) {
               }
             >
               <div
-                className="relative min-h-[320px] w-full touch-none overflow-auto rounded-lg bg-glass-2"
+                className="relative min-h-[320px] w-full touch-none overflow-auto rounded-lg bg-surface-sunken"
                 style={{
                   backgroundImage:
                     "radial-gradient(circle, var(--color-line-strong) 1px, transparent 1px)",

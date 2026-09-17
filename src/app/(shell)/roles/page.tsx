@@ -72,7 +72,7 @@ async function RolesPage() {
           // to be on the page (2026-09-15).
           <Link
             href="/people"
-            className="rounded-md border border-line px-3 py-1 text-[13px] text-text no-underline transition-colors hover:bg-glass-2"
+            className="rounded-md border border-line px-3 py-1 text-[13px] text-text no-underline transition-colors hover:bg-surface-sunken"
           >
             ← Back to People
           </Link>
