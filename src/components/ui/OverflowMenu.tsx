@@ -20,21 +20,56 @@ export function OverflowMenu({ children, label = "More actions" }: { children: R
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
+  // APPLE-P1-02: focus lifecycle. `children` are arbitrary `OverflowMenuItem`s
+  // with no shared ref array, so items are found by querying the DOM inside
+  // this instance's own wrapper — scoped correctly since every `OverflowMenu`
+  // has its own `ref`, and simpler than threading refs through every caller.
+  function items(): HTMLElement[] {
+    return Array.from(ref.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+  }
+
+  function closeAndRestoreFocus() {
+    setOpen(false);
+    ref.current?.querySelector<HTMLButtonElement>('[aria-haspopup="menu"]')?.focus();
+  }
+
   useEffect(() => {
     if (!open) return;
+    // Menu content mounts via AnimatePresence on the next tick.
+    const raf = requestAnimationFrame(() => items()[0]?.focus());
     function onDocClick(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") closeAndRestoreFocus();
     }
     document.addEventListener("mousedown", onDocClick);
     document.addEventListener("keydown", onKey);
     return () => {
+      cancelAnimationFrame(raf);
       document.removeEventListener("mousedown", onDocClick);
       document.removeEventListener("keydown", onKey);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  const onMenuKeyDown = (e: React.KeyboardEvent) => {
+    const list = items();
+    const currentIndex = list.indexOf(document.activeElement as HTMLElement);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      list[(currentIndex + 1) % list.length]?.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      list[(currentIndex - 1 + list.length) % list.length]?.focus();
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      list[0]?.focus();
+    } else if (e.key === "End") {
+      e.preventDefault();
+      list[list.length - 1]?.focus();
+    }
+  };
 
   return (
     <div ref={ref} className="relative inline-block">
@@ -46,6 +81,7 @@ export function OverflowMenu({ children, label = "More actions" }: { children: R
           <motion.div
             role="menu"
             aria-label={label}
+            onKeyDown={onMenuKeyDown}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}

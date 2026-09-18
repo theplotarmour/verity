@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 export type TabDef = {
   id: string;
@@ -21,16 +21,55 @@ export type TabDef = {
 export function Tabs({ tabs, defaultTab }: { tabs: TabDef[]; defaultTab?: string }) {
   const [active, setActive] = useState(defaultTab ?? tabs[0]?.id ?? "");
   const activeTab = tabs.find((t) => t.id === active) ?? tabs[0];
+  const activeIndex = tabs.findIndex((t) => t.id === activeTab?.id);
+  const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  // APPLE-P1-01: Arrow/Home/End move BOTH focus and selection (the standard
+  // "automatic activation" tab pattern) — every tab's content is already
+  // fetched in the page's one server round trip, so there is no fetch to
+  // debounce by requiring a separate activation key.
+  const moveTo = (index: number) => {
+    const next = tabs[(index + tabs.length) % tabs.length];
+    if (!next) return;
+    setActive(next.id);
+    buttonRefs.current[(index + tabs.length) % tabs.length]?.focus();
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      moveTo(activeIndex + 1);
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      moveTo(activeIndex - 1);
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      moveTo(0);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      moveTo(tabs.length - 1);
+    }
+  };
 
   return (
     <div>
-      <div role="tablist" className="mb-5 flex flex-wrap gap-1 border-b border-line">
-        {tabs.map((t) => (
+      <div
+        role="tablist"
+        onKeyDown={onKeyDown}
+        className="mb-5 flex flex-wrap gap-1 border-b border-line"
+      >
+        {tabs.map((t, i) => (
           <button
             key={t.id}
+            ref={(el) => {
+              buttonRefs.current[i] = el;
+            }}
+            id={`tab-${t.id}`}
             type="button"
             role="tab"
             aria-selected={t.id === active}
+            aria-controls={`panel-${t.id}`}
+            tabIndex={t.id === active ? 0 : -1}
             onClick={() => setActive(t.id)}
             className={
               "relative -mb-px flex items-center gap-1.5 border-b-2 px-3.5 py-2.5 text-[13.5px] font-medium transition-colors " +
@@ -53,7 +92,16 @@ export function Tabs({ tabs, defaultTab }: { tabs: TabDef[]; defaultTab?: string
           </button>
         ))}
       </div>
-      <div role="tabpanel">{activeTab?.content}</div>
+      {activeTab && (
+        <div
+          role="tabpanel"
+          id={`panel-${activeTab.id}`}
+          aria-labelledby={`tab-${activeTab.id}`}
+          tabIndex={0}
+        >
+          {activeTab.content}
+        </div>
+      )}
     </div>
   );
 }

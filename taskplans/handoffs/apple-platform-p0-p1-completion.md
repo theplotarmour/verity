@@ -66,12 +66,22 @@ so it no longer silently depends on that default. `tsc --noEmit` clean
 across all 13 call sites.
 
 ### P1-01 — Tabs keyboard semantics
-Status: **PENDING** — `src/components/ui/Tabs.tsx`. Roving `tabIndex`,
-`aria-controls`/panel IDs, Arrow/Home/End.
+Status: **DONE** — `Tabs.tsx` now has roving `tabIndex` (only the active
+tab is in the tab order), `id`/`aria-controls`/`aria-labelledby` linking
+each tab to its panel, and ArrowLeft/ArrowRight/Home/End moving both focus
+and selection (automatic activation — all tab content is already fetched
+in one round trip, so there's no fetch to gate behind a separate
+activation key). Live-verified: ArrowRight on the Outreach record-detail
+tab strip moved focus + swapped the panel in the same frame.
 
 ### P1-02 — Menu focus lifecycle
-Status: **PENDING** — `ProfileMenu.tsx`, `OverflowMenu.tsx`. Focus into
-menu on open, arrow navigation, focus restore to trigger on close.
+Status: **DONE** — both `ProfileMenu.tsx` and `OverflowMenu.tsx`: opening
+focuses the first menu item, Arrow/Home/End cycle items, Escape and
+outside-click restore focus to the trigger. `OverflowMenu`'s items are
+arbitrary children with no shared ref array, so its item lookup queries
+`[role="menuitem"]` inside the component's own wrapper ref rather than
+threading refs through every caller. Live-verified on `ProfileMenu`:
+open → focus on "Account" → ArrowDown → highlight moves to "Settings".
 
 ### P1-03 — CommandPalette focus + honest scope
 Status: **PENDING** — `CommandPalette.tsx`. Focus trap/restore; either add
