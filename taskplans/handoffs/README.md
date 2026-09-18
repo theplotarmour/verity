@@ -11,7 +11,7 @@ line below matching recent commits), regenerate it from `git log` and the
 taskplans it points to before trusting it, same rule `00_STATUS_INDEX.md`
 already states for itself.
 
-**Last updated: 2026-09-18 (manual Outreach launch scope complete; interaction-system audit active)**
+**Last updated: 2026-09-18 (Apple platform UI/UX audit P0/P1 completion pass started)**
 
 ## How to use this folder
 
@@ -64,7 +64,17 @@ scope, create prospect, log an activity with a next action, create task/meeting,
 team/member drill-through, and sign-out. This is not integration scope; manual
 prospecting is the explicit launch workflow.
 
-### 2. Task 115 extension — Apple/Odoo operational interaction grammar
+### 2. Apple platform UI/UX audit — P0/P1 completion
+
+Handoff: [`apple-platform-p0-p1-completion.md`](./apple-platform-p0-p1-completion.md)
+Audit: `docs/audits/2026-09-18-apple-platform-ui-ux-audit.md`
+
+Status: in progress, started 2026-09-18. Working the audit's own P0 → P1
+order (truthful shell → control convergence → keyboard/recovery →
+responsive IA). P1-05 needs a product decision before building — do not
+improvise it. See the handoff file for per-item status.
+
+### 3. Task 115 extension — Apple/Odoo operational interaction grammar
 
 The governing spec now defines consistent page, record, list, form, selection,
 commit, and state behaviour. Continue future UI work through shared primitives;
@@ -74,7 +84,7 @@ forms/tables companions. Exact iOS Liquid Glass remains deferred by product
 direction; Apple craft currently means hierarchy, spacing, motion restraint, and
 direct, trustworthy controls.
 
-### 3. Task 114 — Outreach execution-layer UX redesign — launch scope CLOSED
+### 4. Task 114 — Outreach execution-layer UX redesign — launch scope CLOSED
 
 Handoff: [`outreach-p0-continuation.md`](./outreach-p0-continuation.md)
 Taskplan: `taskplans/114_pa_oms_outreach_execution_layer_redesign.md`
@@ -88,7 +98,7 @@ of four/five. Automation, enrichment, and third-party cadence execution are
 intentionally deferred by the product owner; do not treat them as a launch
 blocker.
 
-### 4. Task 113 — AI implementation audit
+### 5. Task 113 — AI implementation audit
 
 No handoff file — small enough that the taskplan itself
 (`taskplans/113_ai_implementation_audit_all_clients_and_global_agent.md`)
@@ -98,7 +108,7 @@ carries its own findings inline. Status: items 1/2/4/5 DONE 2026-09-17
 unresolved). Item 3 (per-tenant reality check) needs live-DB access this
 environment doesn't have — flagged, not silently skipped.
 
-### 5. Task 90 — Attention platform concept (watching, not active)
+### 6. Task 90 — Attention platform concept (watching, not active)
 
 Not active work — a trigger watch. `taskplans/90_attention_platform_
 concept.md`'s 2026-09-17 note records that Task 114's Outreach work queue

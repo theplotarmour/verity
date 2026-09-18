@@ -60,10 +60,18 @@
   --color-glass-4: light-dark(rgb(255 255 255 / 0.72), rgb(22 26 31 / 0.66));
 
   /* Solid surfaces — level 5. Dense tables, long-form text, forms and
-     destructive confirmation live here, per ADR-011. */
-  --color-surface: light-dark(#ffffff, #1c1c1e);
-  --color-surface-elevated: light-dark(#ffffff, #2c2c2e);
-  --color-surface-sunken: light-dark(#f2f2f7, #141416);
+     destructive confirmation live here, per ADR-011.
+     Dark values are MIXED FROM THE CANVAS, not a bare neutral grey hex —
+     `#1c1c1e` is iOS's own token, but iOS's canvas is neutral black. Ours
+     is `#090f14` (blue-shifted per the brand sheet), so dropping iOS's
+     literal hex on top produced two different color temperatures in the
+     same room — a card reading as a foreign grey box rather than an
+     elevated version of the surface it sits on. Every elevation step now
+     shares the canvas hue, which is the actual Apple rule (materials in
+     one theme keep one temperature; only lightness changes). */
+  --color-surface: light-dark(#ffffff, color-mix(in oklab, white 10%, var(--color-canvas)));
+  --color-surface-elevated: light-dark(#ffffff, color-mix(in oklab, white 18%, var(--color-canvas)));
+  --color-surface-sunken: light-dark(#f2f2f7, color-mix(in oklab, black 10%, var(--color-canvas)));
   --color-control: light-dark(#ffffff, #1c252e);
   --color-chrome: light-dark(#ffffff, #0c1319);
 

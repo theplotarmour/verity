@@ -83,6 +83,12 @@ the shared shell: blue-only accent for this phase, neutral canvas, 240px
 sidebar, compact left-aligned search, restrained panel elevation, and no
 coloured atmospheric haze. Exact Liquid Glass remains explicitly deferred.
 
+**Global audit, 2026-09-18:** The detailed gap assessment is now maintained at
+`docs/audits/2026-09-18-apple-platform-ui-ux-audit.md`. Its P0 order is
+truthful shell controls, primitive convergence, and signed-in visual proof;
+P1 covers keyboard menus/tabs, responsive navigation, and loading feedback.
+Do not call this theme complete while any P0 item is open.
+
 **Correction on §2's own drafted text**: reading Bible V4 §1.B directly (not assumed)
 before drafting found it already permits exactly what ADR-024 does — "Translucent overlays
 are permitted ONLY when showing temporary contextual layers... a quick-action drop-down" —
