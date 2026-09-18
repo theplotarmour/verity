@@ -10,6 +10,7 @@ import { prefersReducedMotion, reducedMotionFade, springDefault } from "@/lib/mo
 type Result = { id: string; type: "lead" | "domain" | "team"; label: string; sublabel: string; href: string };
 
 const TYPE_LABEL: Record<Result["type"], string> = { lead: "Lead", domain: "Domain", team: "Team" };
+const START_ACTION = { label: "Create prospect", detail: "Start a researched prospect", href: "/outreach/prospects?create=1" };
 
 /**
  * Global Cmd/Ctrl+K search (Task 109 Phase G §2). Mounted unconditionally in
@@ -18,9 +19,10 @@ const TYPE_LABEL: Record<Result["type"], string> = { lead: "Lead", domain: "Doma
  * existing `runQuery`, the same decoupling `runCommand` already uses, rather
  * than importing an outreach module into the generic shell.
  *
- * Currently wired to outreach's `command_palette_search`; a second capability
- * wanting this needs the component generalized to accept a query key — not
- * built speculatively here.
+ * Outreach's P2 expansion makes this an execution surface too: it can start a
+ * prospect from an empty palette and exposes record-scoped actions alongside a
+ * searched lead. Every action deep-links into the existing, authorized form;
+ * the palette never duplicates mutation logic or bypasses server commands.
  */
 export function CommandPalette() {
   const router = useRouter();
@@ -104,8 +106,9 @@ export function CommandPalette() {
           } else if (e.key === "ArrowUp") {
             e.preventDefault();
             setActiveIndex((i) => Math.max(i - 1, 0));
-          } else if (e.key === "Enter" && results[activeIndex]) {
-            go(results[activeIndex]!.href);
+          } else if (e.key === "Enter") {
+            if (q.trim().length < 2) go(START_ACTION.href);
+            else if (results[activeIndex]) go(results[activeIndex]!.href);
           }
         }}
       >
@@ -122,7 +125,13 @@ export function CommandPalette() {
         </div>
         <div className="max-h-[360px] overflow-y-auto p-2">
           {q.trim().length < 2 ? (
-            <p className="px-3 py-6 text-center text-[13px] text-text-tertiary">Type at least 2 characters</p>
+            <button
+              onClick={() => go(START_ACTION.href)}
+              className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-[13px] text-text hover:bg-accent-subtle"
+            >
+              <span>{START_ACTION.label}<span className="ml-2 text-text-tertiary">{START_ACTION.detail}</span></span>
+              <span className="text-text-tertiary">↵</span>
+            </button>
           ) : pending ? (
             <p className="px-3 py-6 text-center text-[13px] text-text-tertiary">Searching…</p>
           ) : results.length === 0 ? (
@@ -130,7 +139,7 @@ export function CommandPalette() {
           ) : (
             <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
               {results.map((r, i) => (
-                <li key={`${r.type}-${r.id}`}>
+                <li key={`${r.type}-${r.id}`} className="rounded-lg">
                   <button
                     onClick={() => go(r.href)}
                     onMouseEnter={() => setActiveIndex(i)}
@@ -143,6 +152,23 @@ export function CommandPalette() {
                     </span>
                     <span className="shrink-0 text-[11px] uppercase tracking-wide text-text-tertiary">{TYPE_LABEL[r.type]}</span>
                   </button>
+                  {r.type === "lead" && (
+                    <div className="flex gap-1 px-3 pb-2">
+                      {[
+                        ["Log activity", "log"],
+                        ["Add task", "task"],
+                        ["Schedule meeting", "meeting"],
+                      ].map(([label, action]) => (
+                        <button
+                          key={action}
+                          onClick={() => go(`${r.href}?action=${action}`)}
+                          className="rounded-md border border-line px-2 py-1 text-[11px] text-text-secondary hover:bg-accent-subtle hover:text-text"
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

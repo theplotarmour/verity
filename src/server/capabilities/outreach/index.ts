@@ -3266,8 +3266,10 @@ export function registerOutreachCapability(): void {
         requiresEntity: ENTITY_LEAD, shells: ["platform", "operations"] },
       { href: "/outreach/workspace", label: "My Workspace", group: "Overview", order: 29, icon: "workspace",
         requiresEntity: ENTITY_JUNIOR_WORKSPACE, shells: ["platform", "operations"] },
-      { href: "/outreach/team", label: "Team Command", group: "Overview", order: 29, icon: "people",
-        requiresEntity: ENTITY_TEAM_LEADERSHIP, shells: ["platform", "operations"] },
+      { href: "/outreach/team", label: "My Team", group: "Overview", order: 29, icon: "people",
+        requiresEntity: ENTITY_LEAD, shells: ["platform", "operations"] },
+      { href: "/outreach/teams", label: "Teams", group: "Overview", order: 29.5, icon: "people",
+        requiresEntity: ENTITY_DIRECTION, requiresVerb: "Create", shells: ["platform", "operations"] },
       // 2026-09-17: Pipeline board, Daily check-in, Targets and Reports were
       // removed for every role. Their entities and commands stay registered
       // (existing rows and grants are untouched); only the surfaces are gone.

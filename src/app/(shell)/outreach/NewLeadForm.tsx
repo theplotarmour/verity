@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, ErrorState, Field, Input, Panel, Select } from "@/components/ui/primitives";
+import { Button, ErrorState, Field, Input, Panel, Select, Textarea } from "@/components/ui/primitives";
 import { FormCombobox } from "@/components/ui/Combobox";
 import { runCommand, runQuery } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
@@ -27,6 +27,7 @@ export function NewLeadForm({
   domains = [],
   revalidatePath = "/outreach",
   defaultOwnerId,
+  initiallyOpen = false,
 }: {
   teams: Array<{ id: string; name: string }>;
   members: Array<{ id: string; name: string; teamId: string }>;
@@ -36,9 +37,11 @@ export function NewLeadForm({
   revalidatePath?: string;
   /** Pre-selected assignee when present in the chosen team (e.g. the actor themselves). */
   defaultOwnerId?: string;
+  /** Used by the command palette; normal page entry remains closed. */
+  initiallyOpen?: boolean;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initiallyOpen);
   const [step, setStep] = useState<1 | 2>(1);
   const [createdLead, setCreatedLead] = useState<{ id: string; companyName: string } | null>(null);
   const [teamId, setTeamId] = useState(defaultTeamId ?? teams[0]?.id ?? "");
@@ -121,11 +124,10 @@ export function NewLeadForm({
         >
           <div className="sm:col-span-2">
             <Field label="What they do" htmlFor="whatTheyDo" hint="A one-line business description">
-              <textarea
+              <Textarea
                 id="whatTheyDo"
                 name="whatTheyDo"
                 rows={2}
-                className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text placeholder:text-text-tertiary focus:outline-none focus:border-accent"
               />
             </Field>
           </div>
@@ -143,11 +145,10 @@ export function NewLeadForm({
           </Field>
           <div className="sm:col-span-2">
             <Field label="Sales hypothesis" htmlFor="salesHypothesis" hint="The angle to open with">
-              <textarea
+              <Textarea
                 id="salesHypothesis"
                 name="salesHypothesis"
                 rows={2}
-                className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text placeholder:text-text-tertiary focus:outline-none focus:border-accent"
               />
             </Field>
           </div>
@@ -304,12 +305,11 @@ export function NewLeadForm({
         </Field>
         <div className="sm:col-span-2">
           <Field label="Why now" htmlFor="whyRelevant" required hint="1–2 sentences — a bare company name is not a qualified lead">
-            <textarea
+            <Textarea
               id="whyRelevant"
               name="whyRelevant"
               required
               rows={2}
-              className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text placeholder:text-text-tertiary focus:outline-none focus:border-accent"
             />
           </Field>
         </div>

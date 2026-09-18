@@ -57,8 +57,9 @@ describe("accent contrast (ADR-011)", () => {
     }
   });
 
-  it("defaults to Warm Sand Gold and rejects malformed input", () => {
+  it("defaults to Apple system blue and rejects malformed input", () => {
     expect(resolveAccent(undefined)).toBe(DEFAULT_ACCENT);
+    expect(DEFAULT_ACCENT).toBe("#0A84FF");
     expect(resolveAccent("not-a-colour")).toBe(DEFAULT_ACCENT);
     expect(resolveAccent("#abc")).toBe(DEFAULT_ACCENT);
     // An unvalidated value would be interpolated into a style attribute.

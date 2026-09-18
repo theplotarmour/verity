@@ -68,6 +68,21 @@ backend query shapes the data it needs yet). Items 1–4 of this taskplan's own 
 done. Remaining, tracked outside this taskplan: motion-preset wiring, typography pass, the
 gold brand board's move into `design/`, per-capability material rollout beyond Outreach.
 
+**Operational interaction extension, 2026-09-18:** The user required every
+entry and dropdown to remain consistent as the product grows. The binding
+record/list/form grammar is now codified in `verity-spec/09_experience/
+design-system.md` §3 and its `forms.md` / `tables.md` companions. The
+metadata-driven `DynamicForm` now uses the same shared `Field`, `Input`,
+`Select`, and `Checkbox` primitives as product forms. This is a governance
+completion extension, not a re-opening of the six ADR-025 deliverables.
+
+**Reference-screen correction, 2026-09-18:** The initial implementation
+mistook the supplied `design/newlighttheme.jpeg` and `design/newdarktheme.jpeg`
+for loose token inspiration. Their composition is now the visual baseline for
+the shared shell: blue-only accent for this phase, neutral canvas, 240px
+sidebar, compact left-aligned search, restrained panel elevation, and no
+coloured atmospheric haze. Exact Liquid Glass remains explicitly deferred.
+
 **Correction on §2's own drafted text**: reading Bible V4 §1.B directly (not assumed)
 before drafting found it already permits exactly what ADR-024 does — "Translucent overlays
 are permitted ONLY when showing temporary contextual layers... a quick-action drop-down" —

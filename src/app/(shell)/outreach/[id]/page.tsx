@@ -47,9 +47,16 @@ const TERMINAL_STATES = ["not_a_fit", "unresponsive", "lost", "deferred", "disqu
  * Lead detail — the chain handbook Ch. 02/master-context §112 asks for:
  * which company, who owns it, what was said, what happened, what's next.
  */
-async function OutreachLeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
+async function OutreachLeadDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ action?: string }>;
+}) {
   installCapabilities();
   const { id } = await params;
+  const { action } = await searchParams;
   const actor = await requireActor();
 
   const data = await withTenant(actor.tenantId, async (tx) => {
@@ -183,6 +190,7 @@ async function OutreachLeadDetailPage({ params }: { params: Promise<{ id: string
             teamMembers={data.teamMembers}
             currentOwnerId={lead.opportunityOwnerId}
             isEscalated={lead.escalated}
+            initiallyLogOpen={action === "log"}
           />
         }
       />
@@ -373,6 +381,7 @@ async function OutreachLeadDetailPage({ params }: { params: Promise<{ id: string
                 teamMembers={data.teamMembers}
                 partyName={data.partyName}
                 canCreate={data.canCreateTask}
+                initiallyOpen={action === "task"}
               />
             ),
           },
@@ -392,6 +401,7 @@ async function OutreachLeadDetailPage({ params }: { params: Promise<{ id: string
                   outcomeNotes: m.outcomeNotes,
                 }))}
                 canCreate={data.canCreateMeeting}
+                initiallyOpen={action === "meeting"}
               />
             ),
           },

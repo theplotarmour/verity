@@ -16,6 +16,9 @@ export const CAPABILITY_PAGE_SURFACES = [
   { capabilityId: "verity.capability.outreach", route: "/outreach/intelligence", file: "src/app/(shell)/outreach/intelligence/page.tsx" },
   { capabilityId: "verity.capability.outreach", route: "/outreach/prospects", file: "src/app/(shell)/outreach/prospects/page.tsx" },
   { capabilityId: "verity.capability.outreach", route: "/outreach/team", file: "src/app/(shell)/outreach/team/page.tsx" },
+  { capabilityId: "verity.capability.outreach", route: "/outreach/teams", file: "src/app/(shell)/outreach/teams/page.tsx" },
+  { capabilityId: "verity.capability.outreach", route: "/outreach/teams/[teamId]", file: "src/app/(shell)/outreach/teams/[teamId]/page.tsx" },
+  { capabilityId: "verity.capability.outreach", route: "/outreach/teams/[teamId]/members/[partyId]", file: "src/app/(shell)/outreach/teams/[teamId]/members/[partyId]/page.tsx" },
   { capabilityId: "verity.capability.outreach", route: "/outreach/workspace", file: "src/app/(shell)/outreach/workspace/page.tsx" },
 ] as const;
 

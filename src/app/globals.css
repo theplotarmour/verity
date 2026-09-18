@@ -6,9 +6,9 @@
  * AUTHORITY
  *   1. Security and tenancy invariants (nothing here touches them).
  *   2. ADR-011 — glass is a controlled material system, not decoration.
- *   3. ADR-012 — brand-sheet neutrals, default accent, semantic separation.
- *   3. The approved reference boards, `verity-app-ui-mockups/content.png` and
- *      `content_dark.png`, plus the design source `Verity App.dc.html`.
+ *   3. ADR-012 — brand-sheet neutrals, accent, semantic separation.
+ *   4. The approved reference boards, `design/newlighttheme.jpeg` and
+ *      `design/newdarktheme.jpeg`.
  *
  * Every value below was measured from that source rather than chosen. Where the
  * source computes something in JavaScript, it is computed here in CSS instead —
@@ -17,8 +17,7 @@
  *
  * TWO SYSTEMS, DELIBERATELY SEPARATE
  *   BRAND    the Verity mark and wordmark. Fixed. Never recoloured by the UI.
- *   ACCENT   an Experience System property. Configurable, default #00D1B2 —
- *            the Primary swatch named by design/verity asthetics.png (ADR-012).
+ *   ACCENT   an Experience System property. Configurable, default #0A84FF.
  * Conflating them is how a product ends up with a logo that changes colour when
  * a user picks a theme.
  */
@@ -28,13 +27,13 @@
    * NEUTRAL FOUNDATION — design/verity asthetics.png, the brand sheet (ADR-012).
    * #F7F8FA Background · #0F1115 Text · #1C1F24 · #2A2E33 · #E6E8EB.
    * ------------------------------------------------------------------- */
-  --color-canvas: light-dark(#f7f8fa, #0f1115);
-  --color-text: light-dark(#0f1115, #e6e8eb);
-  --color-text-secondary: light-dark(#5c5c60, #a1a1a7);
+  --color-canvas: light-dark(#f7f7f8, #090f14);
+  --color-text: light-dark(#17171b, #f5f5f7);
+  --color-text-secondary: light-dark(#6e6e73, #a1a1aa);
   /* The source sets --tx3 to #7A7A7F, which measures 3.9:1 on the light canvas
      and fails AA for body text. Darkened to the nearest value that clears it;
      ADR-011 constraint 1 makes accessibility non-negotiable over exact match. */
-  --color-text-tertiary: light-dark(#67676f, #85858b);
+  --color-text-tertiary: light-dark(#86868b, #8e8e93);
 
   /* ---------------------------------------------------------------------
    * GLASS LADDER — `--g1`..`--g4` in the design source.
@@ -62,11 +61,11 @@
 
   /* Solid surfaces — level 5. Dense tables, long-form text, forms and
      destructive confirmation live here, per ADR-011. */
-  --color-surface: light-dark(#ffffff, #1c1f24);
-  --color-surface-elevated: light-dark(#ffffff, #2a2e33);
-  --color-surface-sunken: light-dark(#ececee, #131619);
-  --color-control: light-dark(#ffffff, #1c1f24);
-  --color-chrome: light-dark(#f7f8fa, #0f1115);
+  --color-surface: light-dark(#ffffff, #1c1c1e);
+  --color-surface-elevated: light-dark(#ffffff, #2c2c2e);
+  --color-surface-sunken: light-dark(#f2f2f7, #141416);
+  --color-control: light-dark(#ffffff, #1c252e);
+  --color-chrome: light-dark(#ffffff, #0c1319);
 
   /* ---------------------------------------------------------------------
    * BORDERS — alpha, never solid hex.
@@ -76,10 +75,10 @@
    * while a solid #E4E4E6 hairline is a drawn rectangle. Replacing these with
    * opaque values is the single change that would most flatten the system.
    * ------------------------------------------------------------------- */
-  --color-line: light-dark(rgb(20 20 23 / 0.055), rgb(255 255 255 / 0.06));
-  --color-line-strong: light-dark(rgb(20 20 23 / 0.11), rgb(255 255 255 / 0.13));
-  --color-separator: light-dark(rgb(20 20 23 / 0.05), rgb(255 255 255 / 0.05));
-  --color-track: light-dark(rgb(20 20 23 / 0.07), rgb(255 255 255 / 0.07));
+  --color-line: light-dark(rgb(60 60 67 / 0.12), rgb(255 255 255 / 0.10));
+  --color-line-strong: light-dark(rgb(60 60 67 / 0.22), rgb(255 255 255 / 0.18));
+  --color-separator: light-dark(rgb(60 60 67 / 0.12), rgb(255 255 255 / 0.10));
+  --color-track: light-dark(rgb(60 60 67 / 0.14), rgb(255 255 255 / 0.12));
 
   /* ---------------------------------------------------------------------
    * ACCENT — derived in CSS from one seed.
@@ -93,8 +92,8 @@
    * below it. Deriving it here rather than in JavaScript means an accent change
    * is a single custom property, and no component has to know it happened.
    * ------------------------------------------------------------------- */
-  /* ADR-024: default reverted from Verity Mint to Warm Sand Gold. */
-  --accent-seed: #d4a017;
+  /* Current product default: Apple system blue. */
+  --accent-seed: #0a84ff;
 
   --accent-50: color-mix(in srgb, #ffffff 94%, var(--accent-seed));
   --accent-100: color-mix(in srgb, #ffffff 86%, var(--accent-seed));
@@ -111,13 +110,12 @@
      directly: it is chosen together with its ink so the pair clears WCAG AA,
      stepping darker (light) or lighter (dark) when the first step does not.
      Three of the ten presets need that step; Emerald needs two. Defaults below
-     are the brand-sheet Primary's, so the stylesheet is correct with no cookie. */
-  /* ADR-024 gold default — recomputed via accent.ts's own pairFor() logic
-     (light: mix toward #0D0D0F at .12/.26/.42 until AA clears; dark: toward
-     #FFFFFF at .42/.7/.86). Both themes land on dark ink. */
-  --accent-fill-light: #bc8e16;
-  --accent-fill-dark: #e6c878;
-  --accent-ink-light: #191a1c;
+     match the global fallback, so the stylesheet is correct with no cookie. */
+  /* Computed by accent.ts's pairFor(): the light fill steps to a darker blue
+     so white type clears AA; the dark fill stays bright enough for dark ink. */
+  --accent-fill-light: #0b65b3;
+  --accent-fill-dark: #71b8ff;
+  --accent-ink-light: #ffffff;
   --accent-ink-dark: #191a1c;
 
   --color-accent: light-dark(var(--accent-fill-light), var(--accent-fill-dark));
@@ -169,11 +167,11 @@
   /* ---------------------------------------------------------------------
    * GEOMETRY, ELEVATION, MOTION — the source's own values.
    * ------------------------------------------------------------------- */
-  --radius-xs: 6px;
-  --radius-sm: 9px;
-  --radius-md: 11px;
+  --radius-xs: 8px;
+  --radius-sm: 10px;
+  --radius-md: 12px;
   --radius-lg: 14px;
-  --radius-xl: 17px;
+  --radius-xl: 16px;
   --radius-pill: 999px;
 
   /* `--hl` in the source: the inner highlight that gives glass a lit top edge.
@@ -181,8 +179,8 @@
      uses, and the reason these surfaces look lit rather than filled. */
   --shadow-highlight: inset 0 1px 0 light-dark(rgb(255 255 255 / 0.75), rgb(255 255 255 / 0.045));
 
-  --shadow-sm: 0 1px 1px light-dark(rgb(18 18 21 / 0.025), rgb(0 0 0 / 0.3)),
-               0 12px 32px -16px light-dark(rgb(18 18 21 / 0.13), rgb(0 0 0 / 0.7));
+  --shadow-sm: 0 1px 2px light-dark(rgb(18 18 21 / 0.025), rgb(0 0 0 / 0.24)),
+               0 6px 18px -12px light-dark(rgb(18 18 21 / 0.10), rgb(0 0 0 / 0.55));
   --shadow-md: 0 1px 2px light-dark(rgb(18 18 21 / 0.03), rgb(0 0 0 / 0.35)),
                0 22px 52px -20px light-dark(rgb(18 18 21 / 0.19), rgb(0 0 0 / 0.8));
   --shadow-lg: 0 2px 6px light-dark(rgb(18 18 21 / 0.05), rgb(0 0 0 / 0.45)),
@@ -222,7 +220,7 @@
      doesn't accept a CSS var() reference). */
   --ease-slide: cubic-bezier(0.19, 1, 0.22, 1);
 
-  --font-sans: var(--font-inter), ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", var(--font-inter), "Segoe UI", sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, "SF Mono", Menlo, monospace;
 }
 
@@ -308,8 +306,8 @@
 
   html, body {
     color: var(--color-text);
-    font-family: var(--font-inter), ui-sans-serif, -apple-system, "Segoe UI", Roboto,
-      "Helvetica Neue", Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", var(--font-inter),
+      "Segoe UI", sans-serif;
     font-size: 14px;
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
@@ -654,6 +652,37 @@
   background: var(--color-surface);
   box-shadow: inset 0 1px 0 light-dark(rgb(255 255 255 / 0.7), rgb(255 255 255 / 0.05));
 }
+
+/* Reference-board material pass (2026-09-18).
+ *
+ * Operational density reads better on stable, quiet surfaces than through a
+ * large atmospheric field. Keep the semantic class names so existing modules
+ * need no bespoke rewrite, but make each level behave like the supplied iOS
+ * light/dark boards: a distinct sidebar, opaque content panels, restrained
+ * borders and no blur competing with table rows or form controls.
+ */
+.glass-shell {
+  background: var(--color-chrome);
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+.glass-card,
+.glass-control,
+.glass-overlay {
+  background: var(--color-surface);
+  backdrop-filter: none;
+  border-color: var(--color-line);
+  box-shadow: none;
+}
+
+.glass-overlay { box-shadow: var(--shadow-lg); }
+
+/* The approved boards are intentionally flat behind their surfaces. Keep the
+ * nodes mounted for compatibility with the root layout, but do not paint the
+ * old glass-era bloom or grain. */
+.verity-atmosphere,
+.verity-grain { display: none; }
 
 .verity-scrim { background: light-dark(rgb(24 24 27 / 0.16), rgb(6 6 8 / 0.5)); }
 

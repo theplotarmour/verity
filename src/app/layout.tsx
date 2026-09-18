@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { cookies } from "next/headers";
-import { accentStyle, resolveAccent } from "@/server/platform/accent";
+import { accentStyle, DEFAULT_ACCENT } from "@/server/platform/accent";
 import { Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -44,30 +44,28 @@ export const viewport = {
   themeColor: [
     // The design source's own `--base`. This is the colour the OS paints around
     // the viewport, so a mismatch shows as a seam at the top of a phone screen.
-    { media: "(prefers-color-scheme: light)", color: "#f4f4f5" },
-    { media: "(prefers-color-scheme: dark)", color: "#0d0d0f" },
+    { media: "(prefers-color-scheme: light)", color: "#f5f5f7" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0f14" },
   ],
 };
 
 type Theme = "light" | "dark";
 
 /**
- * Theme and accent both come from cookies, for the same reason: the server can
- * stamp them into the first byte of HTML, so neither needs a script and neither
- * flashes. `undefined` theme is a real answer meaning "follow the OS", which the
- * stylesheet handles with `color-scheme: light dark`.
+ * Theme comes from a cookie so the server can stamp it into the first byte of
+ * HTML. Accent is intentionally fixed to Apple system blue for this phase;
+ * reintroduce user choice only with the later accent-picker scope.
  */
-async function appearance(): Promise<{ theme?: Theme; accent: string }> {
+async function appearance(): Promise<{ theme?: Theme }> {
   const jar = await cookies();
   const t = jar.get("verity-theme")?.value;
   return {
     theme: t === "light" || t === "dark" ? t : undefined,
-    accent: resolveAccent(jar.get("verity-accent")?.value),
   };
 }
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const { theme, accent } = await appearance();
+  const { theme } = await appearance();
 
   return (
     // The font variables go on <html>, not <body>. Tailwind v4 emits theme
@@ -86,11 +84,11 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     <html
       lang="en"
       data-theme={theme}
-      // Two custom properties carry the whole accent system. The 50→900 ladder
+      // The custom properties carry the whole fixed-blue accent system. The 50→900 ladder
       // derives from the seed in CSS, so a change here repaints every accent
       // surface without a single component knowing it happened. `--color-accent-on`
       // is stamped because choosing it needs a contrast comparison CSS cannot do.
-      style={accentStyle(accent) as CSSProperties}
+      style={accentStyle(DEFAULT_ACCENT) as CSSProperties}
       className={`${inter.variable} ${plexMono.variable}`}
       suppressHydrationWarning
     >

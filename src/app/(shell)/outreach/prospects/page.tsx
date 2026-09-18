@@ -51,6 +51,7 @@ type Search = {
   sort?: string;
   needsAction?: string;
   view?: string;
+  create?: string;
 };
 
 type Viewer = "founder" | "senior" | "junior";
@@ -292,6 +293,7 @@ async function ProspectsPage({ searchParams }: { searchParams: Promise<Search> }
           domains={data.formDomains}
           defaultOwnerId={data.viewer === "junior" ? data.me : undefined}
           revalidatePath="/outreach/prospects"
+          initiallyOpen={filters.create === "1"}
         />
       )}
 

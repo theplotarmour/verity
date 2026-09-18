@@ -40,13 +40,19 @@ async function TeamCommandPage() {
       where: { OR: [{ leaderId: user.partyId }, { coLeaderId: user.partyId }], active: true },
       include: { memberships: { where: { active: true } } },
     });
-    if (ledTeams.length === 0) return { noTeam: true as const };
+    const memberTeams = ledTeams.length > 0 ? [] : await tx.outreachTeam.findMany({
+      where: { active: true, memberships: { some: { partyId: user.partyId, active: true } } },
+      include: { memberships: { where: { active: true } } },
+    });
+    const visibleTeams = ledTeams.length > 0 ? ledTeams : memberTeams;
+    if (visibleTeams.length === 0) return { noTeam: true as const };
 
     // Senior leads exactly one team in this roster; if a future tenant gives
     // one Senior multiple teams, this takes the first — a picker is a real
     // gap, not silently handled.
-    const team = ledTeams[0]!;
-    const memberPartyIds = team.memberships.map((m) => m.partyId);
+    const team = visibleTeams[0]!;
+    const canManage = ledTeams.some((led) => led.id === team.id);
+    const memberPartyIds = [...new Set([team.leaderId, ...(team.coLeaderId ? [team.coLeaderId] : []), ...team.memberships.map((m) => m.partyId)])];
     const [members, leads, states] = await Promise.all([
       tx.party.findMany({ where: { id: { in: memberPartyIds } } }),
       tx.outreachLead.findMany({ where: { teamId: team.id } }),
@@ -120,6 +126,7 @@ async function TeamCommandPage() {
       noTeam: false as const,
       teamId: team.id,
       teamName: team.name,
+      canManage,
       availableParties,
       memberCount: memberPartyIds.length,
       activeLeads: leads.filter((l) => !TERMINAL_STATES.includes(l.state) && l.state !== "closed_won").length,
@@ -139,8 +146,8 @@ async function TeamCommandPage() {
   if (data.noTeam) {
     return (
       <>
-        <PageHeader title="Team Command" description="Only shown to Seniors who lead a team." />
-        <EmptyState title="You don't lead a team" description="This view is for a team's Senior Outreach Officer." />
+        <PageHeader title="My Team" description="Your outreach team, roster, and work visibility." />
+        <EmptyState title="You are not assigned to a team" description="Ask a team lead or Core administrator to add you before beginning prospect work." />
       </>
     );
   }
@@ -158,9 +165,9 @@ async function TeamCommandPage() {
         <p className="mb-0 mt-2 max-w-[62ch] text-[14px] text-text-secondary">
           Is my team executing the company direction effectively?
         </p>
-        <div className="mt-3">
+        {data.canManage && <div className="mt-3">
           <RenameTeamForm teamId={data.teamId} currentName={data.teamName} />
-        </div>
+        </div>}
       </header>
 
       <StatRow cols={4} className="mb-6">
@@ -199,7 +206,7 @@ async function TeamCommandPage() {
       </div>
 
       <div className="mb-6">
-        <Panel title="Member performance" flush action={<AddMemberForm teamId={data.teamId} candidates={data.availableParties} />}>
+        <Panel title="Team members" flush action={data.canManage ? <AddMemberForm teamId={data.teamId} candidates={data.availableParties} /> : undefined}>
           <div className="flex flex-col divide-y divide-line px-6">
             <div className="flex items-center gap-4 py-2 text-[11px] uppercase tracking-wide text-text-tertiary">
               <span className="w-8" />
@@ -224,20 +231,18 @@ async function TeamCommandPage() {
                   >
                     {initials(m.name)}
                   </span>
-                  <span className="flex-1 text-[14px] text-text">{m.name}</span>
+                  <a href={`/outreach/teams/${data.teamId}/members/${m.id}`} className="flex-1 text-[14px] text-text no-underline hover:underline">{m.name}</a>
                   <span className="tabular w-16 text-right text-[13px] text-text-secondary">{m.leads}</span>
                   <span className="tabular w-20 text-right text-[13px] text-text-secondary">{m.outreach}</span>
                   <span className="tabular w-16 text-right text-[13px] text-text-secondary">{m.closed}</span>
                   <span className={`tabular w-16 text-right text-[13px] ${m.overdue > 0 ? "font-medium text-danger" : "text-text-secondary"}`}>
                     {m.overdue}
                   </span>
-                  <span className="w-8 text-right">
-                    <RemoveMemberButton teamId={data.teamId} partyId={m.id} name={m.name} />
-                  </span>
+                  <span className="w-8 text-right">{data.canManage && <RemoveMemberButton teamId={data.teamId} partyId={m.id} name={m.name} />}</span>
                 </div>
-                <div className="pl-12">
+                {data.canManage && <div className="pl-12">
                   <CoachingNotePanel teamId={data.teamId} aboutPartyId={m.id} aboutName={m.name} />
-                </div>
+                </div>}
               </div>
             ))}
           </div>

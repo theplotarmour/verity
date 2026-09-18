@@ -15,7 +15,7 @@ solid-material rollout) — see "Relationship to 111/112" below; this file is
 about interaction/workflow, not material/color, though one visual finding
 (low contrast, over-pale surfaces) is shared with 112's rollout.
 
-## Status: P0 + P1 DONE 2026-09-17 (commits 9a873cc..6775ec9); P1.5 items 1-9 ALL DONE (commits e6006ce..e05a790, items 6 and 9 partial — see each item's own note); P2 NOT YET BUILT — see note at file end
+## Status: P0 + P1 DONE 2026-09-17 (commits 9a873cc..6775ec9); P1.5 items 1-9 ALL DONE (commits e6006ce..e05a790, items 6 and 9 partial — see each item's own note). The manual, team-operated launch scope is COMPLETE 2026-09-18; P2 automation/integration work is intentionally deferred — see the re-scope note at file end.
 
 All of P0 (P0.1-P0.6) and P1 are complete. Summary, newest work first:
 
@@ -319,8 +319,20 @@ commit in this batch. No local Postgres in this environment — none of
 this batch needed a live-DB check (pure query/command/UI layer, one
 additive zod field, no migration).
 
-**P2 status:** NOT STARTED, unchanged — still needs product-owner scoping
-before any of it is built, per this file's own text.
+**P2 status:** Re-scoped 2026-09-18 by product owner. External enrichment,
+automated sending and third-party cadence execution are intentionally deferred:
+the launch product is a manual, team-operated system of record. The completed
+launch slice is the record workflow (prospects, detail, activity/task/meeting
+entry, work queue, team hierarchy and Core oversight), not a sales-engagement
+vendor replacement. Future integrations must remain optional adapters and must
+not become a precondition for a staffed team to operate.
+
+**Launch hierarchy completed 2026-09-18:** every staffed outreach user has a
+`My Team` roster view; Core has a cross-team `Teams` directory; each team has a
+member drill-down, and each member has an operational page listing only their
+owned prospects and next actions. Access is tenant-scoped and role-checked at
+each route. This replaces daily-reporting dependency with live, attributable
+prospect activity and ownership.
 
 ## P2 — sales-execution parity (Apollo/Outreach/Salesloft-shaped, largest scope)
 

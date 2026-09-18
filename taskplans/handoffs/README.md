@@ -11,7 +11,7 @@ line below matching recent commits), regenerate it from `git log` and the
 taskplans it points to before trusting it, same rule `00_STATUS_INDEX.md`
 already states for itself.
 
-**Last updated: 2026-09-18 (ADR-024 rollout fully closed; Task 115 fully closed)**
+**Last updated: 2026-09-18 (manual Outreach launch scope complete; interaction-system audit active)**
 
 ## How to use this folder
 
@@ -54,7 +54,27 @@ already states for itself.
 
 ## Active work, in order
 
-### 1. Task 114 — Outreach execution-layer UX redesign — P1.5 fully DONE 2026-09-18
+### 1. Operational launch verification — Outreach manual system of record
+
+The implementation scope is complete: prospect entry, activity/task/meeting
+logging, role-scoped queues, senior team view, Core all-teams view, team roster,
+and member drill-through. Before credentials are issued, run the production-like
+smoke path with a valid database and real launch accounts: sign-in, each role's
+scope, create prospect, log an activity with a next action, create task/meeting,
+team/member drill-through, and sign-out. This is not integration scope; manual
+prospecting is the explicit launch workflow.
+
+### 2. Task 115 extension — Apple/Odoo operational interaction grammar
+
+The governing spec now defines consistent page, record, list, form, selection,
+commit, and state behaviour. Continue future UI work through shared primitives;
+do not introduce page-local entries, selects, table controls, or status patterns
+without first checking `verity-spec/09_experience/design-system.md` §3 and its
+forms/tables companions. Exact iOS Liquid Glass remains deferred by product
+direction; Apple craft currently means hierarchy, spacing, motion restraint, and
+direct, trustworthy controls.
+
+### 3. Task 114 — Outreach execution-layer UX redesign — launch scope CLOSED
 
 Handoff: [`outreach-p0-continuation.md`](./outreach-p0-continuation.md)
 Taskplan: `taskplans/114_pa_oms_outreach_execution_layer_redesign.md`
@@ -64,13 +84,11 @@ partial by design — see the taskplan's own per-item notes for exactly
 what each stops short of and why (both need product-owner-level business
 decisions the review never specified). Item 5 (card verbosity) is now
 also DONE — trimmed to one qualification field + 3 footer items instead
-of four/five. **Only P2 remains** (sequences/cadences, activity-type-
-aware forms, enrichment) — still parked pending product-owner scoping;
-do not start it from the taskplan's text alone. If asked to scope just
-the activity-type-aware forms slice, propose the exact field set per
-type before writing code (per this file's own prior discipline).
+of four/five. Automation, enrichment, and third-party cadence execution are
+intentionally deferred by the product owner; do not treat them as a launch
+blocker.
 
-### 2. Task 113 — AI implementation audit
+### 4. Task 113 — AI implementation audit
 
 No handoff file — small enough that the taskplan itself
 (`taskplans/113_ai_implementation_audit_all_clients_and_global_agent.md`)
@@ -80,7 +98,7 @@ carries its own findings inline. Status: items 1/2/4/5 DONE 2026-09-17
 unresolved). Item 3 (per-tenant reality check) needs live-DB access this
 environment doesn't have — flagged, not silently skipped.
 
-### 3. Task 90 — Attention platform concept (watching, not active)
+### 5. Task 90 — Attention platform concept (watching, not active)
 
 Not active work — a trigger watch. `taskplans/90_attention_platform_
 concept.md`'s 2026-09-17 note records that Task 114's Outreach work queue

@@ -7,9 +7,9 @@ import "server-only";
  * (which value is the default, and the preset list corrected to the brand sheet).
  *
  * BRAND IS NOT ACCENT. The Verity mark and wordmark are fixed assets and are
- * never recoloured by this. `#D4A017` (Warm Sand Gold) is the DEFAULT accent
- * per ADR-024, which reverted ADR-012's Mint default — but a tenant choosing
- * Ocean Blue changes the interface, not the identity.
+ * never recoloured by this. Apple system blue (`#0A84FF`) is the DEFAULT
+ * accent for the current product direction; a tenant choosing another accent
+ * changes the interface, not the identity.
  *
  * Only two things are computed here rather than in CSS. The 50→900 tonal ladder
  * is derived by `color-mix` in `globals.css`, because a stylesheet that can
@@ -37,10 +37,10 @@ export const ACCENT_PRESETS = [
 ] as const;
 
 /**
- * ADR-024's default (reverted from ADR-012's Mint). Mint is retained as an
- * ordinary preset rather than removed.
+ * Product default. Presets remain user-selectable; this is only the safe
+ * fallback when no valid preference has been stored.
  */
-export const DEFAULT_ACCENT = "#D4A017";
+export const DEFAULT_ACCENT = "#0A84FF";
 
 /**
  * The two candidates for text ON the accent.

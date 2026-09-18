@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { PageHeader, Panel } from "@/components/ui/primitives";
 import { AppearanceControls } from "@/components/shell/AppearanceControls";
-import { ACCENT_PRESETS, DEFAULT_ACCENT } from "@/server/platform/accent";
 import { Icon, type IconName } from "@/components/ui/icons";
 
 export const dynamic = "force-dynamic";
@@ -10,9 +9,9 @@ export const dynamic = "force-dynamic";
  * Settings — the one global entry point, reachable from the profile menu by
  * every signed-in actor regardless of role.
  *
- * Appearance renders directly here, ungated: theme and accent are per-user
- * cookie preferences (`AppearanceControls`'s own doc comment), never tenant
- * policy, so gating them behind tenant-admin permission — which is where
+ * Appearance renders directly here, ungated: theme is a per-user cookie
+ * preference (`AppearanceControls`'s own doc comment), never tenant policy,
+ * so gating it behind tenant-admin permission — which is where
  * they lived before, colocated on `/configuration` — was excluding every
  * non-admin actor from changing their own theme. That was the actual bug;
  * this page is the fix.
@@ -39,7 +38,7 @@ export default function SettingsPage() {
       <PageHeader title="Settings" description="Customize your workspace, preferences and account." />
 
       <Panel title="Appearance" className="mb-6">
-        <AppearanceControls presets={ACCENT_PRESETS} defaultAccent={DEFAULT_ACCENT} />
+        <AppearanceControls />
       </Panel>
 
       <div className="grid gap-3 sm:grid-cols-2">

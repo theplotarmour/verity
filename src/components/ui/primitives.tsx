@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 import Link from "next/link";
 import { VeritySymbol } from "@/components/brand/VerityMark";
 import { RequestAccessButton } from "./RequestAccessButton";
@@ -619,6 +619,22 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
 
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
   return <select {...props} className={cx(controlClass, "cursor-pointer pr-8", props.className)} />;
+}
+
+/** A multi-line entry control with the same material, border, and focus grammar as Input. */
+export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      {...props}
+      className={cx(
+        "verity-solid w-full min-h-24 resize-y rounded-lg border border-line px-4 py-2.5 text-[14px] text-text " +
+          "placeholder:text-text-tertiary transition-[border-color,box-shadow] duration-200 hover:border-line-strong " +
+          "focus:border-accent focus:outline-none focus:shadow-[var(--shadow-highlight),0_0_0_3px_var(--color-accent-subtle)] " +
+          "disabled:cursor-not-allowed disabled:opacity-55",
+        props.className,
+      )}
+    />
+  );
 }
 
 /**

@@ -25,3 +25,20 @@ A visual card board where records are represented as cards grouped in vertical c
 Defines the searching, filtering, and grouping options available for a model.
 - **Filters**: Static filters configured in XML (e.g., `<filter name="my_orders" string="My Orders" domain="[('user_id', '=', uid)]"/>`).
 - **Group By**: Allows aggregating list/kanban views by a specific field (e.g., `<filter string="Customer" name="group_by_partner" context="{'group_by': 'partner_id'}"/>`).
+
+## Verity adaptation
+
+This reference informs interaction structure only; Odoo XML, its web client,
+and its broad inline-editing defaults are not Verity architecture.
+
+| Odoo workflow idea | Verity rule |
+| --- | --- |
+| Form header, state, sheet | `PageHeader`, semantic state, and one guarded primary action lead a record workspace. |
+| Notebook and chatter | Labelled tabs/bounded panels hold related records and the activity timeline after the overview. |
+| Tree/list search and filters | `DataTable` or a role-scoped list exposes local filter, sort, pagination, empty state, and first-create path. |
+| Inline edit / kanban drag | Only use after the identical guarded command, audit, validation, and recovery path are proven; never assume a stage move is harmless. |
+| Search scopes and grouping | Scopes can improve discovery but must never expand server-authorized tenant, team, or role visibility. |
+
+The binding requirements are in `verity-spec/09_experience/design-system.md`,
+`forms.md`, and `tables.md`. This file remains a product-reference source, not
+an implementation contract.

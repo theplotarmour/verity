@@ -50,6 +50,7 @@ export function LeadActions({
   teamMembers,
   currentOwnerId,
   isEscalated,
+  initiallyLogOpen = false,
 }: {
   leadId: string;
   transitions: Array<{ key: string; category: string }>;
@@ -61,13 +62,15 @@ export function LeadActions({
   teamMembers: Array<{ id: string; name: string }>;
   currentOwnerId: string;
   isEscalated: boolean;
+  /** Opens the record's activity form from a command-palette deep link. */
+  initiallyLogOpen?: boolean;
 }) {
   const router = useRouter();
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [pending, startTransition] = useTransition();
   const [pendingTerminal, setPendingTerminal] = useState<string | null>(null);
   const [reason, setReason] = useState<(typeof REJECTION_REASONS)[number]>("NoFit");
-  const [logOpen, setLogOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(initiallyLogOpen);
   const [escalateOpen, setEscalateOpen] = useState(false);
   const [reassignOpen, setReassignOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
@@ -235,6 +238,19 @@ function LogActivityForm({ leadId, onDone }: { leadId: string; onDone: () => voi
   const [pending, startTransition] = useTransition();
   const [nextActionAt, setNextActionAt] = useState(dateInNDays(FOLLOWUP_SUGGESTION_DAYS.FirstOutreach));
   const [dateTouched, setDateTouched] = useState(false);
+  const [activityType, setActivityType] = useState<(typeof ACTIVITY_TYPES)[number]>("FirstOutreach");
+  const activityCopy: Record<(typeof ACTIVITY_TYPES)[number], { message: string; messageHint: string; response: string; responseHint: string }> = {
+    FirstOutreach: { message: "Opening message", messageHint: "The first outreach you sent", response: "Reply", responseHint: "Leave blank until they respond" },
+    FollowUp: { message: "Follow-up message", messageHint: "What you used to re-open the conversation", response: "Reply", responseHint: "Any response or objection" },
+    Response: { message: "Their message", messageHint: "What the prospect said", response: "Your response", responseHint: "How you replied or will reply" },
+    MeetingBooked: { message: "Meeting context", messageHint: "Why they agreed to meet", response: "Agenda", responseHint: "What needs to be covered" },
+    MeetingCompleted: { message: "Meeting summary", messageHint: "Decisions, needs, and commitments", response: "Outcome", responseHint: "Next commercial or delivery step" },
+    ProposalSent: { message: "Proposal summary", messageHint: "Scope, value, or commercial terms sent", response: "Commercial response", responseHint: "Their feedback or objection" },
+    PitchDeck: { message: "Deck shared", messageHint: "Deck version and the story it carried", response: "Reaction", responseHint: "Questions or level of interest" },
+    BusinessResearch: { message: "Research finding", messageHint: "A verified company, market, or contact insight", response: "Implication", responseHint: "How it changes the sales approach" },
+    Other: { message: "Activity note", messageHint: "What happened", response: "Result", responseHint: "What changed" },
+  };
+  const copy = activityCopy[activityType];
 
   return (
     <form
@@ -282,8 +298,9 @@ function LogActivityForm({ leadId, onDone }: { leadId: string; onDone: () => voi
             name="activityType"
             defaultValue="FirstOutreach"
             onChange={(e) => {
-              if (dateTouched) return;
               const type = e.target.value as (typeof ACTIVITY_TYPES)[number];
+              setActivityType(type);
+              if (dateTouched) return;
               setNextActionAt(dateInNDays(FOLLOWUP_SUGGESTION_DAYS[type] ?? 3));
             }}
           >
@@ -295,10 +312,10 @@ function LogActivityForm({ leadId, onDone }: { leadId: string; onDone: () => voi
           </Select>
         </Field>
       </div>
-      <Field label="Message" htmlFor="message" hint="What was sent">
+      <Field label={copy.message} htmlFor="message" hint={copy.messageHint}>
         <textarea id="message" name="message" rows={2} className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text focus:outline-none focus:border-accent" />
       </Field>
-      <Field label="Response" htmlFor="response" hint="What they said, if anything">
+      <Field label={copy.response} htmlFor="response" hint={copy.responseHint}>
         <textarea id="response" name="response" rows={2} className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text focus:outline-none focus:border-accent" />
       </Field>
       <div className="grid grid-cols-2 gap-3">

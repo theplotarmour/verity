@@ -27,6 +27,28 @@ stale — re-run against current `git log` and `src/`. `taskplans/101_
 remaining_work_master_plan.md` sequences everything still open as of this
 regeneration — read that instead of re-deriving triage from scratch.
 
+## Current priority order — 2026-09-18 correction
+
+This short list supersedes older "next" wording elsewhere in this historical
+index. It reflects the product-owner decision to launch Outreach as a manual,
+team-operated system of record before any external prospecting integrations.
+
+1. **Launch verification (Outreach):** run the real-role smoke path against a
+   valid production-like database before issuing credentials. The implementation
+   scope is complete; the outstanding work is proof of the deployed workflow,
+   not new enrichment or cadence code.
+2. **Interaction-system enforcement (Task 115 extension):** use the new
+   Apple/Odoo operational grammar in `verity-spec/09_experience/` for every new
+   form, dropdown, table, record view, and state. Remove shared-primitive
+   exceptions when encountered; do not start a page-local control system.
+3. **Deferred, not blocking launch:** external enrichment, automated sending,
+   and third-party sequence/cadence execution from Task 114 P2. Manual prospect
+   creation and relationship documentation are the chosen launch workflow.
+4. **Gated follow-up:** Task 113's live-database AI persistence proof and Task
+   90's Attention concept remain separate gates. Neither should delay manual
+   Outreach operations; neither can be declared complete without its stated
+   live evidence or trigger.
+
 ## Done
 
 | File | Evidence |

@@ -27,6 +27,7 @@ export function TaskPanel({
   teamMembers,
   partyName,
   canCreate,
+  initiallyOpen = false,
 }: {
   leadId: string;
   teamId: string;
@@ -34,9 +35,10 @@ export function TaskPanel({
   teamMembers: Array<{ id: string; name: string }>;
   partyName: Map<string, string>;
   canCreate: boolean;
+  initiallyOpen?: boolean;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initiallyOpen);
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [pending, startTransition] = useTransition();
 

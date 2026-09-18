@@ -167,10 +167,10 @@ export function ShellChrome({
                       // reload does not help because the pointer has not moved.
                       // 42px and a tighter icon gap fit the whole menu without
                       // dropping below the 40px comfortable-target floor.
-                      "flex h-[42px] items-center gap-3 rounded-lg px-3 text-[14px] no-underline " +
+                      "flex h-10 items-center gap-3 rounded-lg px-3 text-[14px] no-underline " +
                       "transition-[background-color,color] duration-200 " +
                       (current
-                        ? "bg-accent-subtle font-medium text-text shadow-[inset_0_1px_0_var(--color-accent-line)]"
+                        ? "border-l-2 border-accent bg-accent-subtle pl-[10px] font-medium text-text"
                         : "text-text-secondary hover:bg-surface-sunken hover:text-text")
                     }
                   >
@@ -234,7 +234,7 @@ export function ShellChrome({
     <div
       data-shell-root=""
       className="flex h-dvh flex-col overflow-hidden lg:grid"
-      style={{ gridTemplateColumns: "234px 1fr" }}
+      style={{ gridTemplateColumns: "240px 1fr" }}
     >
       {/* ----------------------------- sidebar -----------------------------
           Header and account card are stable; the NAVIGATION REGION ALONE
@@ -245,8 +245,8 @@ export function ShellChrome({
           the content still clips to one screen-height page). */}
       {/* ADR-024: structural chrome uses the glass ladder, not .verity-solid
           — this is persistent chrome, not dense content. */}
-      <aside className="glass-shell hidden min-h-0 flex-col rounded-none border-r border-line px-4 pb-5 pt-7 print:hidden lg:flex">
-        <Link href="/" aria-label="Verity" className="mb-8 block shrink-0 px-2 no-underline">
+      <aside className="glass-shell hidden min-h-0 flex-col rounded-none border-r border-line px-4 pb-5 pt-6 print:hidden lg:flex">
+        <Link href="/" aria-label="Verity" className="mb-7 block shrink-0 px-2 no-underline">
           <VerityLockup size={30} className="text-text" />
         </Link>
 
@@ -305,12 +305,12 @@ export function ShellChrome({
         {/* -------------------------- top bar ---------------------------
             Persistent chrome, as the boards draw it. It needs no `sticky`:
             the main region below owns the scroll, so this never travels. */}
-        <div className="hidden h-[92px] shrink-0 items-center gap-5 px-9 print:hidden lg:flex">
+        <div className="hidden h-20 shrink-0 items-center gap-5 px-7 print:hidden lg:flex">
           {/* Search is centred and dominant, as the mockup draws it. It is a
               real control over the records already loaded on the page, not a
               platform-wide index — platform search is DEFERRED and drawing a
               box that promises one would be a control that lies. */}
-          <div className="relative mx-auto flex w-full max-w-[560px] items-center">
+          <div className="relative flex w-full max-w-[750px] items-center">
             <Icon
               name="search"
               size={18}
@@ -323,7 +323,7 @@ export function ShellChrome({
               id="shell-search"
               type="search"
               placeholder="Search this page"
-              className="glass-control h-12 w-full rounded-xl pl-12 pr-16 text-[14px] text-text shadow-[var(--shadow-sm)] placeholder:text-text-tertiary transition-[border-color,box-shadow] duration-200 hover:border-line-strong focus:border-accent focus:shadow-[var(--shadow-highlight),0_0_0_3px_var(--color-accent-subtle)] focus:outline-none"
+              className="glass-control h-10 w-full rounded-lg pl-12 pr-16 text-[14px] text-text placeholder:text-text-tertiary transition-[border-color,box-shadow] duration-200 hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-subtle)] focus:outline-none"
             />
             {/* Task 109 Phase G §2: a separate global command palette (Cmd/Ctrl+K),
                 not this per-page search box — see CommandPalette's own doc comment. */}

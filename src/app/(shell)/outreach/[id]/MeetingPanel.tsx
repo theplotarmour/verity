@@ -16,9 +16,9 @@ type Meeting = {
 };
 
 /** Meeting list + create/outcome forms on a lead (Task 106 Phase 5, spec §62). */
-export function MeetingPanel({ leadId, meetings, canCreate }: { leadId: string; meetings: Meeting[]; canCreate: boolean }) {
+export function MeetingPanel({ leadId, meetings, canCreate, initiallyOpen = false }: { leadId: string; meetings: Meeting[]; canCreate: boolean; initiallyOpen?: boolean }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initiallyOpen);
   const [outcomeFor, setOutcomeFor] = useState<string | null>(null);
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [pending, startTransition] = useTransition();
