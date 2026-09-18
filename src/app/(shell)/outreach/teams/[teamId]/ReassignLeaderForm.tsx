@@ -7,33 +7,28 @@ import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
 /**
- * Only ever picks from people already reachable in the tenant with no
- * active roster anywhere — never a way to create a new login. Provisioning
- * a brand-new person's account stays an admin action, deliberately not
- * exposed here.
+ * Core-only: reassigns a team's primary leader (`verity.outreach.set_team_leader`).
+ * A leader who leaves the team has no other UI path off the roster — see that
+ * command's own doc comment on why reassigning `leaderId` is enough by itself.
  */
-export function AddMemberForm({
+export function ReassignLeaderForm({
   teamId,
+  currentLeaderName,
   candidates,
-  revalidatePath = "/outreach/team",
 }: {
   teamId: string;
+  currentLeaderName: string;
   candidates: Array<{ id: string; name: string }>;
-  /** Defaults to the Senior's own team page; the Core admin roster view
-   *  (`/outreach/teams/[teamId]`) passes its own route instead. */
-  revalidatePath?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [pending, startTransition] = useTransition();
 
-  if (candidates.length === 0) return null;
-
   if (!open) {
     return (
       <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
-        + Add member
+        Reassign leader ({currentLeaderName})
       </Button>
     );
   }
@@ -47,9 +42,9 @@ export function AddMemberForm({
         setFailure(null);
         startTransition(async () => {
           const result = await runCommand(
-            "verity.outreach.add_team_member",
-            { teamId, partyId: String(form.get("partyId")) },
-            revalidatePath,
+            "verity.outreach.set_team_leader",
+            { teamId, leaderId: String(form.get("leaderId")) },
+            `/outreach/teams/${teamId}`,
           );
           if (result.ok) {
             setOpen(false);
@@ -60,7 +55,7 @@ export function AddMemberForm({
         });
       }}
     >
-      <Select name="partyId" className="h-9 w-56">
+      <Select name="leaderId" className="h-9 w-56">
         {candidates.map((c) => (
           <option key={c.id} value={c.id}>
             {c.name}
@@ -68,12 +63,12 @@ export function AddMemberForm({
         ))}
       </Select>
       <Button type="submit" size="sm" disabled={pending}>
-        Add
+        Confirm
       </Button>
       <Button type="button" size="sm" variant="secondary" onClick={() => setOpen(false)}>
         Cancel
       </Button>
-      {failure && <ErrorState title="Could not add member" message={failure.message} issues={failure.issues} retryable={failure.retryable} />}
+      {failure && <ErrorState title="Could not reassign leader" message={failure.message} issues={failure.issues} retryable={failure.retryable} />}
     </form>
   );
 }

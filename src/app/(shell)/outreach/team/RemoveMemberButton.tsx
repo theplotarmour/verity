@@ -7,7 +7,19 @@ import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
 /** Soft-removes — the command deactivates the membership, never deletes it, so attribution history stays intact. */
-export function RemoveMemberButton({ teamId, partyId, name }: { teamId: string; partyId: string; name: string }) {
+export function RemoveMemberButton({
+  teamId,
+  partyId,
+  name,
+  revalidatePath = "/outreach/team",
+}: {
+  teamId: string;
+  partyId: string;
+  name: string;
+  /** Defaults to the Senior's own team page; the Core admin roster view
+   *  (`/outreach/teams/[teamId]`) passes its own route instead. */
+  revalidatePath?: string;
+}) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [failure, setFailure] = useState<ActionFailure | null>(null);
@@ -22,7 +34,7 @@ export function RemoveMemberButton({ teamId, partyId, name }: { teamId: string; 
           onClick={() => {
             setFailure(null);
             startTransition(async () => {
-              const result = await runCommand("verity.outreach.remove_team_member", { teamId, partyId }, "/outreach/team");
+              const result = await runCommand("verity.outreach.remove_team_member", { teamId, partyId }, revalidatePath);
               if (result.ok) router.refresh();
               else setFailure(result);
               setConfirming(false);

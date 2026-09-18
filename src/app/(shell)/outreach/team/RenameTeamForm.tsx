@@ -6,7 +6,17 @@ import { Button, ErrorState, Input } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
-export function RenameTeamForm({ teamId, currentName }: { teamId: string; currentName: string }) {
+export function RenameTeamForm({
+  teamId,
+  currentName,
+  revalidatePath = "/outreach/team",
+}: {
+  teamId: string;
+  currentName: string;
+  /** Defaults to the Senior's own team page; the Core admin roster view
+   *  (`/outreach/teams/[teamId]`) passes its own route instead. */
+  revalidatePath?: string;
+}) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [failure, setFailure] = useState<ActionFailure | null>(null);
@@ -32,7 +42,7 @@ export function RenameTeamForm({ teamId, currentName }: { teamId: string; curren
         const form = new FormData(e.currentTarget);
         setFailure(null);
         startTransition(async () => {
-          const result = await runCommand("verity.outreach.rename_team", { teamId, name: String(form.get("name") ?? "") }, "/outreach/team");
+          const result = await runCommand("verity.outreach.rename_team", { teamId, name: String(form.get("name") ?? "") }, revalidatePath);
           if (result.ok) {
             setEditing(false);
             router.refresh();

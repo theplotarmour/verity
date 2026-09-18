@@ -319,6 +319,30 @@ export const createOutreachTeam: CommandDefinition<
   },
 };
 
+/**
+ * Reassigns a team's primary leader (e.g. when a leader leaves the team).
+ * No such command existed before — `createOutreachTeam` sets `leaderId`
+ * once at creation and `setTeamCoLeader` only ever touched the co-lead
+ * slot. Mirrors `setTeamCoLeader` exactly: same entity/verb, same shape.
+ * `leaderId`/`coLeaderId` are membership by IMPLICATION (roster queries
+ * union them with the explicit `OutreachTeamMembership` rows) —
+ * reassigning this away from someone with no separate membership row is
+ * enough to drop them off the roster; no paired removal needed.
+ */
+export const setTeamLeader: CommandDefinition<{ teamId: string; leaderId: string }, { id: string }> = {
+  key: "verity.outreach.set_team_leader",
+  entity: ENTITY_TEAM,
+  verb: "Edit",
+  input: z.object({ teamId: z.string().uuid(), leaderId: z.string().uuid() }),
+  handler: async (ctx, input) => {
+    const team = await ctx.tx.outreachTeam.update({
+      where: { id: input.teamId },
+      data: { leaderId: input.leaderId, version: { increment: 1 } },
+    });
+    return { result: { id: team.id }, events: [{ name: "verity.outreach.leader_set", entityId: team.id, payload: { leaderId: input.leaderId } }] };
+  },
+};
+
 /** Sets or clears a team's co-leader. Co-leader is authorized identically to `leaderId` everywhere it's checked. */
 export const setTeamCoLeader: CommandDefinition<{ teamId: string; coLeaderId: string | null }, { id: string }> = {
   key: "verity.outreach.set_team_co_leader",
@@ -3478,6 +3502,7 @@ export function registerOutreachCapability(): void {
   });
 
   registerCommand(createOutreachTeam);
+  registerCommand(setTeamLeader);
   registerCommand(setTeamCoLeader);
   registerCommand(addTeamMember);
   registerCommand(createOutreachLead);
