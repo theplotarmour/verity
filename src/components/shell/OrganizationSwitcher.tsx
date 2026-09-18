@@ -51,8 +51,10 @@ export function OrganizationSwitcher({
     return (
       <div
         className={
-          "flex items-center gap-2.5 rounded-md border border-line bg-surface px-3 " +
-          (stacked ? "h-12 w-full" : "h-[38px] max-w-[16rem]")
+          "flex items-center gap-2.5 px-3 " +
+          (stacked
+            ? "h-12 w-full rounded-lg border border-line bg-surface"
+            : "h-[38px] max-w-[16rem] rounded-lg glass-control shadow-[var(--shadow-sm)] transition-[box-shadow,transform] duration-200 hover:-translate-y-px hover:shadow-[var(--shadow-md)]")
         }
       >
         <Icon name="building" size={16} className="shrink-0 text-text-tertiary" />
@@ -78,10 +80,11 @@ export function OrganizationSwitcher({
         <select
           id={selectId}
           className={
-            "w-full cursor-pointer appearance-none truncate rounded-md border border-line bg-surface " +
-            "pl-10 pr-9 text-[13px] text-text transition-colors hover:border-line-strong " +
-            "focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-subtle)] focus:outline-none " +
-            (stacked ? "h-12 min-h-12" : "h-11 min-h-11 lg:h-[38px] lg:min-h-[38px]")
+            "w-full cursor-pointer appearance-none truncate rounded-lg pl-10 pr-9 text-[13px] text-text " +
+            "focus:outline-none focus:shadow-[0_0_0_3px_var(--color-accent-subtle)] " +
+            (stacked
+              ? "border border-line bg-surface transition-colors hover:border-line-strong focus:border-accent h-12 min-h-12"
+              : "glass-control shadow-[var(--shadow-sm)] transition-[box-shadow,transform] duration-200 hover:-translate-y-px hover:shadow-[var(--shadow-md)] h-11 min-h-11 lg:h-[38px] lg:min-h-[38px]")
           }
           value={active.membershipId}
           disabled={pending}
