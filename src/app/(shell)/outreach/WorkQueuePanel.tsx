@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
-import { Badge, Panel } from "@/components/ui/primitives";
+import { Badge, FilterChipRow, Panel } from "@/components/ui/primitives";
 import { runQuery } from "@/server/actions/platform";
 
 const QUEUES = [
@@ -53,23 +53,12 @@ export function WorkQueuePanel({ teamIds }: { teamIds: string[] }) {
 
   return (
     <Panel title="Work queue">
-      <div className="flex flex-wrap gap-2">
-        {QUEUES.map((q) => (
-          <button
-            key={q.key}
-            type="button"
-            onClick={() => setActive(q.key)}
-            className={
-              "rounded-pill border px-3 py-1.5 text-[12.5px] font-medium transition-colors " +
-              (active === q.key
-                ? "border-transparent bg-accent-subtle text-accent-ink"
-                : "border-line text-text-secondary hover:bg-surface-sunken hover:text-text")
-            }
-          >
-            {q.label}
-          </button>
-        ))}
-      </div>
+      {/* ADR-025 pattern 5 (filter-chip rows) — this queue's own hand-rolled
+          chips are the pattern's origin (Task 114 P0.1); now delegated to
+          the generalized primitive. */}
+      <FilterChipRow
+        chips={QUEUES.map((q) => ({ label: q.label, active: active === q.key, onClick: () => setActive(q.key) }))}
+      />
       <div className="mt-4">
         {pending ? (
           <p className="text-[13px] text-text-tertiary">Loading…</p>
