@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { PLYWOOD_CAPABILITY, landingRouteFor } from "@/server/capabilities/plywood";
+import { OUTREACH_CAPABILITY, outreachLandingRouteFor } from "@/server/capabilities/outreach";
 import { withTenant } from "@/server/platform/tenancy";
 import { resolvePermissions, hasTenantPermission } from "@/server/platform/authorization";
 import {
@@ -47,12 +48,23 @@ export default async function OverviewPage() {
   // explain.
   installCapabilities();
   const landing = await withTenant(actor.tenantId, async (tx) => {
-    const plywoodActive = await tx.tenantActivation.findFirst({
-      where: { capabilityId: PLYWOOD_CAPABILITY, status: "Active" },
-      select: { capabilityId: true },
-    });
-    if (!plywoodActive || !actor.roleId) return null;
-    return landingRouteFor(await resolvePermissions(tx, actor.roleId));
+    if (!actor.roleId) return null;
+    const [plywoodActive, outreachActive] = await Promise.all([
+      tx.tenantActivation.findFirst({
+        where: { capabilityId: PLYWOOD_CAPABILITY, status: "Active" },
+        select: { capabilityId: true },
+      }),
+      tx.tenantActivation.findFirst({
+        where: { capabilityId: OUTREACH_CAPABILITY, status: "Active" },
+        select: { capabilityId: true },
+      }),
+    ]);
+    if (!plywoodActive && !outreachActive) return null;
+    const permissions = await resolvePermissions(tx, actor.roleId);
+    // A tenant runs at most one of these packs today, but check both rather
+    // than assume — a null from one is exactly the "leave them here" signal
+    // the other might still override.
+    return (plywoodActive ? landingRouteFor(permissions) : null) ?? (outreachActive ? outreachLandingRouteFor(permissions) : null);
   });
   if (landing) redirect(landing);
 

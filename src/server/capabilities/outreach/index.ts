@@ -71,6 +71,42 @@ export const ENTITY_ASSIGNMENT = "verity.outreach.assignment";
 export const ENTITY_TEAM_LEADERSHIP = "verity.outreach.team_leadership";
 export const ENTITY_JUNIOR_WORKSPACE = "verity.outreach.junior_workspace";
 
+/**
+ * Where a signed-in actor should land, for a tenant running Outreach.
+ *
+ * Root cause of a real bug: `/` (the platform's own generic Overview,
+ * `src/app/(shell)/page.tsx`) requires `Read` on `verity.platform.overview`,
+ * which PA-OMS's seed (`prisma/seed-pa-oms.ts`) never grants to Founders,
+ * Senior, or Junior — none of PA-OMS's roles hold it. Every sign-in lands on
+ * `/` first, so every PA-OMS actor hit "You do not have access to this" on
+ * every single login, and the page's own "Go to dashboard" button points
+ * back at `/` — a dead loop, not a recovery path. The generic Overview is
+ * also the wrong page even if the grant existed: it's shaped around
+ * Locations/Assets/Evidence counts, all zero for this tenant, since PA-OMS
+ * runs no plywood-style capability.
+ *
+ * Mirrors `trading/activities.ts`'s `landingRouteFor` for the same reason
+ * that function exists: derive the destination from what the actor can
+ * actually DO, never from a role name. Reuses the exact markers already
+ * built for `requiresEntity` nav gating (ENTITY_TEAM_LEADERSHIP,
+ * ENTITY_JUNIOR_WORKSPACE) rather than inventing a third mechanism to keep
+ * Founders/Senior/Junior apart.
+ */
+export function outreachLandingRouteFor(resolved: Array<{ verb: string; entity: string }>): string | null {
+  const has = (verb: string, entity: string) => resolved.some((p) => p.verb === verb && p.entity === entity);
+  // Founders' Office and Senior: both hold Edit on ENTITY_TEAM (the same
+  // signal `/outreach`'s own nav gate already uses) — the company-wide or
+  // team-command dashboard is their work.
+  if (has("Edit", ENTITY_TEAM)) return "/outreach";
+  // Junior: the workspace marker, same as the nav item it gates.
+  if (has("Read", ENTITY_JUNIOR_WORKSPACE)) return "/outreach/workspace";
+  // Any other Outreach-scoped actor (shouldn't normally occur given the
+  // three seeded roles, but fails toward a working page rather than the
+  // dead-end generic Overview if it ever does).
+  if (has("Read", ENTITY_LEAD)) return "/outreach/prospects";
+  return null;
+}
+
 /** The 5 terminal/negative lead states (handbook Ch. 22). */
 export const TERMINAL_STATES = ["not_a_fit", "unresponsive", "lost", "deferred", "disqualified"] as const;
 
