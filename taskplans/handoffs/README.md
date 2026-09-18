@@ -11,7 +11,7 @@ line below matching recent commits), regenerate it from `git log` and the
 taskplans it points to before trusting it, same rule `00_STATUS_INDEX.md`
 already states for itself.
 
-**Last updated: 2026-09-18 (Task 114 P1.5 fully landed; Experience System v2 / ADR-024 started)**
+**Last updated: 2026-09-18 (ADR-024 rollout fully closed; Task 115 fully closed)**
 
 ## How to use this folder
 
@@ -30,29 +30,31 @@ already states for itself.
   finishes) rather than being deleted — same "don't destroy history"
   posture as the rest of `taskplans/`.
 
+## Closed this session (moved out of "Active work" — see Closed loops)
+
+- **Verity Experience System v2 — ADR-024 rollout** — CLOSED 2026-09-18.
+  backdrop-filter bug root-caused and fixed (commit `7d3276c`; Lightning
+  CSS dropped the standard property whenever a hand-authored `-webkit-`
+  sibling sat in the same rule — removed the now-redundant prefix). Motion
+  wired into real transitions (`727b8b4`): CommandPalette/OverflowMenu/
+  Combobox via framer-motion, Modal via CSS `@starting-style` (native
+  `<dialog>`, deliberately not framer-motion — see that commit). Typography
+  pass done (H1 now matches the board's 32/40, size-specific tracking).
+  Gold board copied into `design/verity-aesthetics-v2-gold.png` (`7693a7e`).
+  Per-capability accent-fill sweep done, one more violation found and
+  fixed (`f696e48`, Outreach contacts empty-state).
+- **Task 115 — Apple design system governing docs overhaul** — CLOSED
+  2026-09-18. All six ADR-025 patterns built; four wired into live pages,
+  two stay orphan primitives with a stated real reason each (`SplitButton`:
+  no page has its precondition; `TrendChart`: no backend query returns the
+  time series it needs). Spec REQ-IDs added (`verity-spec/09_experience/
+  design-system.md` §2, REQ-004..009). `verity-design-companion` skill
+  resynced. See `taskplans/115_apple_design_system_governing_docs_
+  overhaul.md`'s own Status section for the full account.
+
 ## Active work, in order
 
-### 1. Verity Experience System v2 — ADR-024 rollout (glass chrome, gold accent, motion)
-
-Handoff: [`experience-system-v2-adr024.md`](./experience-system-v2-adr024.md)
-Authority: `verity-spec/17_decisions/adr/adr-024.md`
-
-Status: Foundation + proof surface + step 3 (CommandPalette/AgentChatDock/
-Button press/motion presets) DONE 2026-09-18 (commits `b95296d`..
-`233463f`). **A real, found-but-unfixed bug is blocking full visual
-completion**: `backdrop-filter` is stripped from all four glass classes
-somewhere in the CSS build — confirmed via live CSSOM inspection, not yet
-root-caused (dev-vs-prod build, Lightning CSS defaults, and `@layer`
-placement are the untried leads). Read the handoff's own "open bug"
-section before touching `globals.css` again. Remaining rollout (motion
-wired into actual transitions, typography pass, per-capability sweep,
-copying the gold board into `design/`) is intentionally deferred per the
-plan's own phasing — none of it started. **Governing-docs layer above
-this (component patterns, Bible §1 amendment proposal) is now its own
-plan: `taskplans/115_apple_design_system_governing_docs_overhaul.md`**,
-which also corrects Task 111/112 for ADR-024's partial supersession.
-
-### 2. Task 114 — Outreach execution-layer UX redesign — P1.5 fully DONE 2026-09-18
+### 1. Task 114 — Outreach execution-layer UX redesign — P1.5 fully DONE 2026-09-18
 
 Handoff: [`outreach-p0-continuation.md`](./outreach-p0-continuation.md)
 Taskplan: `taskplans/114_pa_oms_outreach_execution_layer_redesign.md`
@@ -68,19 +70,7 @@ do not start it from the taskplan's text alone. If asked to scope just
 the activity-type-aware forms slice, propose the exact field set per
 type before writing code (per this file's own prior discipline).
 
-### 3. Task 111 → Task 112 — structured-minimalism material rollout — DONE 2026-09-17
-
-Full sweep complete: `Surface`'s `solid` default flipped to `true`
-(ADR-023), every remaining `.glass-*` class and `bg-glass-N` token in
-`src/` migrated to `verity-solid`/`bg-surface-sunken` across ~40 files in
-7 commits (`fb7f3b9`..`3ad2b89`). See
-`taskplans/112_complete_ui_ux_upgrade_to_structured_minimalism.md`'s own
-Status section for the full file list and verification notes. The known
-`bg-glass-2` violation in `prospects/page.tsx` (~line 345) is fixed. Task
-114's P1.5 (which depended on this landing first per its own note) can
-now proceed.
-
-### 4. Task 113 — AI implementation audit
+### 2. Task 113 — AI implementation audit
 
 No handoff file — small enough that the taskplan itself
 (`taskplans/113_ai_implementation_audit_all_clients_and_global_agent.md`)
@@ -90,7 +80,7 @@ carries its own findings inline. Status: items 1/2/4/5 DONE 2026-09-17
 unresolved). Item 3 (per-tenant reality check) needs live-DB access this
 environment doesn't have — flagged, not silently skipped.
 
-### 5. Task 90 — Attention platform concept (watching, not active)
+### 3. Task 90 — Attention platform concept (watching, not active)
 
 Not active work — a trigger watch. `taskplans/90_attention_platform_
 concept.md`'s 2026-09-17 note records that Task 114's Outreach work queue
@@ -100,6 +90,13 @@ Listed here so nobody re-derives this question mid-P0.1.
 
 ## Closed loops (no longer active, recorded so they aren't re-opened)
 
+- **Task 111 → Task 112 — structured-minimalism material rollout** — DONE
+  2026-09-17. `Surface`'s `solid` default flipped to `true` (ADR-023),
+  every remaining `.glass-*` class and `bg-glass-N` token in `src/`
+  migrated to `verity-solid`/`bg-surface-sunken` across ~40 files in 7
+  commits (`fb7f3b9`..`3ad2b89`). Partially superseded by ADR-024's
+  chrome/content split the next day — see `taskplans/112_complete_ui_ux_
+  upgrade_to_structured_minimalism.md`'s own corrected Status section.
 - **Task 97 Finding 1/6 + Task 100's metric-snapshot migration** — both
   were already done 2026-09-04 (commit `e92dbee`), just undocumented until
   2026-09-17. No handoff needed; corrected directly in
