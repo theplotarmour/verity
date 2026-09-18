@@ -32,14 +32,24 @@ listens and opens. Verified live (Chrome DevTools MCP): click opens the
 palette with focus on its own input. Same visual geometry, honest behavior.
 
 ### P0-02 — shared form primitive adoption incomplete
-Status: **PENDING**
-Files named by audit: `src/app/(shell)/outreach/**`, `ImportWizard.tsx`,
-`ItcView.tsx`, `CustomFieldsPanel.tsx`, `DataTable.tsx`.
-Plan: grep for raw `<input`/`<textarea`/`<select` outside `components/ui/`
-primitives, replace with `Field`/`Input`/`Textarea`/`Select`/`Checkbox`
-per site, or document a stated exception inline (matching this repo's own
-"stated reason" convention from Task 115). Large — expect multiple commits,
-one capability/file at a time.
+Status: **DONE** (`DataTable.tsx` checkbox part tracked separately as
+P1-06, not this item). Swept every raw `<input>`/`<textarea>` outside
+`components/ui/` in `src/app/(shell)/`: `TaskPanel`, `ResearchForm`,
+`MeetingPanel`, `DirectionForm`, `ContactForm`, `CoachingNotePanel`,
+`LeadActions` (6 inputs + 4 textareas — the largest single file),
+`BulkActionBar`, `ItcView`, `CustomFieldsPanel` → now `Input`/`Textarea`
+from `primitives.tsx`. Fixed-width fields (`amount`/`threshold`/bulk task
+title) wrapped in a sized `<div>` rather than passed a conflicting `w-*`
+className, because this repo's `cx()` is a plain join (no `tailwind-merge`)
+and `Input`'s own class already bakes in `w-full`.
+Two **stated exceptions**, not silently skipped:
+- `ImportWizard.tsx`'s CSV-paste textarea — same reason, documented inline:
+  `Textarea`'s baked-in `min-h-24`/`text-[14px]` would collide un-overridably
+  with this box's `min-h-40 font-mono text-[13px]` CSV need.
+- `CustomFieldsPanel.tsx`'s dynamic checkbox — not swapped to the
+  `Checkbox` primitive because `Checkbox` renders its own `<label>` and
+  `Field` already supplies one via `htmlFor`; styled to match instead.
+`tsc --noEmit` clean. Screenshot-verified (`/outreach/prospects`, light).
 
 ### P0-03 — no signed-in visual proof
 Status: **PENDING**

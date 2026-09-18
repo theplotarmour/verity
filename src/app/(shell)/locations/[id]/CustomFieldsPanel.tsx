@@ -144,7 +144,18 @@ export function CustomFieldsPanel({
                     ))}
                   </Select>
                 ) : field.control === "checkbox" ? (
-                  <input id={id} name={field.name} type="checkbox" defaultChecked={Boolean(current)} />
+                  // Not the `Checkbox` primitive: it renders its own `<label>`,
+                  // and `Field` above already supplies one via `htmlFor` — two
+                  // nested labels for one control. Same visual language
+                  // (`primitives.tsx`'s checkbox styling) without the double
+                  // label (APPLE-P0-02).
+                  <input
+                    id={id}
+                    name={field.name}
+                    type="checkbox"
+                    defaultChecked={Boolean(current)}
+                    className="size-[18px] shrink-0 cursor-pointer appearance-none rounded-[5px] border border-line-strong bg-surface bg-center bg-no-repeat transition-[background-color,border-color,box-shadow] duration-150 checked:border-accent checked:bg-accent hover:border-line-strong focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-subtle)]"
+                  />
                 ) : (
                   <Input
                     id={id}

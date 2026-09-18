@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, ErrorState, Field, Input, Select } from "@/components/ui/primitives";
+import { Button, ErrorState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -98,12 +98,7 @@ export function DirectionForm() {
       </Field>
       <div className="sm:col-span-2">
         <Field label="Strategic note" htmlFor="strategicNote">
-          <textarea
-            id="strategicNote"
-            name="strategicNote"
-            rows={2}
-            className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text focus:outline-none focus:border-accent"
-          />
+          <Textarea id="strategicNote" name="strategicNote" rows={2} />
         </Field>
       </div>
       {failure && (

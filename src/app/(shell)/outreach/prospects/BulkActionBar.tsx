@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, Select } from "@/components/ui/primitives";
+import { Button, Input, Select } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 
 type OwnerOption = { id: string; name: string };
@@ -95,12 +95,9 @@ export function BulkActionBar({
   if (mode === "task") {
     return (
       <div className="flex flex-wrap items-center gap-2">
-        <input
-          value={taskTitle}
-          onChange={(e) => setTaskTitle(e.target.value)}
-          placeholder="Task title"
-          className="verity-solid h-9 w-48 rounded-lg border border-line px-3 text-[13px] text-text focus:outline-none focus:border-accent"
-        />
+        <div className="w-48">
+          <Input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="Task title" />
+        </div>
         <Button
           size="sm"
           disabled={pending || !taskTitle.trim()}

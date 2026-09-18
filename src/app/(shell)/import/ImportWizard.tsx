@@ -32,9 +32,14 @@ const KIND_TEMPLATE: Record<ImportKind, string> = {
   product: "brandName,name,hsnCode,thicknessTenthMm,category,widthTenth,heightTenth,grade,unitLabel,reorderLevelUnits",
 };
 
-/** Same visual chrome as `Input`/`Select` in `primitives.tsx` (that file's
- *  `controlClass` is private to it), for the one control this page needs
- *  that the shared primitives don't offer — a multi-line paste target. */
+/**
+ * APPLE-P0-02: `primitives.tsx` now has a shared `Textarea`, but this stays a
+ * documented exception rather than switching to it — `cx()` here is a plain
+ * join, not `tailwind-merge`, so `Textarea`'s baked-in `min-h-24`/`text-[14px]`
+ * would sit in the DOM alongside this box's `min-h-40 font-mono text-[13px]`
+ * CSV needs with no guaranteed winner. Kept hand-rolled, same border/focus/
+ * shadow language as `Input`/`Select`.
+ */
 const textareaClass =
   "verity-solid border border-line w-full min-h-40 resize-y rounded-lg px-4 py-3 text-[13px] font-mono text-text " +
   "placeholder:text-text-tertiary placeholder:font-sans transition-[border-color,box-shadow] duration-200 " +

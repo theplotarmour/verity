@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, ErrorState, Field, Input, Panel, Select } from "@/components/ui/primitives";
+import { Button, ErrorState, Field, Input, Panel, Select, Textarea } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -91,12 +91,7 @@ export function ContactForm({ leadId }: { leadId: string }) {
         </div>
         <div className="sm:col-span-2">
           <Field label="Notes" htmlFor="notes">
-            <textarea
-              id="notes"
-              name="notes"
-              rows={2}
-              className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text placeholder:text-text-tertiary focus:outline-none focus:border-accent"
-            />
+            <Textarea id="notes" name="notes" rows={2} />
           </Field>
         </div>
 

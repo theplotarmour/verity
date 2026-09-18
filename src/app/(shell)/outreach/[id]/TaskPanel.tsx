@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Badge, Button, ErrorState, Field, Input, Panel, Select } from "@/components/ui/primitives";
+import { Badge, Button, ErrorState, Field, Input, Panel, Select, Textarea } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -158,12 +158,7 @@ export function TaskPanel({
             <Input id="dueAt" name="dueAt" type="date" />
           </Field>
           <Field label="Description" htmlFor="taskDescription">
-            <textarea
-              id="taskDescription"
-              name="description"
-              rows={2}
-              className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text placeholder:text-text-tertiary focus:outline-none focus:border-accent"
-            />
+            <Textarea id="taskDescription" name="description" rows={2} />
           </Field>
           {failure && <ErrorState title="Could not create task" message={failure.message} issues={failure.issues} retryable={failure.retryable} />}
           <div className="flex items-center gap-2">

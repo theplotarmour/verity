@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Badge, Button, ErrorState, Field, Select } from "@/components/ui/primitives";
+import { Badge, Button, ErrorState, Field, Input, Select, Textarea } from "@/components/ui/primitives";
 import { OverflowMenu, OverflowMenuItem } from "@/components/ui/OverflowMenu";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
@@ -313,22 +313,17 @@ function LogActivityForm({ leadId, onDone }: { leadId: string; onDone: () => voi
         </Field>
       </div>
       <Field label={copy.message} htmlFor="message" hint={copy.messageHint}>
-        <textarea id="message" name="message" rows={2} className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text focus:outline-none focus:border-accent" />
+        <Textarea id="message" name="message" rows={2} />
       </Field>
       <Field label={copy.response} htmlFor="response" hint={copy.responseHint}>
-        <textarea id="response" name="response" rows={2} className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text focus:outline-none focus:border-accent" />
+        <Textarea id="response" name="response" rows={2} />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Next action" htmlFor="nextActionNote" required>
-          <input
-            id="nextActionNote"
-            name="nextActionNote"
-            required
-            className="verity-solid border border-line h-11 w-full rounded-lg px-4 text-[14px] text-text focus:outline-none focus:border-accent"
-          />
+          <Input id="nextActionNote" name="nextActionNote" required />
         </Field>
         <Field label="Due" htmlFor="nextActionAt" required hint="Suggested from the activity type — change freely">
-          <input
+          <Input
             id="nextActionAt"
             name="nextActionAt"
             type="date"
@@ -338,7 +333,6 @@ function LogActivityForm({ leadId, onDone }: { leadId: string; onDone: () => voi
               setDateTouched(true);
               setNextActionAt(e.target.value);
             }}
-            className="verity-solid border border-line h-11 w-full rounded-lg px-4 text-[14px] text-text focus:outline-none focus:border-accent"
           />
         </Field>
       </div>
@@ -471,25 +465,14 @@ function RecordPaymentForm({ leadId, onDone }: { leadId: string; onDone: () => v
       }}
     >
       <Field label="Amount received" htmlFor="amount" hint="In rupees">
-        <input
-          id="amount"
-          name="amount"
-          type="number"
-          min="0.01"
-          step="0.01"
-          required
-          className="verity-solid border border-line h-11 w-36 rounded-lg px-4 text-[14px] text-text focus:outline-none focus:border-accent"
-        />
+        <div className="w-36">
+          <Input id="amount" name="amount" type="number" min="0.01" step="0.01" required />
+        </div>
       </Field>
       <Field label="Set threshold" htmlFor="threshold" hint="Optional — leave blank to keep the current one">
-        <input
-          id="threshold"
-          name="threshold"
-          type="number"
-          min="0.01"
-          step="0.01"
-          className="verity-solid border border-line h-11 w-36 rounded-lg px-4 text-[14px] text-text focus:outline-none focus:border-accent"
-        />
+        <div className="w-36">
+          <Input id="threshold" name="threshold" type="number" min="0.01" step="0.01" />
+        </div>
       </Field>
       {failure && (
         <div className="w-full">
@@ -555,13 +538,7 @@ function ReactivateForm({
         </Select>
       </Field>
       <Field label="Why relevant now" htmlFor="reactivateWhy" required hint="The new trigger — spec §46: reactivation needs a genuinely new reason">
-        <textarea
-          id="reactivateWhy"
-          name="whyRelevant"
-          required
-          rows={2}
-          className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text focus:outline-none focus:border-accent"
-        />
+        <Textarea id="reactivateWhy" name="whyRelevant" required rows={2} />
       </Field>
       {failure && <ErrorState title="Could not reactivate" message={failure.message} issues={failure.issues} retryable={failure.retryable} />}
       <div className="flex gap-2">
@@ -648,13 +625,7 @@ function EscalateForm({ leadId, onDone }: { leadId: string; onDone: () => void }
         required
         hint="Large deal, unusual technical requirement, Agency+Verity cross-sell, ..."
       >
-        <textarea
-          id="escalationNote"
-          name="note"
-          required
-          rows={2}
-          className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text focus:outline-none focus:border-accent"
-        />
+        <Textarea id="escalationNote" name="note" required rows={2} />
       </Field>
       {failure && <ErrorState title="Could not escalate" message={failure.message} issues={failure.issues} retryable={failure.retryable} />}
       <div className="flex gap-2">

@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button, ErrorState, Field, Input, Panel, Select } from "@/components/ui/primitives";
+import { Button, ErrorState, Field, Input, Panel, Select, Textarea } from "@/components/ui/primitives";
 import { runCommand, runQuery } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -156,12 +156,7 @@ export function ResearchForm({ leadId }: { leadId: string }) {
             </Field>
           )}
           <Field label={mode === "Url" ? "Notes" : "Content"} htmlFor="content">
-            <textarea
-              id="content"
-              name="content"
-              rows={3}
-              className="verity-solid border border-line w-full rounded-lg px-4 py-2.5 text-[14px] text-text placeholder:text-text-tertiary focus:outline-none focus:border-accent"
-            />
+            <Textarea id="content" name="content" rows={3} />
           </Field>
           {failure && (
             <ErrorState title="Could not save research" message={failure.message} issues={failure.issues} retryable={failure.retryable} />

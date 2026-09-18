@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Badge, Button, ErrorState, Field, Input, Panel } from "@/components/ui/primitives";
+import { Badge, Button, ErrorState, Field, Input, Panel, Textarea } from "@/components/ui/primitives";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -79,12 +79,7 @@ export function MeetingPanel({ leadId, meetings, canCreate, initiallyOpen = fals
                     });
                   }}
                 >
-                  <textarea
-                    name="outcomeNotes"
-                    rows={2}
-                    placeholder="What happened?"
-                    className="verity-solid border border-line w-full rounded-lg px-3 py-2 text-[13px] text-text placeholder:text-text-tertiary focus:outline-none focus:border-accent"
-                  />
+                  <Textarea name="outcomeNotes" rows={2} placeholder="What happened?" />
                   <div className="flex gap-1.5">
                     <Button size="sm" type="submit" disabled={pending}>
                       Save outcome

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Badge, Button, Select } from "@/components/ui/primitives";
+import { Badge, Button, Select, Textarea } from "@/components/ui/primitives";
 import { runCommand, runQuery } from "@/server/actions/platform";
 
 type Note = { id: string; content: string; visibility: string; createdAt: string };
@@ -73,12 +73,7 @@ export function CoachingNotePanel({ teamId, aboutPartyId, aboutName }: { teamId:
               });
             }}
           >
-            <textarea
-              name="content"
-              rows={2}
-              placeholder={`Add a note about ${aboutName}…`}
-              className="verity-solid border border-line w-full rounded-lg px-3 py-2 text-[13px] text-text placeholder:text-text-tertiary focus:outline-none focus:border-accent"
-            />
+            <Textarea name="content" rows={2} placeholder={`Add a note about ${aboutName}…`} />
             <div className="flex items-center gap-2">
               <Select name="visibility" defaultValue="JuniorVisible" className="w-auto">
                 <option value="JuniorVisible">Visible to them</option>

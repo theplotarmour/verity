@@ -17,6 +17,7 @@ import {
   RowList,
   Stat,
   StatRow,
+  Textarea,
 } from "@/components/ui/primitives";
 import { rupees, rupeesShort } from "@/components/ui/business/format";
 import { Related } from "@/components/ui/business/Related";
@@ -228,12 +229,12 @@ export function ItcView({ report }: { report: Report }) {
               Amounts in rupees, dates as YYYY-MM-DD.
             </p>
             <Field label="Rows" htmlFor="itc-csv" required>
-              <textarea
+              <Textarea
                 id="itc-csv"
                 value={csv}
                 onChange={(event) => setCsv(event.target.value)}
                 rows={10}
-                className="verity-solid border border-line w-full rounded-lg px-4 py-3 font-mono text-[13px] text-text placeholder:text-text-tertiary focus:border-accent focus:outline-none"
+                className="font-mono"
                 placeholder={"gstin,supplier,invoice,date,taxable,cgst,sgst,igst,total\n07AABCU9603R1ZX,Century Ply,CP-8291,2026-08-14,113280,10195,10195,0,133670"}
               />
             </Field>
