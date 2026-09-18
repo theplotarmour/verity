@@ -159,6 +159,14 @@ type OpenAiMessage = {
 async function callProvider(
   messages: OpenAiMessage[],
   tools: ReturnType<typeof toOpenAiTool>[],
+  /** Task 113 finding: `tool_choice: "auto"` lets the model skip every tool
+   *  and reply from nothing, which a narrow "must ground in real data" turn
+   *  (`runAgentTurn`'s `toolKeys` option — insight generation, e.g.) cannot
+   *  tolerate. `"required"` on that first call forces at least one real
+   *  read before any reply. General chat (no `toolKeys` restriction) keeps
+   *  `"auto"` — a reply with no tool call is often the CORRECT answer there
+   *  (e.g. "thanks", answered from history). */
+  forceTool = false,
 ): Promise<{ message: OpenAiMessage }> {
   const config = readAgentProviderConfig();
   if (!config) throw new AgentNotConfiguredError();
@@ -173,7 +181,7 @@ async function callProvider(
       model: config.model,
       messages,
       tools: tools.length > 0 ? tools : undefined,
-      tool_choice: tools.length > 0 ? "auto" : undefined,
+      tool_choice: tools.length > 0 ? (forceTool ? "required" : "auto") : undefined,
     }),
   });
 
@@ -352,7 +360,13 @@ export async function runAgentTurn(
   const toolCalls: ToolCallRecord[] = [];
 
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-    const { message } = await callProvider(messages, tools);
+    // Force a tool call on the FIRST turn only, and only when the manifest
+    // was narrowed (`toolKeys` set) — a restriction the caller applied
+    // specifically because this turn must ground in real reads. Later
+    // iterations go back to "auto" so the model can produce its final
+    // answer once it has read what it needs.
+    const forceTool = i === 0 && options.toolKeys !== undefined;
+    const { message } = await callProvider(messages, tools, forceTool);
     messages.push(message);
 
     if (!message.tool_calls || message.tool_calls.length === 0) {

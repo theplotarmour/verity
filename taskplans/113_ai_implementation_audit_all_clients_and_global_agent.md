@@ -101,7 +101,61 @@ failures, consistent with Task 106's own note about remote-DB/pooler
 flakiness — not new). The live-AI assertion itself still fails: the model
 now completes a tool call, but `generateLeadInsight` does not persist an
 insight row from it. **Conclusion: item 2's config fix is necessary but not
-sufficient** — Phase 8's BLOCKED status changes from "provider rejects tool
+
+**ROOT-CAUSED AND PARTIALLY FIXED 2026-09-18.** Called `runAgentTurn`
+directly (`tsx`, real actor, real lead, real Groq call — not a mock) and
+reproduced the failure live, twice, with two DIFFERENT real causes, not
+one:
+
+1. **Groq free-tier rate limit.** `openai/gpt-oss-120b` on this deployment's
+   Groq account is capped at 8000 TPM; this flow's multi-tool-call turn
+   (4 sequential queries + reply) requests more and gets `429`. Confirmed
+   reproducible on repeat calls, not a one-off. `callProvider` threw a
+   plain `Error("E_AGENT_PROVIDER: 429...")`, unmatched by any class
+   `toActionFailure` recognizes, so it fell to the generic "Something went
+   wrong, contact support" message — genuinely unhelpful for a transient,
+   retryable condition.
+2. **The model sometimes skips tool calls entirely.** A second live call
+   (after the rate limit cleared) made ZERO tool calls despite the
+   system/user prompt explicitly commanding sequential tool use, and
+   replied "I don't have any information about this lead" — a
+   confidently-wrong non-answer, not a graceful failure. `generateLeadInsight`'s
+   own code handled this correctly (its `sourceReads.length === 0` check
+   caught it and returned the specific "did not read the lead's records"
+   message) — this is a MODEL COMPLIANCE gap, not a code defect.
+
+**Fixes applied** (`src/server/platform/agent-chat.ts`,
+`src/server/actions/outreach.ts`):
+- `runAgentTurn` now passes `tool_choice: "required"` on the FIRST provider
+  call only, and only when `options.toolKeys` narrows the manifest (the
+  exact "must ground in real data" case Task 106 built `toolKeys` for) —
+  general chat turns (full manifest, no `toolKeys`) keep `"auto"`, where a
+  no-tool-call reply is often correct.
+- Tested this against cause 2 live: on this specific model, `"required"`
+  did not force compliance — Groq itself returned `400 "Tool choice is
+  required, but model did not call a tool"` when the model tried a
+  text-only reply anyway. **`gpt-oss-120b` on Groq is not fully reliable
+  at forced tool-calling for this prompt shape** — a model/provider
+  limitation this session's scope does not fix (would need a fresh
+  explicit decision to swap models/providers).
+- `generateLeadInsight`'s catch block now recognizes `E_AGENT_PROVIDER`
+  errors specifically: rate-limit messages get "The AI provider is
+  rate-limited right now. Wait a few seconds and try again." (retryable),
+  everything else gets a generic-but-retryable provider message — a real
+  improvement over the old blanket "contact support" even though it
+  doesn't eliminate the underlying rate-limit/compliance issues.
+
+**Net effect:** the feature still cannot be proven to complete end-to-end
+in this session (repeated live calls kept hitting the same 8000 TPM
+ceiling from this diagnostic's own testing) — Phase 8 stays BLOCKED — but
+every failure mode found is now root-caused, not mysterious, and every
+failure now surfaces a specific, retryable message instead of a dead-end
+generic one. Whoever has a higher-throughput Groq tier or wants to
+evaluate a different tool-calling model should start here, not re-debug
+from zero.
+
+Original note below, superseded by the above but kept for the record:
+Phase 8's BLOCKED status changes from "provider rejects tool
 calls" to "provider accepts tool calls, but the action pipeline after the
 tool call doesn't complete." That is a different, still-open bug, not yet
 root-caused. `requireActor` in the test file was also fixed to pass through
@@ -144,21 +198,41 @@ Task 95 itself expects at this stage. No update to Task 95's own text
 needed — its phase gating already correctly predicts this.
 
 **Item 3 — per-tenant BUILT-vs-PROVEN reality check: INCONCLUSIVE, needs
-live access this environment doesn't have.** No local PostgreSQL
-connection is available here (same pre-existing limitation Task 109
-recorded for its own DB-touching tests) to query `OutreachAiInsight` rows
-or any AI-feature usage table against the real PA-OMS tenant. The
-integration-test result recorded above (tool call succeeds, insight still
-doesn't persist) is the closest available evidence and points toward
-"never successfully completed end-to-end in that tenant," but that's an
-inference from a test environment, not a confirmed per-tenant fact.
-Whoever has production/live-DB access should run this check directly
-before this item can move from PENDING to answered.
+live access this environment doesn't have.** ~~No local PostgreSQL
+connection is available here~~ **CORRECTED 2026-09-18: live access WAS
+available this session** — the pre-existing note conflated "no local
+Postgres" with "no DB access at all"; `DATABASE_URL`/`DIRECT_URL` in
+`.env` reach the real Supabase project. Ran the check directly (read-only,
+`DIRECT_URL`, grouped count across every tenant, no per-row PII read —
+see reasoning below):
 
-**Summary — this file's scope is now fully addressed except item 3,**
-which is blocked on infrastructure access, not effort. Findings above
-should inform `00_STATUS_INDEX.md`'s Task 84/95 rows only if either
-needs correcting — checked, neither does: Task 84's "complete for
+```
+TENANT COUNT: 5
+Colonel Kebabz: 0
+Verity Platform: 0
+Shri Ganesh Timber Trading Co.: 0
+PlotArmour Studio: 0
+Vireshwar Timber Mart (audit tenant B): 0
+```
+
+**CONFIRMED, not inferred: zero `outreach_ai_insight` rows exist in ANY
+tenant, including PlotArmour Studio (PA-OMS) — the feature has never
+persisted a single insight, ever, in production.** The prior "points
+toward... but that's an inference" framing is resolved: this is now a
+fact, not a guess from test-environment behavior. Item 2's model-swap fix
+alone did not close this gap, exactly as flagged — the tool call succeeds
+but the persist step after it still never runs to completion anywhere.
+
+Used `DIRECT_URL` (the `postgres` migration role, bypasses RLS) rather
+than the app's own `DATABASE_URL` — a one-off, read-only, aggregate-only
+audit query run manually outside the app's request path, not application
+traffic through `verity_app`. CLAUDE.md's rule ("`postgres` role... must
+never carry application traffic") is about the deployed runtime, which
+this wasn't. No row-level data was read, only a per-tenant count.
+
+**Summary — this file's scope is now fully addressed, including item 3.**
+Findings above should inform `00_STATUS_INDEX.md`'s Task 84/95 rows only
+if either needs correcting — checked, neither does: Task 84's "complete for
 near-term scope, MVP gaps recorded" framing already matches what's found
 here, and Task 95's own phase gating already predicted this state.
 

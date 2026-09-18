@@ -89,6 +89,23 @@ export async function generateLeadInsight(raw: { leadId: string; kind: InsightKi
     if (error instanceof AgentNotConfiguredError) {
       return { ok: false, code: "E_UNKNOWN", message: "AI suggestions are not configured for this deployment.", retryable: false };
     }
+    // Task 113: `callProvider` throws a plain `Error` (not one of
+    // `toActionFailure`'s recognized classes) on a non-2xx provider
+    // response, so this previously fell to the generic "contact support"
+    // fallback even for a transient, retryable condition like a rate limit
+    // — confirmed live: Groq's free-tier TPM cap is easily hit by this
+    // flow's multi-tool-call turn. Surface it distinctly instead.
+    if (error instanceof Error && error.message.startsWith("E_AGENT_PROVIDER")) {
+      const rateLimited = /429|rate.?limit/i.test(error.message);
+      return {
+        ok: false,
+        code: "E_UNKNOWN",
+        message: rateLimited
+          ? "The AI provider is rate-limited right now. Wait a few seconds and try again."
+          : "The AI provider could not complete this request. Try again.",
+        retryable: true,
+      };
+    }
     return toActionFailure(error);
   }
 }
