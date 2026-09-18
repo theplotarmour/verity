@@ -185,22 +185,23 @@ checklist" below, not a replacement for any item in it.
 
 ## Every input control uses Verity's own design-system components — never a raw native browser control
 
-Concrete anti-pattern found 2026-09-19, **not yet fixed** — flagged here
-rather than silently left for the next session to rediscover:
-`TaskPanel.tsx`'s due date uses a bare `<input type="date">` and
-`MeetingPanel.tsx`'s scheduling field uses a bare native datetime picker
+Concrete anti-pattern found 2026-09-19, **fixed the same day**:
+`TaskPanel.tsx`'s due date used a bare `<input type="date">` and
+`MeetingPanel.tsx`'s scheduling field used a bare native datetime picker
 (confirmed native by its accessibility tree: separate Day/Month/Year/
 Hour/Minute/AM-PM spinbuttons, the OS control's own shape, not a
 Verity-themed one) — both bypassing Verity's own `Input`/form primitives
 and the Experience System's material/motion rules (ADR-011/012/023/024)
 entirely, because a native browser control renders with the OS's own
 chrome, never the app's theme, spacing, or interaction pattern.
-`primitives.tsx` has no themed Date/DateTime component yet — building
-one is real, shared design-system work (used by every future capability
-with a date field) and deserves its own `impeccable`-led pass, not a
-rushed single-file patch. Until it exists, treat every native
-`<input type="date"|"datetime-local"|"time">`, `window.alert()`,
-`window.confirm()`, or `window.prompt()` in new capability code as the
+`src/components/ui/DateTimePicker.tsx` (`DateField`/`DateTimeField`,
+plus `Form*` uncontrolled variants matching `Combobox`/`FormCombobox`'s
+own pattern) is the themed replacement — use it for every new date or
+datetime field; do not reach for the native input again. A `time`-only
+variant doesn't exist yet — add it the same way if a capability needs
+one, rather than falling back to a native `<input type="time">`. Any
+native `<input type="date"|"datetime-local"|"time">`, `window.alert()`,
+`window.confirm()`, or `window.prompt()` in new capability code is the
 specific, checkable symptom — same class of rule as this skill's existing
 "integer autoincrement primary key" and "unprefixed table name" checkable
 anti-patterns above.
