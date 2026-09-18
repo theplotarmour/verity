@@ -16,6 +16,7 @@ import {
 } from "@/server/capabilities/outreach";
 import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import { ForbiddenError } from "@/server/platform/authorization";
+import { Icon } from "@/components/ui/icons";
 import {
   Badge,
   DefinitionList,
@@ -300,7 +301,16 @@ async function OutreachLeadDetailPage({ params }: { params: Promise<{ id: string
                   // Task 114 P1.5 item 4: contacts is a sales blocker when
                   // empty, not a routine empty list — an accent-bordered box
                   // with the form open by default, not a grey one-liner.
-                  <div className="rounded-lg border border-dashed border-accent/40 bg-accent-subtle/40 p-5 text-center">
+                  //
+                  // ADR-024: accent is tint/interactive-only, never a large
+                  // filled background — was `bg-accent-subtle/40` across the
+                  // whole card. The dashed accent BORDER already carries the
+                  // "this needs attention" signal on its own; a small accent
+                  // icon replaces the fill as the tint touch.
+                  <div className="rounded-lg border border-dashed border-accent/40 bg-surface p-5 text-center">
+                    <span className="mx-auto mb-3 grid size-9 place-items-center rounded-full bg-accent-subtle text-accent-ink">
+                      <Icon name="parties" size={16} />
+                    </span>
                     <p className="m-0 text-[14px] font-medium text-text">No contacts added yet</p>
                     <p className="m-0 mt-1 text-[13px] text-text-secondary">
                       A prospect with no named contact has no one to reach — add the decision maker below.
