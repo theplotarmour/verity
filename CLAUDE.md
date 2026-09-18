@@ -116,10 +116,10 @@ comes from translucency + blur; depth on content comes from tonal contrast, spac
 
 - **Default accent is Gold `#D4A017`** (ADR-024, reverting ADR-012's Verity Mint default) — one
   of the ten existing presets (Verity Mint, Warm Sand Gold, Champagne, Ocean Blue, Slate Blue,
-  Indigo, Violet, Emerald, Rose, Graphite) plus custom hex, unchanged otherwise. `design/verity
-  asthetics.png` (repo, mint-primary) is now stale on the default-accent question specifically —
-  the current gold-primary board lives outside the repo pending the follow-up ADR-024 flags (copy
-  it into `design/`); do not treat the repo file as current for accent until that's done.
+  Indigo, Violet, Emerald, Rose, Graphite) plus custom hex, unchanged otherwise. **The current
+  palette authority is `design/verity-aesthetics-v2-gold.png`** (gold-primary, copied into the
+  repo 2026-09-18) — `design/verity asthetics.png` (mint-primary) is superseded, kept only for
+  history.
 - **Accent governs small/interactive surfaces only — never a large filled background** (new
   ADR-024 constraint ADR-012 lacked). Buttons, links, focus rings, active nav state, badges as a
   tint/outline: yes. A card or banner filled edge-to-edge with accent color: no — rebuild it as a
@@ -265,10 +265,14 @@ any requirement written because it is "common in ERP/SaaS" rather than traced to
   specified. Default accent reverts Mint → Gold `#D4A017` (existing preset, not new), with a
   new constraint: accent is tint/interactive-only, never a large filled background. Adds a
   spring-based motion system (`framer-motion`, already a dependency) for interactive/transient
-  surfaces. Full text: `verity-spec/17_decisions/adr/adr-024.md`. Evidence for the new default
-  accent is a board supplied outside the repo this session — see the ADR's own "follow-up
-  required" note; the repo's `design/verity asthetics.png` is stale on this one question until
-  that's resolved.
+  surfaces. Full text: `verity-spec/17_decisions/adr/adr-024.md`. **Follow-up closed
+  2026-09-18: the gold-primary board is now in-repo at `design/verity-aesthetics-v2-gold.png`**
+  (copied from the product owner's machine, confirmed matching — Gold `#D4A017`, Inter Thin/
+  Light/Regular/Medium/Semibold, monochrome mark variations, the same neutral values already
+  listed above). It also gives exact typography specs the brand sheet previously left implicit:
+  Heading 1 `32px/40` weight Light, Heading 2 `24px/32` weight Light, body Inter Regular — see
+  the Experience System typography clause below. `design/verity asthetics.png` (mint-primary)
+  is now superseded by this file on every question, not just accent default.
 
   **This list is a curated highlight reel, not the complete register, and is stale beyond what
   it explicitly names.** The canonical ADR register is `verity-spec/17_decisions/adr/`
