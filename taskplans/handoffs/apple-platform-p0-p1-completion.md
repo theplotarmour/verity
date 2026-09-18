@@ -105,9 +105,25 @@ Reversible collapse control + shortcut; preserve org context when
 collapsed.
 
 ### P1-05 — mobile nav is overlay-only
-Status: **PENDING, NEEDS PRODUCT DECISION** — do not silently pick compact
-tab bar vs. primary-only navigator vs. split view. Flag to product owner
-before building; do not treat as a CSS task.
+Status: **DECIDED, NOT YET BUILT.** Product owner chose **compact tab
+bar** (2026-09-18, via `AskUserQuestion`) over primary-only navigator,
+responsive split view, or deferring. Not implemented this session —
+deserves full context for a correct build, not a tail-end edit.
+
+Implementation notes for whoever picks this up:
+- Replace the mobile sheet's full nav dump with a bottom tab bar showing
+  the 4-5 most-used destinations for the signed-in role (per-role nav
+  areas already exist — `ShellChrome`'s `areas: NavArea[]` prop — the tab
+  bar needs its own, smaller selection logic, not all of `areas` flattened).
+- Everything not in the bar needs a "More" destination (reuse the existing
+  mobile sheet for this overflow, don't build a second sheet component).
+- Respect safe-area insets (`env(safe-area-inset-bottom)`) — a bar glued to
+  the literal viewport bottom clips under notched/gesture-bar phones.
+- `ShellChrome.tsx`'s mobile bar (`lg:hidden`, currently just logo + theme
+  toggle + Menu button) and the `navOpen` sheet are the two things this
+  replaces/restructures — read both before starting, they're the same file.
+- Verify against `prefers-reduced-motion` if the bar's active-tab indicator
+  animates (matches every other ADR-024 motion surface's existing rule).
 
 ### P1-06 — table checkboxes raw/small
 Status: **DONE** — `DataTable.tsx`'s header select-all and per-row
