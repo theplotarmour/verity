@@ -287,14 +287,21 @@ export function DataTable({
               <caption className="sr-only">{caption}</caption>
               <thead>
                 <tr className="border-b border-line">
-                  <th scope="col" className="w-10 pb-3 pl-1 pr-2">
-                    <input
-                      type="checkbox"
-                      checked={allShownSelected}
-                      onChange={toggleAllShown}
-                      aria-label={`Select all ${caption.toLowerCase()} on this page`}
-                      className="size-[15px] cursor-pointer rounded-[4px] border-line-strong align-middle accent-[var(--color-accent)]"
-                    />
+                  <th scope="col" className="w-11 pb-3 pl-0 pr-1">
+                    {/* APPLE-P1-06: a bare 15px native checkbox is too small a
+                        pointer/touch target on its own — wrapped so the
+                        CLICKABLE area is 44px even though the visible box
+                        stays a normal checkbox size, matching the shared
+                        `Checkbox` primitive's own size and focus ring. */}
+                    <span className="grid size-11 cursor-pointer place-items-center">
+                      <input
+                        type="checkbox"
+                        checked={allShownSelected}
+                        onChange={toggleAllShown}
+                        aria-label={`Select all ${caption.toLowerCase()} on this page`}
+                        className="size-[18px] cursor-pointer rounded-[5px] border-line-strong align-middle accent-[var(--color-accent)] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-subtle)]"
+                      />
+                    </span>
                   </th>
                   {columns.map((c) => {
                     const sorted = sort?.key === c.key;
@@ -349,14 +356,16 @@ export function DataTable({
                     data-selected={selected.has(key) || undefined}
                     className="border-b border-line transition-colors last:border-b-0 hover:bg-surface-sunken data-selected:bg-accent-subtle data-selected:shadow-[inset_3px_0_0_0_var(--color-accent)]"
                   >
-                    <td className="w-10 py-2.5 pl-1 pr-2 align-middle">
-                      <input
-                        type="checkbox"
-                        checked={selected.has(key)}
-                        onChange={() => toggleRow(key)}
-                        aria-label={`Select ${String(row[columns[0]!.key] ?? key)}`}
-                        className="size-[15px] cursor-pointer rounded-[4px] border-line-strong align-middle accent-[var(--color-accent)]"
-                      />
+                    <td className="w-11 py-1 pl-0 pr-1 align-middle">
+                      <span className="grid size-11 cursor-pointer place-items-center">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(key)}
+                          onChange={() => toggleRow(key)}
+                          aria-label={`Select ${String(row[columns[0]!.key] ?? key)}`}
+                          className="size-[18px] cursor-pointer rounded-[5px] border-line-strong align-middle accent-[var(--color-accent)] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-subtle)]"
+                        />
+                      </span>
                     </td>
                     {columns.map((c, i) => (
                       <td

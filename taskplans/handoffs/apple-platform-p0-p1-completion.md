@@ -88,8 +88,15 @@ tab bar vs. primary-only navigator vs. split view. Flag to product owner
 before building; do not treat as a CSS task.
 
 ### P1-06 — table checkboxes raw/small
-Status: **PENDING** — `DataTable.tsx`. 40–44px hit target, shared
-checkbox primitive, selected-row feedback, keyboard check/uncheck.
+Status: **DONE** — `DataTable.tsx`'s header select-all and per-row
+checkboxes wrapped in a `size-11` (44px) centered clickable span; visible
+box bumped 15px→18px matching the shared `Checkbox` primitive's own size;
+added a visible focus-visible ring. Selected-row feedback already existed
+(`data-selected` background + accent inset shadow). Keyboard check/uncheck
+was already free (native `<input type=checkbox>`). Not live-verified in
+this tenant — the two enabled DataTable routes tried (`/locations`,
+`/audit`) are feature-gated off for this tenant/role; change is low-risk
+pure Tailwind sizing, `tsc --noEmit` clean.
 
 ### P1-07 — RouteLoading is a bare spinner
 Status: **PENDING** — `Spinner.tsx`, `(shell)/loading.tsx`. Route-shaped
