@@ -11,13 +11,26 @@ screenshots (Home dashboard, light + dark) supplied this session are evidence fo
 *patterns* below — explicitly NOT for the blue accent shown, per the user's own instruction.
 
 ## Status: Items 1 and 2 DONE 2026-09-18. **ADR-025** written and ACCEPTED (six named
-component patterns; `StatTile`/`StatTileRow` built as the first live proof, commit
-`0d28988`). **AMD-002** drafted, presented for confirmation, confirmed by the product owner,
-and applied (`verity-bible/volume_4_experience_ux.md` §1.C "Motion & Interruptibility" +
-one line under §1.A) — see `CLAUDE.md`'s Bible-amendment record. Items 3 (Spec REQ-IDs) and
-4 (`verity-design-companion` sync) not started. The other five ADR-025 patterns (split
-action, workspace-switcher card, chart tooltip, filter-chip rows, AI suggested-prompts) are
-named and bound but not yet built — `StatTile` is proof-of-pattern only.
+component patterns). **5 of 6 patterns BUILT** (commits `0d28988`, `f4c3b12`):
+- Pattern 1 (split action) — `SplitButton.tsx`, new primitive, not wired into any page.
+- Pattern 2 (icon-chip stat tile) — `StatTile`/`StatTileRow` in `primitives.tsx`, not wired.
+- Pattern 3 (workspace-switcher card) — live in `ShellChrome`'s desktop sidebar foot.
+- Pattern 5 (filter-chip rows) — `FilterChipRow` in `primitives.tsx`; `WorkQueuePanel`
+  (the pattern's own origin, Task 114 P0.1) not yet migrated to use the generalized version.
+- Pattern 6 (AI suggested-prompts) — live in `AgentChatDock`'s empty state.
+- **Pattern 4 (chart-card live tooltip) NOT built** — no line/area chart component exists
+  anywhere in this codebase (`charts.tsx` has `Donut`/`BarStrip`/`StairFigure`/`FeatureCard`
+  only); building one with scale math, pointer tracking, and path generation is its own
+  scoped task, correctly not rushed alongside the other five.
+
+**AMD-002** drafted, presented for confirmation, confirmed by the product owner, and applied
+(`verity-bible/volume_4_experience_ux.md` §1.C "Motion & Interruptibility" + one line under
+§1.A) — see `CLAUDE.md`'s Bible-amendment record.
+
+**Item 3 (Spec REQ-IDs) and item 4 (`verity-design-companion` sync) NOT started** — checked
+`verity-spec/` for an existing Experience System requirement group to extend: zero hits for
+ADR-023/024 citations anywhere in it, so the correct home for new REQ-IDs isn't identified.
+Guessing a placement/numbering scheme blind was judged worse than leaving it flagged.
 
 **Correction on §2's own drafted text**: reading Bible V4 §1.B directly (not assumed)
 before drafting found it already permits exactly what ADR-024 does — "Translucent overlays
