@@ -120,13 +120,99 @@ skips the step that would have surfaced the gap.
   existing `CustomFieldSchema`/`CustomFieldType` machinery already covers
   this, no new platform primitive needed.
 
+## V1 completeness gate — before scope is called done
+
+**The trigger.** 2026-09-19: a client noticed Core had no way to manage
+team leadership, membership, or team creation — every one of those
+commands already existed server-side (`create_team`, `remove_team_member`,
+even `set_team_co_leader`), but no page ever reached them for anyone
+except a team's own leader. A written requirements doc rarely asks for
+"admins can also do the things individual users can do to their own
+records" — it's assumed. Nothing in this skill's process would have
+caught that gap before a client found it, because nothing required
+comparing the finished capability against what a mature ERP treats as
+baseline for the same domain.
+
+**The rule.** Before any client capability's v1 is reported DONE (per
+`CLAUDE.md`'s reporting vocabulary), cross-check its scope against the
+equivalent module in a reference system under `D:\Code\R&D\` —
+`odoo-19.0` first (broadest domain coverage, most actively maintained),
+`erpnext` second (already has a full audit at `taskplans/
+05_erpnext_audit.md` — read that before re-deriving from source). This is
+narrower than `verity-rd-miner`'s full nine-section audit: not "what can
+Verity learn architecturally from this system," but "what would this
+domain's users consider too obvious to write into a requirements doc,
+and does our v1 actually have it." Use `verity-rd-miner`'s own method
+when the answer needs a real architecture audit, not just a feature
+checklist.
+
+Concretely, for the closest-matching reference module, read its `views/`
+(Odoo) directory listing and ask, for each file, "do we have this, and if
+not, was that a stated decision or a silent gap":
+
+- **A role/admin management surface for every role-scoped surface a
+  regular member gets.** The bug that triggered this gate, generalized:
+  if a Senior can manage their own team, Core needs the same power over
+  every team, not just visibility into it.
+- **A dashboard/landing page shaped for the signed-in role**, not a
+  single generic page everyone shares — Odoo's per-app home view and
+  `digest_views.xml` (periodic own-work summary) are the concrete
+  reference points. A landing page that's the same for a front-line
+  worker and for an owner is very likely wrong for one of them.
+- **A calendar/timeline view wherever the domain has dated events** —
+  `calendar_views.xml` in Odoo's `crm` module is the concrete example:
+  Verity Outreach has `OutreachMeeting.scheduledAt` but no calendar view
+  of it, only a flat per-lead list.
+- **Lost/decline/cancel reasons as a structured field, not free text**,
+  wherever a record can end unsuccessfully (`crm_lost_reason_views.xml` —
+  Verity Outreach already does this for leads; check whether a newer
+  capability replicates the pattern or reverts to a bare text field).
+- **Source/campaign attribution** wherever leads/records originate from
+  multiple channels (`utm_campaign_views.xml`) — not built into Outreach
+  yet; flag as a real, not-yet-built gap rather than silently absent from
+  future audits of this same capability.
+- **Team/ownership management** (`crm_team_views.xml`,
+  `crm_team_member_views.xml`) — the exact shape of 2026-09-19's fix.
+
+**The deliverable.** A short checklist section in the capability's own
+taskplan (see `verity-taskplan-writer`), one line per reference-module
+file/concept checked: `Included` / `Deferred — <reason, and who owns the
+decision to defer>` / `Not applicable — <why this domain doesn't need
+it>`. Never silently absent — the whole point of this gate is that a
+missing item without a marked reason is exactly the failure mode it
+exists to catch. This checklist is additive to the existing "Skill output
+checklist" below, not a replacement for any item in it.
+
+## Every input control uses Verity's own design-system components — never a raw native browser control
+
+Concrete anti-pattern found 2026-09-19, **not yet fixed** — flagged here
+rather than silently left for the next session to rediscover:
+`TaskPanel.tsx`'s due date uses a bare `<input type="date">` and
+`MeetingPanel.tsx`'s scheduling field uses a bare native datetime picker
+(confirmed native by its accessibility tree: separate Day/Month/Year/
+Hour/Minute/AM-PM spinbuttons, the OS control's own shape, not a
+Verity-themed one) — both bypassing Verity's own `Input`/form primitives
+and the Experience System's material/motion rules (ADR-011/012/023/024)
+entirely, because a native browser control renders with the OS's own
+chrome, never the app's theme, spacing, or interaction pattern.
+`primitives.tsx` has no themed Date/DateTime component yet — building
+one is real, shared design-system work (used by every future capability
+with a date field) and deserves its own `impeccable`-led pass, not a
+rushed single-file patch. Until it exists, treat every native
+`<input type="date"|"datetime-local"|"time">`, `window.alert()`,
+`window.confirm()`, or `window.prompt()` in new capability code as the
+specific, checkable symptom — same class of rule as this skill's existing
+"integer autoincrement primary key" and "unprefixed table name" checkable
+anti-patterns above.
+
 ## Skill output checklist, per new capability
 
 Capability status statement; requirement-to-platform-primitive map; scope
 boundaries and non-goals; domain model; state machines; commands; queries;
 permissions; dashboard contributions; UI routes and page sections; migration
 plan; seed/demo plan; test plan; acceptance checklist; open decisions;
-implementation summary with exact files changed.
+implementation summary with exact files changed; **V1 completeness
+checklist against the closest Odoo/erpnext module** (see the gate above).
 
 Three more, required per the 2026-09-03 synthesis:
 
