@@ -57,6 +57,19 @@ export function MeetingPanel({ leadId, meetings, canCreate, initiallyOpen = fals
                   >
                     No-show
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={pending}
+                    onClick={() =>
+                      startTransition(async () => {
+                        await runCommand("verity.outreach.update_meeting_outcome", { meetingId: m.id, status: "Cancelled" }, `/outreach/${leadId}`);
+                        router.refresh();
+                      })
+                    }
+                  >
+                    Cancel meeting
+                  </Button>
                 </div>
               )}
 

@@ -42,7 +42,7 @@ export function TaskPanel({
   const [failure, setFailure] = useState<ActionFailure | null>(null);
   const [pending, startTransition] = useTransition();
 
-  function setStatus(taskId: string, status: "InProgress" | "Blocked" | "Done") {
+  function setStatus(taskId: string, status: "InProgress" | "Blocked" | "Done" | "Cancelled") {
     startTransition(async () => {
       const result = await runCommand("verity.outreach.set_task_status", { taskId, status }, `/outreach/${leadId}`);
       if (result.ok) router.refresh();
@@ -87,6 +87,9 @@ export function TaskPanel({
                   )}
                   <Button size="sm" disabled={pending} onClick={() => setStatus(t.id, "Done")}>
                     Complete
+                  </Button>
+                  <Button size="sm" variant="secondary" disabled={pending} onClick={() => setStatus(t.id, "Cancelled")}>
+                    Cancel
                   </Button>
                 </div>
               )}
