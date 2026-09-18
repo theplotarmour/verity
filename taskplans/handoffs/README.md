@@ -66,13 +66,38 @@ direct, trustworthy controls.
 
 ### 2. Operational launch verification — Outreach manual system of record
 
-The implementation scope is complete: prospect entry, activity/task/meeting
-logging, role-scoped queues, senior team view, Core all-teams view, team roster,
-and member drill-through. Before credentials are issued, run the production-like
-smoke path with a valid database and real launch accounts: sign-in, each role's
-scope, create prospect, log an activity with a next action, create task/meeting,
-team/member drill-through, and sign-out. This is not integration scope; manual
-prospecting is the explicit launch workflow.
+**Partially run, 2026-09-18, as Core (`divyom.sharma`) against the real
+PlotArmour Studio tenant.** Confirmed working live: create prospect
+(2-step form), log activity with a next action, create task, schedule
+meeting, team → member drill-through (record correctly appeared under
+Kulsoom's owned-prospect list with the logged next action). Not run:
+**sign-in/scope as Junior or Senior** — those accounts' passwords were
+printed once to the console at seed time (`prisma/seed-pa-oms.ts`'s own
+documented behavior) and were never captured anywhere retrievable; this
+needs the product owner's own credentials, not something an agent
+session can complete. Sign-out wasn't reached either — the session
+expired mid-pass (unrelated to the app; a local dev-server restart
+invalidated it) before a clean sign-out could be exercised.
+
+**Cleanup still needed**: this pass created live test records —
+`ZZZ Smoke Test Co (delete me)` (a lead, `/outreach/f26f6788-4a84-4577-
+8af2-cf96d7206551`), its task ("Smoke test task (delete me)") and meeting
+("Smoke test meeting (delete me)"). One click each closes them out: Tasks
+tab → Cancel, Meetings tab → Cancel meeting (both new as of this pass —
+see below), then More actions → `disqualified` on the lead itself. The
+activity log entry stays by design (it's the audit trail, and is
+labeled as a smoke test in its own text) — see
+`taskplans/handoffs/apple-platform-p0-p1-completion.md`'s sibling
+discipline for why nothing here was hard-deleted.
+
+**Found while cleaning up**: neither `TaskPanel.tsx` nor `MeetingPanel.tsx`
+ever wired a "Cancel" action to the `"Cancelled"` status both commands
+already fully supported (`verity.outreach.set_task_status`,
+`verity.outreach.update_meeting_outcome`) and both panels already
+correctly rendered. Fixed same pass, `tsc`/`eslint` clean — not yet
+live-re-verified after the session expiry (the command paths were
+already proven live moments earlier via the functionally-identical
+Start/Block/Complete and No-show buttons).
 
 ### 3. Task 114 — Outreach execution-layer UX redesign — launch scope CLOSED
 
