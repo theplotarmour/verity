@@ -330,7 +330,13 @@ Identity shape, Authorization shape, Platform substrate added after the foundati
   is build-time configuration — a per-tenant schedule was unwritable, not merely verbose.
   `vercel.json` carries one cron per cadence. **`CRON_SECRET` must be set on the deployment or
   nothing runs**, by design.
-- **The Bible is not editable.** One amendment (AMD-001, `factoryId` -> `tenantId`, Volume V §1.A.1 and Volume VI) was authorised by the product owner as a one-time edit and is already applied. Do not modify `verity-bible/` again without a fresh explicit instruction.
+- **The Bible is not editable without fresh explicit instruction.** AMD-001 (`factoryId` ->
+  `tenantId`, Volume V §1.A.1 and Volume VI) and **AMD-002** (2026-09-18, Volume IV §1: added
+  §1.C "Motion & Interruptibility" — absent from the Bible before ADR-024 needed to invent
+  motion governance from nothing — plus one line under §1.A cross-referencing "Simplicity,
+  not minimalism"; both `[PROPOSED]`, drafted and confirmed by the product owner before
+  applying, per Task 115's own constraint) are the only two amendments made, both already
+  applied. Do not modify `verity-bible/` again without a fresh explicit instruction.
 
 ## Stop conditions — escalate, do not improvise
 

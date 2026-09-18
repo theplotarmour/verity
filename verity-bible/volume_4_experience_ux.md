@@ -13,6 +13,7 @@ Verity is serious operational software. Its interfaces must feel **premium, prec
     *   *High Density:* Console views, dispatch boards, and scheduling calendars must maximize information visibility on desktop monitors to prevent excessive scrolling.
     *   *Low Density:* Mobile worker screens, check-in prompts, and customer booking wizards must focus on one single primary action per screen.
 *   **Whitespace as Structure:** We use alignment and negative space rather than borders, boxes, and grids to separate information hierarchies.
+*   **Simplicity, not minimalism [PROPOSED, AMD-002]:** stripping to essence still means the core purpose is obvious — burying controls to look sparse is not the same discipline as removing what doesn't earn its place.
 
 ### B. Visual Restraint & The Glassmorphism Rule [FACT]
 *   **The Glassmorphism Restriction:** Verity must NOT use glassmorphic blur (`.verity-glass`, translucent backdrops) as its default visual identity. Ornamental transparency reduces legibility and degrades performance.
@@ -21,6 +22,18 @@ Verity is serious operational software. Its interfaces must feel **premium, prec
     2.  A floating cart panel over a digital menu.
     3.  A quick-action drop-down on a calendar.
 *   **The Default Surface:** The default layout uses solid, high-contrast, structured surfaces (`bg-surface` resolving to `#FFFFFF` in light mode, `#1C1C1E` in dark mode) to maintain crisp, legible text hierarchies.
+
+### C. Motion & Interruptibility [PROPOSED, AMD-002]
+*   **Every animation must be interruptible.** A user grabbing a moving
+    element mid-transition redirects it instantly — no animation may lock
+    out input while it plays.
+*   **Motion starts from the current on-screen value**, never the target
+    value, so an interrupted transition never jumps.
+*   **Reserve overshoot/bounce for gesture-driven motion only** (a flick,
+    a drag release) — a menu or panel that opens on click settles without
+    bounce.
+*   **`prefers-reduced-motion` degrades to a cross-fade**, never to
+    nothing — reduced motion means gentler feedback, not silence.
 
 ---
 

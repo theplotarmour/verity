@@ -10,10 +10,21 @@ Interfaces" / "Principles of Great Design," loaded this session). Two new refere
 screenshots (Home dashboard, light + dark) supplied this session are evidence for the UX
 *patterns* below — explicitly NOT for the blue accent shown, per the user's own instruction.
 
-## Status: PROPOSED — nothing built from this file yet. ADR-024 (material/accent/motion) is
-already ACCEPTED and partially executed (see its own handoff,
-`taskplans/handoffs/experience-system-v2-adr024.md`); this taskplan is the layer above it —
-the governing-document and component-pattern work ADR-024 didn't cover.
+## Status: Items 1 and 2 DONE 2026-09-18. **ADR-025** written and ACCEPTED (six named
+component patterns; `StatTile`/`StatTileRow` built as the first live proof, commit
+`0d28988`). **AMD-002** drafted, presented for confirmation, confirmed by the product owner,
+and applied (`verity-bible/volume_4_experience_ux.md` §1.C "Motion & Interruptibility" +
+one line under §1.A) — see `CLAUDE.md`'s Bible-amendment record. Items 3 (Spec REQ-IDs) and
+4 (`verity-design-companion` sync) not started. The other five ADR-025 patterns (split
+action, workspace-switcher card, chart tooltip, filter-chip rows, AI suggested-prompts) are
+named and bound but not yet built — `StatTile` is proof-of-pattern only.
+
+**Correction on §2's own drafted text**: reading Bible V4 §1.B directly (not assumed)
+before drafting found it already permits exactly what ADR-024 does — "Translucent overlays
+are permitted ONLY when showing temporary contextual layers... a quick-action drop-down" —
+so ADR-024's chrome-glass reactivation was already Bible-compliant, not a violation needing
+amendment. AMD-002 ended up narrower than this file originally proposed: no change to §1.B
+at all, only the new §1.C (motion, genuinely absent before) and one added line under §1.A.
 
 ## What this taskplan is, precisely
 
