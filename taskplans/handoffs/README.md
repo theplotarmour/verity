@@ -88,17 +88,7 @@ of four/five. Automation, enrichment, and third-party cadence execution are
 intentionally deferred by the product owner; do not treat them as a launch
 blocker.
 
-### 4. Task 113 — AI implementation audit
-
-No handoff file — small enough that the taskplan itself
-(`taskplans/113_ai_implementation_audit_all_clients_and_global_agent.md`)
-carries its own findings inline. Status: items 1/2/4/5 DONE 2026-09-17
-(model swap applied, `openai/gpt-oss-120b`; surfaced a second bug —
-`generateLeadInsight` still doesn't persist after a successful tool call,
-unresolved). Item 3 (per-tenant reality check) needs live-DB access this
-environment doesn't have — flagged, not silently skipped.
-
-### 5. Task 90 — Attention platform concept (watching, not active)
+### 4. Task 90 — Attention platform concept (watching, not active)
 
 Not active work — a trigger watch. `taskplans/90_attention_platform_
 concept.md`'s 2026-09-17 note records that Task 114's Outreach work queue
@@ -108,6 +98,17 @@ Listed here so nobody re-derives this question mid-P0.1.
 
 ## Closed loops (no longer active, recorded so they aren't re-opened)
 
+- **Task 113 — AI implementation audit** — CLOSED (already, per the
+  taskplan's own 2026-09-18 correction — this README just hadn't caught
+  up). Item 3's "needs live-DB access this environment doesn't have" was
+  itself stale: the taskplan's own text corrects it same-day —
+  `DATABASE_URL`/`DIRECT_URL` reach the real Supabase project, live
+  access was available, and the per-tenant check ran (5 tenants, 0
+  `outreach_ai_insight` rows in any of them — the feature has never
+  persisted an insight in production, confirmed not inferred). All 5
+  scope items now addressed; see the taskplan's own "Findings" section
+  for the full account, including Phase 8's rate-limit/model-compliance
+  root cause and partial fix.
 - **Apple platform UI/UX audit — P0/P1 completion** — CLOSED 2026-09-18.
   Every P0/P1 item DONE: P0-01/02/04 and P1-01/02/03/06/07 done earlier
   this session; P0-03 (signed-in visual proof), P1-04 (sidebar collapse),
