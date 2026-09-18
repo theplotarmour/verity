@@ -3266,8 +3266,14 @@ export function registerOutreachCapability(): void {
         requiresEntity: ENTITY_LEAD, shells: ["platform", "operations"] },
       { href: "/outreach/workspace", label: "My Workspace", group: "Overview", order: 29, icon: "workspace",
         requiresEntity: ENTITY_JUNIOR_WORKSPACE, shells: ["platform", "operations"] },
+      // Was gated on ENTITY_LEAD Read — an entity Founders' Office/Core also
+      // holds (company-wide grant), so Core saw "My Team" in its own nav and
+      // landed on the page's "You are not assigned to a team" empty state,
+      // since Core is never an OutreachTeam member. ENTITY_TEAM_LEADERSHIP is
+      // the dedicated nav-gating marker seeded Senior-only for exactly this
+      // (see its own doc comment above and seed-pa-oms.ts's grant).
       { href: "/outreach/team", label: "My Team", group: "Overview", order: 29, icon: "people",
-        requiresEntity: ENTITY_LEAD, shells: ["platform", "operations"] },
+        requiresEntity: ENTITY_TEAM_LEADERSHIP, shells: ["platform", "operations"] },
       { href: "/outreach/teams", label: "Teams", group: "Overview", order: 29.5, icon: "people",
         requiresEntity: ENTITY_DIRECTION, requiresVerb: "Create", shells: ["platform", "operations"] },
       // 2026-09-17: Pipeline board, Daily check-in, Targets and Reports were
