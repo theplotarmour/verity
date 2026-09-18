@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { scrubTelemetryEvent } from "@/server/platform/telemetry-scrub";
+import { registerErrorSink } from "@/server/platform/observability";
 
 /**
  * Sentry — server runtime.
@@ -9,8 +10,11 @@ import { scrubTelemetryEvent } from "@/server/platform/telemetry-scrub";
  * every business detail this codebase deliberately puts into an error message
  * left the deployment intact.
  *
- * Initialises only when a DSN is configured, which is unchanged.
+ * Initialises only when a DSN is configured — the comment already claimed
+ * this but `init()` was unconditional (see `sentry.client.config.ts` for
+ * the fuller account of the resulting overhead).
  */
+if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
 
@@ -54,5 +58,5 @@ Sentry.init({
   debug: false,
 });
 
-import { registerErrorSink } from "@/server/platform/observability";
 registerErrorSink((error) => { Sentry.captureException(error); });
+}

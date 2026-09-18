@@ -135,6 +135,20 @@ skeletons for known pages; labelled compact spinner for unknown work.
   `color-mix(in oklab, white/black N%, var(--color-canvas))`, same hue,
   only lightness steps change. `src/app/globals.css`.
 
+## Performance side-fix (not an audit ID, found while investigating "why is the site slow")
+
+`sentry.client.config.ts`/`.edge.config.ts`/`.server.config.ts` each carried
+a comment claiming "initialises only when a DSN is configured" but the
+`Sentry.init(...)` call below it was unconditional. This local dev
+environment has no `NEXT_PUBLIC_SENTRY_DSN` set at all, so every page load
+was paying for full client-side Sentry instrumentation (fetch/XHR/console
+wrapping, breadcrumbs, `tracesSampleRate: 0.1` performance tracing) with
+no DSN to send any of it to. Now gated behind `if (process.env.
+NEXT_PUBLIC_SENTRY_DSN)` in all three files, matching what the comment
+already claimed. The remaining slowness (Turbopack dev-mode HMR,
+unminified bundles, per-route recompiles) is expected dev-mode overhead,
+not a bug — disappears in a production build.
+
 ## Rules while executing this list
 
 - Commit after each completed item (or coherent sub-slice of P0-02, which

@@ -9,8 +9,15 @@ import { scrubTelemetryEvent } from "@/server/platform/telemetry-scrub";
  * every business detail this codebase deliberately puts into an error message
  * left the deployment intact.
  *
- * Initialises only when a DSN is configured, which is unchanged.
+ * Initialises only when a DSN is configured — the comment already claimed
+ * this but the `init()` call below was unconditional, so every page load
+ * paid for full client-side instrumentation (fetch/XHR/console wrapping,
+ * breadcrumbs, performance tracing) with no DSN to send any of it to. Real,
+ * measurable overhead on every navigation for zero benefit in an
+ * environment without `NEXT_PUBLIC_SENTRY_DSN` set (this local dev
+ * environment, notably).
  */
+if (process.env.NEXT_PUBLIC_SENTRY_DSN) {
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
 
@@ -53,3 +60,4 @@ Sentry.init({
 
   debug: false,
 });
+}
