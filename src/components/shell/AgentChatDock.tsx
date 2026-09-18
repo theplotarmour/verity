@@ -5,6 +5,18 @@ import { Icon } from "@/components/ui/icons";
 import type { ChatMessage, PendingPreview } from "@/server/platform/agent-chat";
 
 /**
+ * ADR-025 pattern 6 starting points — deliberately generic (the assistant
+ * runs with the actor's own authority, ADR-017, so it can't assume any
+ * particular capability is active). A capability-aware set is a real
+ * enhancement, not built here — this is the platform-wide default.
+ */
+const SUGGESTED_PROMPTS = [
+  "Summarize what changed this week",
+  "What needs my attention right now?",
+  "Show me anything overdue",
+];
+
+/**
  * The AI assistant — Task 84 area 6.
  *
  * A PERSISTENT SHELL REGION, not a modal (Task 81 rule 10). It stays mounted
@@ -123,10 +135,26 @@ export function AgentChatDock() {
 
           <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
             {messages.length === 0 && (
-              <p className="text-[13px] text-text-tertiary">
-                Ask about your Work, Parties, or anything else in this workspace. I can only see
-                and do what your own role can.
-              </p>
+              <>
+                <p className="text-[13px] text-text-tertiary">
+                  Ask about your Work, Parties, or anything else in this workspace. I can only see
+                  and do what your own role can.
+                </p>
+                {/* ADR-025 pattern 6: suggested prompts as full-width tappable
+                    rows, not a bulleted list. */}
+                <div className="flex flex-col gap-1.5">
+                  {SUGGESTED_PROMPTS.map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      onClick={() => setInput(prompt)}
+                      className="verity-solid w-full cursor-pointer rounded-lg border border-line px-3 py-2.5 text-left text-[13px] text-text-secondary transition-colors hover:border-line-strong hover:text-text"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
             {messages.map((m, i) => (
               <div

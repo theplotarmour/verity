@@ -253,6 +253,11 @@ export function ShellChrome({
         {/* Sign out moved to the header's ProfileMenu (desktop) — accountCard()
             is now mobile-sheet-only, below, where there is no header dropdown. */}
         <div className="min-h-0 flex-1 overflow-y-auto">{navList()}</div>
+        {/* ADR-025 pattern 3: workspace identity as a card at the sidebar
+            foot, not only in the masthead. */}
+        <div className="mt-4 shrink-0">
+          <OrganizationSwitcher memberships={memberships} active={active} instanceId="sidebar" />
+        </div>
       </aside>
 
       {/* ------------------------------ main ------------------------------- */}

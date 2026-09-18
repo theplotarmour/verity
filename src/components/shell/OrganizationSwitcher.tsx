@@ -40,7 +40,9 @@ export function OrganizationSwitcher({
 
   const single = memberships.length <= 1;
   const selectId = `org-switcher-${instanceId}`;
-  const stacked = instanceId === "sheet";
+  // ADR-025 pattern 3 (workspace-switcher card): the sidebar instance wants
+  // the same full-width, taller treatment the mobile sheet already uses.
+  const stacked = instanceId === "sheet" || instanceId === "sidebar";
 
   // One membership is a statement of fact, not a choice. A select with a single
   // option is a control that cannot do anything, so it is shown as the label it

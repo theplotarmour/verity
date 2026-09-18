@@ -372,6 +372,48 @@ export function Button({ variant = "secondary", size = "md", className, ...rest 
 }
 
 /**
+ * Filter-chip row — Authority: ADR-025 pattern 5.
+ *
+ * Generalizes the count-chip idiom Outreach's `WorkQueuePanel` grew
+ * independently (Task 114 P0.1: Overdue/Due today/No next action/At risk)
+ * into a shared, capability-agnostic primitive. Purely presentational — no
+ * internal state, so it needs no "use client" boundary; the caller (which
+ * is already a client component wherever chips filter something) owns
+ * which chip is active and what clicking one does.
+ */
+export function FilterChipRow({
+  chips,
+  className,
+}: {
+  chips: Array<{ label: string; count?: number; active: boolean; onClick: () => void }>;
+  className?: string;
+}) {
+  return (
+    <div className={cx("flex flex-wrap gap-1.5", className)}>
+      {chips.map((chip) => (
+        <button
+          key={chip.label}
+          type="button"
+          onClick={chip.onClick}
+          aria-pressed={chip.active}
+          className={cx(
+            "rounded-pill border px-3 py-1 text-[12.5px] font-medium transition-colors",
+            chip.active
+              ? "border-transparent bg-accent-subtle text-accent-ink"
+              : "border-line text-text-secondary hover:bg-surface-sunken hover:text-text",
+          )}
+        >
+          {chip.label}
+          {typeof chip.count === "number" && (
+            <span className="tabular ml-1.5 opacity-70">{chip.count}</span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
  * A square control holding a single glyph.
  *
  * The board's header and toolbar are built from these: 36px, 10px radius, white,
