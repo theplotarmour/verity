@@ -51,9 +51,22 @@ left unwired rather than forced.
 `taskplans/handoffs/experience-system-v2-adr024.md` for the root cause and fix. Glass chrome
 now renders with real blur in both themes, verified live.
 
-**Still open: pattern 4 (chart-card live tooltip)** — no line/area chart component exists in
-`charts.tsx` to bind it to; building one (scale math, pointer tracking, path generation,
-hover tooltip) is a real scoped sub-project, correctly not rushed alongside the rest.
+**Pattern 4 BUILT 2026-09-18** (commit `bf638ff`) — `TrendChart.tsx`, new file. Scale math
+(categorical x, linear-from-zero y), continuous pointer tracking snapped to nearest index,
+tooltip format matching ADR-025's own reference exactly. Verified via a throwaway, deleted-
+before-commit preview route in Chrome DevTools MCP: scaling, snap, and the accessible
+`aria-label` description all correct, both the visual and hover behavior confirmed live.
+**Not wired into a page** — no backend query returns a multi-day, team-level time series
+today (`verity.outreach.daily_metrics` is single-day/single-actor); wiring it live needs a
+new aggregation query, a separate scope from the component itself.
+
+## Final status: all six ADR-025 patterns BUILT. Four wired into live pages (workspace-
+switcher card, filter-chip rows, AI suggested-prompts, icon-chip stat tile). Two remain
+orphan primitives with a stated, real reason each: `SplitButton` (no page has the pattern's
+actual precondition — checked every creation button in the codebase), `TrendChart` (no
+backend query shapes the data it needs yet). Items 1–4 of this taskplan's own scope are
+done. Remaining, tracked outside this taskplan: motion-preset wiring, typography pass, the
+gold brand board's move into `design/`, per-capability material rollout beyond Outreach.
 
 **Correction on §2's own drafted text**: reading Bible V4 §1.B directly (not assumed)
 before drafting found it already permits exactly what ADR-024 does — "Translucent overlays
