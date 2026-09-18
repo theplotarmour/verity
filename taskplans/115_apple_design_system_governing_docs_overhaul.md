@@ -27,10 +27,33 @@ component patterns). **5 of 6 patterns BUILT** (commits `0d28988`, `f4c3b12`):
 (`verity-bible/volume_4_experience_ux.md` §1.C "Motion & Interruptibility" + one line under
 §1.A) — see `CLAUDE.md`'s Bible-amendment record.
 
-**Item 3 (Spec REQ-IDs) and item 4 (`verity-design-companion` sync) NOT started** — checked
-`verity-spec/` for an existing Experience System requirement group to extend: zero hits for
-ADR-023/024 citations anywhere in it, so the correct home for new REQ-IDs isn't identified.
-Guessing a placement/numbering scheme blind was judged worse than leaving it flagged.
+**Items 3 and 4 DONE 2026-09-18** (commit `5208ec9`). Item 3: home found —
+`verity-spec/09_experience/design-system.md`, scheme `REQ-EXPERIENCE-DESIGNSYSTEM-NNN`
+(next free was 004); added `-004` through `-009` for the six ADR-025 patterns, `-007`
+(chart tooltip) correctly marked `[UNKNOWN_REASON: NOT_YET_BUILT]`. Item 4:
+`verity-design-companion` confirmed NOT auto-derived from `CLAUDE.md` — rewrote its accent/
+material sections for ADR-024's two-treatment split and tint-only rule, added Motion and
+Component-patterns sections it had none of before.
+
+**`StatTile`/`StatTileRow` wired into a real page 2026-09-18** (commit `7d3276c`) — Outreach's
+4-stat summary row (Teams/Active leads/Closed Won/Follow-ups overdue), which has exact-match
+icons (`workspace`/`parties`/`check`/`bell`). The 8-metric pulse view stays `Stat`/`StatRow`:
+no clean 1:1 icon exists per concept in this repo's icon vocabulary, and duplicate/decorative
+icon reuse there would be a craft regression — deliberately not forced.
+
+**`SplitButton` checked, no valid site found 2026-09-18** — every "+ Add X" button in the
+codebase (prospect, contact, task, research, team member) is an independent, always-visible
+toggle for a distinct concept, not one primary action with 2+ related creation commands.
+Merging them would remove affordances, a redesign decision outside this taskplan's scope —
+left unwired rather than forced.
+
+**The backdrop-filter build bug is RESOLVED 2026-09-18** (commit `7d3276c`) — see
+`taskplans/handoffs/experience-system-v2-adr024.md` for the root cause and fix. Glass chrome
+now renders with real blur in both themes, verified live.
+
+**Still open: pattern 4 (chart-card live tooltip)** — no line/area chart component exists in
+`charts.tsx` to bind it to; building one (scale math, pointer tracking, path generation,
+hover tooltip) is a real scoped sub-project, correctly not rushed alongside the rest.
 
 **Correction on §2's own drafted text**: reading Bible V4 §1.B directly (not assumed)
 before drafting found it already permits exactly what ADR-024 does — "Translucent overlays

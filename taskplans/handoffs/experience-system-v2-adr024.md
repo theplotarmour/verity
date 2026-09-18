@@ -53,7 +53,23 @@ content stays solid and legible, `PermissionDenied`'s new "Request
 access"/"Go to dashboard" buttons (unrelated Task 114 work, same session)
 render correctly on the glass-adjacent page background.
 
-## The open bug — found, not fixed (real, needs fresh-context investigation)
+## The backdrop-filter bug — RESOLVED 2026-09-18 (commit `7d3276c`)
+
+Root cause: Lightning CSS (Turbopack, Next.js 16) drops the standard
+`backdrop-filter` declaration whenever a hand-authored
+`-webkit-backdrop-filter` sits in the same rule — confirmed via compiled
+prod-build CSS, and it survives even splitting the two into adjacent
+same-selector rules (Lightning CSS's minifier re-merges them first).
+Fix: removed the `-webkit-backdrop-filter` fallback entirely (Safari
+has shipped unprefixed `backdrop-filter` since 16.4, Mar 2023 — nothing
+in the repo's new `browserslist` needs it); added `browserslist` to
+`package.json` as routine hygiene (unrelated to the actual fix — Turbopack
+doesn't appear to route Lightning CSS targets through it). Verified via
+`next build` + live Chrome DevTools screenshot, both themes: chrome now
+renders as real translucent blur, not a flat tinted card. The
+"Original bug report" section below is kept for the record.
+
+### Original bug report (kept for the record — now fixed, see above)
 
 **`backdrop-filter` is being stripped from all four glass classes during
 the CSS build.** Confirmed via live CSSOM inspection
