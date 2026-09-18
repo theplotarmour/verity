@@ -2,6 +2,7 @@ import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAt
 import Link from "next/link";
 import { VeritySymbol } from "@/components/brand/VerityMark";
 import { RequestAccessButton } from "./RequestAccessButton";
+import { Icon, type IconName } from "./icons";
 
 /**
  * The Verity design system primitives.
@@ -256,6 +257,70 @@ export function StatRow({
       {children}
     </Surface>
   );
+}
+
+/**
+ * Icon-chip stat tile — Authority: ADR-025 pattern 2.
+ *
+ * One headline metric per card: a circular icon-chip (accent-tinted, never a
+ * filled background — ADR-024's tint-only rule), a label, a large number,
+ * and an optional delta-vs-prior-period line. `menu` is a caller-supplied
+ * slot (pass an `<OverflowMenu>`) rather than an import here, so this file
+ * doesn't need to depend on `OverflowMenu.tsx` — which itself imports
+ * `IconButton` from here and would otherwise create a circular import.
+ *
+ * Distinct from `Stat`/`StatRow` above: those are for cramming several
+ * related figures into one shared card (a record's stage/health/next-action
+ * strip). This is for 3+ independent, page-level headline metrics — the
+ * "Total Customers / Active Projects / Revenue" row a dashboard opens with.
+ */
+export function StatTile({
+  icon,
+  label,
+  value,
+  delta,
+  menu,
+  className,
+}: {
+  icon: IconName;
+  label: string;
+  value: string | number;
+  /** Positive/negative/flat phrasing is the caller's — this only picks the color. */
+  delta?: { label: string; direction: "up" | "down" | "flat" };
+  menu?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <Surface className={cx("flex flex-col gap-3 p-5", className)}>
+      <div className="flex items-start justify-between gap-2">
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-subtle text-accent-ink">
+          <Icon name={icon} size={19} />
+        </span>
+        {menu}
+      </div>
+      <div>
+        <p className="m-0 text-[13px] text-text-tertiary">{label}</p>
+        <p className="tabular m-0 mt-1 text-[26px] font-light leading-none text-text">{value}</p>
+      </div>
+      {delta && (
+        <p
+          className={cx(
+            "m-0 text-[12.5px]",
+            delta.direction === "up" && "text-success",
+            delta.direction === "down" && "text-danger",
+            delta.direction === "flat" && "text-text-tertiary",
+          )}
+        >
+          {delta.label}
+        </p>
+      )}
+    </Surface>
+  );
+}
+
+/** A responsive row of `StatTile`s — 1 col on phone, up to 4 on desktop. */
+export function StatTileRow({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cx("grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4", className)}>{children}</div>;
 }
 
 /* -------------------------------- button --------------------------------- */
