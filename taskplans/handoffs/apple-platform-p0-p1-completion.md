@@ -84,8 +84,20 @@ threading refs through every caller. Live-verified on `ProfileMenu`:
 open → focus on "Account" → ArrowDown → highlight moves to "Settings".
 
 ### P1-03 — CommandPalette focus + honest scope
-Status: **PENDING** — `CommandPalette.tsx`. Focus trap/restore; either add
-capability-contributed search providers or relabel/mount narrower.
+Status: **DONE, in part — the other part is a stated, deferred gap, not
+silently skipped.** Focus trap (Tab/Shift+Tab cycle within the dialog,
+matching its `aria-modal="true"`) and focus restore to whatever had focus
+before opening: DONE, live-verified (Tab from input → "Create prospect" →
+Tab wraps back to input → Escape restores focus to the search trigger).
+`aria-label` changed from generic "Command palette" to "Search Outreach
+leads, domains, and teams" — honest about scope for anyone using a screen
+reader, on top of the placeholder text already being explicit.
+**Not done**: capability-contributed search providers, so the palette is
+still mounted globally (every page, via P0-01's trigger) but only ever
+searches Outreach entities. That needs a provider-registration
+architecture — real design work, not a styling fix — and is out of scope
+for this pass. Flagging here rather than either building it unreviewed or
+silently leaving the gap undocumented.
 
 ### P1-04 — sidebar cannot collapse/hide
 Status: **PENDING** — `ShellChrome.tsx`, `OrganizationSwitcher.tsx`.

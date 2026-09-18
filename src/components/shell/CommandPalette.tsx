@@ -32,18 +32,30 @@ export function CommandPalette() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [pending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  // APPLE-P1-03: whatever had focus before the palette opened (the search
+  // trigger, a keyboard-focused link, ...) — restored on close so closing
+  // the palette doesn't strand focus on `document.body`.
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  const close = () => {
+    setOpen(false);
+    previousFocusRef.current?.focus();
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setOpen((v) => !v);
+        if (open) close();
+        else setOpen(true);
       } else if (e.key === "Escape" && open) {
-        setOpen(false);
+        close();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // APPLE-P0-01: the top bar's "Search this page" field is a trigger, not its
@@ -61,12 +73,35 @@ export function CommandPalette() {
 
   useEffect(() => {
     if (open) {
+      previousFocusRef.current = document.activeElement as HTMLElement;
       setQ("");
       setResults([]);
       setActiveIndex(0);
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [open]);
+
+  // APPLE-P1-03: a focus trap — Tab/Shift+Tab cycle WITHIN the dialog rather
+  // than escaping to the page underneath, matching `aria-modal="true"`'s own
+  // promise (a modal dialog that lets Tab leave it isn't actually modal).
+  const onTrapKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "Tab" || !dialogRef.current) return;
+    const focusable = Array.from(
+      dialogRef.current.querySelectorAll<HTMLElement>(
+        'input, button, a[href], [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((el) => !el.hasAttribute("disabled"));
+    if (focusable.length === 0) return;
+    const first = focusable[0]!;
+    const last = focusable[focusable.length - 1]!;
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
 
   useEffect(() => {
     if (q.trim().length < 2) {
@@ -84,7 +119,7 @@ export function CommandPalette() {
   }, [q]);
 
   const go = (href: string) => {
-    setOpen(false);
+    close();
     router.push(href);
   };
 
@@ -101,18 +136,20 @@ export function CommandPalette() {
             transition={transition}
             className="verity-scrim absolute inset-0 border-0"
             aria-label="Close search"
-            onClick={() => setOpen(false)}
+            onClick={close}
           />
           <motion.div
+            ref={dialogRef}
             initial={{ opacity: 0, scale: 0.97 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.97 }}
             transition={transition}
             role="dialog"
             aria-modal="true"
-            aria-label="Command palette"
+            aria-label="Search Outreach leads, domains, and teams"
             className="glass-overlay relative flex w-full max-w-[560px] flex-col overflow-hidden rounded-2xl"
             onKeyDown={(e) => {
+          onTrapKeyDown(e);
           if (e.key === "ArrowDown") {
             e.preventDefault();
             setActiveIndex((i) => Math.min(i + 1, results.length - 1));
