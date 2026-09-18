@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { IconButton } from "./primitives";
 import { Icon } from "./icons";
+import { prefersReducedMotion, reducedMotionFade, springDefault } from "@/lib/motion";
 
 /**
  * Task 114 P0.3 — a menu for actions that don't belong in the primary button
@@ -39,15 +41,22 @@ export function OverflowMenu({ children, label = "More actions" }: { children: R
       <IconButton label={label} tone="default" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((v) => !v)}>
         <Icon name="moreHorizontal" size={18} />
       </IconButton>
-      {open && (
-        <div
-          role="menu"
-          aria-label={label}
-          className="glass-overlay absolute right-0 top-full z-20 mt-2 min-w-[200px] rounded-lg p-1"
-        >
-          {children}
-        </div>
-      )}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            role="menu"
+            aria-label={label}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={prefersReducedMotion() ? reducedMotionFade : springDefault}
+            style={{ transformOrigin: "top right" }}
+            className="glass-overlay absolute right-0 top-full z-20 mt-2 min-w-[200px] rounded-lg p-1"
+          >
+            {children}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

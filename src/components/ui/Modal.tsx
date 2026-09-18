@@ -135,9 +135,24 @@ export function Modal({
       aria-describedby={description ? descriptionId : undefined}
       className={
         // ADR-024: modal is a transient overlay, not dense content — glass.
-        "glass-overlay m-auto w-[calc(100vw-2rem)] rounded-2xl p-0 " +
-        "text-text backdrop:bg-[rgba(15,17,21,0.32)] " +
-        "backdrop:backdrop-blur-[3px] open:animate-none " +
+        //
+        // Motion via CSS `@starting-style` + `allow-discrete`, not
+        // framer-motion. This dialog is built on the native element's own
+        // showModal()/close() lifecycle (top layer, inert backdrop, focus
+        // containment, Escape) rather than conditional mounting -- three
+        // separate hard-won bugs are already documented above this
+        // component about exactly that lifecycle. A framer-motion exit
+        // animation needs the actual `dialog.close()` call deferred until
+        // the animation finishes, which means rebuilding that lifecycle.
+        // `@starting-style` animates a native <dialog> correctly in BOTH
+        // directions with zero JS changes -- the platform-native answer to
+        // this specific problem, and lower risk than touching working code.
+        // `prefers-reduced-motion` is handled for free: `globals.css` already
+        // has a blanket `@media (prefers-reduced-motion: reduce)` block that
+        // collapses every transition/animation duration to ~0, this one
+        // included -- no separate guard needed here.
+        "glass-overlay verity-modal-motion m-auto w-[calc(100vw-2rem)] rounded-2xl p-0 " +
+        "text-text backdrop:bg-[rgba(15,17,21,0.32)] backdrop:backdrop-blur-[3px] " +
         (width === "sm"
           ? "max-w-[420px] "
           : width === "lg"

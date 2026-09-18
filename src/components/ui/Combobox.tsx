@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "framer-motion";
+import { prefersReducedMotion, reducedMotionFade, springDefault } from "@/lib/motion";
 
 export type ComboboxOption = {
   value: string;
@@ -332,27 +334,37 @@ export function Combobox({
         </svg>
       </div>
 
-      {open &&
-        anchor &&
+      {anchor &&
         host &&
         createPortal(
-          <ul
-            ref={listRef}
-            id={listId}
-            role="listbox"
-            style={{
-              position: "fixed",
-              left: anchor.left,
-              width: anchor.width,
-              maxHeight: anchor.maxHeight,
-              ...(anchor.above
-                ? { bottom: window.innerHeight - anchor.top }
-                : { top: anchor.top }),
-            }}
-            className={
-              "glass-overlay z-[100] m-0 list-none overflow-y-auto overscroll-contain rounded-lg p-1"
-            }
-          >
+          <AnimatePresence>
+            {open && (
+              <motion.ul
+                ref={listRef}
+                id={listId}
+                role="listbox"
+                initial={{ opacity: 0, scaleY: 0.95 }}
+                animate={{ opacity: 1, scaleY: 1 }}
+                exit={{ opacity: 0, scaleY: 0.95 }}
+                transition={prefersReducedMotion() ? reducedMotionFade : springDefault}
+                style={{
+                  position: "fixed",
+                  left: anchor.left,
+                  width: anchor.width,
+                  maxHeight: anchor.maxHeight,
+                  // Scale from the edge nearest the field it's anchored to
+                  // (apple-design §7: anchor interactions to their source),
+                  // not a fixed top-of-list origin — the list can open
+                  // upward when there's no room below.
+                  transformOrigin: anchor.above ? "bottom" : "top",
+                  ...(anchor.above
+                    ? { bottom: window.innerHeight - anchor.top }
+                    : { top: anchor.top }),
+                }}
+                className={
+                  "glass-overlay z-[100] m-0 list-none overflow-y-auto overscroll-contain rounded-lg p-1"
+                }
+              >
             {matches.length === 0 && (
               <li className="px-3 py-2 text-[13px] text-text-tertiary">
                 {emptyMessage}
@@ -392,7 +404,9 @@ export function Combobox({
                 )}
               </li>
             ))}
-          </ul>,
+              </motion.ul>
+            )}
+          </AnimatePresence>,
           host,
         )}
 

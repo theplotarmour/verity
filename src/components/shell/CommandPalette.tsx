@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 import { Icon } from "@/components/ui/icons";
 import { runQuery } from "@/server/actions/platform";
+import { prefersReducedMotion, reducedMotionFade, springDefault } from "@/lib/motion";
 
 type Result = { id: string; type: "lead" | "domain" | "team"; label: string; sublabel: string; href: string };
 
@@ -71,17 +73,31 @@ export function CommandPalette() {
     router.push(href);
   };
 
-  if (!open) return null;
+  const transition = prefersReducedMotion() ? reducedMotionFade : springDefault;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh]">
-      <button className="verity-scrim absolute inset-0 border-0" aria-label="Close search" onClick={() => setOpen(false)} />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Command palette"
-        className="glass-overlay relative flex w-full max-w-[560px] flex-col overflow-hidden rounded-2xl"
-        onKeyDown={(e) => {
+    <AnimatePresence>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh]">
+          <motion.button
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={transition}
+            className="verity-scrim absolute inset-0 border-0"
+            aria-label="Close search"
+            onClick={() => setOpen(false)}
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.97 }}
+            transition={transition}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Command palette"
+            className="glass-overlay relative flex w-full max-w-[560px] flex-col overflow-hidden rounded-2xl"
+            onKeyDown={(e) => {
           if (e.key === "ArrowDown") {
             e.preventDefault();
             setActiveIndex((i) => Math.min(i + 1, results.length - 1));
@@ -131,8 +147,10 @@ export function CommandPalette() {
               ))}
             </ul>
           )}
+          </div>
+        </motion.div>
         </div>
-      </div>
-    </div>
+      )}
+    </AnimatePresence>
   );
 }

@@ -316,10 +316,19 @@
     text-rendering: optimizeLegibility;
   }
 
-  h1, h2, h3 { margin: 0; letter-spacing: -0.02em; }
-  h1 { font-size: 30px; line-height: 38px; font-weight: 300; }
-  h2 { font-size: 17px; line-height: 24px; font-weight: 400; }
-  h3 { font-size: 15px; line-height: 22px; font-weight: 500; }
+  /* Size-specific tracking (apple-design skill §15): negative on the one
+     large display size, near-zero as text shrinks toward body's own 14px —
+     a single -0.02em for every heading size reads too tight at 15-17px,
+     where letters need the room, not less of it. h1 is fixed at the brand
+     board's own printed spec (32/40, Light) -- previously 30/38, which its
+     own PageHeader comment already claimed without the CSS matching it.
+     h2/h3 stay smaller than the board's marketing-context sizes: they're
+     Panel/section titles used densely across this operate surface (impeccable
+     Operate mode -- scanability over expression), not a page masthead. */
+  h1, h2, h3 { margin: 0; }
+  h1 { font-size: 32px; line-height: 40px; font-weight: 300; letter-spacing: -0.02em; }
+  h2 { font-size: 17px; line-height: 24px; font-weight: 400; letter-spacing: -0.006em; }
+  h3 { font-size: 15px; line-height: 22px; font-weight: 500; letter-spacing: 0; }
 
   ::selection { background: var(--color-accent-subtle); color: var(--color-text); }
   :root { accent-color: var(--color-accent); caret-color: var(--color-accent); }
@@ -731,6 +740,36 @@
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/**
+ * ADR-024 motion, native-dialog case — `Modal.tsx`'s own comment explains
+ * why this is CSS rather than framer-motion. `@starting-style` plus
+ * `transition-behavior: allow-discrete` is the platform mechanism for
+ * animating a `display: none` <-> rendered transition in both directions on
+ * a native element, which is exactly what showModal()/close() do. Damping
+ * ~1.0 critically-damped feel approximated with a standard ease-out curve —
+ * a true spring needs a JS-driven timeline, which is what this rule is
+ * deliberately avoiding for a native <dialog>.
+ */
+.verity-modal-motion {
+  transition:
+    opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    scale 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    display 0.22s allow-discrete,
+    overlay 0.22s allow-discrete;
+  opacity: 1;
+  scale: 1;
+}
+.verity-modal-motion:not([open]) {
+  opacity: 0;
+  scale: 0.97;
+}
+@starting-style {
+  .verity-modal-motion[open] {
+    opacity: 0;
+    scale: 0.97;
   }
 }
 
