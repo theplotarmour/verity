@@ -30,6 +30,8 @@ import {
   RowList,
   Stat,
   StatRow,
+  StatTile,
+  StatTileRow,
 } from "@/components/ui/primitives";
 import { NewLeadForm } from "./NewLeadForm";
 import { DirectionForm } from "./DirectionForm";
@@ -485,12 +487,18 @@ async function OutreachPage({
           </StatRow>
         </div>
       ) : (
-        <StatRow cols={4} className="mb-6">
-          <Stat label="Teams" value={data.teams.length} />
-          <Stat label="Active leads" value={data.activeLeads} />
-          <Stat label="Closed Won" value={data.closedWon} />
-          <Stat label="Follow-ups overdue" value={data.overdue} />
-        </StatRow>
+        // ADR-025 pattern 2 (icon-chip stat tile) — only this summary row
+        // migrated: its four concepts have exact-match icons already in the
+        // vocabulary (workspace/parties/check/bell). The 8-metric pulse view
+        // above stays `Stat`/`StatRow` — it has no clean icon per concept
+        // (Outreach, Follow-ups, Responses, Proposals would force duplicate
+        // or decorative-not-meaningful icon reuse), so it's not migrated.
+        <StatTileRow className="mb-6">
+          <StatTile icon="workspace" label="Teams" value={data.teams.length} />
+          <StatTile icon="parties" label="Active leads" value={data.activeLeads} />
+          <StatTile icon="check" label="Closed Won" value={data.closedWon} />
+          <StatTile icon="bell" label="Follow-ups overdue" value={data.overdue} />
+        </StatTileRow>
       )}
 
       <SectionLabel>Management intelligence</SectionLabel>

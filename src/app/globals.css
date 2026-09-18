@@ -498,8 +498,20 @@
 .glass-card,
 .glass-control,
 .glass-overlay {
+  /* No `-webkit-backdrop-filter` fallback, deliberately. Lightning CSS
+     (Turbopack, Next.js 16) drops the STANDARD `backdrop-filter` whenever a
+     `-webkit-backdrop-filter` is authored alongside it — confirmed on the
+     compiled prod-build CSS (only the prefixed form survived), and it
+     reproduces even split into a separate adjacent rule with the same
+     selector (Lightning CSS's minifier re-merges same-selector rules before
+     the same collapse hits). Tailwind's own generated `.backdrop-filter`
+     utility was unaffected — different code path, not this bug. The
+     vendor prefix is no longer needed to cover a supported target anyway:
+     Safari has shipped unprefixed `backdrop-filter` since 16.4 (Mar 2023),
+     well inside this repo's `browserslist` ("last 2 versions" per engine).
+     Do not re-add `-webkit-backdrop-filter` here — it silently kills the
+     property this rule exists for. */
   backdrop-filter: blur(var(--blur-glass)) var(--glass-optics);
-  -webkit-backdrop-filter: blur(var(--blur-glass)) var(--glass-optics);
   box-shadow: var(--shadow-highlight);
 }
 
@@ -552,7 +564,6 @@
     ),
     var(--color-glass-1);
   backdrop-filter: blur(var(--blur-glass-strong)) var(--glass-optics);
-  -webkit-backdrop-filter: blur(var(--blur-glass-strong)) var(--glass-optics);
   box-shadow:
     inset 0 1px 0 light-dark(rgb(255 200 170 / 0.22), rgb(255 200 170 / 0.03)),
     inset 0 -1px 0 light-dark(rgb(170 200 255 / 0.16), rgb(170 200 255 / 0.025)),
@@ -616,7 +627,6 @@
     ),
     var(--color-glass-4);
   backdrop-filter: blur(var(--blur-glass-strong)) var(--glass-optics-strong);
-  -webkit-backdrop-filter: blur(var(--blur-glass-strong)) var(--glass-optics-strong);
   /* Dispersion fringe on the top edge — see .glass-shell for why. Overlays
      are dialogs/dropdowns, never a per-row surface, so the same reasoning
      that keeps this off .glass-card applies here too: cheap because rare. */
@@ -699,7 +709,6 @@
 @media (prefers-reduced-transparency: reduce) {
   .glass-shell, .glass-card, .glass-control, .glass-overlay {
     backdrop-filter: none;
-    -webkit-backdrop-filter: none;
   }
   .glass-shell { background: var(--color-chrome); }
   /* Reduced transparency: the blur goes, the TINT stays. Honouring the
