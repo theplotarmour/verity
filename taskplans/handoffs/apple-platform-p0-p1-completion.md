@@ -121,8 +121,17 @@ this tenant — the two enabled DataTable routes tried (`/locations`,
 pure Tailwind sizing, `tsc --noEmit` clean.
 
 ### P1-07 — RouteLoading is a bare spinner
-Status: **PENDING** — `Spinner.tsx`, `(shell)/loading.tsx`. Route-shaped
-skeletons for known pages; labelled compact spinner for unknown work.
+Status: **DONE** — the audit's own wording is a hybrid policy (route-shaped
+skeletons for known pages, a labelled compact spinner for unknown work),
+not skeletons everywhere. `outreach/loading.tsx` already had a route-shaped
+`SkeletonBlock` layout (predates this pass) covering every `/outreach/*`
+sub-route via Next's nested-segment Suspense. `RouteLoading` (the generic
+fallback for every other route) shrunk `lg`→`md` (36px→24px) to actually
+be "compact" per the audit's word; it already carried `aria-label="Loading"`.
+Full per-capability skeleton sweep (customers/suppliers/sales/purchases/
+catalogue/...) is a real but unbounded depth item — ~15+ route folders,
+each needing its own page-shape read — deliberately not done blind in this
+pass; flagged as a P2-adjacent follow-up, not silently skipped.
 
 ## Already done this session, before this file existed (fold into P0-03's proof pass, not separately tracked)
 

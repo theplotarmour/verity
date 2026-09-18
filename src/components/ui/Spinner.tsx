@@ -43,9 +43,15 @@ export function Spinner({
  * resolves.
  */
 export function RouteLoading() {
+  // APPLE-P1-07: `lg` (36px) read as a heavy, attention-grabbing centerpiece
+  // for what the audit specifically wants "compact" — a route with no
+  // route-shaped skeleton yet (see `outreach/loading.tsx` for the pattern
+  // used where one exists) shouldn't feel like it's making an event of
+  // loading. `md` plus the already-present `aria-label="Loading"` covers
+  // the audit's "labelled compact spinner for unknown work" half.
   return (
     <div className="flex h-full min-h-[50vh] w-full items-center justify-center">
-      <Spinner size="lg" />
+      <Spinner size="md" />
     </div>
   );
 }
