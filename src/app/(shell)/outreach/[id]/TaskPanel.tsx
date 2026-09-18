@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, Button, ErrorState, Field, Input, Panel, Select, Textarea } from "@/components/ui/primitives";
+import { FormDateField } from "@/components/ui/DateTimePicker";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -158,7 +159,7 @@ export function TaskPanel({
             </Select>
           </Field>
           <Field label="Due date" htmlFor="dueAt">
-            <Input id="dueAt" name="dueAt" type="date" />
+            <FormDateField id="dueAt" name="dueAt" />
           </Field>
           <Field label="Description" htmlFor="taskDescription">
             <Textarea id="taskDescription" name="description" rows={2} />

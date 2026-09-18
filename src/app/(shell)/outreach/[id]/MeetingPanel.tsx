@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, Button, ErrorState, Field, Input, Panel, Textarea } from "@/components/ui/primitives";
+import { FormDateTimeField } from "@/components/ui/DateTimePicker";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 
@@ -144,7 +145,7 @@ export function MeetingPanel({ leadId, meetings, canCreate, initiallyOpen = fals
           }}
         >
           <Field label="When" htmlFor="scheduledAt" required>
-            <Input id="scheduledAt" name="scheduledAt" type="datetime-local" required />
+            <FormDateTimeField id="scheduledAt" name="scheduledAt" required />
           </Field>
           <Field label="Purpose" htmlFor="purpose">
             <Input id="purpose" name="purpose" placeholder="Discovery call" />
