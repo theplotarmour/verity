@@ -7,7 +7,6 @@ import type { MembershipOption } from "@/server/platform/auth";
 import { OrganizationSwitcher } from "./OrganizationSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
 import { ProfileMenu } from "./ProfileMenu";
-import { Button } from "@/components/ui/primitives";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { VerityLockup } from "@/components/brand/VerityMark";
 import { signOut } from "@/server/actions/platform";
@@ -80,6 +79,41 @@ export function ShellChrome({
   }, [navOpen]);
 
   /**
+   * P1-04 — the 240px rail is a third of a 1280px laptop viewport spent on
+   * navigation an operator has already memorised. Collapse is reversible
+   * (toggle button + Cmd/Ctrl+B) and remembered per browser via
+   * `localStorage`, not per session, so it doesn't reset on every reload.
+   *
+   * Starts `false` on both server and first client render — reading
+   * `localStorage` in the initializer would run during SSR too (where it
+   * doesn't exist) and desync the hydrated DOM from the server-rendered one.
+   * The one-frame "starts expanded" flash is the accepted trade-off for a
+   * client-only preference; the effect below corrects it before paint settles.
+   */
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    if (window.localStorage.getItem("verity:sidebar-collapsed") === "1") {
+      setCollapsed(true);
+    }
+  }, []);
+  const toggleCollapsed = () =>
+    setCollapsed((v) => {
+      const next = !v;
+      window.localStorage.setItem("verity:sidebar-collapsed", next ? "1" : "0");
+      return next;
+    });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        toggleCollapsed();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  /**
    * Which nav item LOOKS active, tracked separately from `pathname`.
    *
    * `usePathname()` only updates once the target page has actually committed
@@ -114,6 +148,19 @@ export function ShellChrome({
   };
 
   /**
+   * P1-05 — the mobile bottom tab bar's 4 primary destinations.
+   *
+   * `areas` is already the platform's own priority order: Overview first,
+   * then the business groups a client reads in (taskplans/45 §8 — Trade,
+   * Inventory, Money, Insights), Administration last. There is no per-role
+   * usage telemetry to rank by, so the first four items in that declared
+   * order stand in for "most-used" — a defensible default, not a guess, and
+   * every item not in the bar is one tap away behind "More" regardless.
+   */
+  const MOBILE_TAB_COUNT = 4;
+  const mobileTabItems = areas.flatMap((a) => a.items).slice(0, MOBILE_TAB_COUNT);
+
+  /**
    * The navigation list.
    *
    * Group headings are DRAWN, not merely announced to a screen reader.
@@ -129,12 +176,12 @@ export function ShellChrome({
    * A single-item group still gets no heading: a heading over one link is
    * noise, and "Overview" sits alone at the top.
    */
-  function navList() {
+  function navList(rail = false) {
     return (
       <nav aria-label="Platform" className="flex flex-col gap-1">
         {areas.map((area) => (
           <ul key={area.group} className="m-0 flex list-none flex-col gap-1 p-0">
-            {area.items.length > 1 ? (
+            {area.items.length > 1 && !rail ? (
               <li
                 aria-hidden="true"
                 className="px-3.5 pt-4 pb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-text-tertiary"
@@ -152,6 +199,7 @@ export function ShellChrome({
                 <li key={item.href}>
                   <Link
                     href={item.href}
+                    title={rail ? item.label : undefined}
                     onClick={() => {
                       setNavOpen(false);
                       if (!current) setPendingHref(item.href);
@@ -167,10 +215,13 @@ export function ShellChrome({
                       // reload does not help because the pointer has not moved.
                       // 42px and a tighter icon gap fit the whole menu without
                       // dropping below the 40px comfortable-target floor.
-                      "flex h-10 items-center gap-3 rounded-lg px-3 text-[14px] no-underline " +
+                      "flex h-10 items-center rounded-lg text-[14px] no-underline " +
                       "transition-[background-color,color] duration-200 " +
+                      (rail ? "justify-center px-0 " : "gap-3 px-3 ") +
                       (current
-                        ? "border-l-2 border-accent bg-accent-subtle pl-[10px] font-medium text-text"
+                        ? rail
+                          ? "bg-accent-subtle font-medium text-text"
+                          : "border-l-2 border-accent bg-accent-subtle pl-[10px] font-medium text-text"
                         : "text-text-secondary hover:bg-surface-sunken hover:text-text")
                     }
                   >
@@ -181,7 +232,7 @@ export function ShellChrome({
                         className={current ? "text-accent" : "text-text-tertiary"}
                       />
                     )}
-                    <span className="truncate">{item.label}</span>
+                    <span className={rail ? "sr-only" : "truncate"}>{item.label}</span>
                   </Link>
                 </li>
               );
@@ -234,7 +285,10 @@ export function ShellChrome({
     <div
       data-shell-root=""
       className="flex h-dvh flex-col overflow-hidden lg:grid"
-      style={{ gridTemplateColumns: "240px 1fr" }}
+      style={{
+        gridTemplateColumns: collapsed ? "76px 1fr" : "240px 1fr",
+        transition: "grid-template-columns 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+      }}
     >
       {/* ----------------------------- sidebar -----------------------------
           Header and account card are stable; the NAVIGATION REGION ALONE
@@ -245,40 +299,57 @@ export function ShellChrome({
           the content still clips to one screen-height page). */}
       {/* ADR-024: structural chrome uses the glass ladder, not .verity-solid
           — this is persistent chrome, not dense content. */}
-      <aside className="glass-shell hidden min-h-0 flex-col rounded-none border-r border-line px-4 pb-5 pt-6 print:hidden lg:flex">
-        <Link href="/" aria-label="Verity" className="mb-7 block shrink-0 px-2 no-underline">
-          <VerityLockup size={30} className="text-text" />
-        </Link>
+      <aside
+        className={
+          "glass-shell hidden min-h-0 flex-col rounded-none border-r border-line pb-5 pt-6 print:hidden lg:flex " +
+          (collapsed ? "px-3" : "px-4")
+        }
+      >
+        <div className={"mb-7 flex shrink-0 items-center " + (collapsed ? "flex-col gap-3" : "justify-between px-2")}>
+          <Link href="/" aria-label="Verity" className="block no-underline">
+            <VerityLockup collapsed={collapsed} size={collapsed ? 22 : 30} className="text-text" />
+          </Link>
+          {/* P1-04: reversible, not a one-way door — same control collapses
+              and expands. Cmd/Ctrl+B mirrors the convention VS Code and Slack
+              already trained operators on for "toggle the sidebar". */}
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-pressed={collapsed}
+            title={collapsed ? "Expand sidebar (Ctrl/Cmd+B)" : "Collapse sidebar (Ctrl/Cmd+B)"}
+            className="grid size-7 shrink-0 place-items-center rounded-md text-text-tertiary transition-colors duration-200 hover:bg-surface-sunken hover:text-text"
+          >
+            <Icon name={collapsed ? "expand" : "collapse"} size={16} />
+            <span className="sr-only">{collapsed ? "Expand sidebar" : "Collapse sidebar"}</span>
+          </button>
+        </div>
 
         {/* Sign out moved to the header's ProfileMenu (desktop) — accountCard()
             is now mobile-sheet-only, below, where there is no header dropdown. */}
-        <div className="min-h-0 flex-1 overflow-y-auto">{navList()}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto">{navList(collapsed)}</div>
         {/* ADR-025 pattern 3: workspace identity as a card at the sidebar
-            foot, not only in the masthead. */}
-        <div className="mt-4 shrink-0">
-          <OrganizationSwitcher memberships={memberships} active={active} instanceId="sidebar" />
+            foot, not only in the masthead. Collapsed rail keeps the context
+            glyph rather than dropping it — see OrganizationSwitcher's own
+            `collapsed` branch. */}
+        <div className={"mt-4 shrink-0" + (collapsed ? " flex justify-center" : "")}>
+          <OrganizationSwitcher
+            memberships={memberships}
+            active={active}
+            instanceId="sidebar"
+            collapsed={collapsed}
+          />
         </div>
       </aside>
 
       {/* ------------------------------ main ------------------------------- */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {/* Mobile bar. The mockups have no small-screen composition to copy, so
-            this states the identity and offers the sheet, and nothing else. */}
+        {/* Mobile top bar: identity + theme only. Navigation lives in the
+            bottom tab bar below (P1-05) — no duplicate "Menu" trigger. */}
         <div className="glass-shell z-30 flex h-14 shrink-0 items-center justify-between gap-3 rounded-none border-b border-line px-4 print:hidden lg:hidden">
           <Link href="/" aria-label="Verity" className="no-underline">
             <VerityLockup size={22} className="text-text" />
           </Link>
-          <div className="flex items-center gap-1">
-            <ThemeToggle />
-            <Button
-              aria-expanded={navOpen}
-              aria-controls="mobile-nav"
-              onClick={() => setNavOpen((v) => !v)}
-              size="md"
-            >
-              {navOpen ? "Close" : "Menu"}
-            </Button>
-          </div>
+          <ThemeToggle />
         </div>
 
         {navOpen && (
@@ -293,7 +364,7 @@ export function ShellChrome({
             />
             <div
               id="mobile-nav"
-              className="glass-shell relative mt-14 flex max-h-[calc(100dvh-3.5rem)] flex-col gap-5 overflow-y-auto rounded-none border-t border-line p-4 shadow-lg"
+              className="glass-shell relative mt-14 mb-16 flex max-h-[calc(100dvh-7.5rem)] flex-col gap-5 overflow-y-auto rounded-none border-t border-line p-4 shadow-lg"
             >
               <OrganizationSwitcher memberships={memberships} active={active} instanceId="sheet" />
               {navList()}
@@ -356,7 +427,10 @@ export function ShellChrome({
         </div>
 
         {/* The one scroller in the application. Pages compose inside it and do
-            not create a second one unless a dense region owns its own (D13). */}
+            not create a second one unless a dense region owns its own (D13).
+            Bottom padding on mobile clears the fixed tab bar below (its own
+            height plus the device's safe-area inset) — `lg:pb-10` reverts to
+            the desktop figure where no tab bar exists. */}
         <main
           id="main"
           // The page's real scroll container: html and body are 100dvh with
@@ -364,10 +438,62 @@ export function ShellChrome({
           // can freeze THIS while it is open — locking document.body, which is
           // what a dialog normally does, achieves nothing here.
           data-shell-scroll=""
-          className="min-h-0 min-w-0 flex-1 overflow-y-auto px-5 pb-10 pt-6 print:p-0 sm:px-8 lg:px-8 lg:pt-0"
+          className="min-h-0 min-w-0 flex-1 overflow-y-auto px-5 pb-[calc(4.5rem+env(safe-area-inset-bottom))] pt-6 print:p-0 sm:px-8 lg:px-8 lg:pb-10 lg:pt-0"
         >
           {children}
         </main>
+
+        {/* P1-05 — mobile bottom tab bar. Replaces the old sheet-only nav: the
+            top 4 destinations (declared priority order, see `mobileTabItems`
+            above) are one tap away, everything else is one tap behind "More",
+            which reuses the existing sheet rather than a second overflow
+            surface. Safe-area padding keeps it clear of notches/gesture bars
+            on devices that need it; `env()` resolves to 0 elsewhere. */}
+        <nav
+          aria-label="Primary"
+          // z-40, matching the sheet's own wrapper, and placed after it in the
+          // DOM: the sheet's scrim (`fixed inset-0`) would otherwise sit over
+          // this bar and swallow taps on "Close" — same stacking level, later
+          // paint wins, so the bar stays reachable while the sheet is open.
+          className="glass-shell fixed inset-x-0 bottom-0 z-40 flex h-16 shrink-0 items-stretch justify-around border-t border-line px-1 pb-[env(safe-area-inset-bottom)] print:hidden lg:hidden"
+        >
+          {mobileTabItems.map((item) => {
+            const current = isCurrent(item.href) && !navOpen;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => {
+                  setNavOpen(false);
+                  if (!isCurrent(item.href)) setPendingHref(item.href);
+                }}
+                aria-current={current ? "page" : undefined}
+                className={
+                  "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg text-[11px] no-underline " +
+                  "transition-colors duration-200 " +
+                  (current ? "text-accent" : "text-text-tertiary hover:text-text")
+                }
+              >
+                {item.icon && <Icon name={item.icon} size={21} />}
+                <span className="max-w-full truncate px-1">{item.label}</span>
+              </Link>
+            );
+          })}
+          <button
+            type="button"
+            aria-expanded={navOpen}
+            aria-controls="mobile-nav"
+            onClick={() => setNavOpen((v) => !v)}
+            className={
+              "flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-lg text-[11px] " +
+              "transition-colors duration-200 " +
+              (navOpen ? "text-accent" : "text-text-tertiary hover:text-text")
+            }
+          >
+            <Icon name="moreHorizontal" size={21} />
+            <span>{navOpen ? "Close" : "More"}</span>
+          </button>
+        </nav>
       </div>
 
       <AgentChatDock />

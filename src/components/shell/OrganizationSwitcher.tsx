@@ -30,10 +30,19 @@ export function OrganizationSwitcher({
    * document, which is the hidden one on mobile.
    */
   instanceId = "header",
+  /**
+   * P1-04 (sidebar collapse) — the collapsed rail has no room for the org
+   * name/tenant text. A building glyph carries the context instead, with the
+   * full name in `title` and an `sr-only` span so it is never lost, only
+   * deferred to a hover/focus. Only the `sidebar` instance ever passes this;
+   * `header` and `sheet` are never rendered while collapsed.
+   */
+  collapsed = false,
 }: {
   memberships: MembershipOption[];
   active: MembershipOption;
   instanceId?: string;
+  collapsed?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -43,6 +52,20 @@ export function OrganizationSwitcher({
   // ADR-025 pattern 3 (workspace-switcher card): the sidebar instance wants
   // the same full-width, taller treatment the mobile sheet already uses.
   const stacked = instanceId === "sheet" || instanceId === "sidebar";
+
+  if (collapsed) {
+    return (
+      <div
+        title={`${active.organizationName} — ${active.tenantName}`}
+        className="grid size-11 place-items-center rounded-lg border border-line bg-surface text-text-tertiary"
+      >
+        <Icon name="building" size={17} />
+        <span className="sr-only">
+          {active.organizationName} — {active.tenantName}
+        </span>
+      </div>
+    );
+  }
 
   // One membership is a statement of fact, not a choice. A select with a single
   // option is a control that cannot do anything, so it is shown as the label it

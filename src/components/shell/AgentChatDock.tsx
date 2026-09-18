@@ -116,7 +116,11 @@ export function AgentChatDock() {
         aria-expanded={open}
         aria-controls="agent-chat-panel"
         title="Assistant"
-        className="glass-control fixed bottom-6 right-6 z-40 grid size-12 place-items-center rounded-full text-text-secondary transition-colors hover:text-text print:hidden"
+        // P1-05 raised the mobile floor: a fixed bottom tab bar now sits at
+        // `bottom-0`, `h-16` plus the device safe-area inset. `bottom-6`
+        // alone put this button underneath it. `lg:bottom-6` restores the
+        // original offset once the tab bar is gone (`lg:hidden`).
+        className="glass-control fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-6 z-40 grid size-12 place-items-center rounded-full text-text-secondary transition-colors hover:text-text print:hidden lg:bottom-6"
       >
         <Icon name={open ? "close" : "assistant"} size={20} />
         <span className="sr-only">{open ? "Close assistant" : "Open assistant"}</span>
@@ -127,7 +131,7 @@ export function AgentChatDock() {
           id="agent-chat-panel"
           role="complementary"
           aria-label="Assistant"
-          className="glass-overlay fixed bottom-24 right-6 z-40 flex h-[min(560px,70dvh)] w-[min(380px,calc(100vw-3rem))] flex-col overflow-hidden rounded-2xl print:hidden"
+          className="glass-overlay fixed bottom-[calc(8.5rem+env(safe-area-inset-bottom))] right-6 z-40 flex h-[min(560px,70dvh)] w-[min(380px,calc(100vw-3rem))] flex-col overflow-hidden rounded-2xl print:hidden lg:bottom-24"
         >
           <div className="flex shrink-0 items-center justify-between border-b border-line px-4 py-3.5">
             <span className="text-[14px] font-medium text-text">Assistant</span>

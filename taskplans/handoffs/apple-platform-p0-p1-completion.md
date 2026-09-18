@@ -52,11 +52,13 @@ Two **stated exceptions**, not silently skipped:
 `tsc --noEmit` clean. Screenshot-verified (`/outreach/prospects`, light).
 
 ### P0-03 — no signed-in visual proof
-Status: **PENDING**
-Plan: once P0-01/P0-04 land, take live Chrome DevTools MCP screenshots,
-light + dark, desktop width, for shell + Outreach (the audited surfaces).
-Compare against `design/newlighttheme.jpeg`/`newdarktheme.jpeg`. Record
-findings back into the audit doc per its own "Audit gates" section.
+Status: **DONE** — live Chrome DevTools MCP session, signed in as
+`divyom.sharma` / PlotArmour Studio. Verified: desktop 1440×900 light +
+dark (masthead glass, gold accent active-nav, `.verity-solid` content
+card), mobile 390×844 light + dark (bottom tab bar, collapsed sidebar).
+No visual regressions against the ADR-024 material system. Screenshots
+not archived to disk this pass — verification was interactive, not a
+file-producing step; re-run the same DevTools MCP flow to reproduce.
 
 ### P0-04 — ModalCancel renders as primary
 Status: **DONE** — audit's premise was already stale: `Button`'s own
@@ -100,30 +102,51 @@ for this pass. Flagging here rather than either building it unreviewed or
 silently leaving the gap undocumented.
 
 ### P1-04 — sidebar cannot collapse/hide
-Status: **PENDING** — `ShellChrome.tsx`, `OrganizationSwitcher.tsx`.
-Reversible collapse control + shortcut; preserve org context when
-collapsed.
+Status: **DONE** — `ShellChrome.tsx`, `OrganizationSwitcher.tsx`. Toggle
+button in the sidebar header (`collapse`/`expand` icons) plus Cmd/Ctrl+B,
+reversible either direction. State persisted to `localStorage`
+(`verity:sidebar-collapsed`), read in a mount effect rather than the
+`useState` initializer to avoid an SSR/client hydration mismatch — costs
+one frame of "starts expanded", accepted trade-off. Grid rail width
+animates 240px↔76px (`grid-template-columns` transition, neutralised
+automatically by the existing global `prefers-reduced-motion` rule — no
+extra guard needed). Collapsed rail: `VerityLockup`'s existing `collapsed`
+prop (symbol only, no wordmark — this prop already existed, unused until
+now), nav labels move to `sr-only` + native `title` tooltip, org context
+preserved via a new `OrganizationSwitcher` `collapsed` prop (building
+glyph + `title`/`sr-only` full name, not dropped). Live-verified 1440×900
+light + dark: collapse/expand both directions, rail width, icon-only nav,
+org glyph present in DOM. `tsc --noEmit` and `eslint` clean.
 
 ### P1-05 — mobile nav is overlay-only
-Status: **DECIDED, NOT YET BUILT.** Product owner chose **compact tab
-bar** (2026-09-18, via `AskUserQuestion`) over primary-only navigator,
-responsive split view, or deferring. Not implemented this session —
-deserves full context for a correct build, not a tail-end edit.
-
-Implementation notes for whoever picks this up:
-- Replace the mobile sheet's full nav dump with a bottom tab bar showing
-  the 4-5 most-used destinations for the signed-in role (per-role nav
-  areas already exist — `ShellChrome`'s `areas: NavArea[]` prop — the tab
-  bar needs its own, smaller selection logic, not all of `areas` flattened).
-- Everything not in the bar needs a "More" destination (reuse the existing
-  mobile sheet for this overflow, don't build a second sheet component).
-- Respect safe-area insets (`env(safe-area-inset-bottom)`) — a bar glued to
-  the literal viewport bottom clips under notched/gesture-bar phones.
-- `ShellChrome.tsx`'s mobile bar (`lg:hidden`, currently just logo + theme
-  toggle + Menu button) and the `navOpen` sheet are the two things this
-  replaces/restructures — read both before starting, they're the same file.
-- Verify against `prefers-reduced-motion` if the bar's active-tab indicator
-  animates (matches every other ADR-024 motion surface's existing rule).
+Status: **DONE** — bottom compact tab bar per the product owner's
+2026-09-18 decision (compact tab bar over primary-only navigator,
+responsive split view, or deferring). `ShellChrome.tsx`: the mobile top
+bar's "Menu" button is gone (identity + theme toggle only now); a new
+fixed `<nav aria-label="Primary">` at the viewport bottom shows the first
+4 items of `areas` flattened (the platform's own declared priority order
+— Overview, then Trade/Inventory/Money/Insights per taskplans/45 §8; no
+per-role usage telemetry exists to rank by otherwise) plus a 5th "More"
+tab reusing the existing `navOpen` sheet for everything else (org
+switcher, full nav, sign out) rather than a second overflow surface.
+Safe-area respected via `env(safe-area-inset-bottom)` on the bar's own
+padding and on `<main>`'s bottom padding (so page content doesn't hide
+behind it). Active-tab color-only accent (no motion to gate behind
+`prefers-reduced-motion` — text/icon color transition only).
+**Found and fixed while verifying, not a separate audit item**:
+`AgentChatDock`'s floating trigger (`fixed bottom-6 right-6`) sat directly
+under the new tab bar on mobile — pushed to
+`bottom-[calc(4.5rem+env(safe-area-inset-bottom))]` with `lg:bottom-6`
+restoring the original desktop offset; same fix applied to the open
+chat panel's offset. Also fixed: the sheet's scrim (`fixed inset-0 z-40`)
+was covering the tab bar the same way it always covered the old
+mobile-top-bar "Close" button (pre-existing, not introduced here) — gave
+the tab bar `z-40` (matching the scrim) placed after it in the DOM, so
+"More"/"Close" stays reachable while the sheet is open, an improvement
+over the prior behaviour rather than a regression of it. Live-verified
+390×844 light + dark: tab bar renders, active tab highlights on
+navigation, "More" opens the sheet with the bar still visible/usable on
+top of the scrim, "Close" closes it. `tsc --noEmit` and `eslint` clean.
 
 ### P1-06 — table checkboxes raw/small
 Status: **DONE** — `DataTable.tsx`'s header select-all and per-row
