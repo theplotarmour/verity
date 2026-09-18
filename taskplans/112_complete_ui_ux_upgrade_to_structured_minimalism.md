@@ -3,8 +3,33 @@
 Authority: ADR-023 (`verity-spec/17_decisions/adr/adr-023.md`) + Task 111
 (pattern definition, Settings/Home scope). This taskplan is the platform-wide
 rollout Task 111 explicitly scoped out ("shell and settings pattern only").
+**Partially superseded by ADR-024 (2026-09-18) — see Correction below.**
 
-## Status: DONE 2026-09-17 — full sweep complete
+## Status: DONE 2026-09-17 for the scope as originally written (material-class sweep).
+**Superseded in part 2026-09-18** — structural chrome reverted to glass under ADR-024;
+this file's "opaque everywhere, no exceptions" framing no longer describes the target for
+chrome surfaces. Dense-content solid material (this file's actual majority of files touched
+— tables, forms, cards, admin screens) is UNAFFECTED and remains correct.
+
+**Correction, 2026-09-18.** The product owner's direction shifted to Apple-craft chrome
+(glass sidebar/top bar/modals/popovers, solid content) — see `verity-spec/17_decisions/
+adr/adr-024.md` and Task 115 for the full plan. Concretely, of this file's own "every
+`.glass-*` usage swept" list:
+- **`ShellChrome`'s sidebar/top-bar, `CommandPalette`, `AgentChatDock`'s trigger+panel,
+  `Modal`, `Combobox`'s floating list, `OverflowMenu`'s popover, `ProfileMenu`'s dropdown**
+  (the last two/three didn't exist when this file was written) — reverted from
+  `.verity-solid` back to the glass classes this file swept them to (`b95296d`..`233463f`,
+  2026-09-18). This is not a regression of this file's work — it's ADR-024 correctly
+  narrowing what ADR-023 originally over-applied to chrome as well as content.
+- **Everything else this file touched — Outreach's 17 files, every admin/desk screen, dense
+  UI primitives (`DataTable`, `charts`, form controls)** — stays exactly as this file left
+  it. ADR-024's own surface table (see its "Resolution" section) draws the line at chrome
+  vs. content, and this file's content-surface work sits entirely on the "stays solid" side.
+- The four `.glass-*` CSS classes this file's own "Non-goals" deliberately left defined
+  (rather than deleted) turned out to matter — they were reactivated wholesale rather than
+  rebuilt, which is exactly the scenario that non-goal was hedging against. Worth noting as
+  a validated judgment call, not luck: don't delete dead-looking CSS a superseding ADR might
+  need back.
 
 `Surface`'s `solid` default flipped `false`→`true` (ADR-023 lever, cascades
 to every screen composing `Surface`/`Panel` with zero per-file edits). Every

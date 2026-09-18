@@ -113,6 +113,18 @@ question. A fresh session with a small, focused repro (a blank test
 page with one `.glass-shell` div) will find the real cause faster than
 more trial edits in the live app.
 
+## Governing-docs work (2026-09-18) — see Task 115
+
+The user has since asked for the ADR/Bible/Spec layer above this handoff's
+scope: formalizing "Apple craft" as Verity's design standard (component
+patterns like a split Create button, icon-chip stat tiles, a workspace-
+switcher card, chart tooltips, filter-chip task rows, quick-action grids,
+AI suggested-prompt rows — none of which exist as named patterns yet),
+plus a proposed (not yet applied) narrow Bible §1 amendment. Read
+`taskplans/115_apple_design_system_governing_docs_overhaul.md` before
+building any of those patterns — it also updates Task 111/112 with
+2026-09-18 corrections reflecting ADR-024's partial supersession of both.
+
 ## Remaining rollout (per the approved plan's own "not everywhere at
 once" phasing — none started)
 

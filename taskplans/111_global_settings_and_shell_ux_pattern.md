@@ -3,10 +3,48 @@
 Authority: User synthesis, 2026-09-17, reference screenshots (Settings/Appearance page,
 Home dashboard) — explicitly scoped by the user to structure/UX, not the shown brown/gold
 palette. Palette stays governed by ADR-012 (`#00D1B2` default, ten presets + custom).
-Material rules now governed by **ADR-023** (supersedes ADR-011's glass hierarchy in full,
-2026-09-17) — see "Open question" below, now resolved.
+Material rules now governed by **ADR-024** (partially supersedes ADR-023, 2026-09-18 — see
+Correction below).
 
-## Status: PROPOSED — open question resolved by ADR-023; scope buildable now, nothing built yet
+## Status: PARTIALLY BUILT — material foundation only; the shell/settings IA this taskplan
+actually asks for is NOT yet built. Full execution plan moved to Task 115.
+
+**Correction, 2026-09-18.** Three things changed since this file was written:
+
+1. **ADR-024 partially supersedes ADR-023's "solid everywhere" default** — structural chrome
+   (sidebar, top bar, command palette, modals, dropdowns) is glass again; dense content
+   (tables, forms, cards) stays solid exactly as ADR-023/this file's original intent
+   described. See `verity-spec/17_decisions/adr/adr-024.md`.
+2. **New reference screenshots, 2026-09-18** (Home dashboard, light + dark, blue accent —
+   accent color is explicitly NOT the point per the user's own instruction, "focus on
+   covering all kinds of UX" instead) refine this file's own Home dashboard IA description
+   (Scope item 3 below) with concrete structural details that description didn't have: a
+   `Create +` split-button top-right (new — not in the original scope text), a workspace-
+   switcher card above the user's identity card at the sidebar foot (this file never
+   specified that), icon-chip stat tiles with a `⋮` overflow control per tile, a chart-card
+   with a hover tooltip showing both series' exact values, task rows with an inline priority
+   pill + due-date column, and AI-assistant suggested-prompt chips as full-width rows rather
+   than a plain text list.
+3. **Direction target is now "Apple craft applied to this IA," not the reference screens'
+   literal look** — per the user's explicit "we are completely shifting to apple design...
+   just focus on cover all kinds of ux," grounded in the `apple-design` skill (WWDC
+   "Designing Fluid Interfaces" / "Principles of Great Design"). This file's own IA (nav
+   grouping, stat row, chart+activity split, quick actions) stays the target *structure*;
+   **Task 115** is where the full Apple-craft execution plan (material, motion, typography,
+   all governing-doc updates) lives — read it before building anything from this file.
+
+**What is actually built vs. not**, corrected from this file's stale framing:
+- Settings: a real global `/settings` index exists (`src/app/(shell)/settings/page.tsx`,
+  built 2026-09-18 under Task 114's P1.5 item 9 work) — but it is a simple link list, NOT
+  the left-nav-list + detail-pane + live-preview three-pane shell this file's "Scope" item 1
+  describes. That three-pane shell is still unbuilt.
+- Appearance: `AppearanceControls` (theme/accent/density/radius) exists and is reachable
+  from `/settings` — but the shade-ramp preview (50–900) this file's "Scope" item 2 calls
+  "new... nothing today visualizes" is still not built.
+- Home dashboard IA (4-up stat row, chart+activity split, quick-actions grid, AI-assistant
+  panel): **not built** for the platform-wide Home (`/`) at all. Outreach's own dashboard
+  (`/outreach`) independently grew a similar-shaped three-layer IA through Task 114's P1
+  work, but that is capability-local, not the shared shell pattern this file asks for.
 
 ## Trigger
 
@@ -57,6 +95,12 @@ governing docs ("amend bible spec adr anything if needed"). `verity-adr-gate` wa
 hierarchy in full. Solid opaque cards are the platform-wide default for every surface, not
 only Settings/forms. `CLAUDE.md`'s Experience System section and the
 `verity-design-companion` skill are updated to match.
+
+**Re-resolved in part by ADR-024 (2026-09-18).** "Solid everywhere" did not survive contact
+with structural chrome (sidebar, top bar, modals, popovers) once the product owner's
+direction shifted to Apple-craft chrome — glass is back for chrome specifically, solid stays
+for dense content. See Task 115 for why and the full plan; this file's own Settings/Home IA
+target is unaffected either way (it was always about layout, not the material question).
 
 ## Non-goals
 

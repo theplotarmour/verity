@@ -47,7 +47,10 @@ placement are the untried leads). Read the handoff's own "open bug"
 section before touching `globals.css` again. Remaining rollout (motion
 wired into actual transitions, typography pass, per-capability sweep,
 copying the gold board into `design/`) is intentionally deferred per the
-plan's own phasing — none of it started.
+plan's own phasing — none of it started. **Governing-docs layer above
+this (component patterns, Bible §1 amendment proposal) is now its own
+plan: `taskplans/115_apple_design_system_governing_docs_overhaul.md`**,
+which also corrects Task 111/112 for ADR-024's partial supersession.
 
 ### 2. Task 114 — Outreach execution-layer UX redesign — P1.5 fully DONE 2026-09-18
 
