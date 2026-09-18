@@ -215,7 +215,15 @@ export function Modal({
   );
 }
 
-/** The cancel button every modal footer wants, so none of them re-decide it. */
+/**
+ * The cancel button every modal footer wants, so none of them re-decide it.
+ *
+ * APPLE-P0-04: pinned explicitly to `variant="secondary"` rather than relying
+ * on `Button`'s default. A cancel action must never visually compete with a
+ * modal's real commit action (Apple's "make the likely action unambiguous");
+ * relying on an unstated default means one future change to that default
+ * silently turns every cancel button in the app into the loud one.
+ */
 export function ModalCancel({
   onClose,
   disabled,
@@ -226,7 +234,7 @@ export function ModalCancel({
   children?: ReactNode;
 }) {
   return (
-    <Button type="button" onClick={onClose} disabled={disabled}>
+    <Button type="button" variant="secondary" onClick={onClose} disabled={disabled}>
       {children}
     </Button>
   );

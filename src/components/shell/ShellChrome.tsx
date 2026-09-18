@@ -306,31 +306,26 @@ export function ShellChrome({
             Persistent chrome, as the boards draw it. It needs no `sticky`:
             the main region below owns the scroll, so this never travels. */}
         <div className="hidden h-20 shrink-0 items-center gap-5 px-7 print:hidden lg:flex">
-          {/* Search is centred and dominant, as the mockup draws it. It is a
-              real control over the records already loaded on the page, not a
-              platform-wide index — platform search is DEFERRED and drawing a
-              box that promises one would be a control that lies. */}
-          <div className="relative flex w-full max-w-[750px] items-center">
+          {/* APPLE-P0-01: this used to be a real-looking `<input>` that did
+              nothing with what was typed into it — a false affordance. It is
+              now a button that opens the actual global search surface
+              (`CommandPalette`, Cmd/Ctrl+K), styled to match the field it
+              replaces so the masthead's geometry is unchanged. */}
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event("verity:open-command-palette"))}
+            className="glass-control relative flex h-10 w-full max-w-[750px] cursor-pointer items-center rounded-lg pl-12 pr-16 text-left text-[14px] text-text-tertiary transition-[border-color,box-shadow] duration-200 hover:border-line-strong hover:text-text focus-visible:border-accent focus-visible:shadow-[0_0_0_3px_var(--color-accent-subtle)] focus-visible:outline-none"
+          >
             <Icon
               name="search"
               size={18}
               className="pointer-events-none absolute left-4 text-text-tertiary"
             />
-            <label htmlFor="shell-search" className="sr-only">
-              Search this page
-            </label>
-            <input
-              id="shell-search"
-              type="search"
-              placeholder="Search this page"
-              className="glass-control h-10 w-full rounded-lg pl-12 pr-16 text-[14px] text-text placeholder:text-text-tertiary transition-[border-color,box-shadow] duration-200 hover:border-line-strong focus:border-accent focus:shadow-[0_0_0_3px_var(--color-accent-subtle)] focus:outline-none"
-            />
-            {/* Task 109 Phase G §2: a separate global command palette (Cmd/Ctrl+K),
-                not this per-page search box — see CommandPalette's own doc comment. */}
+            <span className="truncate">Search this page</span>
             <kbd className="pointer-events-none absolute right-4 rounded border border-line px-1.5 py-0.5 text-[11px] text-text-tertiary">
               ⌘K
             </kbd>
-          </div>
+          </button>
 
           <div className="flex shrink-0 items-center gap-3">
             <OrganizationSwitcher memberships={memberships} active={active} instanceId="header" />

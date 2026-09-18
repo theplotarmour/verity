@@ -46,6 +46,19 @@ export function CommandPalette() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
+  // APPLE-P0-01: the top bar's "Search this page" field is a trigger, not its
+  // own search implementation — clicking/focusing it opens this palette,
+  // exactly like pressing Cmd/Ctrl+K, rather than the field silently doing
+  // nothing when someone types into it. A DOM event, not a prop or context,
+  // because `ShellChrome` and this component are siblings mounted once each
+  // with no natural parent to lift shared state into (`AgentChatDock` follows
+  // the same standalone-mount shape).
+  useEffect(() => {
+    const onOpenRequest = () => setOpen(true);
+    window.addEventListener("verity:open-command-palette", onOpenRequest);
+    return () => window.removeEventListener("verity:open-command-palette", onOpenRequest);
+  }, []);
+
   useEffect(() => {
     if (open) {
       setQ("");

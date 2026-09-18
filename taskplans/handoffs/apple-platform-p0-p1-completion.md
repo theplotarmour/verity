@@ -26,14 +26,10 @@ the whole audit and re-deriving status.
 ## Status
 
 ### P0-01 — fake search field
-Status: **PENDING**
-File: `src/components/shell/ShellChrome.tsx` (the `#shell-search` input in
-the top bar).
-Plan: convert to a real `Cmd/Ctrl+K` trigger that opens the existing
-`CommandPalette` (already built, already global) rather than inventing a
-second search system. Keep it a text-look input for familiarity but make
-click/focus open the palette; remove the implication that typing here does
-anything on its own.
+Status: **DONE** — `ShellChrome.tsx`'s search field is now a `<button>`
+dispatching `window` event `verity:open-command-palette`; `CommandPalette.tsx`
+listens and opens. Verified live (Chrome DevTools MCP): click opens the
+palette with focus on its own input. Same visual geometry, honest behavior.
 
 ### P0-02 — shared form primitive adoption incomplete
 Status: **PENDING**
@@ -53,11 +49,11 @@ Compare against `design/newlighttheme.jpeg`/`newdarktheme.jpeg`. Record
 findings back into the audit doc per its own "Audit gates" section.
 
 ### P0-04 — ModalCancel renders as primary
-Status: **PENDING**
-File: `src/components/ui/Modal.tsx` (`ModalCancel`).
-Plan: default it to the secondary/tertiary `Button` variant so a cancel
-action never visually competes with the modal's real commit action. Check
-every modal footer using it after the change.
+Status: **DONE** — audit's premise was already stale: `Button`'s own
+default is `variant="secondary"` (checked `primitives.tsx`), not primary.
+Hardened anyway: `ModalCancel` now passes `variant="secondary"` explicitly
+so it no longer silently depends on that default. `tsc --noEmit` clean
+across all 13 call sites.
 
 ### P1-01 — Tabs keyboard semantics
 Status: **PENDING** — `src/components/ui/Tabs.tsx`. Roving `tabIndex`,
