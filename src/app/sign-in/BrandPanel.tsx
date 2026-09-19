@@ -4,9 +4,9 @@ import { VerityLockup } from "@/components/brand/VerityMark";
 /**
  * The sign-in page's left marketing panel — headline, subcopy, and a
  * floating product-preview image (a real screenshot/render, not a
- * hand-built fake UI — see `public/brand/sign-in-preview.png` and the
- * generation brief tracked alongside this change). Purely decorative — no
- * live data, no query.
+ * hand-built fake UI — `public/lightsignin.png` / `public/darksignin.png`,
+ * swapped via the `dark:` variant). Purely decorative — no live data, no
+ * query.
  */
 
 export function BrandPanel() {
@@ -47,21 +47,28 @@ export function BrandPanel() {
         </div>
 
         {/* The product preview — angled, floating, matching the reference's
-            "screen tilted back into the scene" composition. A real image
-            asset (see the generation brief kept alongside this file),
-            never a hand-built fake dashboard. */}
+            "screen tilted back into the scene" composition. Real supplied
+            assets, one per theme — never a hand-built fake dashboard. */}
         <div className="relative mt-12 flex-1" style={{ perspective: "2400px" }}>
           <div
             className="absolute inset-x-0 top-0 mx-auto h-[420px] w-full max-w-[640px] overflow-hidden rounded-2xl shadow-lg"
             style={{ transform: "rotateX(8deg) rotateY(-6deg)", transformOrigin: "center top" }}
           >
             <Image
-              src="/brand/sign-in-preview.png"
+              src="/lightsignin.png"
               alt=""
               fill
               sizes="640px"
               priority
-              className="object-cover object-top"
+              className="object-cover object-top dark:hidden"
+            />
+            <Image
+              src="/darksignin.png"
+              alt=""
+              fill
+              sizes="640px"
+              priority
+              className="hidden object-cover object-top dark:block"
             />
           </div>
         </div>
