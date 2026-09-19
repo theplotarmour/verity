@@ -254,8 +254,6 @@ export default async function ShellLayout({
   return (
     <ShellChrome
       areas={areas}
-      memberships={memberships}
-      active={active}
       userLabel={userLabel}
       userInitials={userInitials}
       canAudit={canAudit}

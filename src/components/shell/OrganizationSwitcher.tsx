@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { MembershipOption } from "@/server/platform/auth";
 import { switchOrganization } from "@/server/actions/platform";
 import { Icon } from "@/components/ui/icons";
+import { PolishedSelect } from "@/components/ui/PolishedSelect";
 
 /**
  * Answers "where am I operating right now?" and lets the actor change it.
@@ -100,13 +101,14 @@ export function OrganizationSwitcher({
           size={16}
           className="pointer-events-none absolute left-3 text-text-tertiary"
         />
-        <select
+        <PolishedSelect
           id={selectId}
+          aria-label="Active organization"
+          containerClassName="w-full"
           className={
-            "w-full cursor-pointer appearance-none truncate rounded-lg pl-10 pr-9 text-[13px] text-text " +
-            "focus:outline-none focus:shadow-[0_0_0_3px_var(--color-accent-subtle)] " +
+            "truncate pl-10 pr-9 text-[13px] " +
             (stacked
-              ? "border border-line bg-surface transition-colors hover:border-line-strong focus:border-accent h-12 min-h-12"
+              ? "h-12 min-h-12"
               : "glass-control shadow-[var(--shadow-sm)] transition-[box-shadow,transform] duration-200 hover:-translate-y-px hover:shadow-[var(--shadow-md)] h-11 min-h-11 lg:h-[38px] lg:min-h-[38px]")
           }
           value={active.membershipId}
@@ -124,12 +126,7 @@ export function OrganizationSwitcher({
               {m.organizationName} — {m.tenantName}
             </option>
           ))}
-        </select>
-        <Icon
-          name="chevronDown"
-          size={15}
-          className="pointer-events-none absolute right-3 text-text-tertiary"
-        />
+        </PolishedSelect>
       </div>
       {/* aria-live so a switch is announced; without it the page simply changes
           under a screen-reader user with no explanation. In the masthead there

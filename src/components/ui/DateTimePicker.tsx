@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import dayjs, { type Dayjs } from "dayjs";
 import { Icon } from "./icons";
+import { PolishedSelect } from "./PolishedSelect";
 import { prefersReducedMotion, reducedMotionFade, springDefault } from "@/lib/motion";
 
 /**
@@ -384,10 +385,6 @@ export function DateTimeField({
     onChange(base.minute(m).second(0).millisecond(0).format("YYYY-MM-DDTHH:mm"));
   }
 
-  const selectClass =
-    "verity-solid h-8 cursor-pointer appearance-none rounded-md border border-line px-2 text-[13px] text-text " +
-    "transition-colors hover:border-line-strong focus:border-accent focus:outline-none";
-
   return (
     <div ref={rootRef} className="relative">
       <button
@@ -443,30 +440,32 @@ export function DateTimeField({
                 />
                 <div className="flex items-center gap-2 border-t border-line px-3 py-2.5">
                   <span className="text-[12px] text-text-tertiary">Time</span>
-                  <select
+                  <PolishedSelect
                     aria-label="Hour"
                     value={current ? current.hour() : 9}
                     onChange={(e) => commitHour(Number(e.target.value))}
-                    className={selectClass}
+                    containerClassName="w-auto"
+                    className="h-8 w-auto rounded-md px-2 text-[13px]"
                   >
                     {HOURS.map((h) => (
                       <option key={h} value={h}>
                         {pad2(h % 12 === 0 ? 12 : h % 12)} {h < 12 ? "AM" : "PM"}
                       </option>
                     ))}
-                  </select>
-                  <select
+                  </PolishedSelect>
+                  <PolishedSelect
                     aria-label="Minute"
                     value={current ? current.minute() - (current.minute() % 5) : 0}
                     onChange={(e) => commitMinute(Number(e.target.value))}
-                    className={selectClass}
+                    containerClassName="w-auto"
+                    className="h-8 w-auto rounded-md px-2 text-[13px]"
                   >
                     {MINUTES.map((m) => (
                       <option key={m} value={m}>
                         {pad2(m)}
                       </option>
                     ))}
-                  </select>
+                  </PolishedSelect>
                   <button
                     type="button"
                     onClick={() => setOpen(false)}

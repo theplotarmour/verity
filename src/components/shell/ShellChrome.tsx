@@ -3,8 +3,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { MembershipOption } from "@/server/platform/auth";
-import { OrganizationSwitcher } from "./OrganizationSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
 import { ProfileMenu } from "./ProfileMenu";
 import { Icon, type IconName } from "@/components/ui/icons";
@@ -44,8 +42,6 @@ export type NavArea = { group: string; items: NavItem[] };
  */
 export function ShellChrome({
   areas,
-  memberships,
-  active,
   userLabel,
   userInitials,
   canAudit,
@@ -53,8 +49,6 @@ export function ShellChrome({
   children,
 }: {
   areas: NavArea[];
-  memberships: MembershipOption[];
-  active: MembershipOption;
   userLabel: string;
   userInitials: string;
   /** Task 114 P0.6 — the top-bar "Recent activity" bell link to `/audit` was
@@ -327,18 +321,6 @@ export function ShellChrome({
         {/* Sign out moved to the header's ProfileMenu (desktop) — accountCard()
             is now mobile-sheet-only, below, where there is no header dropdown. */}
         <div className="min-h-0 flex-1 overflow-y-auto">{navList(collapsed)}</div>
-        {/* ADR-025 pattern 3: workspace identity as a card at the sidebar
-            foot, not only in the masthead. Collapsed rail keeps the context
-            glyph rather than dropping it — see OrganizationSwitcher's own
-            `collapsed` branch. */}
-        <div className={"mt-4 shrink-0" + (collapsed ? " flex justify-center" : "")}>
-          <OrganizationSwitcher
-            memberships={memberships}
-            active={active}
-            instanceId="sidebar"
-            collapsed={collapsed}
-          />
-        </div>
       </aside>
 
       {/* ------------------------------ main ------------------------------- */}
@@ -366,7 +348,6 @@ export function ShellChrome({
               id="mobile-nav"
               className="glass-shell relative mt-14 mb-16 flex max-h-[calc(100dvh-7.5rem)] flex-col gap-5 overflow-y-auto rounded-none border-t border-line p-4 shadow-lg"
             >
-              <OrganizationSwitcher memberships={memberships} active={active} instanceId="sheet" />
               {navList()}
               {accountCard()}
             </div>
@@ -399,7 +380,6 @@ export function ShellChrome({
           </button>
 
           <div className="flex shrink-0 items-center gap-3">
-            <OrganizationSwitcher memberships={memberships} active={active} instanceId="header" />
             <ThemeToggle />
             {canAudit && (
               <Link
