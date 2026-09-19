@@ -6,7 +6,49 @@ memory (build the minimum modules the client's team actually needs — this
 taskplan stays inside that lean scope, it only finishes wiring what Phases
 1–5 already built).
 
-## Status: PENDING (session starting 2026-09-20)
+## Status: IN PROGRESS (2026-09-20)
+
+**BUILT and `tsc --noEmit` clean across the whole project** (verified after
+every commit, not just at the end):
+- Phase 0 — `/customers` collision fixed (crm moved to `/guests`).
+- Phase 1 — `/guests` list + `/guests/[customerId]` detail (`crm`).
+- Phase 2 — loyalty balance + redeem folded into guest detail (`loyalty`).
+- Phase 4 (folded in) — complaint history + file-complaint on guest detail,
+  plus a standalone `/complaints` queue with status/resolve actions
+  (`complaint.listComplaints` gained an optional `customerId` filter —
+  additive, no existing caller changed).
+- Phase 5 — `/attendance` dashboard + per-employee mark-attendance board
+  (`attendance`). Not built: payroll-inputs report view, shift-definitions
+  admin list — both listed in the phase's own scope, deferred here for time.
+- Phase 3 — `/coupons` list + create form (`coupon`). Required adding
+  `listCoupons` (the capability had zero read query — flagged in the
+  finding table above, not scope creep) and a nav entry (the capability had
+  none). `apply_coupon`'s counter/bill wiring not checked — still an open
+  item per the phase's own note.
+- Phase 6 — `/expenses` list + record + approve/reject (`finance`). Not
+  built: `/cash-reconciliation`, `/outlet-pnl` — both use commands/queries
+  that already exist (`record_cash_reconciliation`, `get_outlet_pnl`),
+  deferred for time, same pattern as `/expenses` to follow.
+- Phase 7 — `/recipes` menu analytics (quadrant table, last 30 days). Not
+  built: the per-item recipe/BOM authoring panel on `/menu` (`save_recipe`,
+  `set_recipe_active`) — needs `MenuAdmin.tsx` read first, per the phase's
+  own note.
+
+**Verification run:** `tsc --noEmit` clean after every phase's commit.
+`vitest run` on the three capability suites touched
+(`capability-{crm,complaint,coupon}.test.ts`) fails in this environment on
+a pre-existing `E_CONFIG_INVALID` (no `DATABASE_URL` here) — an
+environmental limitation this repo has hit before (Task 106's own "5
+pre-existing environmental failures on the remote DB"), not a regression
+from this session's edits. No real logged-in run against the Colonel
+Kebabz tenant performed this session — still open, per this file's own
+Verification section.
+
+**Remaining for a future session:** Attendance payroll-inputs report +
+shift admin, `/cash-reconciliation` + `/outlet-pnl` routes, coupon
+application at the counter, recipe/BOM authoring on `/menu`, and the real
+logged-in verification pass every phase's own Verification bullet calls
+for.
 
 ## Trigger / finding that opened this taskplan
 
