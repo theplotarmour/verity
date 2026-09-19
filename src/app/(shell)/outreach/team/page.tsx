@@ -2,10 +2,11 @@ import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { hasPermission } from "@/server/platform/authorization";
 import { installCapabilities } from "@/server/capabilities/registry";
-import { OUTREACH_CAPABILITY, ENTITY_LEAD } from "@/server/capabilities/outreach";
+import { OUTREACH_CAPABILITY, ENTITY_LEAD, listTeamDailyWorkStatus } from "@/server/capabilities/outreach";
+import { executeQuery } from "@/server/platform/query";
 import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import { DataTable } from "@/components/ui/DataTable";
-import { EmptyState, PageHeader, Panel, PermissionDenied, Stat, StatRow } from "@/components/ui/primitives";
+import { Badge, EmptyState, PageHeader, Panel, PermissionDenied, Stat, StatRow } from "@/components/ui/primitives";
 import { RemoveMemberButton } from "./RemoveMemberButton";
 import { AddMemberForm } from "./AddMemberForm";
 import { RenameTeamForm } from "./RenameTeamForm";
@@ -152,6 +153,11 @@ async function TeamCommandPage() {
     );
   }
 
+  const dailyWork = await executeQuery(actor, listTeamDailyWorkStatus, {
+    teamId: data.teamId,
+    date: new Date().toISOString(),
+  });
+
   const weekOf = new Date().toLocaleDateString(undefined, { month: "long", day: "numeric" });
 
   return (
@@ -176,6 +182,32 @@ async function TeamCommandPage() {
         <Stat label="Closed Won" value={data.closedWon} />
         <Stat label="Overdue" value={data.overdue.length} hint={data.overdue.length > 0 ? "Needs attention" : undefined} />
       </StatRow>
+
+      <div className="mb-6">
+        <Panel title="Today's work" flush>
+          <div className="flex flex-col divide-y divide-line px-6">
+            {dailyWork.map((member) => {
+              const status = {
+                Worked: { label: "Worked", className: "text-success" },
+                ActivityOnly: { label: "Activity, no check-in", className: "text-warning" },
+                CheckInOnly: { label: "Check-in, no activity", className: "text-warning" },
+                NotStarted: { label: "No work recorded", className: "text-danger" },
+              }[member.status];
+              return (
+                <div key={member.partyId} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3 text-[13px]">
+                  <span className="min-w-40 flex-1 font-medium text-text">{member.name}</span>
+                  <span className={`font-medium ${status.className}`}>{status.label}</span>
+                  <span className="text-text-tertiary">
+                    {member.metrics.activities} {member.metrics.activities === 1 ? "activity" : "activities"}
+                    {member.metrics.leadsGenerated > 0 ? ` · ${member.metrics.leadsGenerated} lead${member.metrics.leadsGenerated === 1 ? "" : "s"}` : ""}
+                  </span>
+                  {member.reviewStatus && <Badge>{member.reviewStatus}</Badge>}
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
+      </div>
 
       {data.escalations.length > 0 && (
         <div className="mb-6 rounded-xl border border-danger/25 bg-danger-subtle">

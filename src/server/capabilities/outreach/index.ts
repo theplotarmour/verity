@@ -2680,6 +2680,74 @@ export const listTeamCheckIns: QueryDefinition<{ teamId: string; date: string },
   },
 };
 
+export type TeamDailyWorkStatus = {
+  partyId: string;
+  name: string;
+  status: "Worked" | "ActivityOnly" | "CheckInOnly" | "NotStarted";
+  checkInId: string | null;
+  reviewStatus: string | null;
+  metrics: { leadsGenerated: number; activities: number; outreach: number; followUps: number; meetings: number };
+};
+
+/**
+ * One honest daily operating signal for each person on a team. A check-in is
+ * not treated as proof of work: "Worked" requires both a submitted check-in
+ * and at least one live activity/lead metric. This lets a leader distinguish
+ * a missed report from a genuinely inactive day without inventing a score.
+ */
+export const listTeamDailyWorkStatus: QueryDefinition<{ teamId: string; date: string }, TeamDailyWorkStatus[]> = {
+  key: "verity.outreach.list_team_daily_work_status",
+  entity: ENTITY_CHECK_IN,
+  scopeHandling: "handler",
+  input: z.object({ teamId: z.string().uuid(), date: z.string().datetime() }),
+  handler: async (ctx, input) => {
+    await assertTeamScopeAllowed(ctx.tx, ctx.actor.userId, input.teamId);
+    const dayStart = new Date(input.date);
+    dayStart.setUTCHours(0, 0, 0, 0);
+    const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+    const team = await ctx.tx.outreachTeam.findUniqueOrThrow({
+      where: { id: input.teamId },
+      include: { memberships: { where: { active: true } } },
+    });
+    const partyIds = [...new Set([team.leaderId, ...(team.coLeaderId ? [team.coLeaderId] : []), ...team.memberships.map((m) => m.partyId)])];
+    const [parties, checkIns, reviews, activities, leads] = await Promise.all([
+      ctx.tx.party.findMany({ where: { id: { in: partyIds } }, select: { id: true, displayName: true } }),
+      ctx.tx.outreachCheckIn.findMany({ where: { partyId: { in: partyIds }, checkInDate: { gte: dayStart, lt: dayEnd } } }),
+      ctx.tx.outreachCheckInReview.findMany({ where: { checkIn: { partyId: { in: partyIds }, checkInDate: { gte: dayStart, lt: dayEnd } } }, orderBy: { reviewedAt: "desc" } }),
+      ctx.tx.outreachActivity.findMany({ where: { actorPartyId: { in: partyIds }, occurredAt: { gte: dayStart, lt: dayEnd } } }),
+      ctx.tx.outreachLead.findMany({ where: { leadOriginatorId: { in: partyIds }, createdAt: { gte: dayStart, lt: dayEnd } }, select: { leadOriginatorId: true } }),
+    ]);
+    const names = new Map(parties.map((p) => [p.id, p.displayName]));
+    const checkInByParty = new Map(checkIns.map((c) => [c.partyId, c]));
+    const reviewByCheckIn = new Map<string, (typeof reviews)[number]>();
+    for (const review of reviews) if (!reviewByCheckIn.has(review.checkInId)) reviewByCheckIn.set(review.checkInId, review);
+
+    return partyIds.map((partyId) => {
+      const checkIn = checkInByParty.get(partyId);
+      const memberActivities = activities.filter((a) => a.actorPartyId === partyId);
+      const leadsGenerated = leads.filter((l) => l.leadOriginatorId === partyId).length;
+      const activityCount = memberActivities.length + leadsGenerated;
+      const status = checkIn
+        ? activityCount > 0 ? "Worked" : "CheckInOnly"
+        : activityCount > 0 ? "ActivityOnly" : "NotStarted";
+      return {
+        partyId,
+        name: names.get(partyId) ?? "Unknown",
+        status,
+        checkInId: checkIn?.id ?? null,
+        reviewStatus: checkIn ? reviewByCheckIn.get(checkIn.id)?.reviewStatus ?? null : null,
+        metrics: {
+          leadsGenerated,
+          activities: activityCount,
+          outreach: memberActivities.filter((a) => a.activityType === "FirstOutreach").length,
+          followUps: memberActivities.filter((a) => a.activityType === "FollowUp").length,
+          meetings: memberActivities.filter((a) => a.activityType === "MeetingBooked" || a.activityType === "MeetingCompleted").length,
+        },
+      } satisfies TeamDailyWorkStatus;
+    });
+  },
+};
+
 /** Auto metrics for one person on one day — computed live, never stored. */
 export const getDailyMetrics: QueryDefinition<{ partyId: string; date: string }, Record<string, number>> = {
   key: "verity.outreach.daily_metrics",
@@ -3357,7 +3425,7 @@ export function registerOutreachCapability(): void {
     schedules: [
       {
         key: "verity.outreach.daily_notification_sweep",
-        label: "Due/overdue follow-ups, stalled prospects",
+        label: "End-of-day team work, due follow-ups, stalled prospects",
         cadence: "daily",
         run: async ({ tx, tenantId, now }) => {
           const dayStart = new Date(now);
@@ -3379,6 +3447,34 @@ export function registerOutreachCapability(): void {
             const leaderUsers = await tx.user.findMany({ where: { partyId: { in: leaderPartyIds } }, select: { id: true } });
 
             const teamLeads = leads.filter((l) => l.teamId === team.id);
+            const memberPartyIds = [...new Set([team.leaderId, ...(team.coLeaderId ? [team.coLeaderId] : []), ...(await tx.outreachTeamMembership.findMany({ where: { teamId: team.id, active: true }, select: { partyId: true } })).map((m) => m.partyId)])];
+            const [parties, checkIns, dayActivities, dayLeads] = await Promise.all([
+              tx.party.findMany({ where: { id: { in: memberPartyIds } }, select: { id: true, displayName: true } }),
+              tx.outreachCheckIn.findMany({ where: { partyId: { in: memberPartyIds }, checkInDate: { gte: dayStart, lt: dayEnd } } }),
+              tx.outreachActivity.findMany({ where: { actorPartyId: { in: memberPartyIds }, occurredAt: { gte: dayStart, lt: dayEnd } } }),
+              tx.outreachLead.findMany({ where: { leadOriginatorId: { in: memberPartyIds }, createdAt: { gte: dayStart, lt: dayEnd } }, select: { leadOriginatorId: true } }),
+            ]);
+            const checkInIds = new Set(checkIns.map((c) => c.partyId));
+            const nameByParty = new Map(parties.map((p) => [p.id, p.displayName]));
+            const summary = memberPartyIds.map((partyId) => {
+              const activityCount = dayActivities.filter((a) => a.actorPartyId === partyId).length + dayLeads.filter((l) => l.leadOriginatorId === partyId).length;
+              const hasCheckIn = checkInIds.has(partyId);
+              const status = hasCheckIn && activityCount > 0 ? "worked" : hasCheckIn ? "checked in, no recorded activity" : activityCount > 0 ? "worked, no check-in" : "no work recorded";
+              return `${nameByParty.get(partyId) ?? "Unknown"}: ${status}`;
+            });
+            if (summary.length > 0 && leaderUsers.length > 0) {
+              await notify(tx, {
+                tenantId,
+                key: "verity.outreach.daily_team_work_summary",
+                recipientIds: leaderUsers.map((u) => u.id),
+                variables: { team: team.name, date: dayStart.toISOString().slice(0, 10), summary: summary.join("; ") },
+                fallback: {
+                  subject: `${team.name}: daily work summary`,
+                  body: `${dayStart.toISOString().slice(0, 10)}\n${summary.join("\n")}`,
+                },
+              });
+            }
+
             const overdue = teamLeads.filter((l) => l.nextActionAt && l.nextActionAt < now);
             if (overdue.length > 0 && leaderUsers.length > 0) {
               await notify(tx, {
@@ -3561,6 +3657,7 @@ export function registerOutreachCapability(): void {
   registerQuery(listOutreachTasks);
   registerQuery(listOutreachMeetings);
   registerQuery(listTeamCheckIns);
+  registerQuery(listTeamDailyWorkStatus);
   registerQuery(listLeadQueue);
   registerQuery(listCoachingNotes);
   registerQuery(getTeamWeeklyMemberBreakdown);
