@@ -47,7 +47,6 @@ async function AttendancePage() {
           employees={employees.map((e) => ({ id: e.id, name: e.party.displayName }))}
           locations={locations}
           shifts={shiftsResult.ok ? shiftsResult.data : []}
-          employeeName={(id) => employees.find((e) => e.id === id)?.party.displayName ?? "Unknown"}
         />
       </div>
     </>

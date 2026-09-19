@@ -134,13 +134,12 @@ export function PayrollAndShifts({
   employees,
   locations,
   shifts,
-  employeeName,
 }: {
   employees: Array<{ id: string; name: string }>;
   locations: Array<{ id: string; name: string }>;
   shifts: Shift[];
-  employeeName: (id: string) => string;
 }) {
+  const employeeName = (id: string) => employees.find((e) => e.id === id)?.name ?? "Unknown";
   return (
     <>
       <PayrollInputsPanel employees={employees} />
