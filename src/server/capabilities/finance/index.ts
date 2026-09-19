@@ -349,6 +349,24 @@ export function registerFinanceCapability(): void {
         requiresEntity: ENTITY_EXPENSE,
         shells: ["platform", "operations"],
       },
+      {
+        href: "/cash-reconciliation",
+        label: "Cash reconciliation",
+        group: "Money",
+        order: 52,
+        icon: "wallet",
+        requiresEntity: ENTITY_CASH_RECONCILIATION,
+        shells: ["platform", "operations"],
+      },
+      {
+        href: "/outlet-pnl",
+        label: "Outlet P&L",
+        group: "Money",
+        order: 53,
+        icon: "finance",
+        requiresEntity: ENTITY_EXPENSE,
+        shells: ["platform", "operations"],
+      },
     ],
   });
   registerCommand(recordExpense);
