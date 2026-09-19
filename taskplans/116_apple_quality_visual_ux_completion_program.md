@@ -34,10 +34,25 @@ document must be corrected in the same phase. In particular:
 
 ## Status
 
-**READY FOR EXECUTION — no phase in this file is complete merely because a
-token, glass class, or shared component exists.** Completion requires signed-in
-visual evidence, real data, interaction verification, and the page-family gates
-defined below.
+**IN PROGRESS — started 2026-09-19.** No phase in this file is complete merely
+because a token, glass class, or shared component exists. Completion requires
+signed-in visual evidence, real data, interaction verification, and the
+page-family gates defined below.
+
+### Execution log
+
+- **2026-09-19 — Phase 0 partial:** classified the full production route list
+  into page families and captured authenticated live observations for a dark
+  business-owner `/overview` and a light Company-Core `/outreach`. Evidence and
+  remaining persona/theme/viewport gaps are recorded in
+  `docs/audits/2026-09-19-task-116-visual-baseline.md`. Phase 0 remains open
+  until durable screenshots and the full role matrix exist.
+- **2026-09-19 — Phase 1 / owner-dashboard slice partial:** added shared
+  `HeroSignal` and `SignalRail` compositions and rebuilt `/overview`'s opening
+  hierarchy around one dominant, real sales signal plus a compact operational
+  rail. This removes the duplicated sales card and the equal-weight four-card
+  wall while retaining exact values, real weekly history, drill-through, and
+  panel-level error isolation. Focused ESLint and TypeScript checks pass.
 
 ## 1. Product outcome
 
@@ -919,4 +934,3 @@ Task 116 closes only after:
    no-persistent-workspace-pill direction.
 10. The product owner accepts the before/after visual evidence—not merely the
     implementation description.
-

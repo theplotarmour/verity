@@ -20,6 +20,7 @@ import {
 import { SetupChecklist } from "./SetupChecklist";
 import { loadPanel } from "@/components/ui/panelState";
 import { StatCard } from "@/components/ui/business/StatCard";
+import { HeroSignal, SignalRail } from "@/components/ui/business/HeroSignal";
 import { AttentionList } from "@/components/ui/business/AttentionList";
 import { RankedList } from "@/components/ui/business/RankedList";
 import { ActivityLog } from "@/components/ui/business/ActivityLog";
@@ -175,66 +176,73 @@ async function OverviewPage() {
         </div>
       )}
 
-      {/* Stat cards — the same eight figures the page always showed
-          (ownerConsole), now the platform-wide StatCard, with a real
-          month-over-month delta on the two figures that have a real prior
-          period to compare against. */}
-      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
+      {/* Task 116 Phase 1 reference composition: one dominant real business
+          signal and one compact operating rail. The previous layout repeated
+          the sales total in two equally weighted card rows, so nothing on the
+          page established priority. */}
+      <div className="mb-6 grid items-stretch gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.8fr)]">
+        <HeroSignal
           icon="sales"
           label="Sales this month"
           value={rupees(c.salesThisMonthPaise)}
-          hint={`${rupees(c.todaysSalesPaise)} today`}
-          delta={delta(c.salesThisMonthPaise, c.salesLastMonthPaise)}
-          href="/finance"
+          context={`${rupees(c.todaysSalesPaise)} today`}
+          delta={(() => {
+            const change = delta(c.salesThisMonthPaise, c.salesLastMonthPaise);
+            return change
+              ? {
+                  label: `${change.percent.toFixed(1)}% vs last month`,
+                  direction: change.direction,
+                }
+              : undefined;
+          })()}
+          action={
+            <Link href="/finance" className="text-[12px] text-accent-ink no-underline hover:underline">
+              View finances →
+            </Link>
+          }
+          visual={
+            salesWeeksPanel.status === "error" ? (
+              <ErrorState title="Weekly sales could not load" message={salesWeeksPanel.message} retryable />
+            ) : salesWeeks.length > 0 ? (
+              <BarStrip values={salesWeeks} label="Sales by week" height={92} />
+            ) : (
+              <p className="m-0 text-[12px] text-text-tertiary">Weekly history will appear as sales are recorded.</p>
+            )
+          }
         />
-        <StatCard
-          icon="workspace"
-          label="Open orders"
-          value={String(c.openSalesOrders)}
-          hint="Taken, not yet closed out"
-          href="/sales"
-        />
-        <StatCard
-          icon="approvals"
-          label="Awaiting credit approval"
-          value={String(c.awaitingCreditApproval)}
-          hint={c.awaitingCreditApproval === 0 ? "Nothing held" : "Held until approved"}
-          href="/sales"
-        />
-        <StatCard
-          icon="purchases"
-          label="Awaiting goods issue"
-          value={String(c.awaitingGoodsIssue)}
-          hint="Approved, still in the godown"
-          href="/sales"
+        <SignalRail
+          items={[
+            {
+              icon: "workspace",
+              label: "Open orders",
+              value: c.openSalesOrders,
+              hint: "Taken, not yet closed out",
+              href: "/sales",
+            },
+            {
+              icon: "approvals",
+              label: "Awaiting credit approval",
+              value: c.awaitingCreditApproval,
+              hint: c.awaitingCreditApproval === 0 ? "Nothing held" : "Held until approved",
+              href: "/sales",
+              tone: c.awaitingCreditApproval > 0 ? "warning" : "neutral",
+            },
+            {
+              icon: "purchases",
+              label: "Awaiting goods issue",
+              value: c.awaitingGoodsIssue,
+              hint: "Approved, still in the godown",
+              href: "/sales",
+              tone: c.awaitingGoodsIssue > 0 ? "warning" : "neutral",
+            },
+          ]}
         />
       </div>
 
-      {/* Sales Overview / Purchase Overview / Needs Attention — the
-          reference's three-up row. Both charts are real weekly totals
-          (GROUP BY week over actual invoice history), never a fabricated
-          smooth line. */}
-      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Panel title="Sales Overview" className="lg:col-span-1">
-          <p className="tabular m-0 text-[26px] font-normal leading-none text-text">
-            {rupees(c.salesThisMonthPaise)}
-          </p>
-          <p className="m-0 mt-1 text-[12px] text-text-tertiary">Sales this month</p>
-          {salesWeeksPanel.status === "error" ? (
-            <div className="mt-4">
-              <ErrorState title="Weekly sales could not load" message={salesWeeksPanel.message} retryable />
-            </div>
-          ) : (
-            salesWeeks.length > 0 && (
-              <div className="mt-5">
-                <BarStrip values={salesWeeks} label="Sales by week" height={72} />
-              </div>
-            )
-          )}
-        </Panel>
-
-        <Panel title="Purchase Overview">
+      {/* Purchase movement and the action queue are the next layer: useful
+          context, but visually subordinate to the business pulse above. */}
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Panel title="Purchase overview">
           <p className="tabular m-0 text-[26px] font-normal leading-none text-text">
             {rupees(c.purchasesThisMonthPaise)}
           </p>
