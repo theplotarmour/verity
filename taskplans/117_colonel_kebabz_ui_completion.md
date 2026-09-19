@@ -53,13 +53,49 @@ redemption wired into the counter's `BillView.tsx` (chains
 authoring — a fallback sub-route rather than a panel on `MenuAdmin.tsx`,
 per the phase's own stated fallback).
 
-**Still open:** the real logged-in verification pass every phase's
-Verification section calls for — this environment has no live DB
-connection (same limitation Task 106/113 document), so nothing here has
-been clicked through as a signed-in Colonel Kebabz user. Code-level
-verification only: `tsc --noEmit` clean after every commit; the
-capability test suites fail on a pre-existing `E_CONFIG_INVALID`
-(`DATABASE_URL` unset here), not a regression.
+**Corrected 2026-09-20 (same day): a live DB connection exists** (`.env`
+has real `DATABASE_URL`/`DIRECT_URL`) — the earlier "no live DB" claim
+was wrong. The `vitest` failure was a deliberate fail-closed guard in
+`src/test/setup-env.ts` (tests refuse to run without their own
+`.env.test`, precisely so they can never touch a real/shared database),
+not an environment gap.
+
+**Real logged-in verification pass completed.** Two pre-existing setup
+gaps found and fixed first, neither caused by this taskplan's code but
+both blocking it:
+- The 7 new capabilities had never been activated for the Colonel
+  Kebabz tenant (`TenantActivation` rows missing) — activated via the
+  platform's own `activateCapability()` semantics (respects the
+  PLA-CAP-003 dependency trigger: `location`/`hr`/`inventory` had to be
+  activated first).
+- The Owner role had no `Permission` grants on any of the 9 new
+  entities — granted Read/Create/Edit/Delete/ActionExecute at Tenant
+  scope, the same shape every other owner-role grant in this tenant
+  already has.
+
+With both fixed, all 8 nav entries render and every route loads.
+Verified with real writes, not just page loads: recorded an expense
+(₹500) → approved it → Outlet P&L correctly showed -₹500 operating
+contribution and the expense under "Miscellaneous"; ran cash
+reconciliation (opening ₹1000, actual ₹1500) → expected cash correctly
+computed as ₹500 (1000 − the 500 cash expense) → variance ₹1000 →
+the "variance requires an explanation" guard fired exactly as the
+command specifies, blocked submission until filled, then saved.
+
+**One real bug found and fixed by this pass:** `/attendance` 500'd —
+`PayrollAndShifts.tsx` (client component) received a plain
+`employeeName` function as a prop from the server `page.tsx`; Next.js
+refuses to serialize a function across the Server→Client boundary.
+Fixed by moving the lookup inline in the client component. `tsc`
+clean, verified live after the fix.
+
+**Not exercised** (no seed data in this tenant to exercise them with):
+guest detail (`/guests/[id]` — 0 guests seeded), attendance
+mark/shift-define (0 `HrEmployee` rows), coupon creation, complaint
+filing, recipe/BOM authoring (0 inventory items). Each route's empty
+state rendered correctly and matches its own copy; the create/action
+forms were code-reviewed and typechecked but not click-tested for lack
+of a seeded row to act on.
 
 ## Trigger / finding that opened this taskplan
 
