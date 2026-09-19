@@ -174,8 +174,8 @@ export function registerCrmCapability(): void {
     capabilityId: CRM_CAPABILITY,
     navigation: [
       {
-        href: "/customers",
-        label: "Customers",
+        href: "/guests",
+        label: "Guests",
         group: "Overview",
         order: 15,
         icon: "user",

@@ -185,10 +185,11 @@ export const resolveComplaint: CommandDefinition<
 };
 
 export const listComplaints: QueryDefinition<
-  { status?: ComplaintStatus; locationId?: string },
+  { status?: ComplaintStatus; locationId?: string; customerId?: string },
   Array<{
     id: string;
     locationId: string;
+    customerId: string | null;
     category: string;
     severity: ComplaintSeverity;
     status: ComplaintStatus;
@@ -197,18 +198,24 @@ export const listComplaints: QueryDefinition<
 > = {
   key: "verity.complaint.list",
   entity: ENTITY_COMPLAINT,
-  input: z.object({ status: z.enum(COMPLAINT_STATUSES).optional(), locationId: z.string().uuid().optional() }),
+  input: z.object({
+    status: z.enum(COMPLAINT_STATUSES).optional(),
+    locationId: z.string().uuid().optional(),
+    customerId: z.string().uuid().optional(),
+  }),
   handler: async (ctx, input) => {
     const rows = await ctx.tx.complaint.findMany({
       where: {
         ...(input.status ? { status: input.status } : {}),
         ...(input.locationId ? { locationId: input.locationId } : {}),
+        ...(input.customerId ? { customerId: input.customerId } : {}),
       },
       orderBy: { createdAt: "desc" },
     });
     return rows.map((r) => ({
       id: r.id,
       locationId: r.locationId,
+      customerId: r.customerId,
       category: r.category,
       severity: r.severity as ComplaintSeverity,
       status: r.status as ComplaintStatus,
