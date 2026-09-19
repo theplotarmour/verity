@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { registerContribution } from "@/server/platform/contribution";
 import { registerCommand, ValidationError, type CommandDefinition } from "@/server/platform/command";
+import { registerQuery, type QueryDefinition } from "@/server/platform/query";
 
 /**
  * CAPABILITY: Coupon — `verity.capability.coupon` (Colonel Kebabz Phase 2,
@@ -115,10 +116,55 @@ export const applyCoupon: CommandDefinition<{ billId: string; code: string }, { 
   },
 };
 
+export const listCoupons: QueryDefinition<
+  Record<string, never>,
+  Array<{
+    id: string;
+    code: string;
+    discountType: DiscountType;
+    value: number;
+    usageLimit: number | null;
+    usedCount: number;
+    expiresAt: Date | null;
+    active: boolean;
+  }>
+> = {
+  key: "verity.coupon.list_coupons",
+  entity: ENTITY_COUPON,
+  input: z.object({}),
+  handler: async (ctx) => {
+    const rows = await ctx.tx.coupon.findMany({ orderBy: { createdAt: "desc" } });
+    return rows.map((r) => ({
+      id: r.id,
+      code: r.code,
+      discountType: r.discountType as DiscountType,
+      value: r.value,
+      usageLimit: r.usageLimit,
+      usedCount: r.usedCount,
+      expiresAt: r.expiresAt,
+      active: r.active,
+    }));
+  },
+};
+
 /* ============================== registration ============================== */
 
 export function registerCouponCapability(): void {
-  registerContribution({ capabilityId: COUPON_CAPABILITY, navigation: [] });
+  registerContribution({
+    capabilityId: COUPON_CAPABILITY,
+    navigation: [
+      {
+        href: "/coupons",
+        label: "Coupons",
+        group: "Money",
+        order: 51,
+        icon: "tag",
+        requiresEntity: ENTITY_COUPON,
+        shells: ["platform", "operations"],
+      },
+    ],
+  });
   registerCommand(createCoupon);
   registerCommand(applyCoupon);
+  registerQuery(listCoupons);
 }
