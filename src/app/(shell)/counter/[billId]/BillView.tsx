@@ -209,6 +209,35 @@ export function BillView({ bill }: { bill: BillDetail }) {
 
           {!settled && (
             <>
+              <Panel title="Coupon">
+                <form
+                  className="flex items-end gap-3"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const code = String(new FormData(e.currentTarget).get("code") ?? "");
+                    setFailure(null);
+                    startTransition(async () => {
+                      const applied = await runCommand<{ discountMinor: number }>(
+                        "verity.coupon.apply_coupon",
+                        { billId: bill.id, code },
+                      );
+                      if (!applied.ok) { setFailure(applied); return; }
+                      const discounted = await runCommand(
+                        "verity.dinein.apply_bill_discount",
+                        { billId: bill.id, discountMinor: applied.data.discountMinor, reason: `Coupon ${code}` },
+                        `/counter/${bill.id}`,
+                      );
+                      if (discounted.ok) router.refresh(); else setFailure(discounted);
+                    });
+                  }}
+                >
+                  <Field label="Code" htmlFor="couponCode" required>
+                    <Input id="couponCode" name="code" required placeholder="e.g. WELCOME10" />
+                  </Field>
+                  <Button type="submit" disabled={pending}>{pending ? "Applying…" : "Apply coupon"}</Button>
+                </form>
+              </Panel>
+
               <Panel title="Discount">
                 <form
                   className="flex flex-col gap-3"
