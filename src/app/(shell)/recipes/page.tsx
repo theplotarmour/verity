@@ -51,7 +51,7 @@ async function RecipesPage() {
           quadrant: r.quadrant,
         }))}
         columns={[
-          { key: "name", header: "Item" },
+          { key: "name", header: "Item", variant: "link", href: "/recipes/{id}" },
           { key: "qtySold", header: "Qty sold", numeric: true },
           { key: "revenue", header: "Revenue", numeric: true },
           { key: "margin", header: "Margin", numeric: true },
