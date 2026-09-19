@@ -44,11 +44,22 @@ from this session's edits. No real logged-in run against the Colonel
 Kebabz tenant performed this session — still open, per this file's own
 Verification section.
 
-**Remaining for a future session:** Attendance payroll-inputs report +
-shift admin, `/cash-reconciliation` + `/outlet-pnl` routes, coupon
-application at the counter, recipe/BOM authoring on `/menu`, and the real
-logged-in verification pass every phase's own Verification bullet calls
-for.
+**All 8 phases now BUILT, `tsc --noEmit` clean** (second pass, same
+session-day): Attendance payroll-inputs report + shift admin
+(`PayrollAndShifts.tsx`), `/cash-reconciliation` + `/outlet-pnl`, coupon
+redemption wired into the counter's `BillView.tsx` (chains
+`coupon.apply_coupon`'s `discountMinor` into the existing
+`dinein.apply_bill_discount`), and `/recipes/[menuItemId]` (whole-BOM
+authoring — a fallback sub-route rather than a panel on `MenuAdmin.tsx`,
+per the phase's own stated fallback).
+
+**Still open:** the real logged-in verification pass every phase's
+Verification section calls for — this environment has no live DB
+connection (same limitation Task 106/113 document), so nothing here has
+been clicked through as a signed-in Colonel Kebabz user. Code-level
+verification only: `tsc --noEmit` clean after every commit; the
+capability test suites fail on a pre-existing `E_CONFIG_INVALID`
+(`DATABASE_URL` unset here), not a regression.
 
 ## Trigger / finding that opened this taskplan
 
