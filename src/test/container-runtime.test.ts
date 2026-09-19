@@ -43,7 +43,9 @@ describe("Dockerfile", () => {
     // it (`FROM base AS ...`), which makes stage divergence impossible
     // rather than merely checked for.
     const literalImageLines = fromLines.filter((l) => !/^FROM base\b/.test(l));
-    expect(literalImageLines).toEqual(["FROM node:20-bookworm-slim AS base"]);
+    expect(literalImageLines).toEqual([
+      "FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS base",
+    ]);
   });
 
   it("runs as a non-root user", () => {
