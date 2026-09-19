@@ -5,21 +5,25 @@ import { withTenant } from "@/server/platform/tenancy";
 import { runQuery } from "@/server/actions/platform";
 import { PageHeader, Stat, StatRow, ErrorState } from "@/components/ui/primitives";
 import { AttendanceBoard } from "./AttendanceBoard";
+import { PayrollAndShifts } from "./PayrollAndShifts";
 
 export const dynamic = "force-dynamic";
 
 type Dashboard = { present: number; absent: number; late: number; onLeave: number };
+type ShiftRow = { id: string; employeeId: string; date: string; label: string; startTime: string; endTime: string };
 
-/** §39-40, 42 — today's check-ins, and who to mark. */
+/** §39-40, 42 — today's check-ins, who to mark, payroll inputs, and shifts. */
 async function AttendancePage() {
   const actor = await requireActor();
   const today = new Date().toISOString().slice(0, 10);
 
-  const [dashboardResult, employees] = await Promise.all([
+  const [dashboardResult, shiftsResult, employees, locations] = await Promise.all([
     runQuery<Dashboard>("verity.attendance.get_dashboard", { date: today }),
+    runQuery<ShiftRow[]>("verity.attendance.list_shifts", {}),
     withTenant(actor.tenantId, (tx) =>
       tx.hrEmployee.findMany({ where: { active: true }, include: { party: true } }),
     ),
+    withTenant(actor.tenantId, (tx) => tx.location.findMany({ select: { id: true, name: true } })),
   ]);
 
   if (!dashboardResult.ok) return <ErrorState title="Could not load attendance" message={dashboardResult.message} issues={dashboardResult.issues} retryable={dashboardResult.retryable} />;
@@ -38,6 +42,14 @@ async function AttendancePage() {
         today={today}
         employees={employees.map((e) => ({ id: e.id, name: e.party.displayName }))}
       />
+      <div className="mt-6">
+        <PayrollAndShifts
+          employees={employees.map((e) => ({ id: e.id, name: e.party.displayName }))}
+          locations={locations}
+          shifts={shiftsResult.ok ? shiftsResult.data : []}
+          employeeName={(id) => employees.find((e) => e.id === id)?.party.displayName ?? "Unknown"}
+        />
+      </div>
     </>
   );
 }
