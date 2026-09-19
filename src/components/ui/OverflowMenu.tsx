@@ -50,7 +50,6 @@ export function OverflowMenu({ children, label = "More actions" }: { children: R
       document.removeEventListener("mousedown", onDocClick);
       document.removeEventListener("keydown", onKey);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const onMenuKeyDown = (e: React.KeyboardEvent) => {
@@ -81,13 +80,14 @@ export function OverflowMenu({ children, label = "More actions" }: { children: R
           <motion.div
             role="menu"
             aria-label={label}
+            onClick={() => setOpen(false)}
             onKeyDown={onMenuKeyDown}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={prefersReducedMotion() ? reducedMotionFade : springDefault}
             style={{ transformOrigin: "top right" }}
-            className="glass-overlay absolute right-0 top-full z-20 mt-2 min-w-[200px] rounded-lg p-1"
+            className="glass-overlay absolute right-0 top-full z-50 mt-2 min-w-[200px] rounded-lg p-1"
           >
             {children}
           </motion.div>

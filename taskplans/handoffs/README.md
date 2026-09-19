@@ -98,13 +98,13 @@ not something an agent session can complete.
   Fixed with `outreachLandingRouteFor` (mirrors plywood's own
   `landingRouteFor` pattern) — signed-in Core now lands on `/outreach`.
   Live-verified.
-- Also noticed, not fixed (real but lower-priority): the "More actions"
-  menu's inline confirm-forms (e.g. `disqualified`'s reason picker) render
-  underneath the still-open dropdown, so a click meant for "Confirm" can
-  land on a menu item instead unless the menu is closed first (Escape) —
-  a z-index/layering issue in `LeadActions.tsx` or wherever that menu is
-  built. Worked around manually during cleanup; flagging for a real fix,
-  not silently leaving it.
+- **Fixed 2026-09-19:** the shared `OverflowMenu` now closes when an item is
+  selected and renders above the following inline confirmation forms. This
+  removes the layering bug that previously made the `disqualified` reason
+  picker require an Escape workaround. Targeted ESLint and TypeScript checks
+  pass; the production build also passes. The full Vitest run remains blocked
+  by the pre-existing no-database/configuration and conformance-drift failures
+  recorded in the session evidence.
 
 ### 3. Task 114 — Outreach execution-layer UX redesign — launch scope CLOSED
 
