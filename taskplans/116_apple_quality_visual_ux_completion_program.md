@@ -53,6 +53,21 @@ page-family gates defined below.
   rail. This removes the duplicated sales card and the equal-weight four-card
   wall while retaining exact values, real weekly history, drill-through, and
   panel-level error isolation. Focused ESLint and TypeScript checks pass.
+- **2026-09-19 — Phase 3 / Core dashboard `/outreach` slice partial:** reused
+  `HeroSignal`/`SignalRail` for the "Pipeline health" band (§8.1's hero signal
+  + pipeline-now rail, replacing the two equal-weight eight-`Stat` rows) and
+  rebuilt "Team performance" as identity cards (avatar initials, leader,
+  member count, prospecting-target progress bar, four-metric footer,
+  hover-lift) replacing the 13-column horizontally-scrolled table and the
+  separate plain-count "Teams" panel it duplicated. §8.1's "Today's
+  execution," "Attention," and "Management intelligence" required regions are
+  now all present; team comparison and pipeline-now are asymmetric, not equal
+  cards. Signed-in visual verification done for Core (divyom.sharma) against
+  the real PlotArmour Studio tenant, light and dark, desktop viewport — both
+  themes preserve the same hierarchy. `tsc --noEmit` and `eslint` on the file
+  are clean. Not yet done: Senior/Junior dashboard variants (§8.2/§8.3),
+  mobile viewport proof, and the rest of the §16 evidence matrix — this slice
+  only closes the Core desktop light/dark cell for `/outreach`.
 
 ## 1. Product outcome
 

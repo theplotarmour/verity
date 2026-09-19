@@ -28,16 +28,16 @@ import {
   PermissionDenied,
   Row,
   RowList,
-  Stat,
-  StatRow,
   StatTile,
   StatTileRow,
+  Surface,
 } from "@/components/ui/primitives";
 import { NewLeadForm } from "./NewLeadForm";
 import { DirectionForm } from "./DirectionForm";
 import { WorkQueuePanel } from "./WorkQueuePanel";
 import { ResolveEscalationButton } from "./ResolveEscalationButton";
 import { Donut, Legend } from "@/components/ui/charts";
+import { HeroSignal, SignalRail } from "@/components/ui/business/HeroSignal";
 import { RangeSwitch } from "./RangeSwitch";
 import { RANGE_LABEL, percent, rangeFromParam, windowFor } from "./range";
 
@@ -58,6 +58,15 @@ function deltaLabel(curr: number, prev: number | null | undefined): string | und
  *  it groups existing sections without adding another nested card. */
 function SectionLabel({ children }: { children: ReactNode }) {
   return <h2 className="mb-3 text-[12px] font-medium uppercase tracking-[0.08em] text-text-tertiary">{children}</h2>;
+}
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
 }
 
 type LeadRow = Record<string, unknown> & {
@@ -450,41 +459,70 @@ async function OutreachPage({
 
       <SectionLabel>Pipeline health</SectionLabel>
       {data.pulse ? (
-        /* Company pulse (2026-09-13 doc §4): the organisation's own numbers
-           for the chosen window, read live — never a stored aggregate. Two
-           bands, not ten framed cards; the window's name sits on the first
-           so a reader knows which week a "47" belongs to. Hints carry a
-           trend delta (Task 114 P1.3) against the immediately preceding
-           period of equal length. */
-        <div className="mb-6">
-          <p className="mb-2 text-[11px] uppercase tracking-wide text-text-tertiary">
-            {RANGE_LABEL[range]} · {data.pulse.activeTeams} active team{data.pulse.activeTeams === 1 ? "" : "s"} ·{" "}
-            {data.pulse.activeMembers} member{data.pulse.activeMembers === 1 ? "" : "s"}
-          </p>
-          <StatRow cols={4}>
-            <Stat label="Leads added" value={data.pulse.leads} hint={deltaLabel(data.pulse.leads, data.previousPulse?.leads)} />
-            <Stat label="Outreach" value={data.pulse.outreach} hint={deltaLabel(data.pulse.outreach, data.previousPulse?.outreach)} />
-            <Stat
-              label="Follow-ups"
-              value={data.pulse.followUps}
-              hint={deltaLabel(data.pulse.followUps, data.previousPulse?.followUps)}
-            />
-            <Stat label="Responses" value={data.pulse.responses} hint={`${percent(data.pulse.responseRate)} response rate`} />
-          </StatRow>
-          <StatRow cols={4} className="mt-3">
-            <Stat label="Meetings" value={data.pulse.meetings} hint={deltaLabel(data.pulse.meetings, data.previousPulse?.meetings)} />
-            <Stat
-              label="Proposals"
-              value={data.pulse.proposals}
-              hint={deltaLabel(data.pulse.proposals, data.previousPulse?.proposals)}
-            />
-            <Stat
-              label="Active pipeline"
-              value={data.pulse.activePipeline}
-              hint={deltaLabel(data.pulse.activePipeline, data.previousPulse?.activePipeline) ?? "Open now, not windowed"}
-            />
-            <Stat label="Closed won" value={data.pulse.closed} hint={`${data.overdue} follow-up${data.overdue === 1 ? "" : "s"} overdue`} />
-          </StatRow>
+        /* Task 116 §8.1: one execution story rather than two equal rows of
+           eight numbers. Every displayed value is still the same registered
+           query result; only the hierarchy changes. */
+        <div className="mb-6 grid items-stretch gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.8fr)]">
+          <HeroSignal
+            icon="parties"
+            label={`${RANGE_LABEL[range]} execution`}
+            value={data.pulse.outreach + data.pulse.followUps + data.pulse.responses + data.pulse.meetings}
+            context={`${data.pulse.activeMembers} member${data.pulse.activeMembers === 1 ? "" : "s"} across ${data.pulse.activeTeams} active team${data.pulse.activeTeams === 1 ? "" : "s"}`}
+            delta={(() => {
+              if (!data.previousPulse) return undefined;
+              const current = data.pulse.outreach + data.pulse.followUps + data.pulse.responses + data.pulse.meetings;
+              const previous = data.previousPulse.outreach + data.previousPulse.followUps + data.previousPulse.responses + data.previousPulse.meetings;
+              const label = deltaLabel(current, previous);
+              if (!label) return undefined;
+              return {
+                label,
+                direction: current === previous ? "flat" as const : current > previous ? "up" as const : "down" as const,
+              };
+            })()}
+            visual={
+              <div className="grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-5">
+                {[
+                  ["Leads", data.pulse.leads],
+                  ["Outreach", data.pulse.outreach],
+                  ["Follow-ups", data.pulse.followUps],
+                  ["Meetings", data.pulse.meetings],
+                  ["Proposals", data.pulse.proposals],
+                ].map(([label, value]) => (
+                  <div key={String(label)} className="min-w-0">
+                    <p className="tabular m-0 text-[20px] font-light leading-none text-text">{value}</p>
+                    <p className="m-0 mt-1.5 truncate text-[11.5px] text-text-tertiary">{label}</p>
+                  </div>
+                ))}
+              </div>
+            }
+          />
+          <SignalRail
+            title="Pipeline now"
+            items={[
+              {
+                icon: "workspace",
+                label: "Active pipeline",
+                value: data.pulse.activePipeline,
+                hint: deltaLabel(data.pulse.activePipeline, data.previousPulse?.activePipeline) ?? "Open now",
+                href: "/outreach/prospects",
+              },
+              {
+                icon: "mail",
+                label: "Responses",
+                value: data.pulse.responses,
+                hint: `${percent(data.pulse.responseRate)} response rate`,
+                href: "/outreach/prospects",
+              },
+              {
+                icon: "bell",
+                label: "Overdue follow-ups",
+                value: data.overdue,
+                hint: data.overdue === 0 ? "Nothing overdue" : "Needs attention",
+                href: "/outreach/prospects?view=needs-action",
+                tone: data.overdue > 0 ? "danger" : "neutral",
+              },
+            ]}
+          />
         </div>
       ) : (
         // ADR-025 pattern 2 (icon-chip stat tile) — only this summary row
@@ -504,76 +542,70 @@ async function OutreachPage({
       <SectionLabel>Management intelligence</SectionLabel>
       {data.teamComparison.length > 0 && (
         <div className="mb-6">
-          <Panel title={`Team performance · ${RANGE_LABEL[range].toLowerCase()}`} flush>
-            <div className="overflow-x-auto px-6">
-              <table className="w-full min-w-[880px] border-collapse text-[13px]">
-                <thead>
-                  <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-text-tertiary">
-                    <th className="py-2 font-medium">Team</th>
-                    <th className="py-2 font-medium">Leader</th>
-                    <th className="py-2 text-right font-medium">Members</th>
-                    <th className="py-2 text-right font-medium">Target</th>
-                    <th className="py-2 text-right font-medium">Leads</th>
-                    <th className="py-2 text-right font-medium">Outreach</th>
-                    <th className="py-2 text-right font-medium">Follow-ups</th>
-                    <th className="py-2 text-right font-medium">Responses</th>
-                    <th className="py-2 text-right font-medium">Resp. rate</th>
-                    <th className="py-2 text-right font-medium">Meetings</th>
-                    <th className="py-2 text-right font-medium">Proposals</th>
-                    <th className="py-2 text-right font-medium">Pipeline</th>
-                    <th className="py-2 text-right font-medium">Closed</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.teamComparison.map((t) => (
-                    <tr key={t.teamId} className="border-b border-line last:border-none">
-                      <td className="py-2.5 text-text">
-                        <Link href={`/outreach?team=${t.teamId}`} className="text-text no-underline hover:text-accent-ink">
-                          {t.teamName}
-                        </Link>
-                      </td>
-                      <td className="py-2.5 text-text-secondary">{t.leaderName}</td>
-                      <td className="tabular py-2.5 text-right text-text-secondary">{t.memberCount}</td>
-                      <td className="tabular py-2.5 text-right text-text-secondary">{t.target ?? "—"}</td>
-                      <td className="tabular py-2.5 text-right text-text-secondary">{t.leads}</td>
-                      <td className="tabular py-2.5 text-right text-text-secondary">{t.outreach}</td>
-                      <td className="tabular py-2.5 text-right text-text-secondary">{t.followUps}</td>
-                      <td className="tabular py-2.5 text-right text-text-secondary">{t.responses}</td>
-                      <td className="tabular py-2.5 text-right text-text-secondary">{percent(t.responseRate)}</td>
-                      <td className="tabular py-2.5 text-right text-text-secondary">{t.meetings}</td>
-                      <td className="tabular py-2.5 text-right text-text-secondary">{t.proposals}</td>
-                      <td className="tabular py-2.5 text-right text-text-secondary">{t.pipeline}</td>
-                      <td className="tabular py-2.5 text-right font-medium text-text">{t.closed}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h3 className="m-0 text-[15px] font-medium text-text">Team performance</h3>
+              <p className="m-0 mt-1 text-[12px] text-text-tertiary">{RANGE_LABEL[range]} · compare execution and pipeline load</p>
             </div>
-          </Panel>
+            <Link href="/outreach/teams" className="text-[12px] text-accent-ink no-underline hover:underline">
+              Open teams →
+            </Link>
+          </div>
+          <div className="grid items-stretch gap-4 lg:grid-cols-2">
+            {data.teamComparison.map((team) => {
+              const progress = team.target && team.target > 0 ? Math.min(100, Math.round((team.leads / team.target) * 100)) : null;
+              return (
+                <Link key={team.teamId} href={`/outreach?team=${team.teamId}`} className="group block no-underline">
+                  <Surface className="h-full p-5 transition-[border-color,transform] duration-200 group-hover:-translate-y-0.5 group-hover:border-line-strong">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-subtle text-[12px] font-medium text-accent-ink">
+                          {initials(team.leaderName)}
+                        </span>
+                        <div className="min-w-0">
+                          <h3 className="m-0 truncate text-[16px] font-medium text-text">{team.teamName}</h3>
+                          <p className="m-0 mt-0.5 truncate text-[12px] text-text-tertiary">
+                            {team.leaderName} · {team.memberCount} member{team.memberCount === 1 ? "" : "s"}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="tabular text-[24px] font-light text-text">{team.pipeline}</span>
+                    </div>
+
+                    {progress != null ? (
+                      <div className="mt-5">
+                        <div className="flex items-center justify-between text-[11.5px] text-text-tertiary">
+                          <span>Prospecting target</span>
+                          <span className="tabular">{team.leads} / {team.target}</span>
+                        </div>
+                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--color-track)]">
+                          <div className="h-full rounded-full bg-accent" style={{ width: `${progress}%` }} />
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="mt-5 grid grid-cols-4 gap-3 border-t border-line pt-4">
+                      {[
+                        ["Outreach", team.outreach],
+                        ["Responses", team.responses],
+                        ["Meetings", team.meetings],
+                        ["Closed", team.closed],
+                      ].map(([label, value]) => (
+                        <div key={String(label)} className="min-w-0">
+                          <p className="tabular m-0 text-[17px] font-light text-text">{value}</p>
+                          <p className="m-0 mt-1 truncate text-[10.5px] text-text-tertiary">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </Surface>
+                </Link>
+              );
+            })}
+          </div>
         </div>
       )}
 
-      <div className="mb-6 grid gap-6 lg:grid-cols-3">
-        <Panel title="Teams" flush>
-          <div className="flex flex-col divide-y divide-line px-6">
-            {data.teams.map((t) => (
-              <Link
-                key={t.id}
-                href={`/outreach?team=${t.id}`}
-                className="flex items-center justify-between py-3 text-text no-underline hover:text-accent-ink"
-              >
-                <span className="text-[14px]">{t.name}</span>
-                <span className="text-[12px] text-text-tertiary">{t.members} members</span>
-              </Link>
-            ))}
-            {filters.team && (
-              <Link href="/outreach" className="py-3 text-[12px] text-text-tertiary no-underline hover:text-accent-ink">
-                Clear team filter
-              </Link>
-            )}
-          </div>
-        </Panel>
-
+      <div className="mb-6 grid items-stretch gap-6 lg:grid-cols-2">
         <Panel title="Pipeline">
           {data.pipelineSegments.length > 0 ? (
             <div className="flex items-center gap-5">
