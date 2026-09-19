@@ -81,6 +81,20 @@ export const CONFIG_CGST_RATE = "verity.dinein.tax.cgst_rate";
 export const CONFIG_SGST_RATE = "verity.dinein.tax.sgst_rate";
 export const CONFIG_PREP_TARGET_MINUTES = "verity.dinein.kitchen.prep_target_minutes";
 
+/**
+ * Mirrors `outreach`'s `outreachLandingRouteFor` / `trading`'s
+ * `landingRouteFor` for the same reason those exist: `/` (the platform's
+ * generic Overview) requires `Read` on `verity.platform.overview`, which no
+ * dinein role is ever granted — dinein was never wired into `/`'s landing
+ * check at all, so every dinein sign-in dead-ended on "You do not have
+ * access to this". Derived from what the actor can DO, not from a role name.
+ */
+export function dineinLandingRouteFor(resolved: Array<{ verb: string; entity: string }>): string | null {
+  const has = (verb: string, entity: string) => resolved.some((p) => p.verb === verb && p.entity === entity);
+  if (has("Read", ENTITY_ORDER)) return "/floor";
+  return null;
+}
+
 /* ================================== menu ================================== */
 
 export const createMenuCategory: CommandDefinition<

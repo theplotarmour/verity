@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { Icon } from "@/components/ui/icons";
 import { signOut } from "@/server/actions/platform";
@@ -27,9 +28,20 @@ export function ProfileMenu({
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   // APPLE-P1-02: the three focusable menu items, in visual order, so Arrow
   // keys can cycle them and opening can focus the first one.
   const itemRefs = useRef<Array<HTMLElement | null>>([]);
+  // Right-edge-anchored position for the portalled menu — see the portal
+  // comment below for why this exists at all.
+  const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
+
+  const measure = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const box = trigger.getBoundingClientRect();
+    setAnchor({ top: box.bottom + 8, right: window.innerWidth - box.right });
+  }, []);
 
   function close() {
     setOpen(false);
@@ -40,13 +52,30 @@ export function ProfileMenu({
     triggerRef.current?.focus();
   }
 
+  // Before paint, so the menu never appears at the wrong place for a frame.
+  useLayoutEffect(() => {
+    if (!open) return;
+    measure();
+    window.addEventListener("scroll", measure, true);
+    window.addEventListener("resize", measure);
+    return () => {
+      window.removeEventListener("scroll", measure, true);
+      window.removeEventListener("resize", measure);
+    };
+  }, [open, measure]);
+
   useEffect(() => {
     if (!open) return;
     // Opening moves focus INTO the menu — a menu you can only reach visually
     // is not reachable by keyboard at all.
     itemRefs.current[0]?.focus();
     function onPointerDown(e: PointerEvent) {
-      if (!rootRef.current?.contains(e.target as Node)) closeAndRestoreFocus();
+      const target = e.target as Node;
+      // The menu now lives on <body> (see the portal below) — "inside" is
+      // the trigger's root OR the portalled menu itself.
+      if (rootRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      closeAndRestoreFocus();
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") closeAndRestoreFocus();
@@ -93,12 +122,24 @@ export function ProfileMenu({
         <span className="sr-only">Account menu — signed in as {userLabel}</span>
       </button>
 
-      {open && (
+      {open &&
+        anchor &&
+        createPortal(
         <div
+          ref={menuRef}
           role="menu"
           aria-label="Account"
           onKeyDown={onMenuKeyDown}
-          className="glass-overlay absolute right-0 top-[calc(100%+8px)] z-50 w-56 rounded-xl p-1.5"
+          // Portalled onto <body>, not rendered inside the header. The header
+          // itself is `.glass-shell` (its own `backdrop-filter`), and a
+          // `backdrop-filter` element nested inside another one is a known
+          // Chromium compositing bug: the inner blur silently no-ops, so the
+          // menu rendered with its tint but none of its blur — page text
+          // behind it stayed crisp and readable. Portalling to `document.body`
+          // puts the menu's backdrop-filter outside that ancestor's stacking
+          // context so it samples the real page again.
+          style={{ position: "fixed", top: anchor.top, right: anchor.right }}
+          className="glass-overlay z-50 w-56 rounded-xl p-1.5"
         >
           <div className="truncate px-3 py-2 text-[12.5px] text-text-tertiary">{userLabel}</div>
           <Link
@@ -139,7 +180,8 @@ export function ProfileMenu({
               Sign out
             </button>
           </form>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
