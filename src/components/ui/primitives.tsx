@@ -606,7 +606,7 @@ export function Field({
  * as unfinished without anyone being able to say why.
  */
 const controlClass =
-  "verity-solid border border-line w-full h-11 px-4 rounded-lg text-text text-[14px] " +
+  "verity-solid min-w-0 border border-line w-full h-11 px-4 rounded-lg text-text text-[14px] " +
   "placeholder:text-text-tertiary transition-[border-color,box-shadow] duration-200 " +
   "hover:border-line-strong " +
   "focus:outline-none focus:border-accent " +
@@ -627,7 +627,7 @@ export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
     <textarea
       {...props}
       className={cx(
-        "verity-solid w-full min-h-24 resize-y rounded-lg border border-line px-4 py-2.5 text-[14px] text-text " +
+        "verity-solid min-w-0 w-full min-h-24 resize-y rounded-lg border border-line px-4 py-2.5 text-[14px] text-text " +
           "placeholder:text-text-tertiary transition-[border-color,box-shadow] duration-200 hover:border-line-strong " +
           "focus:border-accent focus:outline-none focus:shadow-[var(--shadow-highlight),0_0_0_3px_var(--color-accent-subtle)] " +
           "disabled:cursor-not-allowed disabled:opacity-55",

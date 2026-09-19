@@ -29,7 +29,7 @@ export function DirectionForm() {
 
   return (
     <form
-      className="grid gap-3 sm:grid-cols-2"
+      className="grid min-w-0 w-full grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
       onSubmit={(e) => {
         e.preventDefault();
         const form = new FormData(e.currentTarget);
