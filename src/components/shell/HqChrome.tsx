@@ -50,7 +50,7 @@ export function HqChrome({
       className="flex h-dvh flex-col overflow-hidden lg:grid"
       style={{ gridTemplateColumns: "234px 1fr" }}
     >
-      <aside className="verity-solid hidden min-h-0 flex-col rounded-none border-r border-line px-4 pb-5 pt-7 lg:flex">
+      <aside className="glass-shell hidden min-h-0 flex-col rounded-none border-r border-line px-4 pb-5 pt-7 lg:flex">
         <div className="mb-8 shrink-0 px-2">
           <Link href="/hq" aria-label="Verity HQ" className="block no-underline">
             <VerityLockup size={30} />
@@ -113,7 +113,7 @@ export function HqChrome({
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="verity-solid z-30 flex h-14 shrink-0 items-center justify-between gap-3 rounded-none border-b border-line px-4 lg:hidden">
+        <div className="glass-shell z-30 flex h-14 shrink-0 items-center justify-between gap-3 rounded-none border-b border-line px-4 lg:hidden">
           <Link href="/hq" aria-label="Verity HQ" className="no-underline">
             <VerityLockup size={22} />
           </Link>

@@ -92,7 +92,7 @@ export function ContextPanel({
             aria-modal="true"
             aria-labelledby={titleId}
             tabIndex={-1}
-            className="verity-solid relative flex h-full w-full max-w-[420px] flex-col gap-5 overflow-y-auto border-l border-line p-6 shadow-lg outline-none"
+            className="glass-overlay relative flex h-full w-full max-w-[420px] flex-col gap-5 overflow-y-auto border-l border-line p-6 shadow-lg outline-none"
             initial={reducedMotion ? { opacity: 0 } : { x: "100%" }}
             animate={reducedMotion ? { opacity: 1 } : { x: 0 }}
             exit={reducedMotion ? { opacity: 0 } : { x: "100%" }}
