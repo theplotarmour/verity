@@ -27,7 +27,7 @@
    * NEUTRAL FOUNDATION — design/verity asthetics.png, the brand sheet (ADR-012).
    * #F7F8FA Background · #0F1115 Text · #1C1F24 · #2A2E33 · #E6E8EB.
    * ------------------------------------------------------------------- */
-  --color-canvas: light-dark(#f7f7f8, #090f14);
+  --color-canvas: light-dark(#f7f7f8, #0b0d10);
   --color-text: light-dark(#17171b, #f5f5f7);
   --color-text-secondary: light-dark(#6e6e73, #a1a1aa);
   /* The source sets --tx3 to #7A7A7F, which measures 3.9:1 on the light canvas
@@ -54,10 +54,10 @@
    * read on it, and dialogs are thickest because they must stay legible over
    * arbitrary content.
    */
-  --color-glass-1: light-dark(rgb(255 255 255 / 0.16), rgb(255 255 255 / 0.012));
-  --color-glass-2: light-dark(rgb(255 255 255 / 0.20), rgb(255 255 255 / 0.018));
-  --color-glass-3: light-dark(rgb(255 255 255 / 0.38), rgb(255 255 255 / 0.035));
-  --color-glass-4: light-dark(rgb(255 255 255 / 0.72), rgb(22 26 31 / 0.66));
+  --color-glass-1: light-dark(rgb(255 255 255 / 0.16), rgb(255 255 255 / 0.025));
+  --color-glass-2: light-dark(rgb(255 255 255 / 0.20), rgb(255 255 255 / 0.040));
+  --color-glass-3: light-dark(rgb(255 255 255 / 0.38), rgb(255 255 255 / 0.060));
+  --color-glass-4: light-dark(rgb(255 255 255 / 0.72), rgb(22 26 31 / 0.78));
 
   /* Solid surfaces — level 5. Dense tables, long-form text, forms and
      destructive confirmation live here, per ADR-011.
@@ -73,7 +73,7 @@
   --color-surface-elevated: light-dark(#ffffff, color-mix(in oklab, white 18%, var(--color-canvas)));
   --color-surface-sunken: light-dark(#f2f2f7, color-mix(in oklab, black 10%, var(--color-canvas)));
   --color-control: light-dark(#ffffff, #1c252e);
-  --color-chrome: light-dark(#ffffff, #0c1319);
+  --color-chrome: light-dark(#ffffff, #0e1115);
 
   /* ---------------------------------------------------------------------
    * BORDERS — alpha, never solid hex.
@@ -194,8 +194,8 @@
   --shadow-lg: 0 2px 6px light-dark(rgb(18 18 21 / 0.05), rgb(0 0 0 / 0.45)),
                0 44px 90px -28px light-dark(rgb(18 18 21 / 0.32), rgb(0 0 0 / 0.9));
 
-  --blur-glass: 30px;
-  --blur-glass-strong: 44px;
+  --blur-glass: 24px;
+  --blur-glass-strong: 34px;
   /**
    * LIQUID GLASS OPTICS.
    *
@@ -206,8 +206,8 @@
    * so the surface reads as lit rather than filmed. These are the amounts that
    * do it; the fill alphas above are deliberately tiny so these can work.
    */
-  --glass-optics: saturate(2) brightness(1.06);
-  --glass-optics-strong: saturate(2.2) brightness(1.08);
+  --glass-optics: saturate(1.08) brightness(1.02);
+  --glass-optics-strong: saturate(1.12) brightness(1.03);
 
   /**
    * Dark drops the brightness lift entirely and pushes saturation instead.
@@ -433,7 +433,7 @@
    * on a cool accent does not. Toning the SECOND source down is enough —
    * the primary source keeps the seed's true colour untouched.
    *
-   * Both sources turned WAY down (34%/22% peak in dark, 12%/7% in light) and
+   * Both sources stay quiet (8%/4% peak in dark, 12%/7% in light) and
    * blurred harder than before — "glow" is not the goal here, "the glass in
    * front of the screen is tinted and frosted" is. Consistent over bright:
    * the vignette is correspondingly deeper in dark mode so the whole frame
@@ -445,7 +445,7 @@
       1300px 1000px at 50% -12%,
       light-dark(
         rgb(from var(--accent-seed) r g b / 12%),
-        rgb(from var(--accent-seed) r g b / 34%)
+        rgb(from var(--accent-seed) r g b / 3%)
       ) 0%,
       rgb(from var(--accent-seed) r g b / 0%) 85%
     ),
@@ -453,14 +453,14 @@
       1100px 900px at 8% 108%,
       light-dark(
         hsl(from var(--accent-seed) calc(h + 42) calc(s * 0.6) l / 7%),
-        hsl(from var(--accent-seed) calc(h + 42) calc(s * 0.6) l / 20%)
+        hsl(from var(--accent-seed) calc(h + 42) calc(s * 0.6) l / 1.5%)
       ) 0%,
       hsl(from var(--accent-seed) calc(h + 42) calc(s * 0.6) l / 0%) 80%
     ),
     radial-gradient(
       1300px 1000px at 50% -12%,
       transparent 0%,
-      light-dark(rgba(15, 17, 21, 0.02), rgba(0, 0, 0, 0.46)) 100%
+      light-dark(rgba(15, 17, 21, 0.02), rgba(0, 0, 0, 0.24)) 100%
     );
 }
 
@@ -471,7 +471,7 @@
  * stops being noise. This is its own unblurred sibling instead, an SVG
  * fractal-noise tile repeated over the viewport.
  *
- * `soft-light`, not `overlay`, and the opacity is real (0.55+), not a
+ * `soft-light`, not `overlay`, and the opacity stays deliberately low (0.08+), not a
  * near-zero dusting. `overlay` barely moves a pixel that already sits near
  * white or near black — exactly the tonal range this gradient spends most
  * of its area in — so at any opacity it left every ring the gradient
@@ -487,7 +487,7 @@
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  opacity: light-dark(0.55, 0.6);
+  opacity: light-dark(0.04, 0.04);
   mix-blend-mode: soft-light;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: 180px 180px;
@@ -549,13 +549,13 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --glass-optics: saturate(2.1);
-    --glass-optics-strong: saturate(2.3);
+    --glass-optics: saturate(1.10);
+    --glass-optics-strong: saturate(1.14);
   }
 }
 :root[data-theme="dark"] {
-  --glass-optics: saturate(2.1);
-  --glass-optics-strong: saturate(2.3);
+  --glass-optics: saturate(1.10);
+  --glass-optics-strong: saturate(1.14);
 }
 
 /* Level 1 — the shell. Quietest material; it must recede.
@@ -580,8 +580,8 @@
     var(--color-glass-1);
   backdrop-filter: blur(var(--blur-glass-strong)) var(--glass-optics);
   box-shadow:
-    inset 0 1px 0 light-dark(rgb(255 200 170 / 0.22), rgb(255 200 170 / 0.03)),
-    inset 0 -1px 0 light-dark(rgb(170 200 255 / 0.16), rgb(170 200 255 / 0.025)),
+    inset 0 1px 0 light-dark(rgb(255 255 255 / 0.20), rgb(255 255 255 / 0.035)),
+    inset 0 -1px 0 light-dark(rgb(210 220 235 / 0.12), rgb(180 195 220 / 0.02)),
     var(--shadow-highlight);
 }
 
@@ -610,7 +610,7 @@
      Without the bottom edge the surface reads as a flat cut-out. */
   box-shadow:
     inset 0 1px 0 light-dark(rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.045)),
-    inset 2px 0 0 color-mix(in oklab, var(--accent-seed) 42%, transparent),
+    inset 1px 0 0 color-mix(in oklab, var(--accent-seed) 6%, transparent),
     inset 0 -1px 0 light-dark(rgb(16 18 22 / 0.05), rgb(0 0 0 / 0.22)),
     var(--shadow-sm);
 }
@@ -647,8 +647,8 @@
      that keeps this off .glass-card applies here too: cheap because rare. */
   box-shadow:
     inset 0 1px 0 light-dark(rgb(255 255 255 / 0.9), rgb(255 255 255 / 0.05)),
-    inset 0 1.5px 0 light-dark(rgb(255 205 175 / 0.18), rgb(255 205 175 / 0.025)),
-    inset 0 -1px 0 light-dark(rgb(175 205 255 / 0.14), rgb(175 205 255 / 0.02)),
+    inset 0 1.5px 0 light-dark(rgb(255 255 255 / 0.22), rgb(255 255 255 / 0.035)),
+    inset 0 -1px 0 light-dark(rgb(200 215 235 / 0.12), rgb(175 195 220 / 0.02)),
     var(--shadow-lg);
 }
 
