@@ -103,16 +103,15 @@ Conflict resolution: **Safety > Truth > Coherence > Usefulness > Simplicity > Fl
 Every concrete technology choice must cite its authority using one of:
 `Authority: V2-ADR-[N]` | `Authority: Bible V2 [section]` | `Authority: Spec V2 [REQ-ID]` | `Authority: EXISTING INFRASTRUCTURE` | `Authority: IMPLEMENTATION DECISION REQUIRED`.
 
-## Experience System — approved visual direction (ADR-024, partially supersedes ADR-023/ADR-012)
+## Experience System — approved visual direction (ADR-026, partially supersedes ADR-024/ADR-023/ADR-012)
 
-**Two-treatment material system (ADR-024, 2026-09-18).** Structural chrome (sidebar, top bar,
-command palette, modals, dropdowns/popovers, the mobile nav sheet) uses the glass classes —
-`.glass-shell` / `.glass-control` / `.glass-overlay` — reactivated from the token system ADR-023
-never deleted, only stopped defaulting to. Dense content (data tables, forms, record/prospect
-cards, `Panel`/`Surface` holding record content, `PermissionDenied`) stays exactly as ADR-023
-specified: `.verity-solid`, opaque, hairline border, soft non-tinted shadow. **Do not glass a
-table, a form, or long-form text — do not solid a floating/transient surface.** Depth on chrome
-comes from translucency + blur; depth on content comes from tonal contrast, spacing and shadow.
+**Layered material system (ADR-026, 2026-09-19).** Structural chrome and ordinary cards/panels
+use the glass classes — `.glass-shell` / `.glass-card` / `.glass-control` / `.glass-overlay` —
+with atmospheric color, translucent gradients, blur, edge light and controlled elevation. Dense
+tables, forms, long-form text and destructive confirmation may use `.verity-solid` when opacity
+improves reading or decision safety. **Do not glass individual rows, badges or status dots.**
+Depth comes from a small number of deliberate material layers, never decorative gradients on
+every child.
 
 - **Default accent is Gold `#D4A017`** (ADR-024, reverting ADR-012's Verity Mint default) — one
   of the ten existing presets (Verity Mint, Warm Sand Gold, Champagne, Ocean Blue, Slate Blue,
@@ -215,13 +214,10 @@ workflows, routes, or terminology, and never add a compatibility layer for them.
 5. `SpecRefTarget` enum: `VEHICLE_BRAND`, `VEHICLE_MODEL`, `VEHICLE_GENERATION`, `DESIGN`, `COLOR`
 6. `SystemRole` enum: `OWNER`, `CO_OWNER`, `MANAGER`, `SUPERVISOR`, `WORKER`, `STORE_MANAGER` — use dynamic Verb+Entity+Scope permissions
 7. Entities `ProductionBatch`, `BomMode`, `QCTemplate`
-8. `backdrop-filter`/blur (`.glass-shell`/`.glass-control`/`.glass-overlay`) on a **dense
-   content** surface (tables, forms, record/prospect cards, long-form text) — **ADR-024**
-   (2026-09-18) reactivated glass for structural chrome only (sidebar, top bar, command
-   palette, modals, dropdowns), keeping ADR-023's solid-on-content call in force. The inverse
-   is equally forbidden: `.verity-solid` on chrome that should read as a floating material
-   layer. Check ADR-024's surface table before choosing either. (`.verity-glass` as a bare
-   class name remains forbidden as before — it was never the pattern in force.)
+8. `backdrop-filter`/blur on individual rows, badges or status dots; use the bounded material
+  classes (`.glass-shell`/`.glass-card`/`.glass-control`/`.glass-overlay`) and follow ADR-026.
+  Dense tables, forms, long-form text and destructive confirmation may remain `.verity-solid`.
+  (`.verity-glass` as a bare class name remains forbidden.)
 9. Routes `/owner`, `/worker`, `/inspector`, `/supervisor`, `/verity` (legacy role-based routing)
 10. `@@map` to VEDA schema naming
 
@@ -274,14 +270,21 @@ any requirement written because it is "common in ERP/SaaS" rather than traced to
   the Experience System typography clause below. `design/verity asthetics.png` (mint-primary)
   is now superseded by this file on every question, not just accent default.
 
+- **ADR-026** (2026-09-19) extends the glass material from structural chrome to ordinary
+  cards and panels. `Surface` defaults to `.glass-card`; dense tables, forms, long-form text
+  and destructive confirmation may explicitly use `.verity-solid` when opacity improves
+  reading or decision safety. The atmospheric field and grain are active visual structure.
+  Glass remains capped at shell/card/control/overlay and is never applied to individual rows,
+  badges or status dots. Full text: `verity-spec/17_decisions/adr/adr-026.md`.
+
   **This list is a curated highlight reel, not the complete register, and is stale beyond what
   it explicitly names.** The canonical ADR register is `verity-spec/17_decisions/adr/`
-  (`adr-001.md`…`adr-024.md` as of 2026-09-18) — ADR-013 (Global HQ Operator Security Model),
+  (`adr-001.md`…`adr-026.md` as of 2026-09-19) — ADR-013 (Global HQ Operator Security Model),
   ADR-014 (DEC-001 scope), ADR-015 (scheduled work trigger), ADR-016 (the scheduler may enumerate
   tenants), ADR-017 (below), ADR-018 (extract a generic Trading capability out of plywood),
   ADR-019 (below), ADR-020 (OIDC browser identity), ADR-021 (capability pins), and ADR-022
   (Industry Packs as signed artifacts) are all ACCEPTED there and are not summarized here.
-  ADR-023/024 (above) are summarized because they directly override this section's own
+  ADR-023/024/026 (above) are summarized because they directly override this section's own
   Experience System content. Check the register before assuming an ADR number is unused, the
   mistake that made ADR-017 necessary as a correction to begin with.
 - **ADR-017** The AI/assistant channel (`PolicyChannel: "agent"` in `policy.ts`) executes every

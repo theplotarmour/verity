@@ -76,12 +76,12 @@ metadata-driven `DynamicForm` now uses the same shared `Field`, `Input`,
 `Select`, and `Checkbox` primitives as product forms. This is a governance
 completion extension, not a re-opening of the six ADR-025 deliverables.
 
-**Reference-screen correction, 2026-09-18:** The initial implementation
-mistook the supplied `design/newlighttheme.jpeg` and `design/newdarktheme.jpeg`
-for loose token inspiration. Their composition is now the visual baseline for
-the shared shell: blue-only accent for this phase, neutral canvas, 240px
-sidebar, compact left-aligned search, restrained panel elevation, and no
-coloured atmospheric haze. Exact Liquid Glass remains explicitly deferred.
+**Reference-direction update, 2026-09-19:** The product owner has now explicitly
+superseded the prior flat-content limitation. ADR-026 adopts layered glass for
+ordinary cards and panels, reactivates the atmospheric field and grain, and keeps
+`.verity-solid` for dense content where opacity improves reading. The accent remains
+configurable; this change is about material, depth, visual anchors and page-level
+craft, not hard-coded color.
 
 **Global audit, 2026-09-18:** The detailed gap assessment is now maintained at
 `docs/audits/2026-09-18-apple-platform-ui-ux-audit.md`. Its P0 order is

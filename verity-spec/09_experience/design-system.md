@@ -30,7 +30,7 @@ This document details the `experience` system specifications for `Design System`
 
 ## 2. Apple-Craft Component Pattern Library
 
-Authority: `Bible V4 §1` (UX Constitution), `ADR-024` (material/accent/motion), `ADR-025`
+Authority: `Bible V4 §1` (UX Constitution), `ADR-024` (accent/motion), `ADR-025` (patterns), `ADR-026`
 (the six named component patterns below). Task 115.
 
 ### REQ-EXPERIENCE-DESIGNSYSTEM-004
@@ -75,6 +75,23 @@ Authority: `Bible V4 §1` (UX Constitution), `ADR-024` (material/accent/motion),
     full-width tappable rows that populate (not auto-send) the input, rather than a bulleted
     list of examples.
 *   **Authority**: `ADR-025` pattern 6 (AI-assistant suggested-prompt rows).
+*   **Status**: `[DECIDED]`
+
+### REQ-EXPERIENCE-DESIGNSYSTEM-015
+*   **Requirement**: Ordinary cards and panels use the shared layered glass material with
+    atmospheric color, translucent gradient, blur, edge light and controlled elevation. Dense
+    tables, forms, long-form text and destructive confirmation may use the shared opaque
+    material when it improves reading or decision safety; individual rows, badges and status
+    dots never receive glass blur.
+*   **Authority**: `ADR-026` (layered glass content surfaces and visual field).
+*   **Status**: `[DECIDED]`
+
+### REQ-EXPERIENCE-DESIGNSYSTEM-016
+*   **Requirement**: The visual field uses the configurable accent seed and semantic tokens for
+    color, supports light/dark parity, preserves WCAG AA, and honors reduced-motion and
+    reduced-transparency preferences. Visual anchors such as charts, icon chips, atmospheric
+    fields and empty states must reinforce the page's operational purpose.
+*   **Authority**: `ADR-026` (layered glass content surfaces and visual field).
 *   **Status**: `[DECIDED]`
 
 ---

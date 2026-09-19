@@ -60,9 +60,10 @@ The governing spec now defines consistent page, record, list, form, selection,
 commit, and state behaviour. Continue future UI work through shared primitives;
 do not introduce page-local entries, selects, table controls, or status patterns
 without first checking `verity-spec/09_experience/design-system.md` §3 and its
-forms/tables companions. Exact iOS Liquid Glass remains deferred by product
-direction; Apple craft currently means hierarchy, spacing, motion restraint, and
-direct, trustworthy controls.
+forms/tables companions. Apple craft now includes the approved layered-glass rollout
+(ADR-026): hierarchy, spacing, motion restraint, atmospheric depth, purposeful color
+fields and direct, trustworthy controls. Dense content may remain solid for legibility;
+rows and status indicators stay quiet.
 
 ### 2. Operational launch verification — Outreach manual system of record
 

@@ -13,9 +13,9 @@ import { Icon, type IconName } from "./icons";
  * The composition rules the board sets, encoded here once so that individual
  * screens do not each re-decide them:
  *
- *   • The page is Sand 100 and surfaces are pure white. A card is a hairline, a
- *     14px radius and white — it needs no shadow to read as raised, because the
- *     ground beneath it is warm and the card is not.
+ *   • The page is a layered material field. A card is a translucent pane with a
+ *     hairline, a 14px radius and controlled depth; dense controls can opt back
+ *     into the opaque `verity-solid` treatment when text density demands it.
  *   • Hierarchy comes from SIZE, SPACE and POSITION. Headings are Light (300).
  *     Semibold appears exactly twice in the whole system: Heading 3, and the
  *     primary button label.
@@ -44,15 +44,15 @@ function cx(...parts: Array<string | false | undefined>): string {
 export function Surface({
   children,
   bordered = true,
-  solid = true,
+  solid = false,
   className,
 }: {
   children: ReactNode;
   bordered?: boolean;
   /**
-   * ADR-023: structured minimalism, solid by default. Opaque fill, hairline
-   * border, soft shadow — the platform's one material. Pass `solid={false}`
-   * only to keep the deprecated ADR-011 glass on a surface not yet migrated.
+   * ADR-026: layered glass is the default card/panel material. Pass
+   * `solid={true}` for dense tables, long-form text, forms, or destructive
+   * confirmation where opacity materially improves reading and decision safety.
    */
   solid?: boolean;
   className?: string;

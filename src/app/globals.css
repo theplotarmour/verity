@@ -661,36 +661,28 @@
   box-shadow: inset 0 1px 0 light-dark(rgb(255 255 255 / 0.7), rgb(255 255 255 / 0.05));
 }
 
-/* Reference-board material pass (2026-09-18).
+/* ADR-026 material rollout (2026-09-19).
  *
- * Operational density reads better on stable, quiet surfaces than through a
- * large atmospheric field. Keep the semantic class names so existing modules
- * need no bespoke rewrite, but make each level behave like the supplied iOS
- * light/dark boards: a distinct sidebar, opaque content panels, restrained
- * borders and no blur competing with table rows or form controls.
+ * The earlier reference-board pass flattened content cards after validating
+ * the shell. The product direction has now changed: content cards and panels
+ * use the same layered material language as the shell, while dense tables,
+ * long-form text, forms and confirmations may opt into `verity-solid`.
+ * Keep glass capped at shell/card/control/overlay; never apply it to rows or
+ * badges. The atmospheric field and grain are intentional visual structure,
+ * not decoration attached to individual components.
  */
-.glass-shell {
-  background: var(--color-chrome);
-  backdrop-filter: none;
-  box-shadow: none;
+.verity-solid {
+  background:
+    linear-gradient(
+      180deg,
+      light-dark(rgb(255 255 255 / 0.78), rgb(255 255 255 / 0.065)) 0%,
+      light-dark(rgb(255 255 255 / 0.38), rgb(255 255 255 / 0.025)) 100%
+    ),
+    var(--color-surface);
+  box-shadow:
+    inset 0 1px 0 light-dark(rgb(255 255 255 / 0.72), rgb(255 255 255 / 0.06)),
+    var(--shadow-sm);
 }
-
-.glass-card,
-.glass-control,
-.glass-overlay {
-  background: var(--color-surface);
-  backdrop-filter: none;
-  border-color: var(--color-line);
-  box-shadow: none;
-}
-
-.glass-overlay { box-shadow: var(--shadow-lg); }
-
-/* The approved boards are intentionally flat behind their surfaces. Keep the
- * nodes mounted for compatibility with the root layout, but do not paint the
- * old glass-era bloom or grain. */
-.verity-atmosphere,
-.verity-grain { display: none; }
 
 .verity-scrim { background: light-dark(rgb(24 24 27 / 0.16), rgb(6 6 8 / 0.5)); }
 
