@@ -17,6 +17,7 @@ import {
   weeklyPurchaseTotals,
   weeklySalesTotals,
 } from "@/server/capabilities/plywood";
+import { metricsHistory } from "@/server/capabilities/trading";
 import { SetupChecklist } from "./SetupChecklist";
 import { loadPanel } from "@/components/ui/panelState";
 import { StatCard } from "@/components/ui/business/StatCard";
@@ -100,6 +101,7 @@ async function OverviewPage() {
     activityPanel,
     customersPanel,
     itemsPanel,
+    historyPanel,
   ] = await Promise.all([
     loadPanel(executeQuery(actor, marginReport, { sinceDays: 30 })),
     loadPanel(executeQuery(actor, lowStock, {})),
@@ -111,6 +113,7 @@ async function OverviewPage() {
     loadPanel(executeQuery(actor, recentActivityFeed, { limit: 8 })),
     loadPanel(executeQuery(actor, topCustomers, {})),
     loadPanel(executeQuery(actor, topItems, {})),
+    loadPanel(executeQuery(actor, metricsHistory, { days: 14 })),
   ]);
 
   const margin = marginPanel.status === "ok" ? marginPanel.data : null;
@@ -123,6 +126,13 @@ async function OverviewPage() {
   const activity = activityPanel.status === "ok" ? activityPanel.data : [];
   const customers = customersPanel.status === "ok" ? customersPanel.data : [];
   const items = itemsPanel.status === "ok" ? itemsPanel.data : [];
+  // Real daily snapshots only (Task 100) — never fewer than 2 points, so an
+  // empty or single-row history (a tenant too new for the capture job to
+  // have run twice) renders no sparkline rather than a flat or fake one.
+  const history = historyPanel.status === "ok" ? historyPanel.data : [];
+  const stockValueTrend = history.length > 1 ? history.map((h) => h.stockValuePaise) : undefined;
+  const receivablesTrend = history.length > 1 ? history.map((h) => h.receivablesPaise) : undefined;
+  const payablesTrend = history.length > 1 ? history.map((h) => h.payablesPaise) : undefined;
 
   const businessName = await withTenant(actor.tenantId, async (tx) => {
     const profile = await tx.tradingBusinessProfile.findFirst({
@@ -275,6 +285,11 @@ async function OverviewPage() {
             <div>
               <p className="tabular m-0 text-[20px] leading-none text-text">{rupees(c.stockValuePaise)}</p>
               <p className="m-0 mt-1 text-[12px] text-text-tertiary">Inventory value</p>
+              {stockValueTrend && (
+                <div className="mt-2 h-6 w-20">
+                  <BarStrip values={stockValueTrend} label="Inventory value, last 14 days" height={24} />
+                </div>
+              )}
             </div>
             <div>
               <p className="tabular m-0 text-[20px] leading-none text-text">{c.lowStockBoards}</p>
@@ -296,6 +311,11 @@ async function OverviewPage() {
             <div>
               <p className="tabular m-0 text-[20px] leading-none text-text">{rupees(c.receivablesPaise)}</p>
               <p className="m-0 mt-1 text-[12px] text-text-tertiary">Owed to us</p>
+              {receivablesTrend && (
+                <div className="mt-2 h-6 w-20">
+                  <BarStrip values={receivablesTrend} label="Owed to us, last 14 days" height={24} />
+                </div>
+              )}
             </div>
             <div>
               <p className="tabular m-0 text-[20px] leading-none text-danger">{rupees(c.overdueReceivablesPaise)}</p>
@@ -304,6 +324,11 @@ async function OverviewPage() {
             <div>
               <p className="tabular m-0 text-[20px] leading-none text-text">{rupees(c.payablesPaise)}</p>
               <p className="m-0 mt-1 text-[12px] text-text-tertiary">Owed by us</p>
+              {payablesTrend && (
+                <div className="mt-2 h-6 w-20">
+                  <BarStrip values={payablesTrend} label="Owed by us, last 14 days" height={24} />
+                </div>
+              )}
             </div>
             <div>
               <p className="tabular m-0 text-[20px] leading-none text-success">{rupees(c.collectionsTodayPaise)}</p>
