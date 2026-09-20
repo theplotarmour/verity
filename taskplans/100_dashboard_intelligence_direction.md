@@ -22,12 +22,17 @@ corrected 2026-09-17. **The model itself was later renamed
 extraction — same table, same data, just no longer plywood-specific in
 name. `pending-metric-snapshot-migration.sql` no longer exists at the repo
 root; its content is what's now in the proper `prisma/migrations/` entry.
-**Sparklines/trend charts themselves are still NOT built** — a real trend
-needs real elapsed days of accumulated history, which no build session can
-manufacture without violating `charts.tsx`'s own "no sample data, no
-smoothing, no projected series" rule. That part waits on time passing with
-the capture job running (now confirmed actually running against real
-data since 2026-09-04), not on more code.
+**Sparklines: BUILT 2026-09-20.** The prerequisite this file named
+(real elapsed days of accumulated history) is now satisfied — confirmed
+via `DIRECT_URL` before writing any UI: Shri Ganesh has 5 daily
+snapshots, the audit tenant has 14, both real, both from the capture
+job running since 2026-09-04. Wired `metricsHistory` into `/overview`'s
+existing Inventory Snapshot / Money at a Glance panels (inventory
+value, owed-to-us, owed-by-us) using the already-built `BarStrip`
+primitive — no new chart library, matching `StatCard`'s own `weeks`
+prop pattern exactly. Gated on `history.length > 1` so a tenant too new
+for the job to have run twice renders no sparkline, never a fake or
+flat one.
 
 **shadcn/ui adoption: decided NO.** Verity keeps its existing hand-built
 component layer as the only one. Reasoning: the file's own analysis
