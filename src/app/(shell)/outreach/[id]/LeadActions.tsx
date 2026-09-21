@@ -75,6 +75,7 @@ export function LeadActions({
   const [reassignOpen, setReassignOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [reactivateOpen, setReactivateOpen] = useState(false);
+  const [stagePick, setStagePick] = useState<string>("");
 
   const advance = (toState: string, rejectionReason?: string) => {
     setFailure(null);
@@ -105,29 +106,45 @@ export function LeadActions({
           </Button>
         )}
         {isEscalated && <Badge tone="accent">Escalated</Badge>}
-        {/* Primary row (Task 114 P0.3): Log activity plus the normal,
-            non-terminal pipeline moves. Administrative and terminal actions
-            move to the overflow menu below — they're reachable, not the
-            first thing an operator sees. */}
-        {canEdit &&
-          !isTerminal &&
-          transitions
-            .filter((t) => !TERMINAL_STATES.includes(t.key))
-            .map((t) => {
-              const blocked = t.key === "closed_won" && closedWonBlocked;
-              return (
-                <Button
-                  key={t.key}
-                  size="sm"
-                  variant="secondary"
-                  disabled={pending || blocked}
-                  title={blocked ? "Cumulative advance received has not cleared the threshold yet" : undefined}
-                  onClick={() => advance(t.key)}
-                >
-                  {t.key.replace(/_/g, " ")}
-                </Button>
-              );
-            })}
+        {/* Task: stage change was previously one click per option — a
+            misclick fired the move immediately, and the state machine only
+            runs forward (INV-002-adjacent: no undo transition exists). A
+            dropdown + explicit Update requires two deliberate actions
+            before anything moves, same as the terminal-reason flow below. */}
+        {canEdit && !isTerminal && (() => {
+          const forwardMoves = transitions.filter((t) => !TERMINAL_STATES.includes(t.key));
+          if (forwardMoves.length === 0) return null;
+          const blocked = stagePick === "closed_won" && closedWonBlocked;
+          return (
+            <div className="flex items-center gap-2">
+              <Select
+                aria-label="Move to stage"
+                value={stagePick}
+                onChange={(e) => setStagePick(e.target.value)}
+                disabled={pending}
+              >
+                <option value="">Move to stage…</option>
+                {forwardMoves.map((t) => (
+                  <option key={t.key} value={t.key}>
+                    {t.key.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </Select>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={pending || !stagePick || blocked}
+                title={blocked ? "Cumulative advance received has not cleared the threshold yet" : undefined}
+                onClick={() => {
+                  advance(stagePick);
+                  setStagePick("");
+                }}
+              >
+                Update
+              </Button>
+            </div>
+          );
+        })()}
         {canEdit && (
           <OverflowMenu>
             {!isTerminal && (

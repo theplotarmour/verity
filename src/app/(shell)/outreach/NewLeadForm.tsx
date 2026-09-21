@@ -122,6 +122,9 @@ export function NewLeadForm({
             });
           }}
         >
+          <div className="sm:col-span-2 -mb-1 text-[11px] font-medium uppercase tracking-wide text-text-tertiary">
+            Qualification
+          </div>
           <div className="sm:col-span-2">
             <Field label="What they do" htmlFor="whatTheyDo" hint="A one-line business description">
               <Textarea
@@ -214,6 +217,9 @@ export function NewLeadForm({
           submitStep1(new FormData(e.currentTarget), true);
         }}
       >
+        <div className="sm:col-span-2 -mb-1 text-[11px] font-medium uppercase tracking-wide text-text-tertiary">
+          Company
+        </div>
         <Field label="Company" htmlFor="companyName" required>
           <Input
             id="companyName"
@@ -279,7 +285,11 @@ export function NewLeadForm({
             ))}
           </Select>
         </Field>
-        <Field label="Team" htmlFor="teamId">
+
+        <div className="sm:col-span-2 -mb-1 mt-1 text-[11px] font-medium uppercase tracking-wide text-text-tertiary">
+          Assignment
+        </div>
+        <Field label="Team" htmlFor="teamId" required>
           <Select id="teamId" value={teamId} onChange={(e) => setTeamId(e.target.value)}>
             {teams.map((t) => (
               <option key={t.id} value={t.id}>
@@ -303,6 +313,9 @@ export function NewLeadForm({
             ))}
           </Select>
         </Field>
+        <div className="sm:col-span-2 -mb-1 mt-1 text-[11px] font-medium uppercase tracking-wide text-text-tertiary">
+          Why this prospect
+        </div>
         <div className="sm:col-span-2">
           <Field label="Why now" htmlFor="whyRelevant" required hint="1–2 sentences — a bare company name is not a qualified lead">
             <Textarea
