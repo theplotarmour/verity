@@ -1,9 +1,7 @@
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
-import Link from "next/link";
-import { PageHeader, Panel, EmptyState, Button } from "@/components/ui/primitives";
+import { PageHeader, Panel } from "@/components/ui/primitives";
 import { clientDirectory, requireOperator } from "@/server/platform/operator";
-import { enterClientAction } from "@/server/actions/hq";
 import { CreateClientForm } from "./CreateClientForm";
+import { ClientsTable } from "./ClientsTable";
 
 export const dynamic = "force-dynamic";
 
@@ -31,71 +29,7 @@ export default async function HqClientsPage() {
       </div>
 
       <Panel title={`${clients.length} client${clients.length === 1 ? "" : "s"}`} flush>
-        {clients.length === 0 ? (
-          <EmptyState
-            compact
-            title="No clients yet"
-            description="Create one above. Nothing is provisioned automatically, and no demo client is created for you."
-          />
-        ) : (
-          <table className="w-full border-collapse">
-            <caption className="sr-only">Clients on this installation</caption>
-            <thead>
-              <tr>
-                {["Client", "People", "Organizations", "Created", "", ""].map((h, i) => (
-                  <th
-                    key={h || i}
-                    className={
-                      "border-b border-line px-3 py-3 text-[12px] font-normal text-text-tertiary " +
-                      (i === 0 ? "text-left" : "text-right")
-                    }
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {clients.map((client) => (
-                <tr key={client.tenantId}>
-                  <td className="border-b border-line px-3 py-3 text-[14px]">
-                    <Link
-                      href={`/hq/clients/${client.tenantId}`}
-                      className="text-text no-underline hover:text-accent"
-                    >
-                      {client.name}
-                    </Link>
-                  </td>
-                  <td className="tabular border-b border-line px-3 py-3 text-right text-[14px]">
-                    {client.memberCount}
-                  </td>
-                  <td className="tabular border-b border-line px-3 py-3 text-right text-[14px]">
-                    {client.organizationCount}
-                  </td>
-                  <td className="border-b border-line px-3 py-3 text-right text-[13px] text-text-secondary">
-                    {client.createdAt.toISOString().slice(0, 10)}
-                  </td>
-                  <td className="border-b border-line px-3 py-3 text-right">
-                    <Link
-                      href={`/hq/clients/${client.tenantId}`}
-                      className="text-[13px] text-text-secondary no-underline hover:text-text"
-                    >
-                      Administer
-                    </Link>
-                  </td>
-                  <td className="border-b border-line px-3 py-3 text-right">
-                    <form action={enterClientAction}>
-                      <input type="hidden" name="tenantId" value={client.tenantId} />
-                      <Button type="submit" size="sm">
-                        Enter client
-                      </Button>
-                    </form>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <ClientsTable clients={clients} />
       </Panel>
     </>
   );
