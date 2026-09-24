@@ -1,6 +1,5 @@
 "use client";
 
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
 import { CommandButton } from "@/components/ui/CommandAccess";
 
 import Link from "next/link";
@@ -18,6 +17,7 @@ import {
   StatRow,
 } from "@/components/ui/primitives";
 import { FormCombobox } from "@/components/ui/Combobox";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Modal } from "@/components/ui/Modal";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
@@ -296,76 +296,37 @@ export function StockBoard({
       {short.length > 0 && (
         <div className="mb-4">
           <Panel title="At or below reorder level">
-            <div className="-mx-3 overflow-x-auto px-3">
-              <table className="w-full min-w-[560px] border-collapse">
-                <caption className="sr-only">
-                  Boards at or below their reorder level
-                </caption>
-                <thead>
-                  <tr>
-                    {["Board", "Available", "Reorder at", ""].map(
-                      (heading, index) => (
-                        <th
-                          key={heading}
-                          className={
-                            "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                            (index === 0 ? "text-left" : "text-right")
-                          }
-                        >
-                          {heading}
-                        </th>
-                      ),
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {short.map((row) => (
-                    <tr key={row.productId}>
-                      <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                        {/* §71 — the name is the way in. Low stock leads to the
-                          product, where the reorder decision has its context. */}
-                        <Link
-                          href={`/catalogue/${row.productId}`}
-                          className="text-text no-underline hover:underline"
-                        >
-                          {row.brandName} · {row.productName}
-                        </Link>
-                      </td>
-                      {/* AVAILABLE, not on hand — that is the figure the
-                          reorder rule actually tests, and a header naming the
-                          other one describes a number this row is not about.
-                          A board with 100 on hand and 100 reserved is short,
-                          and "On hand 100" beside "Reorder at 25" reads as a
-                          mistake. */}
-                      <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] text-warning">
-                        {row.availableUnits} {row.unitLabel}
-                        {row.reservedUnits > 0 && (
-                          <span className="ml-1 text-[12px] text-text-tertiary">
-                            ({row.onHandUnits} on hand, {row.reservedUnits}{" "}
-                            reserved)
-                          </span>
-                        )}
-                      </td>
-                      <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                        {row.reorderLevelUnits}
-                      </td>
-                      {/* §17: a low-stock row exists so somebody buys more.
-                          Without the action it is a notification that reports a
-                          problem and leaves the reader to go and find where to
-                          solve it. */}
-                      <td className="whitespace-nowrap border-b border-line px-3 py-2 text-right">
-                        <Link
-                          href="/purchases"
-                          className="text-[13px] text-accent-ink no-underline hover:underline"
-                        >
-                          Order more →
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              columns={[
+                // §71 — the name is the way in. Low stock leads to the
+                // product, where the reorder decision has its context.
+                { key: "board", header: "Board", sortable: true, variant: "link", href: "/catalogue/{productId}" },
+                // AVAILABLE, not on hand — that is the figure the reorder
+                // rule actually tests, and a header naming the other one
+                // describes a number this row is not about. A board with 100
+                // on hand and 100 reserved is short, and "On hand 100" beside
+                // "Reorder at 25" reads as a mistake.
+                { key: "available", header: "Available", numeric: true, sortable: true },
+                { key: "reorderAt", header: "Reorder at", numeric: true, sortable: true },
+                // §17: a low-stock row exists so somebody buys more. Without
+                // the action it is a notification that reports a problem and
+                // leaves the reader to go and find where to solve it.
+                { key: "action", header: "", variant: "link", href: "/purchases" },
+              ]}
+              rows={short.map((row) => ({
+                id: row.productId,
+                productId: row.productId,
+                board: `${row.brandName} · ${row.productName}`,
+                available:
+                  `${row.availableUnits} ${row.unitLabel}` +
+                  (row.reservedUnits > 0
+                    ? ` (${row.onHandUnits} on hand, ${row.reservedUnits} reserved)`
+                    : ""),
+                reorderAt: row.reorderLevelUnits,
+                action: "Order more →",
+              }))}
+              caption="Boards at or below their reorder level"
+            />
             <p className="mb-0 mt-3 text-[12px] text-text-tertiary">
               Counted across every godown. A board short in one and plentiful in
               another is a transfer, not a purchase.
@@ -406,56 +367,28 @@ export function StockBoard({
                 </div>
               }
             >
-              <div className="-mx-3 overflow-x-auto px-3">
-                <table className="w-full min-w-[560px] border-collapse">
-                  <caption className="sr-only">Stock in {godown.name}</caption>
-                  <thead>
-                    <tr>
-                      {["Board", "Grade", "On hand", "Avg cost", "Value"].map(
-                        (heading, index) => (
-                          <th
-                            key={heading}
-                            className={
-                              "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                              (index <= 1 ? "text-left" : "text-right")
-                            }
-                          >
-                            {heading}
-                          </th>
-                        ),
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {godown.rows.map((row) => (
-                      <tr key={`${row.productId}-${row.locationId}`}>
-                        <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                          {/* §13 — clicking a quantity opens why that quantity
-                            exists, scoped to the godown of this row. */}
-                          <Link
-                            href={`/stock/${row.productId}?godown=${row.locationId}`}
-                            className="text-text no-underline hover:underline"
-                          >
-                            {row.brandName} · {row.productName}
-                          </Link>
-                        </td>
-                        <td className="border-b border-line px-3 py-2 text-[13px] text-text-secondary">
-                          {row.grade}
-                        </td>
-                        <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                          {row.qtyUnits} {row.unitLabel}
-                        </td>
-                        <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                          {rupees(row.avgUnitCostPaise)}
-                        </td>
-                        <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                          {rupeesRound(row.valuePaise)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                columns={[
+                  // §13 — clicking a quantity opens why that quantity
+                  // exists, scoped to the godown of this row.
+                  { key: "board", header: "Board", sortable: true, variant: "link", href: "/stock/{productId}?godown={locationId}" },
+                  { key: "grade", header: "Grade", sortable: true },
+                  { key: "onHand", header: "On hand", numeric: true, sortable: true },
+                  { key: "avgCost", header: "Avg cost", numeric: true, sortable: true },
+                  { key: "value", header: "Value", numeric: true, sortable: true },
+                ]}
+                rows={godown.rows.map((row) => ({
+                  id: `${row.productId}-${row.locationId}`,
+                  productId: row.productId,
+                  locationId: row.locationId,
+                  board: `${row.brandName} · ${row.productName}`,
+                  grade: row.grade,
+                  onHand: `${row.qtyUnits} ${row.unitLabel}`,
+                  avgCost: rupees(row.avgUnitCostPaise),
+                  value: rupeesRound(row.valuePaise),
+                }))}
+                caption={`Stock in ${godown.name}`}
+              />
             </Panel>
           ))}
         </div>

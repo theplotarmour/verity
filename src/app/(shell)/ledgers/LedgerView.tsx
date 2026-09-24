@@ -1,6 +1,5 @@
 "use client";
 
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
 import { CommandButton } from "@/components/ui/CommandAccess";
 
 import { useState, useTransition } from "react";
@@ -17,6 +16,7 @@ import {
   StatRow,
 } from "@/components/ui/primitives";
 import { Combobox } from "@/components/ui/Combobox";
+import { DataTable } from "@/components/ui/DataTable";
 import { Modal, ModalCancel } from "@/components/ui/Modal";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
@@ -223,103 +223,59 @@ export function LedgerView({
           </div>
 
           <Panel title="Ledger" flush={ledger.entries.length === 0}>
-            {ledger.entries.length === 0 ? (
-              <EmptyState
-                compact
-                title="Nothing recorded yet"
-                description="An entry appears when an invoice is raised or a payment is taken."
-              />
-            ) : (
-              <table className="w-full border-collapse">
-                <caption className="sr-only">
-                  Ledger entries, oldest first
-                </caption>
-                <thead>
-                  <tr>
-                    {[
-                      "Date",
-                      "Particulars",
-                      bothSides
-                        ? "Owed to us · paid by us"
-                        : isSupplier
-                          ? "We paid"
-                          : "They owe",
-                      bothSides
-                        ? "Owed to them · paid by them"
-                        : isSupplier
-                          ? "We owe"
-                          : "They paid",
-                      "Balance",
-                    ].map((heading, index) => (
-                      <th
-                        key={heading}
-                        className={
-                          "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                          (index <= 1 ? "text-left" : "text-right")
-                        }
-                      >
-                        {heading}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {ledger.entries.map((entry) => (
-                    <tr
-                      key={entry.id}
-                      className="transition-colors hover:bg-accent-subtle/40"
-                    >
-                      <td className="tabular border-b border-line px-3 py-2 text-[13px] text-text-secondary">
-                        {shortDate(entry.occurredAt)}
-                      </td>
-                      <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                        {entry.narration ?? "—"}
-                        {(entry.pending || bothSides) && (
-                          <span className="ml-2 text-[11px] uppercase tracking-wide text-text-tertiary">
-                            {bothSides
-                              ? entry.side === "customer"
-                                ? "sale"
-                                : "purchase"
-                              : ""}
-                            {bothSides && entry.pending ? " · " : ""}
-                            {entry.pending ? "not yet billed" : ""}
-                          </span>
-                        )}
-                      </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                        {entry.entryType === "debit"
-                          ? rupees(entry.amountPaise)
-                          : "—"}
-                      </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                        {entry.entryType === "credit"
-                          ? rupees(entry.amountPaise)
-                          : "—"}
-                      </td>
-                      {/* A signed figure under business labels is a trap. The
-                          columns say "We paid" and "We owe", and a balance
-                          reading "₹-70,000" beside "We owe ₹70,000" leaves the
-                          reader working out a sign convention nobody told them.
-                          The amount is absolute and a word says which way it
-                          points — the same treatment the summary above already
-                          uses. */}
-                      <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] text-text">
-                        {entry.runningBalancePaise === 0 ? (
-                          "Settled"
-                        ) : (
-                          <>
-                            {rupees(Math.abs(entry.runningBalancePaise))}{" "}
-                            <span className="text-[12px] text-text-tertiary">
-                              {balanceDirection(entry.runningBalancePaise)}
-                            </span>
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+            <DataTable
+              columns={[
+                { key: "date", header: "Date", sortable: true },
+                { key: "particulars", header: "Particulars", sortable: false },
+                {
+                  key: "debit",
+                  header: bothSides
+                    ? "Owed to us · paid by us"
+                    : isSupplier
+                      ? "We paid"
+                      : "They owe",
+                  numeric: true,
+                  sortable: false,
+                },
+                {
+                  key: "credit",
+                  header: bothSides
+                    ? "Owed to them · paid by them"
+                    : isSupplier
+                      ? "We owe"
+                      : "They paid",
+                  numeric: true,
+                  sortable: false,
+                },
+                { key: "balance", header: "Balance", numeric: true, sortable: false },
+              ]}
+              rows={ledger.entries.map((entry) => {
+                const suffixParts: string[] = [];
+                if (bothSides) suffixParts.push(entry.side === "customer" ? "sale" : "purchase");
+                if (entry.pending) suffixParts.push("not yet billed");
+                const suffix = suffixParts.length > 0 ? ` (${suffixParts.join(" · ")})` : "";
+                return {
+                  id: entry.id,
+                  date: shortDate(entry.occurredAt),
+                  particulars: `${entry.narration ?? "—"}${suffix}`,
+                  debit: entry.entryType === "debit" ? rupees(entry.amountPaise) : "—",
+                  credit: entry.entryType === "credit" ? rupees(entry.amountPaise) : "—",
+                  // A signed figure under business labels is a trap. The
+                  // columns say "We paid" and "We owe", and a balance reading
+                  // "₹-70,000" beside "We owe ₹70,000" leaves the reader
+                  // working out a sign convention nobody told them. The
+                  // amount is absolute and a word says which way it points —
+                  // the same treatment the summary above already uses.
+                  balance:
+                    entry.runningBalancePaise === 0
+                      ? "Settled"
+                      : `${rupees(Math.abs(entry.runningBalancePaise))} ${balanceDirection(entry.runningBalancePaise)}`,
+                };
+              })}
+              caption="Ledger entries, oldest first"
+              emptyTitle="Nothing recorded yet"
+              emptyDescription="An entry appears when an invoice is raised or a payment is taken."
+            />
             <p className="mb-0 mt-3 text-[12px] text-text-tertiary">
               Append-only, enforced by the database. A correction is a new entry
               in the opposite direction, never an edit — which is why this
