@@ -114,7 +114,20 @@ async function OutreachPage({
       throw error;
     }
 
-    const [teams, leads, states, canCreate, canPostDirection, directionHistory, tenant] = await Promise.all([
+    const canPostDirection = await hasPermission(tx, actor.roleId, "Create", ENTITY_DIRECTION);
+    // Task 116 §8.2 — a Senior's default landing is "your team today," not
+    // this page's company-wide shape (which has nothing to show them: no
+    // direction-post rights, no company pulse, and an unfiltered cross-team
+    // lead list until they hand-craft a `?team=` URL themselves). Team
+    // Command (`/outreach/team`) already exists and already matches §8.2's
+    // checklist — same redirect pattern this page already uses for a
+    // Junior below, just for the other non-Core role. A Senior who follows
+    // an explicit `?team=` deep link (e.g. from Core's team-comparison
+    // drill-through) is left alone — that's a deliberate scoped visit to
+    // this page, not the bare landing this redirect targets.
+    if (!canPostDirection && !filters.team) return "senior" as const;
+
+    const [teams, leads, states, canCreate, directionHistory, tenant] = await Promise.all([
       tx.outreachTeam.findMany({
         where: { active: true },
         include: { _count: { select: { memberships: true } }, memberships: { where: { active: true } } },
@@ -130,7 +143,6 @@ async function OutreachPage({
       }),
       tx.stateDefinition.findMany({ where: { entityKey: ENTITY_LEAD }, orderBy: { key: "asc" } }),
       hasPermission(tx, actor.roleId, "Create", ENTITY_LEAD),
-      hasPermission(tx, actor.roleId, "Create", ENTITY_DIRECTION),
       tx.outreachDirection.findMany({ orderBy: { postedAt: "desc" }, take: 20 }),
       tx.tenant.findUnique({ where: { id: actor.tenantId }, select: { timeZone: true } }),
     ]);
@@ -269,13 +281,18 @@ async function OutreachPage({
 
   if (!data) return <PermissionDenied what="reading the outreach pipeline" />;
   if (data === "junior") redirect("/outreach/prospects");
+  if (data === "senior") redirect("/outreach/team");
   if (data === "forbidden") return <PermissionDenied what="viewing another team's pipeline" />;
 
   return (
     <>
       <PageHeader
         title="Outreach"
-        description="PlotArmour's client-acquisition pipeline — one lead database, one activity history, one pipeline. Company Core view."
+        description={
+          data.canPostDirection
+            ? "PlotArmour's client-acquisition pipeline — one lead database, one activity history, one pipeline. Company Core view."
+            : "PlotArmour's client-acquisition pipeline, scoped to one team."
+        }
         actions={
           data.pulse ? (
             <>
