@@ -1,5 +1,6 @@
 "use client";
 
+/* eslint-disable no-restricted-syntax -- print-only document table (REQ-019), same reasoning as BillView.tsx/InvoiceView.tsx: DataTable's on-screen chrome (filter/sort/pagination) has no place on a printed page a supplier receives. */
 import { CommandButton } from "@/components/ui/CommandAccess";
 
 import { useState, useTransition } from "react";
@@ -116,11 +117,62 @@ export function PurchaseOrderView({
 
   return (
     <>
+      {/* Supplier-facing purchase order — REQ-EXPERIENCE-DESIGNSYSTEM-019.
+          Unlike BillView/InvoiceView this page is a working desk (receiving
+          form, internal three-way match, activity log), not a document-only
+          view, so those stay print:hidden below and this block is the only
+          thing that prints: what a supplier actually needs to see. */}
+      <section className="hidden rounded-lg border border-line bg-surface p-8 print:block print:border-0 print:p-0">
+        <header className="mb-6 border-b border-line pb-4">
+          <h1 className="m-0 text-[20px] font-medium">Purchase Order — {title}</h1>
+          <p className="m-0 mt-1 text-[13px] text-text-secondary">
+            To: {order.supplierName} · Deliver to: {order.locationName} · Raised {day(order.createdAt)}
+          </p>
+        </header>
+        <table className="w-full border-collapse text-[13px]">
+          <caption className="sr-only">Order lines</caption>
+          <thead>
+            <tr className="border-b border-line text-left">
+              <th className="py-2 font-medium">Item</th>
+              <th className="py-2 font-medium">HSN</th>
+              <th className="py-2 text-right font-medium">Qty</th>
+              <th className="py-2 text-right font-medium">Rate</th>
+              <th className="py-2 text-right font-medium">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {order.lines.map((line) => (
+              <tr key={line.productId} className="border-b border-line">
+                <td className="py-2">{line.name}</td>
+                <td className="py-2">{line.hsnCode}</td>
+                <td className="tabular py-2 text-right">{line.qtyOrdered}</td>
+                <td className="tabular py-2 text-right">{rupees(line.unitCostPaise)}</td>
+                <td className="tabular py-2 text-right">{rupees(line.lineTotalPaise)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="mt-4 flex justify-end">
+          <div className="text-right text-[13px]">
+            <p className="m-0 text-text-secondary">
+              {order.gstApplicable && order.estimatedTaxPaise !== null
+                ? `${rupees(order.totalCostPaise)} + ${rupees(order.estimatedTaxPaise)} GST`
+                : "No GST"}
+            </p>
+            <p className="tabular m-0 mt-1 text-[16px] font-medium text-text">
+              {rupees(order.totalCostPaise + (order.estimatedTaxPaise ?? 0))}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <div className="print:hidden">
       <PageHeader
         title={title}
         description={`${order.supplierName} · into ${order.locationName} · raised ${day(order.createdAt)}`}
         actions={
           <>
+            <Button onClick={() => window.print()}>Print order</Button>
             {order.state === "draft" && (
               <CommandButton commands={"verity.trading.submit_purchase_order"}
                 variant="primary"
@@ -473,6 +525,7 @@ export function PurchaseOrderView({
             },
           ]}
         />
+      </div>
       </div>
     </>
   );
