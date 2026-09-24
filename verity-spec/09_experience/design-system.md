@@ -77,7 +77,7 @@ Authority: `Bible V4 §1` (UX Constitution), `ADR-024` (accent/motion), `ADR-025
 *   **Authority**: `ADR-025` pattern 6 (AI-assistant suggested-prompt rows).
 *   **Status**: `[DECIDED]`
 
-### REQ-EXPERIENCE-DESIGNSYSTEM-015
+### REQ-EXPERIENCE-DESIGNSYSTEM-020
 *   **Requirement**: Ordinary cards and panels use the shared layered glass material with
     atmospheric color, translucent gradient, blur, edge light and controlled elevation. Dense
     tables, forms, long-form text and destructive confirmation may use the shared opaque
@@ -85,14 +85,20 @@ Authority: `Bible V4 §1` (UX Constitution), `ADR-024` (accent/motion), `ADR-025
     dots never receive glass blur.
 *   **Authority**: `ADR-026` (layered glass content surfaces and visual field).
 *   **Status**: `[DECIDED]`
+*   **Renumber note (2026-09-24, Task 122)**: was REQ-EXPERIENCE-DESIGNSYSTEM-015, which
+    collided with an unrelated REQ-015 in §3 below (a real duplicate-ID bug, not intentional —
+    grep-verified no code or spec file cites either by number, so renumbering is safe). See the
+    matching note on REQ-021.
 
-### REQ-EXPERIENCE-DESIGNSYSTEM-016
+### REQ-EXPERIENCE-DESIGNSYSTEM-021
 *   **Requirement**: The visual field uses the configurable accent seed and semantic tokens for
     color, supports light/dark parity, preserves WCAG AA, and honors reduced-motion and
     reduced-transparency preferences. Visual anchors such as charts, icon chips, atmospheric
     fields and empty states must reinforce the page's operational purpose.
 *   **Authority**: `ADR-026` (layered glass content surfaces and visual field).
 *   **Status**: `[DECIDED]`
+*   **Renumber note (2026-09-24, Task 122)**: was REQ-EXPERIENCE-DESIGNSYSTEM-016, same
+    collision and same safety check as REQ-020 above.
 
 ---
 
@@ -144,3 +150,15 @@ targets, quiet surfaces, and one obvious next action.
 ### REQ-EXPERIENCE-DESIGNSYSTEM-019
 *   **Requirement**: A record meant to leave the system to an external party (an invoice, a purchase order, a certificate) has a print/PDF path. A CSV/data export alone does not satisfy this — the recipient is assumed to want a document, not a spreadsheet.
 *   **Status**: `[PROPOSED]` — Task 121, awaiting ratification.
+
+### REQ-EXPERIENCE-DESIGNSYSTEM-022
+*   **Requirement**: A collection view whose rows commonly need the same action applied to several at once (approve, assign, tag, export) offers a bulk-selection affordance — a checkbox per row plus a "select all shown" control — and surfaces the chosen action(s) in place of the row-count line once 1+ rows are checked, rather than requiring the same command be repeated per row. `DataTable`'s existing `bulkActions` prop is the reference shape; a capability does not invent a second selection mechanism.
+*   **Status**: `[PROPOSED]` — Task 121 §3.2, awaiting the same ratification pass as REQ-010..019; do not treat as enforceable until re-marked `[DECIDED]`.
+
+### REQ-EXPERIENCE-DESIGNSYSTEM-023
+*   **Requirement**: A record type that a person refers to by a short human name in conversation or on paper (an order, an invoice, a bill, a work item) carries a stable, sequential, human-readable number distinct from its internal identifier, generated at creation and shown wherever the record is referenced. A raw UUID or CUID fragment is not an acceptable substitute in a caption, a printed document, or a search field.
+*   **Status**: `[PROPOSED]` — Task 121 §3.2, awaiting ratification. Several existing screens already fall back to `id.slice(0, 8)` when no reference exists (`PurchaseDesk.tsx`, `SalesDesk.tsx`) — this REQ, once ratified, names that fallback as the gap to close, not the accepted shape.
+
+### REQ-EXPERIENCE-DESIGNSYSTEM-024
+*   **Requirement**: A state transition on a record that another person is responsible for acting on next (an approval request, an assignment, a dispatch) raises a notification to that person at the moment of transition, through the platform's existing notification mechanism — not left as a fact only visible if the responsible person happens to reopen the record.
+*   **Status**: `[PROPOSED]` — Task 121 §3.2, awaiting ratification. Scope note: this governs the *interaction-grammar expectation* (a state transition of this kind gets a notification); it does not itself define the notification transport or template shape, which stays each capability's own `NotificationTemplate` usage per Task 104's correction.

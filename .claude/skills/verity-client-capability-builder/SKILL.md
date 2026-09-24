@@ -134,17 +134,32 @@ comparing the finished capability against what a mature ERP treats as
 baseline for the same domain.
 
 **The rule.** Before any client capability's v1 is reported DONE (per
-`CLAUDE.md`'s reporting vocabulary), cross-check its scope against the
-equivalent module in a reference system under `D:\Code\R&D\` —
-`odoo-19.0` first (broadest domain coverage, most actively maintained),
-`erpnext` second (already has a full audit at `taskplans/
-05_erpnext_audit.md` — read that before re-deriving from source). This is
-narrower than `verity-rd-miner`'s full nine-section audit: not "what can
-Verity learn architecturally from this system," but "what would this
-domain's users consider too obvious to write into a requirements doc,
-and does our v1 actually have it." Use `verity-rd-miner`'s own method
-when the answer needs a real architecture audit, not just a feature
-checklist.
+`CLAUDE.md`'s reporting vocabulary), two checks run, both required, same
+enforcement posture already given to `verity-adr-gate` and
+`verity-migration-safety` (Task 121 §3.3 — not just an audit run once,
+a standing bar every new capability clears before shipping):
+
+1. Invoke the global `obvious-basics-checklist` skill against every
+   entity/screen the capability introduces. It is broader than the
+   Odoo cross-check below in one respect (data completeness, list-view
+   basics, notifications, accessibility) and narrower in another (it
+   doesn't require a reference-system read) — run both, they catch
+   different gaps. `taskplans/121_permanent_obvious_basics_enforcement_
+   and_priority_order.md` is why this exists: the exact class of bug
+   this checklist targets (a hand-rolled `<table>` missing its
+   `overflow-x-auto` wrapper in one spot but not another, in the same
+   file) already reproduced in this codebase once, on a screen that was
+   the strong example elsewhere in the same file.
+2. Cross-check its scope against the equivalent module in a reference
+   system under `D:\Code\R&D\` — `odoo-19.0` first (broadest domain
+   coverage, most actively maintained), `erpnext` second (already has a
+   full audit at `taskplans/05_erpnext_audit.md` — read that before
+   re-deriving from source). This is narrower than `verity-rd-miner`'s
+   full nine-section audit: not "what can Verity learn architecturally
+   from this system," but "what would this domain's users consider too
+   obvious to write into a requirements doc, and does our v1 actually
+   have it." Use `verity-rd-miner`'s own method when the answer needs a
+   real architecture audit, not just a feature checklist.
 
 Concretely, for the closest-matching reference module, read its `views/`
 (Odoo) directory listing and ask, for each file, "do we have this, and if
@@ -178,9 +193,12 @@ not, was that a stated decision or a silent gap":
 taskplan (see `verity-taskplan-writer`), one line per reference-module
 file/concept checked: `Included` / `Deferred — <reason, and who owns the
 decision to defer>` / `Not applicable — <why this domain doesn't need
-it>`. Never silently absent — the whole point of this gate is that a
-missing item without a marked reason is exactly the failure mode it
-exists to catch. This checklist is additive to the existing "Skill output
+it>` — plus `obvious-basics-checklist`'s own per-entity table (`Category
+| Status | Evidence | Fix`), run against every entity/screen the
+capability introduces, in the same taskplan section. Never silently
+absent — the whole point of this gate is that a missing item without a
+marked reason is exactly the failure mode it exists to catch. This
+checklist is additive to the existing "Skill output
 checklist" below, not a replacement for any item in it.
 
 ## Every input control uses Verity's own design-system components — never a raw native browser control
