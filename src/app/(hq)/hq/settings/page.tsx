@@ -1,8 +1,20 @@
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
-import { PageHeader, Panel, DefinitionList, EmptyState } from "@/components/ui/primitives";
+import { PageHeader, Panel, DefinitionList } from "@/components/ui/primitives";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import { platformSettings } from "@/server/platform/operator";
 
 export const dynamic = "force-dynamic";
+
+const operatorColumns: Column[] = [
+  { key: "displayName", header: "Person", sortable: true },
+  { key: "email", header: "Email", sortable: true },
+  { key: "roleName", header: "Role", sortable: true },
+];
+
+const capabilityColumns: Column[] = [
+  { key: "name", header: "Capability", sortable: true },
+  { key: "capId", header: "Key", sortable: true },
+  { key: "version", header: "Version", sortable: true },
+];
 
 /**
  * Platform settings.
@@ -43,40 +55,17 @@ export default async function HqSettingsPage() {
 
       <div className="mb-6">
         <Panel title="Operators" flush>
-          {settings.operators.length === 0 ? (
-            <EmptyState compact title="No operators" />
-          ) : (
-            <table className="w-full border-collapse">
-              <caption className="sr-only">People holding platform operator authority</caption>
-              <thead>
-                <tr>
-                  {["Person", "Email", "Role"].map((heading) => (
-                    <th
-                      key={heading}
-                      className="border-b border-line px-3 py-3 text-left text-[12px] font-normal text-text-tertiary"
-                    >
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {settings.operators.map((operator) => (
-                  <tr key={`${operator.displayName}-${operator.email ?? ""}`}>
-                    <td className="border-b border-line px-3 py-3 text-[14px] text-text">
-                      {operator.displayName}
-                    </td>
-                    <td className="border-b border-line px-3 py-3 text-[13px] text-text-secondary">
-                      {operator.email ?? "—"}
-                    </td>
-                    <td className="border-b border-line px-3 py-3 text-[13px] text-text-secondary">
-                      {operator.roleName ?? "No role — grants nothing"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          <DataTable
+            columns={operatorColumns}
+            rows={settings.operators.map((operator) => ({
+              id: `${operator.displayName}-${operator.email ?? ""}`,
+              displayName: operator.displayName,
+              email: operator.email ?? "—",
+              roleName: operator.roleName ?? "No role — grants nothing",
+            }))}
+            caption="People holding platform operator authority"
+            emptyTitle="No operators"
+          />
           <p className="mb-0 mt-3 px-4 pb-4 text-[12px] text-text-tertiary">
             Operator authority is granted by <code>prisma/bootstrap-operator.ts</code>, run by a
             person at a terminal. It is deliberately not a button here.
@@ -85,36 +74,17 @@ export default async function HqSettingsPage() {
       </div>
 
       <Panel title="Installed capabilities" flush>
-        <table className="w-full border-collapse">
-          <caption className="sr-only">Capabilities installed on this platform</caption>
-          <thead>
-            <tr>
-              {["Capability", "Key", "Version"].map((heading) => (
-                <th
-                  key={heading}
-                  className="border-b border-line px-3 py-3 text-left text-[12px] font-normal text-text-tertiary"
-                >
-                  {heading}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {settings.installedCapabilities.map((capability) => (
-              <tr key={capability.id}>
-                <td className="border-b border-line px-3 py-3 text-[14px] text-text">
-                  {capability.name}
-                </td>
-                <td className="border-b border-line px-3 py-3 text-[13px] text-text-tertiary">
-                  {capability.id}
-                </td>
-                <td className="border-b border-line px-3 py-3 text-[13px] text-text-secondary">
-                  {capability.version}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          columns={capabilityColumns}
+          rows={settings.installedCapabilities.map((capability) => ({
+            id: capability.id,
+            name: capability.name,
+            capId: capability.id,
+            version: capability.version,
+          }))}
+          caption="Capabilities installed on this platform"
+          emptyTitle="No capabilities installed"
+        />
         <p className="mb-0 mt-3 px-4 pb-4 text-[12px] text-text-tertiary">
           Installed by migration; enabled per client on that client&apos;s Modules tab.
         </p>

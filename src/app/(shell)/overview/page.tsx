@@ -1,4 +1,3 @@
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
 import { withPageAccess } from "@/components/ui/PageAccess";
 import Link from "next/link";
 import { requireActor } from "@/server/platform/auth";
@@ -35,6 +34,7 @@ import {
   PermissionDenied,
 } from "@/components/ui/primitives";
 import { Icon } from "@/components/ui/icons";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 
 export const dynamic = "force-dynamic";
 
@@ -438,39 +438,20 @@ async function OverviewPage() {
               </Link>
             }
           >
-            <table className="w-full border-collapse">
-              <caption className="sr-only">Boards at or below their reorder level</caption>
-              <thead>
-                <tr>
-                  {["Board", "On hand", "Reorder at"].map((heading, index) => (
-                    <th
-                      key={heading}
-                      className={
-                        "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                        (index === 0 ? "text-left" : "text-right")
-                      }
-                    >
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {short.slice(0, 10).map((row) => (
-                  <tr key={row.productId}>
-                    <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                      {row.brandName} · {row.productName}
-                    </td>
-                    <td className="tabular border-b border-line px-3 py-2 text-right text-[14px] text-warning">
-                      {row.onHandUnits} {row.unitLabel}
-                    </td>
-                    <td className="tabular border-b border-line px-3 py-2 text-right text-[13px] text-text-secondary">
-                      {row.reorderLevelUnits}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable
+              columns={[
+                { key: "board", header: "Board", sortable: true },
+                { key: "onHand", header: "On hand", numeric: true, sortable: true },
+                { key: "reorderAt", header: "Reorder at", numeric: true, sortable: true },
+              ]}
+              rows={short.slice(0, 10).map((row) => ({
+                id: row.productId,
+                board: `${row.brandName} · ${row.productName}`,
+                onHand: `${row.onHandUnits} ${row.unitLabel}`,
+                reorderAt: row.reorderLevelUnits,
+              }))}
+              caption="Boards at or below their reorder level"
+            />
           </Panel>
         </div>
       )}

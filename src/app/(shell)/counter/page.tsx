@@ -1,6 +1,4 @@
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
 import { withPageAccess } from "@/components/ui/PageAccess";
-import Link from "next/link";
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
 import { installCapabilities } from "@/server/capabilities/registry";
@@ -15,6 +13,7 @@ import {
   Stat,
   StatRow,
 } from "@/components/ui/primitives";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import { BillableOrders } from "./BillableOrders";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +21,14 @@ export const dynamic = "force-dynamic";
 function rupees(minor: number): string {
   return `₹${(minor / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+
+const openBillColumns: Column[] = [
+  { key: "tableLabel", header: "Table", sortable: true },
+  { key: "total", header: "Total", sortable: true },
+  { key: "paid", header: "Paid", sortable: true },
+  { key: "outstanding", header: "Outstanding", sortable: true },
+  { key: "action", header: "", variant: "link", href: "/counter/{id}" },
+];
 
 /**
  * The counter.
@@ -104,56 +111,19 @@ async function CounterPage() {
       </div>
 
       <Panel title="Open bills" flush>
-        {openBills.length === 0 ? (
-          <EmptyState compact title="No bills open" />
-        ) : (
-          <table className="w-full border-collapse">
-            <caption className="sr-only">Bills awaiting payment</caption>
-            <thead>
-              <tr>
-                {["Table", "Total", "Paid", "Outstanding", ""].map(
-                  (heading, index) => (
-                    <th
-                      key={heading || index}
-                      className={
-                        "border-b border-line px-3 py-3 text-[12px] font-normal text-text-tertiary " +
-                        (index === 0 ? "text-left" : "text-right")
-                      }
-                    >
-                      {heading}
-                    </th>
-                  ),
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {openBills.map((bill) => (
-                <tr key={bill.id}>
-                  <td className="border-b border-line px-3 py-3 text-[14px] text-text">
-                    {bill.tableLabel}
-                  </td>
-                  <td className="tabular border-b border-line px-3 py-3 text-right text-[14px]">
-                    {rupees(bill.totalMinor)}
-                  </td>
-                  <td className="tabular border-b border-line px-3 py-3 text-right text-[14px] text-text-secondary">
-                    {rupees(bill.paidMinor)}
-                  </td>
-                  <td className="tabular border-b border-line px-3 py-3 text-right text-[14px] text-accent-ink">
-                    {rupees(bill.totalMinor - bill.paidMinor)}
-                  </td>
-                  <td className="border-b border-line px-3 py-3 text-right">
-                    <Link
-                      href={`/counter/${bill.id}`}
-                      className="text-[13px] text-accent-ink no-underline hover:underline"
-                    >
-                      Take payment
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <DataTable
+          columns={openBillColumns}
+          rows={openBills.map((bill) => ({
+            id: bill.id,
+            tableLabel: bill.tableLabel,
+            total: rupees(bill.totalMinor),
+            paid: rupees(bill.paidMinor),
+            outstanding: rupees(bill.totalMinor - bill.paidMinor),
+            action: "Take payment",
+          }))}
+          caption="Bills awaiting payment"
+          emptyTitle="No bills open"
+        />
       </Panel>
     </>
   );

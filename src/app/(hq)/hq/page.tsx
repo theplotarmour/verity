@@ -1,6 +1,5 @@
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
-import Link from "next/link";
-import { PageHeader, Panel, Stat, StatRow, EmptyState } from "@/components/ui/primitives";
+import { PageHeader, Panel, Stat, StatRow } from "@/components/ui/primitives";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import {
   clientDirectory,
   platformActivity,
@@ -8,6 +7,13 @@ import {
 } from "@/server/platform/operator";
 
 export const dynamic = "force-dynamic";
+
+const columns: Column[] = [
+  { key: "name", header: "Client", sortable: true, variant: "link", href: "/hq/clients" },
+  { key: "activity30d", header: "Changes", numeric: true, sortable: true },
+  { key: "securityEvents30d", header: "Security events", numeric: true, sortable: true },
+  { key: "lastActivity", header: "Last change", sortable: true },
+];
 
 /**
  * The operator overview.
@@ -44,55 +50,21 @@ export default async function HqOverviewPage() {
       </StatRow>
 
       <Panel title="Activity by client" flush>
-        {activity.length === 0 ? (
-          <EmptyState
-            compact
-            title="No clients yet"
-            description="Create the first client from the Clients page. Nothing is provisioned automatically."
-          />
-        ) : (
-          <table className="w-full border-collapse">
-            <caption className="sr-only">Activity per client over the last 30 days</caption>
-            <thead>
-              <tr>
-                <th className="border-b border-line px-3 py-3 text-left text-[12px] font-normal text-text-tertiary">
-                  Client
-                </th>
-                <th className="border-b border-line px-3 py-3 text-right text-[12px] font-normal text-text-tertiary">
-                  Changes
-                </th>
-                <th className="border-b border-line px-3 py-3 text-right text-[12px] font-normal text-text-tertiary">
-                  Security events
-                </th>
-                <th className="border-b border-line px-3 py-3 text-right text-[12px] font-normal text-text-tertiary">
-                  Last change
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {activity.map((row) => (
-                <tr key={row.tenantId}>
-                  <td className="border-b border-line px-3 py-3 text-[14px]">
-                    <Link href="/hq/clients" className="no-underline text-text hover:text-accent">
-                      {row.name}
-                    </Link>
-                  </td>
-                  <td className="tabular border-b border-line px-3 py-3 text-right text-[14px]">
-                    {row.activity30d}
-                  </td>
-                  <td className="tabular border-b border-line px-3 py-3 text-right text-[14px]">
-                    {row.securityEvents30d}
-                  </td>
-                  <td className="border-b border-line px-3 py-3 text-right text-[13px] text-text-secondary">
-                    {row.lastActivityAt
-                      ? row.lastActivityAt.toISOString().slice(0, 16).replace("T", " ")
-                      : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <DataTable
+          columns={columns}
+          rows={activity.map((row) => ({
+            id: row.tenantId,
+            name: row.name,
+            activity30d: row.activity30d,
+            securityEvents30d: row.securityEvents30d,
+            lastActivity: row.lastActivityAt
+              ? row.lastActivityAt.toISOString().slice(0, 16).replace("T", " ")
+              : "—",
+          }))}
+          caption="Activity per client over the last 30 days"
+          emptyTitle="No clients yet"
+          emptyDescription="Create the first client from the Clients page. Nothing is provisioned automatically."
+        />
       </Panel>
     </>
   );

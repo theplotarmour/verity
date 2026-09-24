@@ -1,5 +1,5 @@
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
 import { withPageAccess } from "@/components/ui/PageAccess";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import { requireActor } from "@/server/platform/auth";
 import { installCapabilities } from "@/server/capabilities/registry";
 import { executeQuery } from "@/server/platform/query";
@@ -240,52 +240,26 @@ async function ReportsPage() {
               description="Every board is above its reorder level."
             />
           ) : (
-            <div className="-mx-3 overflow-x-auto px-3">
-              <table className="w-full min-w-[560px] border-collapse text-[14px]">
-                <thead>
-                  <tr>
-                    <th className="border-b border-line px-3 py-2 text-left font-medium">
-                      Board
-                    </th>
-                    <th className="border-b border-line px-3 py-2 text-right font-medium">
-                      On hand
-                    </th>
-                    <th className="border-b border-line px-3 py-2 text-right font-medium">
-                      Reserved
-                    </th>
-                    <th className="border-b border-line px-3 py-2 text-right font-medium">
-                      Available
-                    </th>
-                    <th className="border-b border-line px-3 py-2 text-right font-medium">
-                      Reorder at
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {low.map((row) => (
-                    <tr key={row.productId}>
-                      <td className="border-b border-line px-3 py-2">
-                        {row.brandName} {row.productName}
-                      </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-right">
-                        {row.onHandUnits}
-                      </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-right">
-                        {row.reservedUnits}
-                      </td>
-                      {/* Available is what can be sold. On hand looks healthy
-                        while every sheet is already promised to somebody. */}
-                      <td className="tabular border-b border-line px-3 py-2 text-right font-medium">
-                        {row.availableUnits}
-                      </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-right text-text-tertiary">
-                        {row.reorderLevelUnits}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              columns={[
+                { key: "board", header: "Board", sortable: true },
+                { key: "onHand", header: "On hand", numeric: true, sortable: true },
+                { key: "reserved", header: "Reserved", numeric: true, sortable: true },
+                { key: "available", header: "Available", numeric: true, sortable: true },
+                { key: "reorderAt", header: "Reorder at", numeric: true, sortable: true },
+              ]}
+              rows={low.map((row) => ({
+                id: row.productId,
+                board: `${row.brandName} ${row.productName}`,
+                onHand: row.onHandUnits,
+                reserved: row.reservedUnits,
+                // Available is what can be sold. On hand looks healthy while
+                // every sheet is already promised to somebody.
+                available: row.availableUnits,
+                reorderAt: row.reorderLevelUnits,
+              }))}
+              caption="Boards below reorder level"
+            />
           )}
         </Panel>
       </div>
@@ -293,32 +267,18 @@ async function ReportsPage() {
       {receivables.length > 0 && (
         <div className="mb-4">
           <Panel title="Who owes what">
-            <div className="-mx-3 overflow-x-auto px-3">
-              <table className="w-full min-w-[560px] border-collapse text-[14px]">
-                <thead>
-                  <tr>
-                    <th className="border-b border-line px-3 py-2 text-left font-medium">
-                      Customer
-                    </th>
-                    <th className="border-b border-line px-3 py-2 text-right font-medium">
-                      Outstanding
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {receivables.map((row) => (
-                    <tr key={row.customerId}>
-                      <td className="border-b border-line px-3 py-2">
-                        {row.customerName}
-                      </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-right">
-                        {rupees(row.outstandingPaise)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              columns={[
+                { key: "customer", header: "Customer", sortable: true },
+                { key: "outstanding", header: "Outstanding", numeric: true, sortable: true },
+              ]}
+              rows={receivables.map((row) => ({
+                id: row.customerId,
+                customer: row.customerName,
+                outstanding: rupees(row.outstandingPaise),
+              }))}
+              caption="Who owes what"
+            />
           </Panel>
         </div>
       )}

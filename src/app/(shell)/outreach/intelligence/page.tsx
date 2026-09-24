@@ -1,4 +1,3 @@
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
 import Link from "next/link";
 import { requireActor } from "@/server/platform/auth";
 import { withTenant } from "@/server/platform/tenancy";
@@ -14,6 +13,7 @@ import {
 } from "@/server/capabilities/outreach";
 import { withCapabilityPageAccess } from "@/components/ui/PageAccess";
 import { EmptyState, PageHeader, Panel, PermissionDenied } from "@/components/ui/primitives";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import { RangeSwitch } from "../RangeSwitch";
 import { RANGE_LABEL, percent, rangeFromParam, windowFor } from "../range";
 import { IntelligenceFilters } from "./IntelligenceFilters";
@@ -202,46 +202,37 @@ function IntelligenceTable({
   }>;
   empty: string;
 }) {
+  const columns: Column[] = [
+    { key: "key", header: keyHeader, sortable: true },
+    { key: "leads", header: "Leads", numeric: true, sortable: true },
+    { key: "outreach", header: "Outreach", numeric: true, sortable: true },
+    { key: "responses", header: "Responses", numeric: true, sortable: true },
+    { key: "rate", header: "Rate", numeric: true, sortable: true },
+    { key: "meetings", header: "Meetings", numeric: true, sortable: true },
+    { key: "proposals", header: "Proposals", numeric: true, sortable: true },
+    { key: "closed", header: "Closed", numeric: true, sortable: true },
+  ];
+
   return (
     <Panel title={title} flush>
       {rows.length === 0 ? (
         <EmptyState title="Nothing to read yet" description={empty} compact />
       ) : (
-        <div className="overflow-x-auto px-6">
-          <table className="w-full min-w-[560px] border-collapse text-[13px]">
-            <thead>
-              <tr className="border-b border-line text-left text-[11px] uppercase tracking-wide text-text-tertiary">
-                <th className="py-2 font-medium">{keyHeader}</th>
-                <th className="py-2 text-right font-medium">Leads</th>
-                <th className="py-2 text-right font-medium">Outreach</th>
-                <th className="py-2 text-right font-medium">Responses</th>
-                <th className="py-2 text-right font-medium">Rate</th>
-                <th className="py-2 text-right font-medium">Meetings</th>
-                <th className="py-2 text-right font-medium">Proposals</th>
-                <th className="py-2 text-right font-medium">Closed</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.key} className="border-b border-line last:border-none">
-                  <td className="py-2.5 text-text">{r.key}</td>
-                  <td className="tabular py-2.5 text-right text-text-secondary">{r.leads}</td>
-                  <td className="tabular py-2.5 text-right text-text-secondary">{r.outreach}</td>
-                  <td className="tabular py-2.5 text-right text-text-secondary">{r.responses}</td>
-                  <td className="tabular py-2.5 text-right text-text-secondary">
-                    {percent(r.responseRate)}
-                    {r.thinSample && r.responseRate != null && (
-                      <span className="ml-1 text-[11px] text-text-tertiary">thin</span>
-                    )}
-                  </td>
-                  <td className="tabular py-2.5 text-right text-text-secondary">{r.meetings}</td>
-                  <td className="tabular py-2.5 text-right text-text-secondary">{r.proposals}</td>
-                  <td className="tabular py-2.5 text-right font-medium text-text">{r.closed}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          columns={columns}
+          rows={rows.map((r) => ({
+            id: r.key,
+            key: r.key,
+            leads: r.leads,
+            outreach: r.outreach,
+            responses: r.responses,
+            rate: percent(r.responseRate) + (r.thinSample && r.responseRate != null ? " (thin)" : ""),
+            meetings: r.meetings,
+            proposals: r.proposals,
+            closed: r.closed,
+          }))}
+          caption={title}
+        />
       )}
     </Panel>
   );

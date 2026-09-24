@@ -1,6 +1,14 @@
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
-import { PageHeader, Panel, EmptyState } from "@/components/ui/primitives";
+import { PageHeader, Panel } from "@/components/ui/primitives";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import { platformAudit, requireOperator } from "@/server/platform/operator";
+
+const columns: Column[] = [
+  { key: "when", header: "When", sortable: true },
+  { key: "client", header: "Client", sortable: true },
+  { key: "entity", header: "Entity", sortable: true },
+  { key: "change", header: "Change", sortable: false, subKey: "commandKey" },
+  { key: "by", header: "By", sortable: true },
+];
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +29,16 @@ export default async function HqAuditPage() {
   const operator = await requireOperator();
   const rows = await platformAudit(operator, 100);
 
+  const tableRows = rows.map((row, i) => ({
+    id: `${row.entityId}-${row.occurredAt.toISOString()}-${i}`,
+    when: row.occurredAt.toISOString().slice(0, 16).replace("T", " "),
+    client: row.tenantName,
+    entity: row.entityKey,
+    change: row.fieldChanged,
+    commandKey: row.commandKey ?? undefined,
+    by: row.isOperator ? "Operator" : "Client user",
+  }));
+
   return (
     <>
       <PageHeader
@@ -29,53 +47,12 @@ export default async function HqAuditPage() {
       />
 
       <Panel title={`${rows.length} most recent`} flush>
-        {rows.length === 0 ? (
-          <EmptyState compact title="Nothing recorded yet" />
-        ) : (
-          <table className="w-full border-collapse">
-            <caption className="sr-only">Platform-wide audit metadata</caption>
-            <thead>
-              <tr>
-                {["When", "Client", "Entity", "Change", "By"].map((h) => (
-                  <th
-                    key={h}
-                    className="border-b border-line px-3 py-3 text-left text-[12px] font-normal text-text-tertiary"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => (
-                <tr key={`${row.entityId}-${row.occurredAt.toISOString()}-${i}`}>
-                  <td className="tabular border-b border-line px-3 py-3 text-[13px] text-text-secondary">
-                    {row.occurredAt.toISOString().slice(0, 16).replace("T", " ")}
-                  </td>
-                  <td className="border-b border-line px-3 py-3 text-[14px]">{row.tenantName}</td>
-                  <td className="border-b border-line px-3 py-3 text-[13px] text-text-secondary">
-                    {row.entityKey}
-                  </td>
-                  <td className="border-b border-line px-3 py-3 text-[13px]">
-                    {row.fieldChanged}
-                    {row.commandKey && (
-                      <span className="ml-2 text-text-tertiary">{row.commandKey}</span>
-                    )}
-                  </td>
-                  <td className="border-b border-line px-3 py-3 text-[13px]">
-                    {row.isOperator ? (
-                      <span className="inline-flex items-center rounded-pill bg-accent-subtle px-2 py-0.5 text-[12px] font-medium text-accent-ink">
-                        Operator
-                      </span>
-                    ) : (
-                      <span className="text-text-secondary">Client user</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <DataTable
+          columns={columns}
+          rows={tableRows}
+          caption="Platform-wide audit metadata"
+          emptyTitle="Nothing recorded yet"
+        />
       </Panel>
     </>
   );
