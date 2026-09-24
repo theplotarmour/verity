@@ -1,7 +1,5 @@
 "use client";
 
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
-
 import { CommandButton } from "@/components/ui/CommandAccess";
 
 import { useMemo, useState, useTransition, type ReactNode } from "react";
@@ -14,9 +12,9 @@ import {
   FormRow,
   Input,
   Panel,
-  StateBadge,
 } from "@/components/ui/primitives";
 import { Combobox } from "@/components/ui/Combobox";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Modal, ModalCancel } from "@/components/ui/Modal";
 import {
   NewPurchaseOrderForm,
@@ -317,150 +315,106 @@ export function PurchaseDesk({
               }
             />
           ) : (
-            <div className="-mx-3 overflow-x-auto px-3">
-              <table className="w-full min-w-[720px] border-collapse">
-                <caption className="sr-only">
-                  Open purchase orders. Quantities are units ordered.
-                </caption>
-                <thead>
-                  <tr>
-                    {[
-                      "Order",
-                      "Board",
-                      "Status",
-                      "Ordered",
-                      "Still owed",
-                      "Value",
-                      "",
-                    ].map((heading, index) => (
-                      <th
-                        key={heading || index}
-                        className={
-                          "whitespace-nowrap border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                          (index <= 2 ? "text-left" : "text-right")
-                        }
+            <DataTable
+              columns={[
+                // The order is the record; the desk is only a way in. Every
+                // action worth taking has more context on the order's own
+                // page than a table row can carry.
+                { key: "order", header: "Order", sortable: true, variant: "link", href: "/purchases/{orderId}", subKey: "meta" },
+                // U2-2: what the order is FOR. Without this the desk could
+                // not tell a warehouse user which order they were looking
+                // at, and neither could the receive form.
+                { key: "board", header: "Board", sortable: true },
+                { key: "status", header: "Status", sortable: true, variant: "state", categoryKey: "stateCategory" },
+                { key: "ordered", header: "Ordered", numeric: true, sortable: true },
+                // U2-3: a bare number beside a rupee figure reads as money.
+                // The unit is carried by the caption once rather than
+                // repeated in every cell, where "300 sheets" wrapped to two
+                // lines in a column this narrow.
+                { key: "stillOwed", header: "Still owed", numeric: true, sortable: true },
+                { key: "value", header: "Value", numeric: true, sortable: true },
+              ]}
+              rows={orders.map((order) => ({
+                id: order.id,
+                orderId: order.id,
+                order: order.reference ?? `Order ${order.id.slice(0, 8)}`,
+                meta:
+                  `${order.supplierName} · ${day(order.raisedAt)}` +
+                  // Only the exception is called out. Every other order
+                  // carries GST, and saying so on all of them would make
+                  // the one that does not invisible.
+                  (!order.gstApplicable ? " · No GST" : ""),
+                board: order.summary,
+                status: STATE_LABEL[order.state] ?? order.state,
+                stateCategory: STATE_CATEGORY[order.state] ?? "Pending",
+                ordered: order.orderedUnits.toLocaleString("en-IN"),
+                stillOwed:
+                  order.outstandingUnits === 0 ? "—" : order.outstandingUnits.toLocaleString("en-IN"),
+                value: rupees(order.totalCostPaise),
+                orderState: order.state,
+                receivedUnits: order.receivedUnits,
+                order_: order,
+              }))}
+              caption="Open purchase orders. Quantities are units ordered."
+              rowActions={(row) => (
+                <div className="flex justify-end gap-2">
+                  {row.orderState === "draft" && (
+                    <CommandButton
+                      commands={"verity.trading.submit_purchase_order"}
+                      size="sm"
+                      disabled={pending}
+                      onClick={() =>
+                        run("verity.trading.submit_purchase_order", { orderId: row.orderId })
+                      }
+                    >
+                      Send to supplier
+                    </CommandButton>
+                  )}
+                  {(row.orderState === "submitted" || row.orderState === "receiving") && (
+                    <CommandButton
+                      commands={"verity.trading.receive_goods"}
+                      size="sm"
+                      disabled={pending}
+                      onClick={() =>
+                        openPanel(() =>
+                          setReceiving(receiving === row.orderId ? null : String(row.orderId)),
+                        )
+                      }
+                    >
+                      {receiving === row.orderId ? "Close" : "Receive…"}
+                    </CommandButton>
+                  )}
+                  {/* Amendable only while nothing has arrived — once it
+                      has, the lines describe a real delivery. */}
+                  {row.receivedUnits === 0 &&
+                    row.orderState !== "completed" &&
+                    row.orderState !== "cancelled" && (
+                      <CommandButton
+                        commands={"verity.trading.edit_purchase_order"}
+                        size="sm"
+                        disabled={pending}
+                        onClick={() => openPanel(() => setAmending(row.order_ as typeof orders[number]))}
                       >
-                        {heading}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.map((order) => (
-                    <tr key={order.id} className="transition-colors hover:bg-accent-subtle/40">
-                      <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                        {/* The order is the record; the desk is only a way in.
-                          Every action worth taking has more context on the
-                          order's own page than a table row can carry. */}
-                        <Link
-                          href={`/purchases/${order.id}`}
-                          className="whitespace-nowrap text-text no-underline hover:underline"
-                        >
-                          {order.reference ?? `Order ${order.id.slice(0, 8)}`}
-                        </Link>
-                        <span className="mt-0.5 block text-[12px] text-text-tertiary">
-                          {order.supplierName} · {day(order.raisedAt)}
-                          {/* Only the exception is called out. Every other
-                              order carries GST, and saying so on all of them
-                              would make the one that does not invisible. */}
-                          {!order.gstApplicable && " · No GST"}
-                        </span>
-                      </td>
-                      {/* U2-2: what the order is FOR. Without this the desk could
-                        not tell a warehouse user which order they were looking
-                        at, and neither could the receive form. */}
-                      <td className="border-b border-line px-3 py-2 text-[14px] text-text-secondary">
-                        {order.summary}
-                      </td>
-                      <td className="border-b border-line px-3 py-2">
-                        <StateBadge
-                          category={STATE_CATEGORY[order.state] ?? "Pending"}
-                          label={STATE_LABEL[order.state] ?? order.state}
-                        />
-                      </td>
-                      <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] text-text-secondary">
-                        {order.orderedUnits.toLocaleString("en-IN")}
-                      </td>
-                      {/* U2-3: a bare number beside a rupee figure reads as
-                        money. The unit is carried by the caption once rather
-                        than repeated in every cell, where "300 sheets" wrapped
-                        to two lines in a column this narrow. */}
-                      <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px]">
-                        {order.outstandingUnits === 0
-                          ? "—"
-                          : order.outstandingUnits.toLocaleString("en-IN")}
-                      </td>
-                      <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px]">
-                        {rupees(order.totalCostPaise)}
-                      </td>
-                      <td className="border-b border-line px-3 py-2 text-right">
-                        <div className="flex justify-end gap-2">
-                          {order.state === "draft" && (
-                            <CommandButton commands={"verity.trading.submit_purchase_order"}
-                              size="sm"
-                              disabled={pending}
-                              onClick={() =>
-                                run("verity.trading.submit_purchase_order", {
-                                  orderId: order.id,
-                                })
-                              }
-                            >
-                              Send to supplier
-                            </CommandButton>
-                          )}
-                          {(order.state === "submitted" ||
-                            order.state === "receiving") && (
-                            <CommandButton commands={"verity.trading.receive_goods"}
-                              size="sm"
-                              disabled={pending}
-                              onClick={() =>
-                                openPanel(() =>
-                                  setReceiving(
-                                    receiving === order.id ? null : order.id,
-                                  ),
-                                )
-                              }
-                            >
-                              {receiving === order.id ? "Close" : "Receive…"}
-                            </CommandButton>
-                          )}
-                          {/* Amendable only while nothing has arrived — once
-                              it has, the lines describe a real delivery. */}
-                          {order.receivedUnits === 0 &&
-                            order.state !== "completed" &&
-                            order.state !== "cancelled" && (
-                              <CommandButton commands={"verity.trading.edit_purchase_order"}
-                                size="sm"
-                                disabled={pending}
-                                onClick={() => openPanel(() => setAmending(order))}
-                              >
-                                Edit
-                              </CommandButton>
-                            )}
-                          {order.state !== "completed" && (
-                            <CommandButton commands={"verity.trading.cancel_purchase_order"}
-                              size="sm"
-                              disabled={pending}
-                              onClick={() =>
-                                openPanel(() =>
-                                  setCancelling(
-                                    cancelling === order.id ? null : order.id,
-                                  ),
-                                )
-                              }
-                            >
-                              {cancelling === order.id
-                                ? "Keep order"
-                                : "Cancel order…"}
-                            </CommandButton>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        Edit
+                      </CommandButton>
+                    )}
+                  {row.orderState !== "completed" && (
+                    <CommandButton
+                      commands={"verity.trading.cancel_purchase_order"}
+                      size="sm"
+                      disabled={pending}
+                      onClick={() =>
+                        openPanel(() =>
+                          setCancelling(cancelling === row.orderId ? null : String(row.orderId)),
+                        )
+                      }
+                    >
+                      {cancelling === row.orderId ? "Keep order" : "Cancel order…"}
+                    </CommandButton>
+                  )}
+                </div>
+              )}
+            />
           )}
 
         </Panel>
