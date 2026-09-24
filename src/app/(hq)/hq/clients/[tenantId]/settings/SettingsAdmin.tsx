@@ -1,19 +1,23 @@
 "use client";
 
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Button,
-  EmptyState,
   ErrorState,
   Field,
   Input,
   Panel,
 } from "@/components/ui/primitives";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import { runClientCommand } from "@/server/actions/hq";
 import type { ActionFailure } from "@/server/platform/action-error";
 import type { ConfigRow } from "./page";
+
+const columns: Column[] = [
+  { key: "key", header: "Key", sortable: true },
+  { key: "value", header: "Value", sortable: false },
+];
 
 /**
  * Tenant configuration for one client.
@@ -100,49 +104,27 @@ export function SettingsAdmin({
       </div>
 
       <Panel title={`${tenantScoped.length} tenant-scoped`} flush>
-        {tenantScoped.length === 0 ? (
-          <EmptyState
-            compact
-            title="Nothing configured"
-            description="Capabilities fall back to their own defaults when a key is unset, which is a decision rather than an absence."
-          />
-        ) : (
-          <table className="w-full border-collapse">
-            <caption className="sr-only">Tenant-scoped configuration</caption>
-            <thead>
-              <tr>
-                {["Key", "Value", "Action"].map((heading) => (
-                  <th
-                    key={heading}
-                    className="border-b border-line px-3 py-3 text-left text-[12px] font-normal text-text-tertiary"
-                  >
-                    {heading}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {tenantScoped.map((row) => (
-                <tr key={row.key}>
-                  <td className="border-b border-line px-3 py-3 text-[14px] text-text">{row.key}</td>
-                  <td className="border-b border-line px-3 py-3 text-[13px] text-text-secondary">
-                    {JSON.stringify(row.value)}
-                  </td>
-                  <td className="border-b border-line px-3 py-3">
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      disabled={pending}
-                      onClick={() => set(row.key, null)}
-                    >
-                      Clear
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <DataTable
+          columns={columns}
+          rows={tenantScoped.map((row) => ({
+            id: row.key,
+            key: row.key,
+            value: JSON.stringify(row.value),
+          }))}
+          caption="Tenant-scoped configuration"
+          emptyTitle="Nothing configured"
+          emptyDescription="Capabilities fall back to their own defaults when a key is unset, which is a decision rather than an absence."
+          rowActions={(row) => (
+            <Button
+              size="sm"
+              variant="danger"
+              disabled={pending}
+              onClick={() => set(String(row.key), null)}
+            >
+              Clear
+            </Button>
+          )}
+        />
       </Panel>
 
       {otherScoped.length > 0 && (

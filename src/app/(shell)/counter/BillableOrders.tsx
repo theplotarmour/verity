@@ -1,14 +1,19 @@
 "use client";
 
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
-
 import { CommandButton } from "@/components/ui/CommandAccess";
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ErrorState } from "@/components/ui/primitives";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
+
+const columns: Column[] = [
+  { key: "tableLabel", header: "Table", sortable: true },
+  { key: "covers", header: "Covers", numeric: true, sortable: true },
+  { key: "subtotal", header: "Subtotal", numeric: true, sortable: true },
+];
 
 function rupees(minor: number): string {
   return `₹${(minor / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -56,49 +61,27 @@ export function BillableOrders({
         </div>
       )}
 
-      <table className="w-full border-collapse">
-        <caption className="sr-only">Served orders with no bill yet</caption>
-        <thead>
-          <tr>
-            {["Table", "Covers", "Subtotal", ""].map((heading, index) => (
-              <th
-                key={heading || index}
-                className={
-                  "border-b border-line px-3 py-3 text-[12px] font-normal text-text-tertiary " +
-                  (index === 0 ? "text-left" : "text-right")
-                }
-              >
-                {heading}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {orders.map((order) => (
-            <tr key={order.id}>
-              <td className="border-b border-line px-3 py-3 text-[14px] text-text">
-                {order.tableLabel}
-              </td>
-              <td className="tabular border-b border-line px-3 py-3 text-right text-[14px]">
-                {order.covers}
-              </td>
-              <td className="tabular border-b border-line px-3 py-3 text-right text-[14px] text-text-secondary">
-                {rupees(order.subtotalMinor)}
-              </td>
-              <td className="border-b border-line px-3 py-3 text-right">
-                <CommandButton commands={"verity.dinein.generate_bill"}
-                  size="sm"
-                  variant="primary"
-                  disabled={pending}
-                  onClick={() => generate(order.id)}
-                >
-                  Raise bill
-                </CommandButton>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <DataTable
+        columns={columns}
+        rows={orders.map((order) => ({
+          id: order.id,
+          tableLabel: order.tableLabel,
+          covers: order.covers,
+          subtotal: rupees(order.subtotalMinor),
+        }))}
+        caption="Served orders with no bill yet"
+        rowActions={(row) => (
+          <CommandButton
+            commands={"verity.dinein.generate_bill"}
+            size="sm"
+            variant="primary"
+            disabled={pending}
+            onClick={() => generate(String(row.id))}
+          >
+            Raise bill
+          </CommandButton>
+        )}
+      />
     </>
   );
 }

@@ -147,6 +147,7 @@ export function DataTable({
   filterable = true,
   toolbar,
   bulkActions,
+  rowActions,
 }: {
   columns: Column[];
   rows: Array<Record<string, unknown>>;
@@ -166,6 +167,19 @@ export function DataTable({
    * this component only owns which keys are checked.
    */
   bulkActions?: (selectedKeys: string[], clear: () => void) => React.ReactNode;
+  /**
+   * Task 121 §3.2 — a per-row action (button, link, or small cluster) that
+   * doesn't fit `Column`'s declarative variants: a privileged write (Enable/
+   * Disable, Clear, Settle, Raise bill) that must stay a real control, not a
+   * second navigation link with an overlapping accessible name (see this
+   * file's own "WHAT IS DELIBERATELY ABSENT" note above — that note is about
+   * a redundant "open" action; this is for a row action that is NOT "open").
+   * A function prop, so only a client-component caller can pass one, same
+   * constraint as `bulkActions`/`toolbar` above it. Renders as a trailing,
+   * unlabelled column on desktop and beneath the record on mobile; omitted
+   * entirely when not given, so every existing caller is unaffected.
+   */
+  rowActions?: (row: Record<string, unknown>) => React.ReactNode;
 }) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
@@ -345,6 +359,7 @@ export function DataTable({
                       </th>
                     );
                   })}
+                  {rowActions && <th scope="col" className="w-px pb-3" />}
                 </tr>
               </thead>
               <tbody>
@@ -377,6 +392,11 @@ export function DataTable({
                         <Cell column={c} row={row} lead={i === 0} />
                       </td>
                     ))}
+                    {rowActions && (
+                      <td className="whitespace-nowrap px-4 py-2.5 text-right align-middle">
+                        {rowActions(row)}
+                      </td>
+                    )}
                   </tr>
                   );
                 })}
@@ -405,6 +425,7 @@ export function DataTable({
                       </div>
                     ))}
                   </div>
+                  {rowActions && <div className="flex justify-end gap-2 pt-1">{rowActions(row)}</div>}
                 </li>
               );
             })}
