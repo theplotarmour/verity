@@ -120,6 +120,54 @@ page-family gates defined below.
   week / No next action set / On track / Closed) instead of one flat list.
   `tsc --noEmit` and `eslint` on the file are clean. **Not live-verified**
   — same Phase 6 credential gap as the two entries above.
+- **2026-09-24 — §8.5 audited, already complete; §8.6 drill-through
+  closed:** §8.5 (prospects/lead detail) needed nothing — the lead detail
+  page already has a strong summary hero, a tabbed workflow (Overview/
+  Activity/Contacts/Tasks/Meetings/Research/Commercial, not a stacked
+  page), and `AiInsightPanel` already shows provenance
+  (model/sourceReads/requestedBy) and a `configured` gate instead of raw
+  provider errors. §8.6 (Intelligence/domains) had funnel, velocity,
+  aging, and channel/industry tables already built; the one real gap was
+  "drill through" — added a link from Intelligence's industry-row key to
+  a filtered prospect search (`/outreach/prospects?q=`, since the row key
+  is free text with no id to target) and from the domain page's per-team
+  row to that team's page. Found and fixed a real bug while there: the
+  `eslint.config.mjs` `no-restricted-syntax` ignores array's entry for
+  `outreach/domains/[domainId]/page.tsx` was a silent no-op — minimatch
+  parses a literal `[domainId]` route segment as a bracket character
+  class, never the real path, so the file was actually failing lint. Every
+  *other* bracket-route file in that list turned out to already carry its
+  own inline `eslint-disable` comment (the real protection); this file
+  didn't, so it got one, matching the existing pattern. `eslint.config.mjs`
+  itself is protected by a config-integrity hook and wasn't touched — the
+  array still lists bracket paths that don't functionally match anything;
+  future bracket-route grandfathering needs the inline-comment pattern,
+  not an ignores-array entry alone. `tsc --noEmit` and `eslint` clean on
+  every touched file. **Not live-verified** — same Phase 6 gap.
+- **2026-09-24 — §9.2 spot-audited (no gap), §7 sign-in audited (no gap),
+  §10 graphics decided against building:** `FinanceDesk`/`SalesDesk` read
+  in full — attention bands (`StatRow`, "Goods moved without a document"),
+  lifecycle via `DataTable`'s declarative `variant: "state"` column (not a
+  literal `StateBadge` grep hit, which is why an earlier pattern-match
+  pass here misread them as gaps), `rupees()` tabular formatting. Already
+  spec-compliant; `PurchaseDesk`/`TransactionsDesk`/`StockBoard` weren't
+  individually re-read but share the same `DataTable` architecture. §7
+  sign-in (`sign-in/page.tsx`) was already rebuilt against a reference
+  board 2026-09-04 — product-led layout, monochrome mark, human-readable
+  OIDC error copy, clean server-side redirect. No changes needed either
+  place. §10 (graphics): invoked `impeccable` before starting, which
+  surfaced that `EmptyState` (`primitives.tsx`) already renders a
+  low-opacity `VeritySymbol` identically across every empty state in the
+  app — one coherent, theme-aware, on-brand treatment, not per-context
+  illustrations, but a real answer to §10's actual ask ("restrained...
+  no mascots/stock/3D... first-party visual asset system" — a single
+  first-party mark IS that, at lower risk than 10 bespoke SVGs). Building
+  10 separate illustrations would replace that already-shipped,
+  already-consistent pattern across every screen in the product — a
+  visual-identity decision, not a bounded UI slice, and not something to
+  improvise without product-owner sign-off (the same posture ADR-024's
+  gold board got). Decided, with the product owner, not to build it.
+  §10 is considered **closed as already-met**, not open debt.
 
 ## 1. Product outcome
 
