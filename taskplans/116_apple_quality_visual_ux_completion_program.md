@@ -103,6 +103,23 @@ page-family gates defined below.
   live-verified** — same Phase 6 credential gap as the Junior slice above,
   though this is a routing change on an already-shipped page, lower risk
   than new UI.
+- **2026-09-24 — §8.4 Teams / member-detail slice, code-complete, NOT
+  visually verified:** the team list and team-detail pages already matched
+  most of §8.4 (identity cards on `/outreach/teams`, work-state matrix on
+  team detail); the real gap was the member-detail page
+  (`teams/[teamId]/members/[partyId]/page.tsx`), which had none of the
+  spec's "progress, activity heatmap, reports, coaching timeline, assigned
+  work with explicit periods." Rebuilt it: a 14-day activity heatmap from
+  `OutreachActivity.occurredAt` (grouped client-side, no new query), a
+  daily-reports list from `OutreachCheckIn`/`OutreachCheckInReview` (same
+  tables `listTeamCheckIns` already reads, queried directly here per this
+  file's existing raw-Prisma pattern), the existing `CoachingNotePanel`
+  wired in for Core/leader viewers (it already existed for Senior's own
+  team but was never reachable from Core's per-team member view), and the
+  assigned-work list regrouped into explicit periods (Overdue / Due this
+  week / No next action set / On track / Closed) instead of one flat list.
+  `tsc --noEmit` and `eslint` on the file are clean. **Not live-verified**
+  — same Phase 6 credential gap as the two entries above.
 
 ## 1. Product outcome
 
