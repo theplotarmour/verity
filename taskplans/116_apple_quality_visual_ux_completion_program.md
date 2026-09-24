@@ -85,6 +85,24 @@ page-family gates defined below.
   `outreach/page.tsx` Core/Senior split, a larger and riskier edit than this
   self-contained page; do not start it without a fresh read of that file's
   current `isCoreView` branching.
+- **2026-09-24 — §8.2 closed, smaller than expected:** reading `outreach/
+  page.tsx`'s `isCoreView` branching (as the entry above flagged as
+  necessary first) found the real gap was routing, not missing UI. A Senior
+  visiting bare `/outreach` got no auto-scoping — `isCoreView` requires
+  `canPostDirection` (Founder-only), so they saw an unfiltered cross-team
+  lead list, no direction banner, and a hardcoded "Company Core view"
+  description that was simply wrong for them. `/outreach/team` ("Team
+  Command") already existed and already matched §8.2's checklist closely —
+  team-scoped hero, `listTeamDailyWorkStatus` work-state matrix, coaching
+  notes, lead queue, escalations. Added the same redirect pattern this page
+  already used for Junior (`/outreach` → `/outreach/prospects`), just for
+  Senior (`/outreach` → `/outreach/team`), only on the bare landing — an
+  explicit `?team=` deep link still renders this page scoped, unchanged.
+  Also fixed the hardcoded description for that remaining case. `tsc
+  --noEmit`, `eslint`, and `impeccable detect.mjs` all clean. **Not
+  live-verified** — same Phase 6 credential gap as the Junior slice above,
+  though this is a routing change on an already-shipped page, lower risk
+  than new UI.
 
 ## 1. Product outcome
 
