@@ -141,24 +141,24 @@ targets, quiet surfaces, and one obvious next action.
 
 ### REQ-EXPERIENCE-DESIGNSYSTEM-017
 *   **Requirement**: A collection-view row for an entity with a lifecycle state exposes its obvious next-state action inline (e.g. Approve, Cancel, Adjust), not only from a separate action screen the operator must re-find the same record on.
-*   **Status**: `[PROPOSED]` — Task 121, awaiting the same ratification pass as REQ-010..016; do not treat as enforceable until re-marked `[DECIDED]`.
+*   **Status**: `[DECIDED]` — ratified 2026-09-24 (Task 122 Phase 2). Largely already true: `DataTable`'s `rowActions` prop already ships this in `FinanceDesk`/`SalesDesk`; ratifying names the existing shape as the required one, not a new build.
 
 ### REQ-EXPERIENCE-DESIGNSYSTEM-018
 *   **Requirement**: Any entity holding a counterparty relationship (customer, supplier, dealer, or an equivalent party-like entity in a future capability) exposes a running ledger/statement view — generalizing the pattern already built in `src/app/(shell)/ledgers/LedgerView.tsx` platform-wide via a shared query/component, not left to each capability to reinvent or omit.
-*   **Status**: `[PROPOSED]` — Task 121, awaiting ratification.
+*   **Status**: `[DECIDED]` — ratified 2026-09-24 (Task 122 Phase 2). Real net-new scope: no shared platform primitive exists yet, only `LedgerView.tsx`'s own capability-local pattern. Ratifying commits to building the generalization; it does not itself constitute having built it — do not report this REQ as satisfied until a shared query/component actually exists and a second capability uses it.
 
 ### REQ-EXPERIENCE-DESIGNSYSTEM-019
 *   **Requirement**: A record meant to leave the system to an external party (an invoice, a purchase order, a certificate) has a print/PDF path. A CSV/data export alone does not satisfy this — the recipient is assumed to want a document, not a spreadsheet.
-*   **Status**: `[PROPOSED]` — Task 121, awaiting ratification.
+*   **Status**: `[DECIDED]` — ratified 2026-09-24 (Task 122 Phase 2). Whether `BillView.tsx`/`InvoiceView.tsx` already have a real print/PDF path, versus only the solid+print-safe styling ADR-011 requires of dense financial documents, was not verified before ratification — check before citing either as already compliant.
 
 ### REQ-EXPERIENCE-DESIGNSYSTEM-022
 *   **Requirement**: A collection view whose rows commonly need the same action applied to several at once (approve, assign, tag, export) offers a bulk-selection affordance — a checkbox per row plus a "select all shown" control — and surfaces the chosen action(s) in place of the row-count line once 1+ rows are checked, rather than requiring the same command be repeated per row. `DataTable`'s existing `bulkActions` prop is the reference shape; a capability does not invent a second selection mechanism.
-*   **Status**: `[PROPOSED]` — Task 121 §3.2, awaiting the same ratification pass as REQ-010..019; do not treat as enforceable until re-marked `[DECIDED]`.
+*   **Status**: `[DECIDED]` — ratified 2026-09-24 (Task 122 Phase 2). Already shipped infrastructure: `DataTable`'s `bulkActions` prop, used today in Prospects' `BulkActionBar`; ratifying names the existing shape as the required one.
 
 ### REQ-EXPERIENCE-DESIGNSYSTEM-023
 *   **Requirement**: A record type that a person refers to by a short human name in conversation or on paper (an order, an invoice, a bill, a work item) carries a stable, sequential, human-readable number distinct from its internal identifier, generated at creation and shown wherever the record is referenced. A raw UUID or CUID fragment is not an acceptable substitute in a caption, a printed document, or a search field.
-*   **Status**: `[PROPOSED]` — Task 121 §3.2, awaiting ratification. Several existing screens already fall back to `id.slice(0, 8)` when no reference exists (`PurchaseDesk.tsx`, `SalesDesk.tsx`) — this REQ, once ratified, names that fallback as the gap to close, not the accepted shape.
+*   **Status**: `[DECIDED]` — ratified 2026-09-24 (Task 122 Phase 2). Known real gap at ratification time: `PurchaseDesk.tsx`/`SalesDesk.tsx` still fall back to `id.slice(0, 8)` when no reference exists. This is a schema/migration-level fix (a per-tenant sequential-number generator), not a UI change — ratifying commits to closing it, does not itself close it.
 
 ### REQ-EXPERIENCE-DESIGNSYSTEM-024
 *   **Requirement**: A state transition on a record that another person is responsible for acting on next (an approval request, an assignment, a dispatch) raises a notification to that person at the moment of transition, through the platform's existing notification mechanism — not left as a fact only visible if the responsible person happens to reopen the record.
-*   **Status**: `[PROPOSED]` — Task 121 §3.2, awaiting ratification. Scope note: this governs the *interaction-grammar expectation* (a state transition of this kind gets a notification); it does not itself define the notification transport or template shape, which stays each capability's own `NotificationTemplate` usage per Task 104's correction.
+*   **Status**: `[DECIDED]` — ratified 2026-09-24 (Task 122 Phase 2). No notification transport is wired for most of the transitions this would cover yet — ratifying establishes the interaction-grammar expectation going forward (new work must raise the notification), it does not retrofit existing transitions. Scope note unchanged: this governs the *expectation*, not the transport/template shape, which stays each capability's own `NotificationTemplate` usage per Task 104's correction.

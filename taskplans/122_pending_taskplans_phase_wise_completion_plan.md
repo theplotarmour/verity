@@ -53,31 +53,35 @@ grammar in `verity-spec/09_experience/design-system.md` §3. No page-local
 control systems. Ongoing discipline, not a checklist with an end state —
 re-check before every new UI surface, not once.
 
-## Phase 2 — Task 121 §3.2: draft REQ text for the uncovered categories
+## Phase 2 — Task 121 §3.2: draft REQ text for the uncovered categories [DONE 2026-09-24]
 
-Draft, then run through this repo's normal REQ ratification pass (same
-process REQ-010..016 went through — not invented unilaterally):
+Drafted as REQ-EXPERIENCE-DESIGNSYSTEM-017/018/019/022/023/024
+(`verity-spec/09_experience/design-system.md`), then ratified
+`[DECIDED]` the same session (product-owner walkthrough, one decision
+per REQ, not batch-approved). Found and fixed a real duplicate-ID bug
+along the way — the file's ADR-026 glass-material items had reused
+REQ-015/016, colliding with unrelated section-3 grammar items of the
+same numbers; grep-verified nothing cited either by number, renumbered
+the ADR-026 pair to 020/021.
 
-- Per-row inline next-state action on a collection view (extends
-  REQ-012).
-- A required ledger/statement pattern for any entity with a counterparty
-  relationship — generalizing `LedgerView.tsx`'s own pattern platform-wide
-  via a shared query/component.
-- Print/PDF path for any record meant to leave the system (invoice, PO,
-  certificate) — not CSV export alone.
-- Bulk actions, human-readable sequential numbering, notification-on-
-  state-change.
+Ratifying `[DECIDED]` records intent, not completion — three of the six
+(REQ-018 ledger generalization, REQ-023 sequential numbering, REQ-024
+notification-on-transition) name real, currently-unbuilt scope in their
+own Status note; do not report any of those as satisfied without
+checking the actual code first. REQ-017/022 were already true in
+practice (`DataTable`'s `rowActions`/`bulkActions` props); REQ-019
+(print/PDF path) was ratified without verifying `BillView.tsx`/
+`InvoiceView.tsx` actually have one — check before citing it either way.
 
-**Sequencing note (from Task 121 itself):** do this only after Phase 0/4's
-real migration list is settled — the lint rule already surfaced the true
-28-file list; don't draft spec prose against a stale one.
+## Phase 3 — Task 121 §3.3: wire `obvious-basics-checklist` into review [DONE 2026-09-24]
 
-## Phase 3 — Task 121 §3.3: wire `obvious-basics-checklist` into review
-
-Make the skill a required pass before any new capability's screens ship,
-plus a periodic (quarterly, or on capability-set change) sweep of the
-full shipped surface — same enforcement posture already given to
-`verity-adr-gate` and `verity-migration-safety`.
+Wired into `verity-client-capability-builder`'s existing V1-completeness
+gate as a required pass alongside the Odoo reference-module cross-check
+— same enforcement posture already given to `verity-adr-gate` and
+`verity-migration-safety`, not just a one-time audit. See that skill's
+`SKILL.md` for the exact gate text and output-format requirement
+(`obvious-basics-checklist`'s own `Category | Status | Evidence | Fix`
+table, additive to the existing Odoo-cross-check output).
 
 ## Phase 4 — migrate the 28 grandfathered bare-table files [DONE 2026-09-24, 18 of 28]
 
