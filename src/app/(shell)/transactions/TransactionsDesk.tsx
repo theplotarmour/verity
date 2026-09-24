@@ -1,14 +1,10 @@
 "use client";
 
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
-
 import { CommandButton } from "@/components/ui/CommandAccess";
 
 import { useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Badge,
   EmptyState,
   ErrorState,
   Field,
@@ -19,6 +15,7 @@ import {
   StatRow,
 } from "@/components/ui/primitives";
 import { Combobox } from "@/components/ui/Combobox";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Modal, ModalCancel } from "@/components/ui/Modal";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
@@ -192,97 +189,42 @@ export function TransactionsDesk({
             }
           />
         ) : (
-          <div className="-mx-3 overflow-x-auto px-3">
-            <table className="w-full min-w-[820px] border-collapse">
-              <caption className="sr-only">
-                Payments received and sent, newest first
-              </caption>
-              <thead>
-                <tr>
-                  {["Date", "What happened", "How", "Amount", "Settled"].map(
-                    (heading, index) => (
-                      <th
-                        key={heading}
-                        className={
-                          "whitespace-nowrap border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                          (index >= 3 ? "text-right" : "text-left")
-                        }
-                      >
-                        {heading}
-                      </th>
-                    ),
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((payment) => {
-                  const unallocated =
-                    payment.amountPaise - payment.allocatedPaise;
-                  return (
-                    <tr key={payment.id} className="transition-colors hover:bg-accent-subtle/40">
-                      <td className="whitespace-nowrap border-b border-line px-3 py-2 text-[13px] text-text-secondary">
-                        {shortDate(payment.receivedAt)}
-                      </td>
-                      <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                        {/* The sentence, not a sign. */}
-                        {payment.direction === "in"
-                          ? "Received from "
-                          : "Sent to "}
-                        <Link
-                          href={
-                            payment.partySide === "customer"
-                              ? `/ledgers?customer=${payment.partyId}`
-                              : `/ledgers?supplier=${payment.partyId}`
-                          }
-                          className="text-text no-underline hover:underline"
-                        >
-                          {payment.partyName}
-                        </Link>
-                        {payment.reference && (
-                          <span className="mt-0.5 block text-[12px] text-text-tertiary">
-                            {payment.reference}
-                          </span>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap border-b border-line px-3 py-2 text-[13px] text-text-secondary">
-                        {METHOD_LABEL[payment.method] ?? payment.method}
-                      </td>
-                      <td
-                        className={
-                          "tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] " +
-                          (payment.direction === "in"
-                            ? "text-success"
-                            : "text-text")
-                        }
-                      >
-                        {payment.direction === "in" ? "+" : "−"}
-                        {rupees(payment.amountPaise)}
-                      </td>
-                      <td className="border-b border-line px-3 py-2 text-right text-[12px] text-text-tertiary">
-                        {payment.settled.length > 0 && (
-                          <span className="block">
-                            {payment.settled.join(", ")}
-                          </span>
-                        )}
-                        {unallocated > 0 && (
-                          // "On account" is accountant's language. What it
-                          // means to a merchant is that this much of the money
-                          // is not against any bill yet.
-                          <Badge tone="accent">
-                            {rupees(unallocated)}{" "}
-                            {payment.direction === "in"
-                              ? "paid in advance"
-                              : "advance to them"}
-                          </Badge>
-                        )}
-                        {payment.settled.length === 0 && unallocated === 0 && "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={[
+              { key: "date", header: "Date", sortable: true },
+              { key: "party", header: "What happened", sortable: true, variant: "link", href: "{ledgerHref}", subKey: "reference" },
+              { key: "how", header: "How", sortable: true },
+              { key: "amount", header: "Amount", numeric: true, sortable: true },
+              { key: "settled", header: "Settled", sortable: false },
+            ]}
+            rows={shown.map((payment) => {
+              const unallocated = payment.amountPaise - payment.allocatedPaise;
+              const settledParts: string[] = [];
+              if (payment.settled.length > 0) settledParts.push(payment.settled.join(", "));
+              if (unallocated > 0)
+                // "On account" is accountant's language. What it means to a
+                // merchant is that this much of the money is not against any
+                // bill yet.
+                settledParts.push(
+                  `${rupees(unallocated)} ${payment.direction === "in" ? "paid in advance" : "advance to them"}`,
+                );
+              return {
+                id: payment.id,
+                date: shortDate(payment.receivedAt),
+                // The sentence, not a sign.
+                party: `${payment.direction === "in" ? "Received from " : "Sent to "}${payment.partyName}`,
+                ledgerHref:
+                  payment.partySide === "customer"
+                    ? `/ledgers?customer=${payment.partyId}`
+                    : `/ledgers?supplier=${payment.partyId}`,
+                reference: payment.reference ?? undefined,
+                how: METHOD_LABEL[payment.method] ?? payment.method,
+                amount: `${payment.direction === "in" ? "+" : "−"}${rupees(payment.amountPaise)}`,
+                settled: settledParts.length > 0 ? settledParts.join(" · ") : "—",
+              };
+            })}
+            caption="Payments received and sent, newest first"
+          />
         )}
       </Panel>
 
