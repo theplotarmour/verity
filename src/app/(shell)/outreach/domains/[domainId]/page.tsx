@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/server/platform/auth";

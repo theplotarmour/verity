@@ -127,6 +127,20 @@ dark-mode counterpart considered in the same pass, not as a follow-up.
    surface with flat accent color, recoloring the mark, collapsing success
    into the accent hue, reintroducing scarlet, generic-SaaS drift with no
    material point of view).
+4. **Before shipping any new collection/detail/form screen for a
+   capability** (or reviewing an existing one against a client complaint
+   that it "feels unfinished"), run the `obvious-basics-checklist` skill
+   against it. Required, not optional, per `taskplans/121_permanent_
+   obvious_basics_enforcement_and_priority_order.md` — this is the
+   standing gate that replaces one-off audits: per-row actions, drill-in,
+   a ledger/statement for any counterparty entity, print/export, mobile
+   table safety (also enforced structurally by ESLint's ban on bare
+   `<table>` outside `DataTable`/`SmartTable`/`DynamicTable`), search/
+   filter, empty/error states. Cite `verity-spec/09_experience/design-
+   system.md` REQ-EXPERIENCE-DESIGNSYSTEM-017..019 (`[PROPOSED]`, not yet
+   `[DECIDED]`) for the three categories now spec-drafted from that
+   checklist; the rest of the checklist's categories are process-enforced
+   here, not yet spec REQ items.
 
 ## Non-goals
 

@@ -132,3 +132,15 @@ targets, quiet surfaces, and one obvious next action.
 ### REQ-EXPERIENCE-DESIGNSYSTEM-016
 *   **Requirement**: Loading, empty, degraded, denied, and error states explain what happened and offer only a safe next step. A screen must not present a silent blank area as if the user has no records or no permission.
 *   **Status**: `[DECIDED]`
+
+### REQ-EXPERIENCE-DESIGNSYSTEM-017
+*   **Requirement**: A collection-view row for an entity with a lifecycle state exposes its obvious next-state action inline (e.g. Approve, Cancel, Adjust), not only from a separate action screen the operator must re-find the same record on.
+*   **Status**: `[PROPOSED]` — Task 121, awaiting the same ratification pass as REQ-010..016; do not treat as enforceable until re-marked `[DECIDED]`.
+
+### REQ-EXPERIENCE-DESIGNSYSTEM-018
+*   **Requirement**: Any entity holding a counterparty relationship (customer, supplier, dealer, or an equivalent party-like entity in a future capability) exposes a running ledger/statement view — generalizing the pattern already built in `src/app/(shell)/ledgers/LedgerView.tsx` platform-wide via a shared query/component, not left to each capability to reinvent or omit.
+*   **Status**: `[PROPOSED]` — Task 121, awaiting ratification.
+
+### REQ-EXPERIENCE-DESIGNSYSTEM-019
+*   **Requirement**: A record meant to leave the system to an external party (an invoice, a purchase order, a certificate) has a print/PDF path. A CSV/data export alone does not satisfy this — the recipient is assumed to want a document, not a spreadsheet.
+*   **Status**: `[PROPOSED]` — Task 121, awaiting ratification.

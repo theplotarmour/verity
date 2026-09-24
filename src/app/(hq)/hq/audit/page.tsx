@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
 import { PageHeader, Panel, EmptyState } from "@/components/ui/primitives";
 import { platformAudit, requireOperator } from "@/server/platform/operator";
 

@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
+
 import Link from "next/link";
 import { Button } from "@/components/ui/primitives";
 import { Related } from "@/components/ui/business/Related";

@@ -1,5 +1,6 @@
 "use client";
 
+/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button, EmptyState, ErrorState, Panel } from "@/components/ui/primitives";
