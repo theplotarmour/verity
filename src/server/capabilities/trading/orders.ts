@@ -23,6 +23,7 @@ import {
 } from "@/server/platform/audit";
 import { transition } from "@/server/platform/state";
 import { notify } from "@/server/platform/notification";
+import { hasTenantPermission } from "@/server/platform/authorization";
 import type { TenantScopedClient } from "@/server/platform/tenancy";
 import {
   GSTIN,
@@ -84,6 +85,41 @@ async function orderNumber(
     financialYearOf(raisedAt, await tenantZone(tx)),
   );
   return invoiceNumber;
+}
+
+/**
+ * REQ-EXPERIENCE-DESIGNSYSTEM-024 — everyone whose role holds `ActionExecute`
+ * on `entity`, tenant-wide, minus the actor who just caused the transition.
+ * The actor never needs telling about their own action.
+ *
+ * Same shape as `requestAccess` (`src/server/actions/access-request.ts`):
+ * resolve recipients from the permission the next step actually requires,
+ * not a separate "who gets told" list that can drift from it.
+ */
+async function notifyPermissionHolders(
+  ctx: { tx: TenantScopedClient; actor: ActorContext },
+  entity: string,
+): Promise<string[]> {
+  const memberships = await ctx.tx.tenantMembership.findMany({
+    where: { tenantId: ctx.actor.tenantId, roleId: { not: null } },
+    select: { userId: true, roleId: true },
+  });
+  const roleIds = [...new Set(memberships.map((m) => m.roleId!))];
+  const permittedRoleIds = new Set<string>();
+  for (const roleId of roleIds) {
+    if (await hasTenantPermission(ctx.tx, roleId, "ActionExecute", entity)) {
+      permittedRoleIds.add(roleId);
+    }
+  }
+  return [
+    ...new Set(
+      memberships
+        .filter(
+          (m) => permittedRoleIds.has(m.roleId!) && m.userId !== ctx.actor.userId,
+        )
+        .map((m) => m.userId),
+    ),
+  ];
 }
 
 /* ================================ suppliers =============================== */
@@ -1050,6 +1086,26 @@ export const submitPurchaseOrder: CommandDefinition<
       where: { id: order.id },
       data: { state: "submitted", version: { increment: 1 } },
     });
+
+    // REQ-EXPERIENCE-DESIGNSYSTEM-024 — a submitted PO is next for whoever
+    // holds the receiving permission; nobody else knows to expect the goods
+    // until they happen to reopen the order.
+    const receivers = await notifyPermissionHolders(ctx, ENTITY_PURCHASE_ORDER);
+    if (receivers.length > 0) {
+      await notify(ctx.tx, {
+        tenantId: ctx.actor.tenantId,
+        recipientIds: receivers,
+        key: "verity.trading.purchase_order_submitted",
+        entityKey: ENTITY_PURCHASE_ORDER,
+        entityId: order.id,
+        variables: { reference: order.reference ?? order.id.slice(0, 8) },
+        fallback: {
+          subject: `Purchase order ${order.reference ?? order.id.slice(0, 8)} submitted`,
+          body: "Submitted and awaiting receipt against this order.",
+        },
+      });
+    }
+
     return {
       result: { id: order.id },
       events: [
@@ -2600,6 +2656,24 @@ export const reserveForOrder: CommandDefinition<
       where: { id: order.id },
       data: { state: "dispatching", version: { increment: 1 } },
     });
+
+    // REQ-EXPERIENCE-DESIGNSYSTEM-024 — stock is held; whoever dispatches is
+    // the next actor and needs telling now, not on next reopening the order.
+    const dispatchers = await notifyPermissionHolders(ctx, ENTITY_SALES_ORDER);
+    if (dispatchers.length > 0) {
+      await notify(ctx.tx, {
+        tenantId: ctx.actor.tenantId,
+        recipientIds: dispatchers,
+        key: "verity.trading.stock_reserved",
+        entityKey: ENTITY_SALES_ORDER,
+        entityId: order.id,
+        variables: { reference: order.reference ?? order.id.slice(0, 8) },
+        fallback: {
+          subject: `Order ${order.reference ?? order.id.slice(0, 8)} ready to dispatch`,
+          body: "Stock is held against this order and ready to dispatch.",
+        },
+      });
+    }
 
     return {
       result: { reserved },

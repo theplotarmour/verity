@@ -73,6 +73,20 @@ practice (`DataTable`'s `rowActions`/`bulkActions` props); REQ-019
 (print/PDF path) was ratified without verifying `BillView.tsx`/
 `InvoiceView.tsx` actually have one — check before citing it either way.
 
+**Follow-up checked 2026-09-24 (same session):** REQ-023's named gap was
+stale — `orderNumber()` in `orders.ts` already closes it (see the REQ's
+own updated Status note). REQ-024 got its first real wiring: two
+`notify()` calls in `trading/orders.ts` (`submitPurchaseOrder`,
+`reserveForOrder`), via a new `notifyPermissionHolders()` helper —
+closes trading's two clearest handoffs, not the whole platform surface.
+REQ-018 (ledger generalization) is **not** done: no second capability
+has a counterparty-balance concept to generalize *to* today (checked
+`accounting`, `billing`, `crm` — none fit), so building a "shared
+platform primitive" now would be a single-implementation abstraction
+with no real second caller. Put to the product owner same session;
+answer was defer/mark blocked, not build the seam speculatively — see
+the REQ's own updated Status note.
+
 ## Phase 3 — Task 121 §3.3: wire `obvious-basics-checklist` into review [DONE 2026-09-24]
 
 Wired into `verity-client-capability-builder`'s existing V1-completeness
