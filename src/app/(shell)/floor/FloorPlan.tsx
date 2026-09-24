@@ -1,12 +1,12 @@
 "use client";
 
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
 import { CommandButton, useCommandAccess } from "@/components/ui/CommandAccess";
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button, ErrorState, Panel, Field, Input } from "@/components/ui/primitives";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
 import type { FloorTable } from "@/server/capabilities/dinein";
@@ -197,74 +197,60 @@ export function FloorPlan({ tables }: { tables: FloorTable[] }) {
 
             {/* The same information as a list. Not a fallback nobody maintains:
                 it is what a screen reader reads and what a phone shows. */}
-            <table className="mt-4 w-full border-collapse">
-              <caption className="sr-only">{zone.name} tables</caption>
-              <thead>
-                <tr>
-                  {["Table", "State", "Covers", "Outstanding", ""].map((heading, index) => (
-                    <th
-                      key={heading || index}
-                      className="border-b border-line px-3 py-2 text-left text-[12px] font-normal text-text-tertiary"
+            <DataTable
+              columns={[
+                { key: "label", header: "Table", sortable: true },
+                { key: "state", header: "State", sortable: true },
+                { key: "covers", header: "Covers", sortable: true },
+                { key: "outstanding", header: "Outstanding", numeric: true, sortable: true },
+              ]}
+              rows={zone.tables.map((table) => ({
+                id: table.id,
+                tableId: table.id,
+                label: table.label,
+                state: (STATE_STYLE[table.state] ?? STATE_STYLE.available!).label,
+                covers: table.covers ?? "—",
+                outstanding: table.openLines,
+                tableState: table.state,
+                orderId: table.orderId ?? null,
+                table_: table,
+              }))}
+              caption={`${zone.name} tables`}
+              rowActions={(row) => (
+                <>
+                  {row.tableState === "available" && (
+                    <CommandButton
+                      commands={["verity.dinein.move_table", "verity.dinein.create_order"]}
+                      size="sm"
+                      disabled={pending}
+                      onClick={() => setSeating(row.table_ as FloorTable)}
                     >
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {zone.tables.map((table) => {
-                  const style = STATE_STYLE[table.state] ?? STATE_STYLE.available!;
-                  return (
-                    <tr key={table.id}>
-                      <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                        {table.label}
-                      </td>
-                      <td className="border-b border-line px-3 py-2 text-[13px]">
-                        <span className="flex items-center gap-2">
-                          <span aria-hidden="true" className={`size-2 rounded-full ${style.dot}`} />
-                          {style.label}
-                        </span>
-                      </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-[13px]">
-                        {table.covers ?? "—"}
-                      </td>
-                      <td className="tabular border-b border-line px-3 py-2 text-[13px]">
-                        {table.openLines}
-                      </td>
-                      <td className="border-b border-line px-3 py-2 text-right">
-                        {table.state === "available" && (
-                          <CommandButton commands={["verity.dinein.move_table","verity.dinein.create_order"]} size="sm" disabled={pending} onClick={() => setSeating(table)}>
-                            Seat
-                          </CommandButton>
-                        )}
-                        {table.orderId && (
-                          <Link
-                            href={`/floor/${table.orderId}`}
-                            className="text-[13px] text-accent-ink no-underline hover:underline"
-                          >
-                            Open order
-                          </Link>
-                        )}
-                        {table.state === "cleaning" && (
-                          <CommandButton commands={"verity.dinein.move_table"}
-                            size="sm"
-                            disabled={pending}
-                            onClick={() =>
-                              run("verity.dinein.move_table", {
-                                tableId: table.id,
-                                to: "available",
-                              })
-                            }
-                          >
-                            Mark clean
-                          </CommandButton>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      Seat
+                    </CommandButton>
+                  )}
+                  {row.orderId != null && (
+                    <Link
+                      href={`/floor/${row.orderId}`}
+                      className="text-[13px] text-accent-ink no-underline hover:underline"
+                    >
+                      Open order
+                    </Link>
+                  )}
+                  {row.tableState === "cleaning" && (
+                    <CommandButton
+                      commands={"verity.dinein.move_table"}
+                      size="sm"
+                      disabled={pending}
+                      onClick={() =>
+                        run("verity.dinein.move_table", { tableId: row.tableId, to: "available" })
+                      }
+                    >
+                      Mark clean
+                    </CommandButton>
+                  )}
+                </>
+              )}
+            />
           </Panel>
         </div>
       ))}

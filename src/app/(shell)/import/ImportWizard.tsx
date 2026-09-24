@@ -1,6 +1,5 @@
 "use client";
 
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
 import { useMemo, useState, useTransition } from "react";
 import Papa from "papaparse";
 import {
@@ -11,6 +10,7 @@ import {
   Select,
   ErrorState,
 } from "@/components/ui/primitives";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import {
   IMPORT_KINDS,
   runImportPreview,
@@ -220,33 +220,18 @@ export function ImportWizard() {
             }
           >
             {preview.invalid.length > 0 && (
-              <div className="overflow-x-auto border-b border-line">
-                <table className="w-full min-w-[560px] border-collapse">
-                  <caption className="sr-only">Rows that will not be imported as-is</caption>
-                  <thead>
-                    <tr>
-                      <th className="w-16 border-b border-line px-5 py-2 text-left text-[12px] font-normal text-text-tertiary">
-                        Row
-                      </th>
-                      <th className="border-b border-line px-5 py-2 text-left text-[12px] font-normal text-text-tertiary">
-                        Problem
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.invalid.map((issue) => (
-                      <tr key={issue.row} className="bg-danger-subtle">
-                        <td className="border-b border-line px-5 py-2 text-[13px] text-text">
-                          {issue.row}
-                        </td>
-                        <td className="border-b border-line px-5 py-2 text-[13px] text-danger">
-                          {issue.errors.join("; ")}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                columns={[
+                  { key: "row", header: "Row", numeric: true, sortable: true },
+                  { key: "problem", header: "Problem", sortable: false },
+                ]}
+                rows={preview.invalid.map((issue) => ({
+                  id: issue.row,
+                  row: issue.row,
+                  problem: issue.errors.join("; "),
+                }))}
+                caption="Rows that will not be imported as-is"
+              />
             )}
             <div className="flex items-center justify-between px-5 py-4">
               <p className="m-0 text-[12px] text-text-tertiary">
@@ -282,38 +267,18 @@ export function ImportWizard() {
             </span>
           }
         >
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] border-collapse">
-              <caption className="sr-only">What happened to each row</caption>
-              <thead>
-                <tr>
-                  <th className="w-16 border-b border-line px-5 py-2 text-left text-[12px] font-normal text-text-tertiary">
-                    Row
-                  </th>
-                  <th className="border-b border-line px-5 py-2 text-left text-[12px] font-normal text-text-tertiary">
-                    Result
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {commit.rows.map((row) => (
-                  <tr key={row.row} className={row.ok ? undefined : "bg-danger-subtle"}>
-                    <td className="border-b border-line px-5 py-2 text-[13px] text-text">
-                      {row.row}
-                    </td>
-                    <td
-                      className={
-                        "border-b border-line px-5 py-2 text-[13px] " +
-                        (row.ok ? "text-success" : "text-danger")
-                      }
-                    >
-                      {row.message}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={[
+              { key: "row", header: "Row", numeric: true, sortable: true },
+              { key: "result", header: "Result", sortable: false },
+            ]}
+            rows={commit.rows.map((row) => ({
+              id: row.row,
+              row: row.row,
+              result: row.message,
+            }))}
+            caption="What happened to each row"
+          />
           <div className="flex justify-end px-5 py-4">
             <Button variant="primary" onClick={reset}>
               Import more
