@@ -1,15 +1,11 @@
 "use client";
 
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
-
 import { CommandButton } from "@/components/ui/CommandAccess";
 
 import { useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Badge,
-  EmptyState,
   ErrorState,
   Field,
   FormRow,
@@ -19,6 +15,7 @@ import {
   StatRow,
 } from "@/components/ui/primitives";
 import { Combobox } from "@/components/ui/Combobox";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Modal, ModalCancel } from "@/components/ui/Modal";
 import { runCommand } from "@/server/actions/platform";
 import { netAcrossBusinesses } from "../ledgers/LedgerView";
@@ -284,83 +281,44 @@ export function FinanceDesk({
       )}
 
       <Panel title="Documents" flush={invoices.length === 0}>
-        {invoices.length === 0 ? (
-          <EmptyState
-            compact
-            title="No invoices yet"
-            description="They are raised by delivering goods and by receiving them."
-          />
-        ) : (
-          <div className="-mx-3 overflow-x-auto px-3">
-            <table className="w-full min-w-[760px] border-collapse">
-              <caption className="sr-only">
-                Invoices and supplier bills, newest first
-              </caption>
-              <thead>
-                <tr>
-                  {["Document", "Party", "Date", "Total", "Outstanding", ""].map(
-                    (heading, index) => (
-                      <th
-                        key={heading || index}
-                        className={
-                          "whitespace-nowrap border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                          (index <= 2 ? "text-left" : "text-right")
-                        }
-                      >
-                        {heading}
-                      </th>
-                    ),
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.map((invoice) => (
-                  <tr key={invoice.id} className="transition-colors hover:bg-accent-subtle/40">
-                    <td className="border-b border-line px-3 py-2 text-[14px]">
-                      <Link
-                        href={`/finance/${invoice.id}`}
-                        className="whitespace-nowrap text-text no-underline hover:underline"
-                      >
-                        {invoice.invoiceNumber}
-                      </Link>
-                      <span className="mt-0.5 block text-[12px] text-text-tertiary">
-                        {invoice.direction === "sales"
-                          ? "Sales invoice"
-                          : "Supplier bill"}
-                        {invoice.provisional && " · awaiting their document"}
-                      </span>
-                    </td>
-                    <td className="border-b border-line px-3 py-2 text-[14px] text-text-secondary">
-                      {invoice.partyName}
-                    </td>
-                    <td className="whitespace-nowrap border-b border-line px-3 py-2 text-[13px] text-text-secondary">
-                      {shortDate(invoice.issuedAt)}
-                    </td>
-                    <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] text-text-secondary">
-                      {rupees(invoice.totalPaise)}
-                    </td>
-                    <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px]">
-                      {invoice.outstandingPaise === 0
-                        ? "Settled"
-                        : rupees(invoice.outstandingPaise)}
-                    </td>
-                    <td className="border-b border-line px-3 py-2 text-right">
-                      {invoice.provisional && (
-                        <CommandButton commands={"verity.trading.confirm_purchase_bill"}
-                          size="sm"
-                          disabled={pending}
-                          onClick={() => setConfirming(invoice)}
-                        >
-                          Record their bill…
-                        </CommandButton>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <DataTable
+          columns={[
+            { key: "document", header: "Document", sortable: true, variant: "link", href: "/finance/{invoiceId}", subKey: "kind" },
+            { key: "party", header: "Party", sortable: true },
+            { key: "date", header: "Date", sortable: true },
+            { key: "total", header: "Total", numeric: true, sortable: true },
+            { key: "outstanding", header: "Outstanding", numeric: true, sortable: true },
+          ]}
+          rows={invoices.map((invoice) => ({
+            id: invoice.id,
+            invoiceId: invoice.id,
+            document: invoice.invoiceNumber,
+            kind:
+              (invoice.direction === "sales" ? "Sales invoice" : "Supplier bill") +
+              (invoice.provisional ? " · awaiting their document" : ""),
+            party: invoice.partyName,
+            date: shortDate(invoice.issuedAt),
+            total: rupees(invoice.totalPaise),
+            outstanding: invoice.outstandingPaise === 0 ? "Settled" : rupees(invoice.outstandingPaise),
+            provisional: invoice.provisional,
+            invoice,
+          }))}
+          caption="Invoices and supplier bills, newest first"
+          emptyTitle="No invoices yet"
+          emptyDescription="They are raised by delivering goods and by receiving them."
+          rowActions={(row) =>
+            row.provisional ? (
+              <CommandButton
+                commands={"verity.trading.confirm_purchase_bill"}
+                size="sm"
+                disabled={pending}
+                onClick={() => setConfirming(row.invoice as typeof invoices[number])}
+              >
+                Record their bill…
+              </CommandButton>
+            ) : null
+          }
+        />
       </Panel>
 
       <ConfirmBillModal

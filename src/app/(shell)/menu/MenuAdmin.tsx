@@ -1,13 +1,20 @@
 "use client";
 
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
 import { CommandButton } from "@/components/ui/CommandAccess";
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { EmptyState, ErrorState, Field, Input, Panel, Select } from "@/components/ui/primitives";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import { runCommand } from "@/server/actions/platform";
 import type { ActionFailure } from "@/server/platform/action-error";
+
+const itemColumns: Column[] = [
+  { key: "name", header: "Item", sortable: true },
+  { key: "price", header: "Price", numeric: true, sortable: true },
+  { key: "portions", header: "Portions", sortable: false },
+  { key: "state", header: "State", sortable: true },
+];
 
 type MenuCategory = {
   categoryId: string;
@@ -167,67 +174,44 @@ export function MenuAdmin({ menu }: { menu: MenuCategory[] }) {
               {category.items.length === 0 ? (
                 <p className="m-0 text-[13px] text-text-secondary">Nothing in this section yet.</p>
               ) : (
-                <table className="w-full border-collapse">
-                  <caption className="sr-only">{category.categoryName} items</caption>
-                  <thead>
-                    <tr>
-                      {["Item", "Price", "Portions", "State", ""].map((heading, index) => (
-                        <th
-                          key={heading || index}
-                          className={
-                            "border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                            (index === 0 || index === 2 ? "text-left" : "text-right")
-                          }
-                        >
-                          {heading}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {category.items.map((item) => (
-                      <tr key={item.id}>
-                        <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                          {item.name}
-                        </td>
-                        <td className="tabular border-b border-line px-3 py-2 text-right text-[14px]">
-                          {rupees(item.priceMinor)}
-                        </td>
-                        <td className="border-b border-line px-3 py-2 text-[13px] text-text-secondary">
-                          {item.variants.length === 0
-                            ? "—"
-                            : item.variants
-                                .map(
-                                  (variant) =>
-                                    `${variant.name} ${variant.priceDeltaMinor >= 0 ? "+" : "−"}${rupees(
-                                      Math.abs(variant.priceDeltaMinor),
-                                    )}`,
-                                )
-                                .join(", ")}
-                        </td>
-                        <td className="border-b border-line px-3 py-2 text-right text-[13px]">
-                          <span className={item.active ? "text-success" : "text-text-tertiary"}>
-                            {item.active ? "On the menu" : "Retired"}
-                          </span>
-                        </td>
-                        <td className="border-b border-line px-3 py-2 text-right">
-                          <CommandButton commands={"verity.dinein.set_menu_item_active"}
-                            size="sm"
-                            disabled={pending}
-                            onClick={() =>
-                              run("verity.dinein.set_menu_item_active", {
-                                itemId: item.id,
-                                active: !item.active,
-                              })
-                            }
-                          >
-                            {item.active ? "Retire" : "Bring back"}
-                          </CommandButton>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <DataTable
+                  columns={itemColumns}
+                  rows={category.items.map((item) => ({
+                    id: item.id,
+                    itemId: item.id,
+                    name: item.name,
+                    price: rupees(item.priceMinor),
+                    portions:
+                      item.variants.length === 0
+                        ? "—"
+                        : item.variants
+                            .map(
+                              (variant) =>
+                                `${variant.name} ${variant.priceDeltaMinor >= 0 ? "+" : "−"}${rupees(
+                                  Math.abs(variant.priceDeltaMinor),
+                                )}`,
+                            )
+                            .join(", "),
+                    state: item.active ? "On the menu" : "Retired",
+                    active: item.active,
+                  }))}
+                  caption={`${category.categoryName} items`}
+                  rowActions={(row) => (
+                    <CommandButton
+                      commands={"verity.dinein.set_menu_item_active"}
+                      size="sm"
+                      disabled={pending}
+                      onClick={() =>
+                        run("verity.dinein.set_menu_item_active", {
+                          itemId: row.itemId,
+                          active: !row.active,
+                        })
+                      }
+                    >
+                      {row.active ? "Retire" : "Bring back"}
+                    </CommandButton>
+                  )}
+                />
               )}
             </Panel>
           ))}
