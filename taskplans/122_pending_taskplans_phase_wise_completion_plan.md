@@ -7,7 +7,7 @@ Task 121 §2's priority list into concrete phases, verified live against
 `00_STATUS_INDEX.md`, `handoffs/README.md`, `eslint.config.mjs`, and
 current `git status` as of 2026-09-24 — not re-typed from memory.
 
-## Status: PROPOSED — sequencing doc, not new scope
+## Status: Phase 4 (bare-`<table>` migration) DONE 2026-09-24 — see below; other phases PROPOSED
 
 This is a pointer and an ordering, the same posture as
 `101_remaining_work_master_plan.md` and Task 121 §2. It creates no new
@@ -79,7 +79,64 @@ plus a periodic (quarterly, or on capability-set change) sweep of the
 full shipped surface — same enforcement posture already given to
 `verity-adr-gate` and `verity-migration-safety`.
 
-## Phase 4 — migrate the 28 grandfathered bare-table files
+## Phase 4 — migrate the 28 grandfathered bare-table files [DONE 2026-09-24, 18 of 28]
+
+**Outcome: 28 → 10.** `DataTable` gained a new optional `rowActions`
+render-prop (`src/components/ui/DataTable.tsx`, Task 121 §3.2's own
+named gap — a per-row privileged write control that `Column`'s
+declarative variants can't express) — additive, all 21 pre-existing
+importers verified unaffected (`tsc --noEmit` clean before any importer
+touched it). One file (`hq/clients/page.tsx`) needed a small client
+component extracted (`ClientsTable.tsx`) because it's a Server
+Component and `rowActions` is a plain closure, not a `"use server"`
+action — the same pattern this repo already uses for `CreateClientForm.tsx`
+in the same directory.
+
+**18 files migrated** across 9 commits (`5418f18`..`1822ce8`): full
+CRUD/list tables in HQ admin, shell desks, counter, ledgers, stock,
+transactions, floor plan, import wizard, and outreach intelligence.
+Accepted, documented simplifications along the way: per-cell semantic
+color/badge styling has no `Column` equivalent (status text itself is
+unchanged, only its color emphasis is lost) — same tradeoff repeated
+consistently rather than migrating some files and not others for
+inconsistent reasons.
+
+**10 files remain, each with a real structural reason, not deferred
+debt:**
+- `counter/[billId]/BillView.tsx`, `finance/[invoiceId]/InvoiceView.tsx`
+  — printable financial documents (ADR-011 dense-financial-solid +
+  print-safety); `DataTable`'s filter/sort/pagination chrome is wrong on
+  a print surface.
+- `outreach/domains/[domainId]/page.tsx`, `outreach/intelligence/page.tsx`
+  (funnel table only — its other table, `IntelligenceTable`, IS
+  migrated) — per-cell progress-bar visualization, not plain data.
+- `hq/clients/[tenantId]/organizations/OrganizationsAdmin.tsx` — a
+  depth-first indented parent/child tree; column-sort would visually
+  scatter a subtree from its parent.
+- `catalogue/CatalogueAdmin.tsx` — `groupByDesign()`'s fixed
+  parent/variant grouping has the identical column-sort problem.
+- `hq/clients/[tenantId]/roles/RolesAdmin.tsx` — a permission matrix,
+  4 interactive checkboxes per row, not one trailing action.
+- `hq/clients/[tenantId]/people/PeopleAdmin.tsx` — a live `<Select>`
+  embedded in a data column, not the action slot.
+- `prices/PriceSheet.tsx` — every cell is a controlled `<input>` with
+  cross-cell keyboard navigation; an inline-editable grid, not a
+  read-only row.
+- `ledgers/LedgerView.tsx` (`OwedTable` only — its other table, the
+  single-party ledger, IS migrated) — deliberately headerless top-N
+  summary list (`<tbody>` with no `<thead>`); `DataTable` always renders
+  visible header/filter chrome, which would be an unrequested visual
+  change to an intentionally minimal list.
+
+None of the 10 are candidates for `rowActions` or any other prop
+addition — each is a genuine shape mismatch (tree, matrix, live-input
+grid, print document, data-viz, headerless list), not a control gap.
+Revisit only if a future shared-component variant is purpose-built for
+one of these shapes; don't force-fit them into `DataTable` meanwhile.
+
+Original plan text (superseded by the outcome above, kept for
+context — the sequencing intent held, the file count/reasoning is now
+what actually happened):
 
 Mechanical, unblocked, no product-owner decision required. Swap each to
 `DataTable`/`SmartTable`/`DynamicTable` (`src/components/ui/`), then
