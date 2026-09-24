@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically. The config `ignores` array's glob for this path is a known no-op: minimatch treats a literal `[domainId]` route segment as a bracket character class, not literal text, so it never matches — this inline comment is the only mechanism that actually protects this file. Same bug likely affects every other bracketed-route entry in that list; they're currently harmless only because each of those files also carries this same inline comment. */
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireActor } from "@/server/platform/auth";
@@ -218,7 +219,11 @@ async function DomainDetailPage({
                 <tbody>
                   {activeTeams.map((t) => (
                     <tr key={t.teamId} className="border-b border-line last:border-none">
-                      <td className="py-2.5 text-text">{t.teamName}</td>
+                      <td className="py-2.5">
+                        <Link href={`/outreach/teams/${t.teamId}`} className="text-text no-underline hover:text-accent-ink hover:underline">
+                          {t.teamName}
+                        </Link>
+                      </td>
                       <td className="tabular py-2.5 text-right text-text-secondary">{t.leads}</td>
                       <td className="tabular py-2.5 text-right text-text-secondary">{t.outreach}</td>
                       <td className="tabular py-2.5 text-right text-text-secondary">{percent(t.responseRate)}</td>

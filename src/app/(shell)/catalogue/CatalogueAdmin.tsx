@@ -1,6 +1,5 @@
 "use client";
 
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
 import { CommandButton } from "@/components/ui/CommandAccess";
 
 import Link from "next/link";

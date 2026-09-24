@@ -160,6 +160,11 @@ async function IntelligencePage({
           keyHeader="Industry"
           rows={data.verticals}
           empty="No activity by industry in this window — industry is set on each lead."
+          // Drills through to the prospects this row's number came from —
+          // §8.6 requires the industry visual to drill through, and the key
+          // here is free text (domain name or raw industry field, no id to
+          // link to), so a filtered prospect search is the honest target.
+          drillHref
         />
         <IntelligenceTable
           title="By channel"
@@ -186,6 +191,7 @@ function IntelligenceTable({
   keyHeader,
   rows,
   empty,
+  drillHref,
 }: {
   title: string;
   keyHeader: string;
@@ -201,9 +207,13 @@ function IntelligenceTable({
     thinSample: boolean;
   }>;
   empty: string;
+  /** Link the key column to a filtered prospect search for this row. */
+  drillHref?: boolean;
 }) {
   const columns: Column[] = [
-    { key: "key", header: keyHeader, sortable: true },
+    drillHref
+      ? { key: "key", header: keyHeader, sortable: true, variant: "link", href: "/outreach/prospects?q={q}" }
+      : { key: "key", header: keyHeader, sortable: true },
     { key: "leads", header: "Leads", numeric: true, sortable: true },
     { key: "outreach", header: "Outreach", numeric: true, sortable: true },
     { key: "responses", header: "Responses", numeric: true, sortable: true },
@@ -223,6 +233,7 @@ function IntelligenceTable({
           rows={rows.map((r) => ({
             id: r.key,
             key: r.key,
+            q: encodeURIComponent(r.key),
             leads: r.leads,
             outreach: r.outreach,
             responses: r.responses,
