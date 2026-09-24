@@ -1,6 +1,5 @@
 "use client";
 
-/* eslint-disable no-restricted-syntax -- Task 121 grandfathered debt (bare <table>), migrate to DataTable/SmartTable opportunistically */
 import { CommandButton } from "@/components/ui/CommandAccess";
 
 import { useState, useTransition, type ReactNode } from "react";
@@ -12,8 +11,8 @@ import {
   Field,
   Input,
   Panel,
-  StateBadge,
 } from "@/components/ui/primitives";
+import { DataTable, type Column } from "@/components/ui/DataTable";
 import { day } from "@/components/ui/business/format";
 import { NewCustomerModal } from "@/components/ui/business/NewCustomerModal";
 import { NewSalesOrderForm, type SellableRow } from "./NewSalesOrderForm";
@@ -325,145 +324,104 @@ export function SalesDesk({
               }
             />
           ) : (
-            <div className="-mx-3 overflow-x-auto px-3">
-              <table className="w-full min-w-[720px] border-collapse">
-                <caption className="sr-only">
-                  Open sales orders. Quantities are units ordered.
-                </caption>
-                <thead>
-                  <tr>
-                    {["Order", "Board", "Status", "Ordered", "Value", ""].map(
-                      (heading, index) => (
-                        <th
-                          key={heading || index}
-                          className={
-                            "whitespace-nowrap border-b border-line px-3 py-2 text-[12px] font-normal text-text-tertiary " +
-                            (index <= 1 ? "text-left" : "text-right")
-                          }
-                        >
-                          {heading}
-                        </th>
-                      ),
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.map((order) => (
-                    <tr key={order.id} className="transition-colors hover:bg-accent-subtle/40">
-                      <td className="border-b border-line px-3 py-2 text-[14px] text-text">
-                        {/* The order is the record; the desk is only a way in.
-                          Every action worth taking has more context on the
-                          order's own page than a table row can carry. */}
-                        <Link
-                          href={`/sales/${order.id}`}
-                          className="whitespace-nowrap text-text no-underline hover:underline"
-                        >
-                          {order.reference ?? `Order ${order.id.slice(0, 8)}`}
-                        </Link>
-                        <span className="mt-0.5 block text-[12px] text-text-tertiary">
-                          <Link
-                            href={`/customers/${order.customerId}`}
-                            className="text-text-tertiary no-underline hover:underline"
-                          >
-                            {order.customerName}
-                          </Link>{" "}
-                          · {day(order.raisedAt)}
-                        </span>
-                      </td>
-                      {/* U2-2: what the order is for. */}
-                      <td className="border-b border-line px-3 py-2 text-[14px] text-text-secondary">
-                        {order.summary}
-                      </td>
-                      <td className="border-b border-line px-3 py-2">
-                        <StateBadge
-                          category={STATE_CATEGORY[order.state] ?? "Pending"}
-                          label={STATE_LABEL[order.state] ?? order.state}
-                        />
-                      </td>
-                      <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px] text-text-secondary">
-                        {order.orderedUnits.toLocaleString("en-IN")}
-                      </td>
-                      <td className="tabular whitespace-nowrap border-b border-line px-3 py-2 text-right text-[14px]">
-                        {rupees(order.totalPricePaise)}
-                      </td>
-                      <td className="border-b border-line px-3 py-2 text-right">
-                        <div className="flex justify-end gap-2">
-                          {order.amendable && (
-                            <CommandButton commands={"verity.trading.edit_sales_order"}
-                              size="sm"
-                              disabled={pending}
-                              onClick={() => openPanel(() => setAmending(order))}
-                            >
-                              Edit
-                            </CommandButton>
-                          )}
-                          {order.state === "approved" && (
-                            <CommandButton commands={"verity.trading.reserve_for_order"}
-                              size="sm"
-                              disabled={pending}
-                              onClick={() => setReserving(order.id)}
-                            >
-                              Hold stock for this
-                            </CommandButton>
-                          )}
-                          {order.state === "dispatching" && (
-                            <CommandButton commands={"verity.trading.dispatch_order"}
-                              size="sm"
-                              variant="primary"
-                              disabled={pending}
-                              onClick={() =>
-                                run(
-                                  "verity.trading.dispatch_order",
-                                  { orderId: order.id },
-                                  (data) => {
-                                    // Requested: go straight to the invoice
-                                    // this raised. The point of handing goods
-                                    // over is the document that comes out of
-                                    // it, and making someone find it again on
-                                    // another screen is a step with no purpose.
-                                    //
-                                    // Only when one was actually raised: a
-                                    // refused invoice — a customer with no
-                                    // state code, a closed period — leaves the
-                                    // desk where it is, with the refusal shown,
-                                    // rather than navigating to nothing.
-                                    const invoiceId = (
-                                      data as {
-                                        invoicing?: { id?: string } | null;
-                                      } | null
-                                    )?.invoicing?.id;
-                                    if (invoiceId) {
-                                      router.push(`/finance/${invoiceId}`);
-                                    }
-                                  },
-                                )
-                              }
-                            >
-                              Hand over &amp; invoice
-                            </CommandButton>
-                          )}
-                          <CommandButton commands={"verity.trading.cancel_sales_order"}
-                            size="sm"
-                            disabled={pending}
-                            onClick={() =>
-                              openPanel(() =>
-                                setCancelling(
-                                  cancelling === order.id ? null : order.id,
-                                ),
-                              )
+            <DataTable
+              columns={[
+                // The order is the record; the desk is only a way in. Every
+                // action worth taking has more context on the order's own
+                // page than a table row can carry.
+                { key: "order", header: "Order", sortable: true, variant: "link", href: "/sales/{orderId}", subKey: "meta" },
+                { key: "board", header: "Board", sortable: true },
+                { key: "status", header: "Status", sortable: true, variant: "state", categoryKey: "stateCategory" },
+                { key: "ordered", header: "Ordered", numeric: true, sortable: true },
+                { key: "value", header: "Value", numeric: true, sortable: true },
+              ]}
+              rows={orders.map((order) => ({
+                id: order.id,
+                orderId: order.id,
+                order: order.reference ?? `Order ${order.id.slice(0, 8)}`,
+                meta: `${order.customerName} · ${day(order.raisedAt)}`,
+                board: order.summary,
+                status: STATE_LABEL[order.state] ?? order.state,
+                stateCategory: STATE_CATEGORY[order.state] ?? "Pending",
+                ordered: order.orderedUnits.toLocaleString("en-IN"),
+                value: rupees(order.totalPricePaise),
+                amendable: order.amendable,
+                orderState: order.state,
+                order_: order,
+              }))}
+              caption="Open sales orders. Quantities are units ordered."
+              rowActions={(row) => (
+                <div className="flex justify-end gap-2">
+                  {row.amendable === true && (
+                    <CommandButton
+                      commands={"verity.trading.edit_sales_order"}
+                      size="sm"
+                      disabled={pending}
+                      onClick={() => openPanel(() => setAmending(row.order_ as SalesOrder))}
+                    >
+                      Edit
+                    </CommandButton>
+                  )}
+                  {row.orderState === "approved" && (
+                    <CommandButton
+                      commands={"verity.trading.reserve_for_order"}
+                      size="sm"
+                      disabled={pending}
+                      onClick={() => setReserving(String(row.orderId))}
+                    >
+                      Hold stock for this
+                    </CommandButton>
+                  )}
+                  {row.orderState === "dispatching" && (
+                    <CommandButton
+                      commands={"verity.trading.dispatch_order"}
+                      size="sm"
+                      variant="primary"
+                      disabled={pending}
+                      onClick={() =>
+                        run(
+                          "verity.trading.dispatch_order",
+                          { orderId: row.orderId },
+                          (data) => {
+                            // Requested: go straight to the invoice this
+                            // raised. The point of handing goods over is the
+                            // document that comes out of it, and making
+                            // someone find it again on another screen is a
+                            // step with no purpose.
+                            //
+                            // Only when one was actually raised: a refused
+                            // invoice — a customer with no state code, a
+                            // closed period — leaves the desk where it is,
+                            // with the refusal shown, rather than navigating
+                            // to nothing.
+                            const invoiceId = (
+                              data as { invoicing?: { id?: string } | null } | null
+                            )?.invoicing?.id;
+                            if (invoiceId) {
+                              router.push(`/finance/${invoiceId}`);
                             }
-                          >
-                            {cancelling === order.id
-                              ? "Keep order"
-                              : "Cancel order…"}
-                          </CommandButton>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                          },
+                        )
+                      }
+                    >
+                      Hand over &amp; invoice
+                    </CommandButton>
+                  )}
+                  <CommandButton
+                    commands={"verity.trading.cancel_sales_order"}
+                    size="sm"
+                    disabled={pending}
+                    onClick={() =>
+                      openPanel(() =>
+                        setCancelling(cancelling === row.orderId ? null : String(row.orderId)),
+                      )
+                    }
+                  >
+                    {cancelling === row.orderId ? "Keep order" : "Cancel order…"}
+                  </CommandButton>
+                </div>
+              )}
+            />
           )}
 
           {cancelling && (
