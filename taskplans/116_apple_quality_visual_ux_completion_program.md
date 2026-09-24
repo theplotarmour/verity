@@ -68,6 +68,23 @@ page-family gates defined below.
   are clean. Not yet done: Senior/Junior dashboard variants (§8.2/§8.3),
   mobile viewport proof, and the rest of the §16 evidence matrix — this slice
   only closes the Core desktop light/dark cell for `/outreach`.
+- **2026-09-24 — Phase 3 / Junior workspace §8.3 slice, code-complete, NOT
+  visually verified:** `/outreach/workspace` extended toward §8.3's required
+  composition — linear progress track (done-today vs still-to-go, both real
+  counts, no fabricated target), compact current-direction card (reused
+  `getCurrentDirection`'s read path, confirmed Junior already has `Read` on
+  `ENTITY_DIRECTION` before adding), a "Logged today" activity timeline from
+  data already fetched but not previously rendered, and a split empty-queue
+  state ("All caught up" vs "Nothing on your list" — different situations
+  that were one message). `impeccable` detector clean (zero findings),
+  `tsc --noEmit` and `eslint` clean. **Blocked from live verification by the
+  same Phase 6 gap** (`taskplans/122_...`) — no Junior login credentials
+  exist to sign in and confirm the render against real queue/timeline data.
+  Senior's §8.2 variant (member work-state matrix, coaching-scoped queue)
+  remains entirely unstarted — it lives inside the shared, 667-line
+  `outreach/page.tsx` Core/Senior split, a larger and riskier edit than this
+  self-contained page; do not start it without a fresh read of that file's
+  current `isCoreView` branching.
 
 ## 1. Product outcome
 
