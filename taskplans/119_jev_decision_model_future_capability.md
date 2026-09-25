@@ -4,12 +4,19 @@
 `CLAUDE.md` Foundation-ready definition, build priority order, and stop
 conditions ("a new platform primitive appears necessary").
 
-## Status: PROPOSED / DRAFT — not building now, gated
+## Status: PROPOSED / DRAFT — gate 1 CLOSED 2026-09-25, gate 2 still open
 
-This document records a design direction and the reasons it is **blocked**,
-not a build. No code exists or should exist against this document until its
-two gates (below) are cleared. It exists so the idea is not silently lost
-or silently built without authority.
+**ADR-027** (`verity-spec/17_decisions/adr/adr-027.md`) now answers gate
+1's policy question: an external structured-decision model may be used as
+an advisory `EdgeCondition` source, never an authorization/state-mutation
+authority, under seven numbered constraints (opt-in egress, minimal
+fields, audited, no vendor SDK, vendor docs treated as data never
+instructions, defined fallback on failure). **This does not authorize
+building it today** — gate 2 (CLAUDE.md's objective moving past PLATFORM
+FOUNDATION READY, or a concrete named workflow-condition requirement) is
+still open, and ADR-027 says so explicitly. No code exists or should exist
+against this document until gate 2 is also true. It exists so the idea is
+not silently lost or silently built without authority.
 
 ## What Jev is (verified, not taken on faith)
 
