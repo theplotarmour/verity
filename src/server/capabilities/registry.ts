@@ -9,6 +9,7 @@ import { registerTradingCapability } from "./trading";
 import { registerPlywoodCapability } from "./plywood";
 import { registerAccountingCapability } from "./accounting";
 import { registerInventoryCapability } from "./inventory";
+import { registerManufacturingCapability } from "./manufacturing";
 import { registerHrCapability } from "./hr";
 import { registerBillingCapability } from "./billing";
 import { registerRecipeCapability } from "./recipe";
@@ -52,6 +53,7 @@ export function installCapabilities(): void {
   // override 2026-09-04 — see taskplans/96_pending_roadmap_phases.md.
   registerAccountingCapability();
   registerInventoryCapability();
+  registerManufacturingCapability();
   registerHrCapability();
   registerBillingCapability();
   registerRecipeCapability();

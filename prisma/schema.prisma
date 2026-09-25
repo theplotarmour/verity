@@ -154,6 +154,10 @@ model Tenant {
   inventoryStockMovements InventoryStockMovement[]
   inventoryWastageRecords InventoryWastageRecord[]
 
+  // Capability: manufacturing (Task 118 minimal slice). Back-relations only.
+  manufacturingOrders     ManufacturingOrder[]
+  manufacturingOrderLines ManufacturingOrderLine[]
+
   // Capability: recipe (Colonel Kebabz Phase 1). Back-relations only.
   recipes           Recipe[]
   recipeIngredients RecipeIngredient[]
@@ -1522,6 +1526,9 @@ model Location {
   // Capability: inventory (Task 73). Back-relations only, as above.
   inventoryStockBalances  InventoryStockBalance[]
   inventoryStockMovements InventoryStockMovement[]
+
+  // Capability: manufacturing (Task 118 minimal slice). Back-relations only.
+  manufacturingOrders ManufacturingOrder[]
 
   // Capability: dinein (Colonel Kebabz multi-outlet). Back-relations only.
   diningZones  DiningZone[]
@@ -3990,6 +3997,8 @@ model InventoryItem {
   balances          InventoryStockBalance[]
   movements         InventoryStockMovement[]
   recipeIngredients RecipeIngredient[]
+  manufacturingOrderOutputs    ManufacturingOrder[]     @relation("ManufacturingOrderOutput")
+  manufacturingOrderComponents ManufacturingOrderLine[] @relation("ManufacturingOrderComponent")
 
   @@unique([tenantId, sku])
   @@unique([tenantId, id], name: "inventory_item_tenant_scoped_id")
@@ -4077,6 +4086,69 @@ model InventoryWastageRecord {
   movement InventoryStockMovement @relation(fields: [movementId], references: [id], onDelete: Cascade)
 
   @@map("inventory_wastage_record")
+}
+
+// ===========================================================================
+// CAPABILITY: Manufacturing (Task 118 minimal slice) — ManufacturingOrder
+// only. Composes existing platform primitives rather than reimplementing
+// them: `Location` for where consumption/production happens, `InventoryItem`
+// for both components and output, `InventoryStockMovement`/
+// `InventoryStockBalance` for the actual stock ledger (this capability never
+// keeps its own qty-on-hand column — see `manufacturing/index.ts`'s
+// source-of-truth note). NOT YET BUILT, deliberately deferred per
+// `taskplans/118_manufacturing_capability_odoo_gap_and_ux_completeness.md`:
+// lot/serial, work-center capacity/cost, BOM cost roll-up, QC evidence
+// wiring, putaway rules, backorders, `recipe` generalization. This does not
+// reuse `Recipe`/`RecipeIngredient` (Colonel Kebabz, keyed 1:1 to
+// `MenuItem`) — wrong fit, forcing a manufacturing order to fake a
+// `menuItemId`. Lines are their own snapshot per order instead.
+// ===========================================================================
+
+/// One production run: consume `lines`' components, produce `outputQty` of
+/// `outputItem`. Draft -> InProgress -> Completed | Cancelled (ADR-009).
+model ManufacturingOrder {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  locationId String   @map("location_id") @db.Uuid
+  /// What this order produces. Distinct from every line's `componentItemId` —
+  /// enforced in the command, not just by convention.
+  outputItemId String @map("output_item_id") @db.Uuid
+  outputQty    Int    @map("output_qty")
+  /// Tenant-facing label, same free-text-but-kept posture as
+  /// `TradingPurchaseOrder.reference` — no generator in this minimal slice.
+  reference    String?
+  state        String   @default("draft")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  version      Int      @default(1)
+  customFields Json     @default("{}") @map("custom_fields")
+
+  tenant     Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  location   Location                 @relation(fields: [tenantId, locationId], references: [tenantId, id], onDelete: Restrict, onUpdate: NoAction)
+  outputItem InventoryItem            @relation("ManufacturingOrderOutput", fields: [outputItemId], references: [id], onDelete: Restrict)
+  lines      ManufacturingOrderLine[]
+
+  @@index([tenantId, state])
+  @@map("manufacturing_order")
+}
+
+/// A component this order consumes, snapshotted at creation — never edited
+/// after the order leaves `draft` (same posture as a trading order line's
+/// product snapshot). `qtyRequired` is the TOTAL for the whole order, not a
+/// per-unit rate — this slice does not scale lines by `outputQty`.
+model ManufacturingOrderLine {
+  id                   String @id @default(uuid()) @db.Uuid
+  tenantId             String @map("tenant_id") @db.Uuid
+  manufacturingOrderId String @map("manufacturing_order_id") @db.Uuid
+  componentItemId      String @map("component_item_id") @db.Uuid
+  qtyRequired          Int    @map("qty_required")
+
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  manufacturingOrder ManufacturingOrder @relation(fields: [manufacturingOrderId], references: [id], onDelete: Cascade)
+  componentItem      InventoryItem      @relation("ManufacturingOrderComponent", fields: [componentItemId], references: [id], onDelete: Restrict)
+
+  @@unique([manufacturingOrderId, componentItemId])
+  @@map("manufacturing_order_line")
 }
 
 // ===========================================================================

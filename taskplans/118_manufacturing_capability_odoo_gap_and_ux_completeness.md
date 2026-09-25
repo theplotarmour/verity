@@ -9,7 +9,15 @@ capability from it. Grounded against `veda`'s own three prior audit docs
 Verity's live `src/server/capabilities/registry.ts` and `prisma/schema.prisma`
 as of this date — not against memory or generic ERP knowledge.
 
-**Status:** PROPOSED — design and gap analysis only. No code written under
+**Status:** Minimal first slice **BUILT + PROVEN** 2026-09-25 — product
+owner gave the Task-84-style override this document's §6 said was needed.
+See "§7 — 2026-09-25 minimal slice" below for exactly what shipped and what
+is still open. The rest of this document (§1-6) is design/gap-analysis
+only, unchanged since 2026-09-23, and still governs what a fuller build
+should look like.
+
+**Original status (superseded above, kept for history):** PROPOSED —
+design and gap analysis only. No code written under
 this task. Building the actual `manufacturing` capability requires a
 product-owner decision (see §6) because the platform's own scope statement
 (`CLAUDE.md` top section, "Not in scope now") still lists manufacturing-
@@ -207,3 +215,49 @@ this vertical).
   document is deliberately client-agnostic per the user's ask ("all kinds
   of manufacturing clients"), but a real build should still anchor on one
   concrete first client the way `Party` anchored the platform slice.
+
+## 7 — 2026-09-25 minimal slice
+
+Product owner approved the override this document's §6 asked for, scoped
+to the smallest real slice rather than the full §3 design at once (product
+owner's own instruction: "minimal real slice, not the whole design doc").
+
+**BUILT + PROVEN:**
+- `verity.capability.manufacturing`, one entity `verity.manufacturing.order`
+  (`src/server/capabilities/manufacturing/index.ts`).
+- `ManufacturingOrder` + `ManufacturingOrderLine` (`prisma/schema.prisma`,
+  migration `20260924210000_capability_manufacturing_order`, RLS +
+  `capability_definition`/`entity_definition`/`state_definition`/
+  `transition_definition` rows, same pattern as `asset`'s own migration).
+- Lifecycle: `draft -> in_progress -> completed | cancelled` (ADR-009:
+  Draft/Active/Completed/Cancelled).
+- `createManufacturingOrder`, `startManufacturingOrder` (real component
+  consumption, negative-stock guard checked before any write — not
+  `recipe`'s deliberately theoretical posture),
+  `completeManufacturingOrder` (posts output as a Receipt),
+  `cancelManufacturingOrder` (reverses in-progress consumption with a new
+  offsetting Adjustment, never edits the original Issue rows — ADR-009).
+- `listManufacturingOrders`, `manufacturingOrderDetail` queries.
+- `src/test/capability-manufacturing.test.ts` — 5 tests, run against the
+  real (shared, product-owner-approved-for-this-run) database:
+  same-item-consumes-what-it-produces rejection, the full
+  create→start→complete happy path with real ledger deltas asserted,
+  insufficient-stock refusal leaving stock untouched, cancel-reversal, and
+  INV-002 terminal-state read-only. **5/5 passed.**
+- `tsc --noEmit` and `eslint` both clean on every touched file.
+
+**Deliberately NOT built this pass** (named, not silently absent — see the
+capability file's own header comment for the full reasoning on each):
+lot/serial, work-center capacity/cost, BOM cost roll-up, QC evidence
+wiring, putaway rules, backorders/partial completion, `recipe`
+generalization into a shared multi-level BOM engine, and any UI (this
+slice is server-side commands/queries only — no page under `src/app/`
+yet). The V1 completeness gate (`verity-client-capability-builder`'s
+Odoo/erpnext cross-check + `obvious-basics-checklist`) was **not** run
+against this slice — it has no UI to check yet, and running it now would
+be checking a page that doesn't exist. Run it when a UI is built.
+
+Not chosen: referencing `recipe.Recipe` as this order's BOM (wrong fit —
+keyed 1:1 to `MenuItem`, would force a fake `menuItemId`). See the
+capability file's header for the full reasoning; `ManufacturingOrderLine`
+snapshots components directly instead.
